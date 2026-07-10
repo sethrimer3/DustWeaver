@@ -15,6 +15,8 @@ import type { EditorState, EditorRoomData, EditorWall } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
+import { anchorForMaterial } from './editorPixelMaterialTool';
+import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { getRectBrushPreview } from './editorBrush';
 import {
   PREVIEW_COLOR, PREVIEW_RAMP_COLOR, PREVIEW_PLATFORM_COLOR, PREVIEW_PILLAR_HALF_COLOR,
@@ -141,18 +143,25 @@ export function drawPlacementPreview(
 ): void {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return;
 
-  // Pixel-material tool: highlight the exact native pixel that will be painted.
+  // Pixel-material tool: highlight the exact footprint that will be painted
+  // (a single native pixel for Sand 1x1, a snapped 2x2 block for Sand 2x2).
   if (state.selectedPaletteItem.isPixelMaterialItem === 1) {
-    const px = Math.floor(state.cursorWorldX);
-    const py = Math.floor(state.cursorWorldY);
-    const size = Math.max(1, zoom);
-    const x = px * zoom + offsetXPx;
-    const y = py * zoom + offsetYPx;
+    const material = state.selectedPaletteItem.pixelMaterialId ?? 1;
+    const anchor = anchorForMaterial(
+      Math.floor(state.cursorWorldX), Math.floor(state.cursorWorldY), material,
+    );
+    const footprint = getMaterialFootprintSize(material);
+    const cellPx = Math.max(1, zoom);
+    const x = anchor.x * zoom + offsetXPx;
+    const y = anchor.y * zoom + offsetYPx;
+    const wh = cellPx * footprint;
     ctx.fillStyle = 'rgba(255,230,150,0.55)';
-    ctx.fillRect(x, y, size, size);
+    ctx.fillRect(x, y, wh, wh);
+    // Thicker stroke for the larger footprint so it reads as a distinct
+    // "bigger brush" cursor rather than just a scaled-up 1x1 highlight.
     ctx.strokeStyle = 'rgba(255,240,190,0.9)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, size, size);
+    ctx.lineWidth = footprint > 1 ? 2 : 1;
+    ctx.strokeRect(x, y, wh, wh);
     return;
   }
 

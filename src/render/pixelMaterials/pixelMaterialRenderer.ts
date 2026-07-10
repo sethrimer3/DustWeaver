@@ -16,7 +16,7 @@
  */
 
 import type { WorldState } from '../../sim/world';
-import { MATERIAL_VISUALS } from '../../sim/pixelMaterials/pixelMaterialTypes';
+import { MATERIAL_VISUALS, getMaterialFootprintSize } from '../../sim/pixelMaterials/pixelMaterialTypes';
 
 const FALLBACK_COLOR = '#ffffff';
 
@@ -28,22 +28,27 @@ export function renderPixelMaterials(
   zoom: number,
 ): void {
   const system = world.pixelMaterialSystem;
-  if (system.occupiedCount === 0) return;
+  if (system.particleCount === 0) return;
 
   // Snap zoom-scaled cell size to whole device pixels so every particle
   // renders at an identical size — fractional zoom would otherwise round
   // some cells up and others down, producing visibly inconsistent sizes.
-  const size = Math.max(1, Math.round(zoom));
+  const cellPx = Math.max(1, Math.round(zoom));
   let currentMaterial = -1;
 
+  // `forEachParticle` visits one call per PARTICLE (anchor position), not
+  // per occupied cell — a 2x2 particle is drawn as one fillRect covering its
+  // full footprint (`getMaterialFootprintSize` * cellPx), not four separate
+  // 1x1 squares. No per-particle array/object allocation either way.
   system.forEachParticle((x, y, material) => {
     if (material !== currentMaterial) {
       currentMaterial = material;
       const visual = MATERIAL_VISUALS[material];
       ctx.fillStyle = visual !== undefined ? visual.color : FALLBACK_COLOR;
     }
+    const footprint = getMaterialFootprintSize(material);
     const px = Math.round(x * zoom + offsetXPx);
     const py = Math.round(y * zoom + offsetYPx);
-    ctx.fillRect(px, py, size, size);
+    ctx.fillRect(px, py, cellPx * footprint, cellPx * footprint);
   });
 }

@@ -14,6 +14,7 @@ import { BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
 import { EditorTool } from './editorState';
 import { ropeLineCrossesWall } from './editorHitTest';
+import { getMaterialFootprintSize, MATERIAL_VISUALS } from '../sim/pixelMaterials/pixelMaterialTypes';
 import {
   ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
@@ -350,13 +351,20 @@ export function drawEditorPixelMaterials(
   offsetYPx: number,
   zoom: number,
 ): void {
-  const size = Math.max(1, zoom);
+  const cellPx = Math.max(1, zoom);
   for (const p of (room.pixelMaterials ?? [])) {
     const sel = isSelected('pixelMaterial', p.uid);
+    const footprint = getMaterialFootprintSize(p.material);
     const xPx = p.xPixel * zoom + offsetXPx;
     const yPx = p.yPixel * zoom + offsetYPx;
-    ctx.fillStyle = sel ? '#f2e3a0' : '#d9c07a';
-    ctx.fillRect(xPx, yPx, size, size);
+    const visual = MATERIAL_VISUALS[p.material];
+    ctx.fillStyle = sel ? '#f2e3a0' : (visual?.color ?? '#d9c07a');
+    ctx.fillRect(xPx, yPx, cellPx * footprint, cellPx * footprint);
+    if (footprint > 1) {
+      ctx.strokeStyle = sel ? 'rgba(255,240,190,0.9)' : 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(xPx, yPx, cellPx * footprint, cellPx * footprint);
+    }
   }
 }
 

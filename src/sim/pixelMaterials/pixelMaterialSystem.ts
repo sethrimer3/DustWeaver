@@ -15,10 +15,37 @@
  * modify or participate in the existing collision pipeline. See
  * docs/pixelMaterials.md for the full design writeup.
  *
- * Data-oriented representation: particles are small plain records stored in
- * a `Map` keyed by cell index (sparse — most of the 480x270 native-pixel grid
- * is empty), not one heavyweight object/entity per pixel. No per-frame full
- * grid scans: only active particles are stepped, plus a small active-key set.
+ * ── Multi-cell occupancy model (Phase 3: 2x2 sand) ─────────────────────────
+ *
+ * One `PixelMaterialParticle` record per authored/simulated particle,
+ * regardless of footprint size (still cheap/sparse — no per-cell objects).
+ * Two collections track them:
+ *   - `particles: Set<PixelMaterialParticle>` — the master list, one entry
+ *     per particle. Used for iteration (render/serialize/diagnostics) so a
+ *     2x2 particle is never visited more than once.
+ *   - `occupancy: Map<cellKey, PixelMaterialParticle>` — one entry PER
+ *     OCCUPIED CELL. A 1x1 particle owns 1 key; a 2x2 particle owns 4 keys,
+ *     all pointing at the same particle object. This is what makes "does
+ *     this cell contain something" and "erase whatever covers this cell"
+ *     O(1) regardless of footprint size, without scanning all particles.
+ *   - `activeSet: Set<PixelMaterialParticle>` — subset of `particles` that
+ *     are awake (mirrors Phase 1/2 design).
+ *
+ * Moving a particle (`moveParticle`) removes ALL of its old footprint keys,
+ * then writes ALL of its new footprint keys — never a partial update. Every
+ * region-free check before a move (`isRegionFree`) treats cells owned by the
+ * particle ITSELF as free (an `ignore` parameter), since a 2x2 particle's
+ * destination footprint always overlaps part of its own current footprint
+ * (e.g. moving down by 1px, the bottom row of the old footprint overlaps the
+ * top row of the new one) — without this self-exclusion a multi-cell
+ * particle could never move at all.
+ *
+ * This design was chosen over "4 independent 1x1 particles logically grouped"
+ * because that would require extra bookkeeping to keep the group's 4 members
+ * moving in lockstep and to prevent them drifting apart/rotating — the task
+ * explicitly requires 2x2 sand NOT split, rotate, or become 4 separate
+ * particles. A single record with a multi-key occupancy footprint guarantees
+ * that structurally: there is only one `(x, y)` to move, so it cannot drift.
  */
 
 import type { SolidMask } from './pixelMaterialSolid';
@@ -28,6 +55,7 @@ import {
   WIND_MOMENTUM_DAMPING,
   WIND_MOMENTUM_EPSILON,
   getMaterialFootprintSize,
+  isKnownMaterialId,
   type MaterialId,
   type PixelMaterialParticle,
   type RoomPixelMaterialDef,
@@ -44,7 +72,10 @@ export class PixelMaterialSystem {
   heightPx: number;
   solid: SolidMask | null = null;
 
+  /** One entry per occupied CELL (a size-N particle owns N*N keys, all pointing to the same particle). */
   private readonly occupancy = new Map<number, PixelMaterialParticle>();
+  /** One entry per PARTICLE (unique) — used for iteration so multi-cell particles aren't visited more than once. */
+  private readonly particles = new Set<PixelMaterialParticle>();
   private readonly activeSet = new Set<PixelMaterialParticle>();
   private stepCounter = 0;
 
@@ -76,10 +107,16 @@ export class PixelMaterialSystem {
     return x >= 0 && y >= 0 && x < this.widthPx && y < this.heightPx;
   }
 
-  private isFree(x: number, y: number): boolean {
+  /**
+   * Returns true if (x, y) can be occupied — in bounds, not solid, and either
+   * unoccupied or occupied only by `ignore` (used so a particle's own
+   * footprint cells don't block its own move — see class doc comment).
+   */
+  private isFree(x: number, y: number, ignore?: PixelMaterialParticle): boolean {
     if (!this.inBounds(x, y)) return false;
     if (this.solid !== null && this.solid.isSolid(x, y)) return false;
-    return !this.occupancy.has(this.key(x, y));
+    const occupant = this.occupancy.get(this.key(x, y));
+    return occupant === undefined || occupant === ignore;
   }
 
   // ── Queries ─────────────────────────────────────────────────────────────
@@ -93,33 +130,36 @@ export class PixelMaterialSystem {
     return this.occupancy.has(this.key(x, y));
   }
 
-  /** Returns true if a sand particle could occupy this cell (in bounds, not solid, not already occupied). */
+  /** Returns true if a 1x1 particle could occupy this single cell (in bounds, not solid, not already occupied). */
   canOccupy(x: number, y: number): boolean {
     return this.isFree(x, y);
   }
 
   /**
    * Returns true if every cell of a `size x size` footprint anchored at
-   * (x, y) is free. `size` comes from `getMaterialFootprintSize()` — for
-   * every material today (`footprintSize === 1`) this is identical to
-   * `isFree(x, y)`. Exists so `place()` already asks the material for its
-   * footprint instead of hard-coding "1 cell", per the 2x2-readiness prep in
-   * pixelMaterialTypes.ts — a future multi-cell material would extend this
-   * (and `moveParticle`/`stepParticle`) to reserve/move all footprint cells
-   * as a rigid unit, which is NOT implemented yet.
+   * (x, y) is free (see `isFree`'s `ignore` semantics). `size` comes from
+   * `getMaterialFootprintSize()`. This is the one shared footprint-region
+   * check used by placement, movement, and wind — no per-material special
+   * casing at any call site.
    */
-  private isRegionFree(x: number, y: number, size: number): boolean {
-    if (size <= 1) return this.isFree(x, y);
+  private isRegionFree(x: number, y: number, size: number, ignore?: PixelMaterialParticle): boolean {
+    if (size <= 1) return this.isFree(x, y, ignore);
     for (let dy = 0; dy < size; dy++) {
       for (let dx = 0; dx < size; dx++) {
-        if (!this.isFree(x + dx, y + dy)) return false;
+        if (!this.isFree(x + dx, y + dy, ignore)) return false;
       }
     }
     return true;
   }
 
+  /** Total occupied CELLS (a 2x2 particle counts as 4). Useful as a coverage diagnostic. */
   get occupiedCount(): number {
     return this.occupancy.size;
+  }
+
+  /** Total distinct PARTICLES (a 2x2 particle counts as 1). */
+  get particleCount(): number {
+    return this.particles.size;
   }
 
   get activeCount(): number {
@@ -127,43 +167,64 @@ export class PixelMaterialSystem {
   }
 
   get sleepingCount(): number {
-    return this.occupancy.size - this.activeSet.size;
+    return this.particles.size - this.activeSet.size;
   }
 
-  /** Read-only iterator over all occupied cells, for rendering/serialization/diagnostics. */
+  /** Read-only iterator over all particles (one call per particle, regardless
+   *  of footprint size), for rendering/serialization/diagnostics. */
   forEachParticle(fn: (x: number, y: number, material: MaterialId, active: boolean) => void): void {
-    for (const p of this.occupancy.values()) fn(p.x, p.y, p.material, p.active);
+    for (const p of this.particles) fn(p.x, p.y, p.material, p.active);
   }
 
   // ── Editing (place / erase) ────────────────────────────────────────────
 
   place(x: number, y: number, material: MaterialId = MATERIAL_SAND): boolean {
-    // Footprint-aware check (currently always 1x1 — see isRegionFree doc comment).
-    if (!this.isRegionFree(x, y, getMaterialFootprintSize(material))) return false;
+    const size = getMaterialFootprintSize(material);
+    if (!this.isRegionFree(x, y, size)) return false;
     const p: PixelMaterialParticle = {
       x, y, material, active: true, unchangedSteps: 0, windVelX: 0, windVelY: 0,
     };
-    this.occupancy.set(this.key(x, y), p);
+    this.setFootprintKeys(p, x, y, size);
+    this.particles.add(p);
     this.activeSet.add(p);
-    this.wakeNeighbors(x, y);
+    this.wakeAround(x, y, size);
     return true;
   }
 
+  /** Erases whatever particle (of any footprint size) covers cell (x, y), if any. */
   erase(x: number, y: number): boolean {
-    const k = this.key(x, y);
-    const p = this.occupancy.get(k);
+    const p = this.occupancy.get(this.key(x, y));
     if (p === undefined) return false;
-    this.occupancy.delete(k);
+    const size = getMaterialFootprintSize(p.material);
+    this.clearFootprintKeys(p.x, p.y, size);
+    this.particles.delete(p);
     this.activeSet.delete(p);
-    this.wakeNeighbors(x, y);
+    this.wakeAround(p.x, p.y, size);
     return true;
   }
 
   clear(): void {
     this.occupancy.clear();
+    this.particles.clear();
     this.activeSet.clear();
     this.stepCounter = 0;
     this.dynamicWallSnapshots.clear();
+  }
+
+  private setFootprintKeys(p: PixelMaterialParticle, x: number, y: number, size: number): void {
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        this.occupancy.set(this.key(x + dx, y + dy), p);
+      }
+    }
+  }
+
+  private clearFootprintKeys(x: number, y: number, size: number): void {
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        this.occupancy.delete(this.key(x + dx, y + dy));
+      }
+    }
   }
 
   private wake(p: PixelMaterialParticle): void {
@@ -173,17 +234,16 @@ export class PixelMaterialSystem {
     this.activeSet.add(p);
   }
 
-  /** Wakes any sleeping particles in the 8 neighbours of (x, y) — used when a
-   *  cell's occupant changes (moved away, placed, or erased), since that may
-   *  remove support or destabilize an adjacent settled particle. */
-  private wakeNeighbors(x: number, y: number): void {
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue;
-        const p = this.occupancy.get(this.key(x + dx, y + dy));
-        if (p !== undefined) this.wake(p);
-      }
-    }
+  /**
+   * Wakes every particle (sleeping or already active) whose footprint
+   * intersects the `size x size` region anchored at (x, y), PLUS a 1-cell
+   * margin all around — used whenever a cell's occupant changes (moved away,
+   * placed, or erased), since that may remove support or destabilize an
+   * adjacent settled particle. For `size === 1` this is exactly the original
+   * Phase 1/2 "8 neighbours + self" wake, so 1x1 behavior is unchanged.
+   */
+  private wakeAround(x: number, y: number, size: number): void {
+    this.wakeRegion(x - 1, y - 1, x + size, y + size);
   }
 
   /**
@@ -192,6 +252,12 @@ export class PixelMaterialSystem {
    * a bounded region (a falling block moving, a crumble block being
    * destroyed) — see `notifySolidGeometryChanged` in `pixelMaterialSolidSync.ts`.
    * Bounded loop over the region only, not the full occupancy map.
+   *
+   * Correctly wakes multi-cell particles whose ANCHOR lies outside the given
+   * bounds but whose footprint partially overlaps it: `occupancy` has one key
+   * per occupied cell (see class doc comment), so any footprint cell that
+   * falls inside the scanned region resolves to the owning particle exactly
+   * like a 1x1 particle would.
    */
   wakeRegion(x0: number, y0: number, x1: number, y1: number): void {
     const minX = Math.max(0, Math.floor(x0));
@@ -222,6 +288,17 @@ export class PixelMaterialSystem {
    * any future caller (player dash, enemy ability, environmental gust) —
    * this system has no knowledge of who the source is beyond the optional
    * `sourceId` tag.
+   *
+   * Multi-cell policy (Phase 3): a particle is affected if ANY of its
+   * footprint cells falls within the force area — chosen because it matches
+   * how `wakeRegion`/collision already work (per-cell occupancy lookups) and
+   * feels more physically right for a "gust hits part of a boulder" gust than
+   * requiring the whole footprint or just the anchor to be inside the
+   * radius. Force is applied to each affected particle exactly ONCE per call
+   * (deduped via a local `Set`) regardless of how many of its footprint
+   * cells fall inside the radius — otherwise a 2x2 particle would receive up
+   * to 4x the momentum of a 1x1 particle for the same gust, which would make
+   * bigger particles feel MORE fragile, the opposite of intended game feel.
    */
   applyWindForce(params: WindForceParams): void {
     const { centerXPx, centerYPx, radiusPx, forceX, forceY } = params;
@@ -231,11 +308,11 @@ export class PixelMaterialSystem {
     const maxX = Math.min(this.widthPx - 1, Math.ceil(centerXPx + radiusPx));
     const minY = Math.max(0, Math.floor(centerYPx - radiusPx));
     const maxY = Math.min(this.heightPx - 1, Math.ceil(centerYPx + radiusPx));
-    let affected = 0;
+    const affectedThisCall = new Set<PixelMaterialParticle>();
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const p = this.occupancy.get(this.key(x, y));
-        if (p === undefined) continue;
+        if (p === undefined || affectedThisCall.has(p)) continue;
         const dx = x - centerXPx;
         const dy = y - centerYPx;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -246,11 +323,11 @@ export class PixelMaterialSystem {
         p.windVelX += forceX * strength;
         p.windVelY += forceY * strength;
         this.wake(p);
-        affected++;
+        affectedThisCall.add(p);
       }
     }
     this.windImpulsesThisTick++;
-    this.windParticlesAffectedThisTick += affected;
+    this.windParticlesAffectedThisTick += affectedThisCall.size;
     this.recordWindDebugEvent(centerXPx, centerYPx, radiusPx, forceX, forceY);
   }
 
@@ -259,8 +336,9 @@ export class PixelMaterialSystem {
   // Fixed-capacity ring buffer of typed arrays — recording a wind event is an
   // O(1) write into pre-allocated storage, never a per-event object
   // allocation. `ageSteps` increments in `step()`; a debug renderer reads
-  // `windDebugEventCount`/the typed arrays and ignores anything past its own
-  // fade lifetime. See `render/pixelMaterials/pixelMaterialDebugRenderer.ts`.
+  // `windDebugEventCapacity`/the typed arrays and ignores anything past its
+  // own fade lifetime. See `render/pixelMaterials/pixelMaterialDebugRenderer.ts`,
+  // which IS wired into the normal render path (gated behind `isDebugMode`).
 
   private static readonly DEBUG_WIND_EVENT_CAPACITY = 24;
   readonly windDebugCenterX = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
@@ -296,31 +374,35 @@ export class PixelMaterialSystem {
       this.windDebugAgeSteps[i]++;
     }
     if (this.activeSet.size === 0) return;
-    const particles = Array.from(this.activeSet);
-    for (const p of particles) this.stepParticle(p);
+    const activeParticles = Array.from(this.activeSet);
+    for (const p of activeParticles) this.stepParticle(p);
   }
 
+  /** Atomically moves `p`'s entire footprint from its current position to (nx, ny) — never a partial update. */
   private moveParticle(p: PixelMaterialParticle, nx: number, ny: number): void {
-    this.occupancy.delete(this.key(p.x, p.y));
+    const size = getMaterialFootprintSize(p.material);
     const oldX = p.x;
     const oldY = p.y;
+    this.clearFootprintKeys(oldX, oldY, size);
     p.x = nx;
     p.y = ny;
-    this.occupancy.set(this.key(nx, ny), p);
+    this.setFootprintKeys(p, nx, ny, size);
     p.unchangedSteps = 0;
-    this.wakeNeighbors(oldX, oldY);
-    this.wakeNeighbors(nx, ny);
+    this.wakeAround(oldX, oldY, size);
+    this.wakeAround(nx, ny, size);
   }
 
   private stepParticle(p: PixelMaterialParticle): void {
+    const size = getMaterialFootprintSize(p.material);
+
     // Decay wind momentum every step regardless of whether it moves this step.
     p.windVelX *= WIND_MOMENTUM_DAMPING;
     p.windVelY *= WIND_MOMENTUM_DAMPING;
     if (Math.abs(p.windVelX) < WIND_MOMENTUM_EPSILON) p.windVelX = 0;
     if (Math.abs(p.windVelY) < WIND_MOMENTUM_EPSILON) p.windVelY = 0;
 
-    // 1. Gravity: attempt straight down.
-    if (this.isFree(p.x, p.y + 1)) {
+    // 1. Gravity: attempt straight down (whole footprint must be free).
+    if (this.isRegionFree(p.x, p.y + 1, size, p)) {
       this.moveParticle(p, p.x, p.y + 1);
       return;
     }
@@ -329,17 +411,17 @@ export class PixelMaterialSystem {
     const leftFirst = preferLeftFirst(this.stepCounter, p.x);
     const dx1 = leftFirst ? -1 : 1;
     const dx2 = -dx1;
-    if (this.isFree(p.x + dx1, p.y + 1)) {
+    if (this.isRegionFree(p.x + dx1, p.y + 1, size, p)) {
       this.moveParticle(p, p.x + dx1, p.y + 1);
       return;
     }
-    if (this.isFree(p.x + dx2, p.y + 1)) {
+    if (this.isRegionFree(p.x + dx2, p.y + 1, size, p)) {
       this.moveParticle(p, p.x + dx2, p.y + 1);
       return;
     }
 
     // 3. Wind-driven upward displacement (temporary disturbance).
-    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.isFree(p.x, p.y - 1)) {
+    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.isRegionFree(p.x, p.y - 1, size, p)) {
       this.moveParticle(p, p.x, p.y - 1);
       return;
     }
@@ -347,7 +429,7 @@ export class PixelMaterialSystem {
     // 4. Wind-driven sideways displacement.
     if (p.windVelX !== 0) {
       const dir = p.windVelX > 0 ? 1 : -1;
-      if (this.isFree(p.x + dir, p.y)) {
+      if (this.isRegionFree(p.x + dir, p.y, size, p)) {
         this.moveParticle(p, p.x + dir, p.y);
         return;
       }
@@ -363,32 +445,30 @@ export class PixelMaterialSystem {
 
   // ── Serialization ───────────────────────────────────────────────────────
 
-  /** Serializes current occupancy as authored placements (sparse list — most
+  /** Serializes current particles as authored placements (sparse list — most
    *  of the native-pixel grid is empty, so this avoids storing a dense
-   *  480x270 array). Runtime-only state (velocity, sleep counters) is not
-   *  included; reloaded particles start active and re-settle naturally. */
+   *  480x270 array). One entry per PARTICLE (anchor position + material),
+   *  never one entry per occupied cell — a 2x2 particle serializes to exactly
+   *  one entry, matching how it was authored/placed. Runtime-only state
+   *  (velocity, sleep counters) is not included; reloaded particles start
+   *  active and re-settle naturally. */
   serialize(): RoomPixelMaterialDef[] {
-    const out: RoomPixelMaterialDef[] = [];
+    const list = Array.from(this.particles);
     // Sorted for deterministic output (stable diffs, deterministic tests).
-    const keys = Array.from(this.occupancy.keys()).sort((a, b) => a - b);
-    for (const k of keys) {
-      const p = this.occupancy.get(k)!;
-      out.push({ xPixel: p.x, yPixel: p.y, material: p.material });
-    }
-    return out;
+    list.sort((a, b) => this.key(a.x, a.y) - this.key(b.x, b.y));
+    return list.map(p => ({ xPixel: p.x, yPixel: p.y, material: p.material }));
   }
 
-  /** Loads authored placements. Invalid/out-of-bounds/duplicate entries are
-   *  silently skipped rather than throwing, so malformed room data can't
-   *  crash room loading. */
+  /** Loads authored placements. Invalid/unknown-material/out-of-bounds/
+   *  overlapping entries are silently skipped rather than throwing, so
+   *  malformed room data can't crash room loading. */
   loadFromDefs(defs: readonly RoomPixelMaterialDef[]): void {
     for (const d of defs) {
       if (!Number.isFinite(d.xPixel) || !Number.isFinite(d.yPixel)) continue;
+      if (!isKnownMaterialId(d.material)) continue;
       const x = Math.floor(d.xPixel);
       const y = Math.floor(d.yPixel);
-      const material = (d.material === MATERIAL_SAND ? MATERIAL_SAND : 0) as MaterialId;
-      if (material === 0) continue;
-      this.place(x, y, material);
+      this.place(x, y, d.material as MaterialId);
     }
   }
 }

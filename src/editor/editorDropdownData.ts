@@ -216,6 +216,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'decoration_glowgrass', label: 'Glow Grass',       category: 'environment' },
   { id: 'decoration_vine',      label: 'Glow Vine',        category: 'environment' },
   { id: 'sand_1x1', label: 'Sand 1×1', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 1 },
+  // pixelMaterialId: 2 === MATERIAL_SAND_2X2 (sim/pixelMaterials/pixelMaterialTypes.ts).
+  // Kept as a numeric literal (not imported) to avoid pulling sim modules into
+  // this already-heavy dropdown-data module for a single constant.
+  { id: 'sand_2x2', label: 'Sand 2×2', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 2 },
   // Objects (interactive world objects)
   { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },

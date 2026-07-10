@@ -13,8 +13,10 @@ export const NATIVE_HEIGHT_PX = 270;
 /** Material identifiers for occupied pixel-material cells. 0 = empty (not stored). */
 export const MATERIAL_EMPTY = 0;
 export const MATERIAL_SAND = 1;
+/** 2x2 sand — a real multi-cell footprint (see MATERIAL_DEFS), not four independent grains. */
+export const MATERIAL_SAND_2X2 = 2;
 
-export type MaterialId = typeof MATERIAL_EMPTY | typeof MATERIAL_SAND;
+export type MaterialId = typeof MATERIAL_EMPTY | typeof MATERIAL_SAND | typeof MATERIAL_SAND_2X2;
 
 /**
  * Per-material definition: visual + footprint size, so additional materials
@@ -45,11 +47,19 @@ export interface MaterialDef {
 
 export const MATERIAL_DEFS: Readonly<Record<number, MaterialDef>> = {
   [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a' },
+  // Distinct but related hue (deeper/more saturated tan) so a 2x2 grain reads
+  // as visually different from 1x1 sand at a glance, not just "bigger sand".
+  [MATERIAL_SAND_2X2]: { footprintSize: 2, color: '#b8925a' },
 };
 
 /** Returns the material's square footprint size in native pixels (defaults to 1 for unknown ids). */
 export function getMaterialFootprintSize(material: number): number {
   return MATERIAL_DEFS[material]?.footprintSize ?? 1;
+}
+
+/** Returns true if `material` is a recognized, placeable material id (not `MATERIAL_EMPTY`, not unknown). */
+export function isKnownMaterialId(material: number): material is MaterialId {
+  return material !== MATERIAL_EMPTY && MATERIAL_DEFS[material] !== undefined;
 }
 
 /**

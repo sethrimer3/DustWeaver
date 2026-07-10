@@ -6,16 +6,11 @@
  * from `PixelMaterialSystem`'s pre-allocated typed arrays — no per-frame
  * allocation beyond what `CanvasRenderingContext2D` itself needs for text/paths.
  *
- * DISABLED IN NORMAL GAMEPLAY. To enable: call `renderPixelMaterialDebug`
- * from the same place `renderPixelMaterials` is called in
- * `screens/gameRender.ts`, gated behind the existing debug-mode flag, e.g.:
- *
- *   if (isDebugMode) {
- *     renderPixelMaterialDebug(ctx, world, ox, oy, zoom);
- *   }
- *
- * (Not wired in by default so it never affects normal play or non-debug
- * screenshots/perf profiling.)
+ * WIRED IN, BUT GATED: `screens/gameRender.ts` already calls
+ * `renderPixelMaterialDebug(ctx, world, ox, oy, zoom)` right after the normal
+ * sand render, wrapped in `if (isDebugMode) { ... }`. It is therefore a no-op
+ * (never called) during normal play or non-debug screenshots/perf profiling —
+ * toggle the game's existing debug mode to see it, no separate flag needed.
  */
 
 import type { WorldState } from '../../sim/world';
@@ -68,9 +63,9 @@ export function renderPixelMaterialDebug(
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillText(
-    `sand: occ=${system.occupiedCount} active=${system.activeCount} ` +
-    `sleep=${system.sleepingCount} wind=${system.windImpulsesThisTick} ` +
-    `hit=${system.windParticlesAffectedThisTick}`,
+    `sand: particles=${system.particleCount} cells=${system.occupiedCount} ` +
+    `active=${system.activeCount} sleep=${system.sleepingCount} ` +
+    `wind=${system.windImpulsesThisTick} hit=${system.windParticlesAffectedThisTick}`,
     4, 4,
   );
 

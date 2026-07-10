@@ -9,6 +9,7 @@
 
 import type { EditorRoomData, EditorWall, EditorTransition } from './editorState';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { getMaterialFootprintSize, MATERIAL_SAND } from '../sim/pixelMaterials/pixelMaterialTypes';
 
 // ── Basic hit-test primitives ────────────────────────────────────────────────
 
@@ -221,31 +222,42 @@ function cellOverlapsEditorPoints(
 }
 
 /**
- * Returns true if the given block cell is occupied by any editor-authored
- * object that becomes SOLID, NON-PLATFORM runtime wall geometry — i.e. the
- * same policy `buildSolidMaskFromWorld` (sim/pixelMaterials/pixelMaterialSolid.ts)
- * uses when it scans `WorldState.wallXWorld/Y/W/H` to build the pixel-material
- * solid mask. This is the single shared source of truth for "is this cell
- * solid for pixel-material purposes" on the editor side — do not duplicate
- * these per-object-type checks elsewhere; extend this function instead.
+ * Returns true if the given NATIVE-PIXEL cell is occupied by any editor-
+ * authored object that becomes SOLID, NON-PLATFORM runtime wall geometry —
+ * i.e. the same policy `buildSolidMaskFromWorld`
+ * (sim/pixelMaterials/pixelMaterialSolid.ts) uses when it scans
+ * `WorldState.wallXWorld/Y/W/H` to build the pixel-material solid mask. This
+ * is the single shared source of truth for "is this cell solid for
+ * pixel-material purposes" on the editor side — do not duplicate these
+ * per-object-type checks elsewhere; extend this function instead.
  *
- * Deliberately DIFFERENT from `cellOverlapsSolidWall` (which excludes ramps
- * and is used by grapple-carry/phantasmal-tile placement — those have their
- * own, older policy). Runtime treats ramp walls as full solid AABB rects in
- * the wall array (rampOrientationIndex only affects rendering/movement-surface
- * logic elsewhere, not the base rect), so this function does too.
+ * Deliberately DIFFERENT from `cellOverlapsSolidWall` (which excludes ramps,
+ * works at whole-block granularity, and is used by grapple-carry/phantasmal-
+ * tile placement — those have their own, older, coarser policy). Pixel
+ * materials need native-PIXEL precision, not block-cell precision, because
+ * some runtime wall geometry is narrower than a full 8x8 block:
+ *
+ *   - Half-width pillars (`EditorWall.isPillarHalfWidthFlag === 1`): the
+ *     runtime wall rect is only 4px wide (see `gameRoomWalls.ts`:
+ *     `rawWWorld = Math.max(BLOCK_SIZE_MEDIUM / 2, wBlock * (BLOCK_SIZE_MEDIUM / 2))`
+ *     when the flag is set), always anchored at the wall's left edge
+ *     (`xBlock * BLOCK_SIZE_SMALL`). A block-cell-granularity check would
+ *     treat the ENTIRE 8x8 block as solid and incorrectly reject placement
+ *     in the empty right half — this function tests the real 4px-wide AABB
+ *     instead, matching runtime exactly.
+ *   - Ramps: still full-rect (matches how they're stored in the wall array —
+ *     `rampOrientationIndex` only affects rendering/movement-surface logic
+ *     elsewhere, the base AABB rect is always solid unless it's a platform).
  *
  * Runtime wall-geometry sources covered (see gameRoomWalls.ts / gameRoomHazards.ts
  * / gameRoomFallingBlocks.ts, which all push full-rect entries into the wall
  * arrays for these object types):
- *   - interior walls, INCLUDING ramps (excluded only when isPlatformFlag === 1,
- *     matching the one-way-platform skip in `buildSolidMaskFromWorld`).
- *   - crumble blocks (full 1-cell-per-block-unit rect).
- *   - bounce pads.
- *   - kinetic blocks.
- *   - falling block tiles (their authored rest position — the runtime group
- *     may move once it starts falling, but that can't be predicted at author
- *     time; see docs/pixelMaterials.md § dynamic solid geometry).
+ *   - interior walls, INCLUDING ramps and half-width pillars (excluded only
+ *     when isPlatformFlag === 1, matching the one-way-platform skip in
+ *     `buildSolidMaskFromWorld`).
+ *   - crumble blocks, bounce pads, kinetic blocks, falling block tiles — none
+ *     of these have a sub-block-width concept, so they're still checked at
+ *     block-cell granularity (equivalent to native-pixel precision for them).
  *
  * Deliberately EXCLUDED (these do NOT become wall-array entries at runtime,
  * per gameRoomHazards.ts): grapple-carry blocks, phantasmal tiles. Sand may
@@ -256,8 +268,20 @@ function cellOverlapsEditorPoints(
  * field exists), so there is nothing to check here yet — add a branch if that
  * ever becomes editor-authorable.
  */
-export function isPixelMaterialSolidAtBlockCell(room: EditorRoomData, bx: number, by: number): boolean {
-  if (room.interiorWalls.some(w => w.isPlatformFlag !== 1 && wallsOverlap(w, bx, by, 1, 1))) return true;
+export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number, yPixel: number): boolean {
+  for (const w of room.interiorWalls) {
+    if (w.isPlatformFlag === 1) continue;
+    const x0 = w.xBlock * BLOCK_SIZE_SMALL;
+    const y0 = w.yBlock * BLOCK_SIZE_SMALL;
+    const wPx = w.isPillarHalfWidthFlag === 1
+      ? Math.max(BLOCK_SIZE_SMALL / 2, w.wBlock * (BLOCK_SIZE_SMALL / 2))
+      : Math.max(BLOCK_SIZE_SMALL, w.wBlock * BLOCK_SIZE_SMALL);
+    const hPx = Math.max(BLOCK_SIZE_SMALL, w.hBlock * BLOCK_SIZE_SMALL);
+    if (xPixel >= x0 && xPixel < x0 + wPx && yPixel >= y0 && yPixel < y0 + hPx) return true;
+  }
+
+  const bx = Math.floor(xPixel / BLOCK_SIZE_SMALL);
+  const by = Math.floor(yPixel / BLOCK_SIZE_SMALL);
   if ((room.crumbleBlocks ?? []).some(b => {
     const bw = b.wBlock ?? 1;
     const bh = b.hBlock ?? 1;
@@ -273,20 +297,52 @@ export function isPixelMaterialSolidAtBlockCell(room: EditorRoomData, bx: number
   return false;
 }
 
+/** @deprecated Kept only as a thin block-granularity wrapper for callers/tests
+ *  that don't need pixel precision. New pixel-material code should call
+ *  `isPixelMaterialSolidAtPixel` directly — block-cell granularity misses the
+ *  half-width-pillar distinction it exists to fix. */
+export function isPixelMaterialSolidAtBlockCell(room: EditorRoomData, bx: number, by: number): boolean {
+  return isPixelMaterialSolidAtPixel(room, bx * BLOCK_SIZE_SMALL, by * BLOCK_SIZE_SMALL);
+}
+
+function pixelMaterialRectsOverlap(
+  ax: number, ay: number, aSize: number,
+  bx: number, by: number, bSize: number,
+): boolean {
+  return ax < bx + bSize && ax + aSize > bx && ay < by + bSize && ay + aSize > by;
+}
+
 /**
- * Returns true if a pixel-material particle may be placed at the given
- * NATIVE-PIXEL coordinate (not block units) — inside room bounds, not inside
- * anything `isPixelMaterialSolidAtBlockCell` treats as solid, and not already
- * occupied by another placed particle.
+ * Returns true if a pixel-material particle of the given `material` may be
+ * placed with its anchor at the given NATIVE-PIXEL coordinate — every cell of
+ * its `getMaterialFootprintSize(material)` footprint must be: inside room
+ * bounds, not solid (`isPixelMaterialSolidAtPixel`), and not overlapping any
+ * other already-placed particle's footprint (1x1 or 2x2 alike). Material-
+ * aware and footprint-aware by construction — callers never need their own
+ * multi-cell overlap special-casing.
  */
-export function canPlacePixelMaterialAt(room: EditorRoomData, xPixel: number, yPixel: number): boolean {
+export function canPlacePixelMaterialAt(
+  room: EditorRoomData,
+  xPixel: number,
+  yPixel: number,
+  material: number = MATERIAL_SAND,
+): boolean {
   const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
   const heightPx = room.heightBlocks * BLOCK_SIZE_SMALL;
-  if (xPixel < 0 || yPixel < 0 || xPixel >= widthPx || yPixel >= heightPx) return false;
-  const bx = Math.floor(xPixel / BLOCK_SIZE_SMALL);
-  const by = Math.floor(yPixel / BLOCK_SIZE_SMALL);
-  if (isPixelMaterialSolidAtBlockCell(room, bx, by)) return false;
-  if ((room.pixelMaterials ?? []).some(p => p.xPixel === xPixel && p.yPixel === yPixel)) return false;
+  const size = getMaterialFootprintSize(material);
+
+  if (xPixel < 0 || yPixel < 0 || xPixel + size > widthPx || yPixel + size > heightPx) return false;
+
+  for (let dy = 0; dy < size; dy++) {
+    for (let dx = 0; dx < size; dx++) {
+      if (isPixelMaterialSolidAtPixel(room, xPixel + dx, yPixel + dy)) return false;
+    }
+  }
+
+  for (const p of (room.pixelMaterials ?? [])) {
+    const pSize = getMaterialFootprintSize(p.material);
+    if (pixelMaterialRectsOverlap(xPixel, yPixel, size, p.xPixel, p.yPixel, pSize)) return false;
+  }
   return true;
 }
 
