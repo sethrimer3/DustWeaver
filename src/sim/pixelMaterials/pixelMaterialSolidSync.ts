@@ -19,8 +19,9 @@
  *     gameRoomHazards.ts) — sand does not collide with them, matching how
  *     the player/particles' own collision treats them (a separate carry-block
  *     physics system, not the wall array).
- *   - Ramps: static once loaded; only their rest position matters, already
- *     covered by the initial `buildSolidMaskFromWorld` call.
+ *   - Stairs and legacy ramps: static once loaded; only their rest position
+ *     matters, already covered by the initial `buildSolidMaskFromWorld` call
+ *     (which expands stairs into their step rectangles).
  *   - Editor authoring (placing/removing tiles or falling blocks in the
  *     editor UI): the editor mutates `EditorRoomData`, not a live
  *     `WorldState` — there is no "live preview world" kept in sync while

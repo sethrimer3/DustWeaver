@@ -392,7 +392,9 @@ export interface SurfaceExposureWallLike {
   readonly hBlock: number;
   readonly isPlatformFlag?: 0 | 1;
   readonly isInvisibleFlag?: 0 | 1;
+  /** Legacy ramp orientation. Retired from editor placement; still loads. */
   readonly rampOrientation?: 0 | 1 | 2 | 3;
+  readonly stairsOrientation?: 0 | 1 | 2 | 3;
 }
 
 /**
@@ -410,7 +412,12 @@ export interface SurfaceExposureWallLike {
  *     differs from `blockWallLayoutCache.ts`'s render-time `occupied` set,
  *     which skips them because that set only tracks what needs a sprite
  *     drawn — not true collision solidity.
- *   - Ramps count as solid (they occupy their bounding tile for collision).
+ *   - Stairs and legacy ramps count as solid at TILE granularity: they occupy
+ *     their bounding tile. Sub-tile step exposure is not modelled here — this
+ *     grid's cell is one block, and a stair's steps are 2px. Per-step edge
+ *     highlighting comes from the stair sprite's alpha channel instead (see
+ *     `applyOrganicEdgeShading`), and per-step grapple surfaces come from the
+ *     step rectangles in `sim/stairsWorldGeometry.ts`.
  *   - Decorations / non-colliding elements are out of scope here since
  *     they never appear in the wall array.
  */

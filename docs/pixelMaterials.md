@@ -89,11 +89,16 @@ existing wall arrays.
   solid — internal tile boundaries don't matter, only occupied/unoccupied.
 - One-way platforms (`wallIsPlatformFlag`) are excluded — sand falls through
   them, matching their gameplay semantics.
-- Ramps are conservatively treated as full solid rectangles (matches how they
-  are stored in the wall arrays — `rampOrientationIndex` only affects
-  rendering/movement-surface logic elsewhere, the base AABB rect is always
-  solid unless it's a platform). A real triangular occupancy test is still a
-  documented follow-up.
+- Stairs are expanded into their individual step rectangles via
+  `forEachWallSolidRect` (see `sim/stairsWorldGeometry.ts`), so the stair
+  template mask — not the bounding box — decides solidity. Sand falls into the
+  empty space above a stair's upper steps and settles on each tread.
+- Legacy ramps are still conservatively treated as full solid rectangles
+  (matches how they are stored in the wall arrays — a `rampOrientationIndex` of
+  0–3 only affects rendering/movement-surface logic elsewhere, the base AABB
+  rect is always solid unless it's a platform). Ramps are retired from editor
+  placement, so a real triangular occupancy test is unlikely to be worth
+  building; stairs are the supported sloped shape.
 - Room bounds: `SolidMask.isSolid()` returns `true` for any out-of-bounds
   query, so sand cannot leave the room without special-casing edges.
 - Rebuilt from scratch on every room load (`loadRoomPixelMaterials` in
@@ -362,15 +367,15 @@ system existed simply have no `pixelMaterials` key, and load unchanged.
 single shared helper for "does this editor-authored block cell become solid,
 non-platform runtime wall geometry" — mirroring exactly what
 `buildSolidMaskFromWorld` does when it scans the live `WorldState` wall
-arrays. It covers interior walls (including ramps — matching the runtime
-full-rect policy), crumble blocks, bounce pads, kinetic blocks, and falling
-block tiles; it deliberately excludes grapple-carry blocks and phantasmal
-tiles (not wall-array entries at runtime) and one-way platforms (sand falls
-through them at runtime too).
+arrays. It covers interior walls (stairs by their template mask, legacy ramps
+by the runtime full-rect policy), crumble blocks, bounce pads, kinetic blocks,
+and falling block tiles; it deliberately excludes grapple-carry blocks and
+phantasmal tiles (not wall-array entries at runtime) and one-way platforms
+(sand falls through them at runtime too).
 
 This is intentionally a **different, newer** helper than the pre-existing
 `cellOverlapsSolidWall` (used by grapple-carry-block/phantasmal-tile
-placement, which has its own older policy that excludes ramps) — rather than
+placement, which has its own older policy that excludes shaped walls) — rather than
 changing `cellOverlapsSolidWall`'s behavior for unrelated tools, pixel
 materials get their own helper that can evolve independently to keep tracking
 runtime solid-mask policy exactly.
