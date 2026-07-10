@@ -52,6 +52,7 @@ import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
+import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometerOverlayRenderer';
 import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
@@ -566,6 +567,7 @@ export function startGameScreen(
   // See src/render/ui/dialogueOverlayRenderer.ts for the full rationale.
   const dialogueState = createDialogueState();
   const dialogueRenderer = new DialogueOverlayRenderer(uiRoot);
+  const playerSpeedometerOverlay = new PlayerSpeedometerOverlayRenderer(uiRoot);
   /**
    * UIDs of dialogue triggers that have already fired this room visit.
    * Cleared on every room load so each trigger fires once per visit.
@@ -1519,6 +1521,7 @@ export function startGameScreen(
 
   function frame(timestampMs: number): void {
     if (!isRunning) return;
+    playerSpeedometerOverlay.hide();
 
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
@@ -1575,6 +1578,7 @@ export function startGameScreen(
           interpolationBuffers.prevClusterPosX,
           interpolationBuffers.prevClusterPosY,
         );
+        const editorBackdropRoom = editorController.getRoomDef() ?? currentRoom;
         renderEditorBackdrop(
           ctx,
           deviceCtx,
@@ -1584,7 +1588,7 @@ export function startGameScreen(
           bloomSystem,
           world,
           reusableSnapshot,
-          currentRoom,
+          editorBackdropRoom,
           bgColor,
           eox,
           eoy,
@@ -2309,6 +2313,15 @@ export function startGameScreen(
       alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       stagedRoom: null,
     });
+    playerSpeedometerOverlay.update({
+      world,
+      canvas,
+      nativeWidthPx: virtualWidthPx,
+      nativeHeightPx: virtualHeightPx,
+      offsetXPx: ox,
+      offsetYPx: oy,
+      zoom,
+    });
     FP.recordRenderMs(import.meta.env.DEV ? performance.now() - _renderT0 : 0);
 
     // Tick the loading overlay — hides it once sprites are ready.
@@ -2590,6 +2603,7 @@ export function startGameScreen(
     detachInput();
     webglRenderer.dispose();
     dialogueRenderer.destroy();
+    playerSpeedometerOverlay.destroy();
     window.removeEventListener('resize', onResize);
     loadingOverlay.destroy();
     if (menuButton !== null && menuButton.parentElement !== null) {

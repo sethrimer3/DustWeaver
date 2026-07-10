@@ -181,6 +181,7 @@ export function createEditorController(
   // Passed to renderEditorOverlays so extension tiles are visible as blue ghost
   // tiles (30 % opacity) outside the room boundary.
   let editorEdgeExtensionCache: EdgeExtensionCache | null = null;
+  let liveEditorRoomDef: RoomDef | null = null;
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
@@ -364,6 +365,15 @@ export function createEditorController(
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
     if (!usesCampaignStore || campaignSession?.campaignStore === undefined || roomData === null) return;
     campaignSession.campaignStore.discardRoomChanges(roomData.id);
+  }
+
+  function rebuildLiveEditorRoomDef(): RoomDef | null {
+    if (state.roomData === null) {
+      liveEditorRoomDef = null;
+      return null;
+    }
+    liveEditorRoomDef = editorRoomDataToRoomDef(state.roomData);
+    return liveEditorRoomDef;
   }
 
   function toggle(currentRoom: RoomDef): void {
@@ -689,11 +699,14 @@ export function createEditorController(
     }
     if (changeKind === 'metadata') {
       const toRoomDefStartMs = import.meta.env.DEV ? performance.now() : 0;
-      const roomDef = editorRoomDataToRoomDef(state.roomData);
+      const roomDef = rebuildLiveEditorRoomDef();
+      if (roomDef === null) return;
       registerRoom(roomDef); // keep registry metadata in sync for map tooling
       if (import.meta.env.DEV) {
         logEditorPerfWarned('editorRoomDataToRoomDef', toRoomDefStartMs, state.roomData.id);
       }
+    } else {
+      liveEditorRoomDef = null;
     }
   }
 
@@ -712,6 +725,7 @@ export function createEditorController(
       isCurrentRoomDirty = false;
       syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
       editorEdgeExtensionCache = buildEdgeExtensionCache(room);
+      rebuildLiveEditorRoomDef();
       return;
     }
     const pending = pendingRoomEdits.get(room.id);
@@ -745,6 +759,7 @@ export function createEditorController(
     // Rebuild edge extension cache for the newly loaded room so the editor
     // can show extension tiles as non-editable ghost overlays.
     editorEdgeExtensionCache = buildEdgeExtensionCache(room);
+    rebuildLiveEditorRoomDef();
   }
 
   /**
@@ -1295,7 +1310,7 @@ export function createEditorController(
 
   function getRoomDef(): RoomDef | null {
     if (!state.roomData) return null;
-    return editorRoomDataToRoomDef(state.roomData);
+    return liveEditorRoomDef ?? rebuildLiveEditorRoomDef();
   }
 
   function destroy(): void {
@@ -1303,6 +1318,7 @@ export function createEditorController(
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
+    liveEditorRoomDef = null;
   }
 
   return {

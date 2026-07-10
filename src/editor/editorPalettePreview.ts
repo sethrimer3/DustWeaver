@@ -2,8 +2,8 @@
  * editorPalettePreview.ts — Centralized palette-preview resolver.
  *
  * Provides `makePalettePreviewCard()` for every non-block palette category
- * (specialBlocks, enemies, triggers, collectables, environment, objects,
- * lighting, liquids, ropes, guidePaths).
+ * (specialBlocks, enemies, triggers, collectables, environment, dust,
+ * objects, lighting, liquids, ropes, guidePaths).
  *
  * Design goals:
  *  - One card style matching `makeBlockPreviewCard` exactly (40×40 preview + label).

@@ -13,7 +13,37 @@
 
 import type { BlockTheme } from '../levels/roomDef';
 
-export type PaletteCategory = 'blocks' | 'specialBlocks' | 'enemies' | 'triggers' | 'collectables' | 'environment' | 'objects' | 'lighting' | 'liquids' | 'ropes' | 'guidePaths';
+export const PALETTE_CATEGORIES = [
+  'blocks',
+  'specialBlocks',
+  'enemies',
+  'triggers',
+  'collectables',
+  'environment',
+  'dust',
+  'liquids',
+  'objects',
+  'lighting',
+  'ropes',
+  'guidePaths',
+] as const;
+
+export type PaletteCategory = typeof PALETTE_CATEGORIES[number];
+
+export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> = {
+  blocks: 'Blocks',
+  specialBlocks: 'Special Blocks',
+  enemies: 'Enemies',
+  triggers: 'Triggers',
+  collectables: 'Collectables',
+  environment: 'Environment',
+  dust: 'Dust',
+  liquids: 'Liquids',
+  objects: 'Objects',
+  lighting: 'Lighting',
+  ropes: 'Ropes',
+  guidePaths: 'Guide Paths',
+};
 
 export interface PaletteItem {
   id: string;
@@ -156,24 +186,25 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'dust_container',        label: 'Dust Container',        category: 'collectables', isDustContainerItem: 1 },
   { id: 'dust_container_piece',  label: 'Dust Container Piece',  category: 'collectables', isDustContainerPieceItem: 1 },
   { id: 'dust_swarm',            label: 'Dust Swarm',            category: 'collectables', isDustSwarmItem: 1 },
-  // Environment (world atmosphere and critters)
-  { id: 'dust_pile_small',  label: 'Dust Pile (S)', category: 'environment' },
-  { id: 'dust_pile_medium', label: 'Dust Pile (M)', category: 'environment' },
-  { id: 'dust_pile_large',  label: 'Dust Pile (L)', category: 'environment' },
+  // Dust (free-placed dust piles and pixel materials)
+  { id: 'dust_pile_small',  label: 'Dust Pile (S)', category: 'dust' },
+  { id: 'dust_pile_medium', label: 'Dust Pile (M)', category: 'dust' },
+  { id: 'dust_pile_large',  label: 'Dust Pile (L)', category: 'dust' },
   // Legacy alias kept for backward-compat with older room exports
-  { id: 'dust_pile', label: 'Dust Pile', category: 'environment' },
+  { id: 'dust_pile', label: 'Dust Pile', category: 'dust' },
+  { id: 'sand_1x1', label: 'Sand 1×1', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 1 },
+  // pixelMaterialId: 2 === MATERIAL_SAND_2X2 (sim/pixelMaterials/pixelMaterialTypes.ts).
+  // Kept as a numeric literal (not imported) to avoid pulling sim modules into
+  // this already-heavy dropdown-data module for a single constant.
+  { id: 'sand_2x2', label: 'Sand 2×2', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 2 },
+  // pixelMaterialId: 3 === MATERIAL_WATER (sim/pixelMaterials/pixelMaterialTypes.ts).
+  { id: 'water_1x1', label: 'Water 1×1', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 3 },
+  // Environment (world atmosphere and critters)
   { id: 'grasshopper_area',     label: 'Grasshopper Area', category: 'environment' },
   { id: 'firefly_area',         label: 'Firefly Area',     category: 'environment' },
   { id: 'decoration_mushroom',  label: 'Glow Mushroom',    category: 'environment' },
   { id: 'decoration_glowgrass', label: 'Glow Grass',       category: 'environment' },
   { id: 'decoration_vine',      label: 'Glow Vine',        category: 'environment' },
-  { id: 'sand_1x1', label: 'Sand 1×1', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 1 },
-  // pixelMaterialId: 2 === MATERIAL_SAND_2X2 (sim/pixelMaterials/pixelMaterialTypes.ts).
-  // Kept as a numeric literal (not imported) to avoid pulling sim modules into
-  // this already-heavy dropdown-data module for a single constant.
-  { id: 'sand_2x2', label: 'Sand 2×2', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 2 },
-  // pixelMaterialId: 3 === MATERIAL_WATER (sim/pixelMaterials/pixelMaterialTypes.ts).
-  { id: 'water_1x1', label: 'Water 1×1', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 3 },
   // Objects (interactive world objects)
   { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },

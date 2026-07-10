@@ -21,7 +21,7 @@ export type BrushMode = 'single' | '3x3' | '5x5' | 'rect' | 'fill';
 // Palette types and items live in editorPaletteItems.ts (no bundler-only deps)
 // so tests can import them; re-exported here for existing callers.
 export type { PaletteCategory, PaletteItem } from './editorPaletteItems';
-export { PALETTE_ITEMS } from './editorPaletteItems';
+export { PALETTE_CATEGORIES, PALETTE_CATEGORY_LABELS, PALETTE_ITEMS } from './editorPaletteItems';
 
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
 

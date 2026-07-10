@@ -20,7 +20,6 @@ import {
   MOTE_REGEN_FLASH_TICKS,
 } from '../sim/motes/orderedMoteQueue';
 import { formatRunTimer } from '../progression/saveSlots';
-import { getPixelSpeedometerEnabled } from '../ui/renderSettings';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -450,22 +449,4 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     ctx.restore();
   }
 
-  if (getPixelSpeedometerEnabled()) {
-    const player = world.clusters[0];
-    if (player !== undefined && player.isAliveFlag === 1) {
-      const speedPxPerSec = Math.hypot(player.velocityXWorld, player.velocityYWorld);
-      const speedText = `${Math.round(speedPxPerSec)} px/s`;
-      const speedPaddingRight = 6;
-      const speedY = 22;
-      ctx.save();
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'right';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = 'rgba(0,0,0,0.65)';
-      ctx.fillText(speedText, r.virtualWidthPx - speedPaddingRight + 1, speedY + 1);
-      ctx.fillStyle = '#d4a84b';
-      ctx.fillText(speedText, r.virtualWidthPx - speedPaddingRight, speedY);
-      ctx.restore();
-    }
-  }
 }

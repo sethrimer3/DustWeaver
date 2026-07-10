@@ -7,6 +7,7 @@
 
 import {
   EditorState, EditorTool, PaletteCategory, PALETTE_ITEMS,
+  PALETTE_CATEGORIES, PALETTE_CATEGORY_LABELS,
   BLOCK_THEMES, BACKGROUND_OPTIONS,
   BlockTheme, SONG_OPTIONS, RoomSongId,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
@@ -421,10 +422,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   let dimHeightInput: HTMLInputElement | null = null;
   const catBar = document.createElement('div');
   catBar.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 8px;';
-  const categories: PaletteCategory[] = ['blocks', 'specialBlocks', 'enemies', 'triggers', 'collectables', 'environment', 'objects', 'lighting', 'liquids', 'ropes', 'guidePaths'];
+  const categories: readonly PaletteCategory[] = PALETTE_CATEGORIES;
   const catBtns: HTMLButtonElement[] = [];
   for (const cat of categories) {
-    const btn = makeBtn(cat, () => callbacks?.onCategoryChange(cat));
+    const btn = makeBtn(PALETTE_CATEGORY_LABELS[cat], () => callbacks?.onCategoryChange(cat));
     btn.dataset.category = cat;
     catBtns.push(btn);
     catBar.appendChild(btn);
@@ -707,6 +708,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           state.activeCategory === 'triggers' ||
           state.activeCategory === 'collectables' ||
           state.activeCategory === 'environment' ||
+          state.activeCategory === 'dust' ||
           state.activeCategory === 'objects' ||
           state.activeCategory === 'lighting' ||
           state.activeCategory === 'liquids' ||
