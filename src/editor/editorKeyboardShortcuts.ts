@@ -45,13 +45,11 @@ export function handleEditorKeyboardShortcuts(
   if (inputState.toolKeyPressed === 2) state.activeTool = EditorTool.Place;
   if (inputState.toolKeyPressed === 3) state.activeTool = EditorTool.Delete;
 
-  // Mouse wheel → rotation (Place mode) or element rotation (Select mode)
-  if (inputState.wheelDelta !== 0) {
-    if (state.activeTool === EditorTool.Place) {
-      state.placementRotationSteps = (state.placementRotationSteps + (inputState.wheelDelta > 0 ? 1 : 3)) % 4;
-    } else if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0) {
-      rotateSelectedElement(state);
-    }
+  // Mouse wheel → rotation (Place mode only). In Select mode, wheel zooms
+  // the camera instead (see editorController.update()); element rotation in
+  // Select mode is still available via the Q/E keys below.
+  if (inputState.wheelDelta !== 0 && state.activeTool === EditorTool.Place) {
+    state.placementRotationSteps = (state.placementRotationSteps + (inputState.wheelDelta > 0 ? 1 : 3)) % 4;
   }
 
   // Q/E keys → rotate placement (Q = counter-clockwise, E = clockwise)

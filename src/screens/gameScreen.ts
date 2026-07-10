@@ -1567,10 +1567,14 @@ export function startGameScreen(
       );
 
       if (isEditorConsuming) {
-        // Still render the game world (walls, particles, etc.) as backdrop
+        // Still render the game world (walls, particles, etc.) as backdrop.
+        // Recompute offset AND zoom fresh from camera post-update, since the
+        // editor may have changed camera.zoom this frame (mismatching the
+        // stale `zoom` local captured above would misalign the backdrop).
         const camOff = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
+        const editorZoom = camera.zoom;
         updateSnapshotInPlace(
           reusableSnapshot,
           world,
@@ -1592,7 +1596,7 @@ export function startGameScreen(
           bgColor,
           eox,
           eoy,
-          zoom,
+          editorZoom,
           virtualWidthPx,
           virtualHeightPx,
           environmentalDust,

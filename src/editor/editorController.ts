@@ -8,6 +8,7 @@
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
 import type { CameraState } from '../render/camera';
+import { CAMERA_DEFAULT_ZOOM, getCameraOffset } from '../render/camera';
 import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 
@@ -18,7 +19,7 @@ import { EditorState, createEditorState, EditorTool,
   selectBlockTheme,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
-import { updateEditorCamera, EditorCameraInput } from './editorCamera';
+import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput } from './editorCamera';
 import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
@@ -147,6 +148,10 @@ export function createEditorController(
   let ui: EditorUI | null = null;
   let worldMapCleanup: (() => void) | null = null;
   let visualMapCleanup: (() => void) | null = null;
+  // Reference to the shared gameplay CameraState most recently passed to
+  // update(), kept so closeEditor() can reset zoom back to default and
+  // avoid leaking editor zoom into gameplay rendering.
+  let activeCameraRef: CameraState | null = null;
 
   // Drag-paint tracking: last block position where Place/Delete acted during a drag
   // Initialized to out-of-range sentinels so the first drag always triggers.
@@ -622,6 +627,9 @@ export function createEditorController(
   }
 
   function closeEditor(): void {
+    // Reset the shared camera's zoom so editor zoom never leaks into
+    // gameplay rendering after the editor closes.
+    if (activeCameraRef) { activeCameraRef.zoom = CAMERA_DEFAULT_ZOOM; activeCameraRef = null; }
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
@@ -984,13 +992,14 @@ export function createEditorController(
     camera: CameraState,
     offsetXPx: number,
     offsetYPx: number,
-    zoom: number,
+    _zoom: number,
     cssWidthPx: number,
     cssHeightPx: number,
     virtualWidthPx: number,
     virtualHeightPx: number,
   ): boolean {
     if (!state.isActive) return false;
+    activeCameraRef = camera;
     if (state.isWorldMapOpen || state.isVisualMapOpen) return true;
 
     // Camera movement (shift doubles speed)
@@ -1009,9 +1018,29 @@ export function createEditorController(
     const virtualMouseX = (inputState.mouseScreenXPx / cssWidthPx) * virtualWidthPx;
     const virtualMouseY = (inputState.mouseScreenYPx / cssHeightPx) * virtualHeightPx;
 
+    // Zoom (mouse wheel restricted to the Select tool; +/- keys work in any tool).
+    // Cursor-anchored for wheel zoom, viewport-centered for keyboard zoom.
+    applyEditorZoomInput(
+      camera,
+      inputState.wheelDelta,
+      state.activeTool === EditorTool.Select,
+      inputState.isZoomInPressed,
+      inputState.isZoomOutPressed,
+      virtualMouseX,
+      virtualMouseY,
+      virtualWidthPx / 2,
+      virtualHeightPx / 2,
+      offsetXPx,
+      offsetYPx,
+    );
+
+    // Recompute the camera offset in case zoom changed above, so cursor
+    // math is accurate this same frame rather than lagging one frame.
+    const freshOffset = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
+
     // Update cursor position (virtual → world → block)
-    const worldX = (virtualMouseX - offsetXPx) / zoom;
-    const worldY = (virtualMouseY - offsetYPx) / zoom;
+    const worldX = (virtualMouseX - freshOffset.offsetXPx) / camera.zoom;
+    const worldY = (virtualMouseY - freshOffset.offsetYPx) / camera.zoom;
     state.cursorWorldX = worldX;
     state.cursorWorldY = worldY;
     state.cursorBlockX = Math.floor(worldX / BS);

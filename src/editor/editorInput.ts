@@ -50,6 +50,10 @@ export interface EditorInputState {
   isRotateLeftPressed: boolean;
   /** E key pressed (one-shot) — rotates placement clockwise. */
   isRotateRightPressed: boolean;
+  /** '+'/'=' pressed (one-shot) — zooms the editor camera in. */
+  isZoomInPressed: boolean;
+  /** '-' pressed (one-shot) — zooms the editor camera out. */
+  isZoomOutPressed: boolean;
   /** World coordinates at drag start. */
   dragStartWorldX: number;
   dragStartWorldY: number;
@@ -83,6 +87,8 @@ export function createEditorInputState(): EditorInputState {
     isFlipPressed: false,
     isRotateLeftPressed: false,
     isRotateRightPressed: false,
+    isZoomInPressed: false,
+    isZoomOutPressed: false,
     dragStartWorldX: 0,
     dragStartWorldY: 0,
   };
@@ -129,6 +135,12 @@ export function attachEditorInputListeners(
     if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isFlipPressed = true; e.preventDefault(); }
     if (key === 'q' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateLeftPressed = true; e.preventDefault(); }
     if (key === 'e' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateRightPressed = true; e.preventDefault(); }
+    // Zoom shortcuts work regardless of active tool. e.key already covers the
+    // numpad +/- keys ('NumpadAdd' -> '+', 'NumpadSubtract' -> '-'), so no
+    // separate e.code check is needed. preventDefault stops browser/Electron
+    // page-zoom from firing on these keys.
+    if ((key === '+' || key === '=') && !e.ctrlKey && !e.metaKey) { state.isZoomInPressed = true; e.preventDefault(); }
+    if (key === '-' && !e.ctrlKey && !e.metaKey) { state.isZoomOutPressed = true; e.preventDefault(); }
   }
 
   function onKeyUp(e: KeyboardEvent): void {
@@ -169,6 +181,8 @@ export function attachEditorInputListeners(
 
   function onWheel(e: WheelEvent): void {
     if (!editorState.isActive) return;
+    // Always preventDefault while editor is active so the wheel never
+    // scrolls the surrounding editor UI, regardless of active tool.
     e.preventDefault();
     state.wheelDelta += e.deltaY > 0 ? 1 : -1;
   }
@@ -214,4 +228,6 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isFlipPressed = false;
   state.isRotateLeftPressed = false;
   state.isRotateRightPressed = false;
+  state.isZoomInPressed = false;
+  state.isZoomOutPressed = false;
 }
