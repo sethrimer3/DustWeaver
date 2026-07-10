@@ -14,6 +14,7 @@ import type { EditorRoomData } from './editorState';
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
 import type { RoomEdge } from './editorUI';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 
 /** Clamps a zone rect (with wBlock/hBlock) to fit within the given room dimensions. */
 export function clampZoneToDimensions(
@@ -110,6 +111,19 @@ export function applyRoomDimensionChange(
     room.fallingBlocks = room.fallingBlocks.filter(
       fb => fb.xBlock >= 0 && fb.xBlock < room.widthBlocks &&
             fb.yBlock >= 0 && fb.yBlock < room.heightBlocks,
+    );
+  }
+
+  // Clip pixel-material particles — these are authored in NATIVE-PIXEL units
+  // (not block units), so the bound is widthBlocks/heightBlocks * BLOCK_SIZE_SMALL.
+  // Entries past the new edge are removed outright (no sensible "clamp into
+  // bounds" behavior for individually-painted sand pixels — clamping would
+  // silently pile every out-of-bounds grain onto the new edge column/row).
+  if (room.pixelMaterials) {
+    const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
+    const heightPx = room.heightBlocks * BLOCK_SIZE_SMALL;
+    room.pixelMaterials = room.pixelMaterials.filter(
+      p => p.xPixel >= 0 && p.xPixel < widthPx && p.yPixel >= 0 && p.yPixel < heightPx,
     );
   }
 
@@ -255,6 +269,13 @@ export function applyEdgeResize(
     for (const fb of (room.fallingBlocks ?? [])) {
       fb.xBlock += shiftX;
       fb.yBlock += shiftY;
+    }
+
+    // Shift pixel-material particles — these are in native-pixel units, so
+    // the shift must be scaled by BLOCK_SIZE_SMALL to match the block shift.
+    for (const p of (room.pixelMaterials ?? [])) {
+      p.xPixel += shiftX * BLOCK_SIZE_SMALL;
+      p.yPixel += shiftY * BLOCK_SIZE_SMALL;
     }
 
     // Shift interior walls

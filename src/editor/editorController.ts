@@ -1132,12 +1132,28 @@ export function createEditorController(
       }
     }
 
-    // Right-click delete (one-shot)
+    // Right-click delete (one-shot).
+    // NOTE: `EditorInputState` only tracks a one-shot `isRightClickFired` flag,
+    // not a persistent "right mouse button held" state (unlike `isMouseDown`
+    // for the left button) — there is currently no drag-paint/erase support
+    // for a held right-click. Gap-free erase-while-dragging is available via
+    // the Delete tool (left-click drag), which already reuses the same
+    // Bresenham `paintPixelMaterialLine` path as Place.
     if (inputState.isRightClickFired && state.roomData !== null) {
       if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
         pushSnapshot(history, state.roomData);
-        deleteAtCursor(state);
-        syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+        if (state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+          // Pixel-material tool: right-click erases the exact native pixel
+          // under the cursor, not whatever block-grid element deleteAtCursor
+          // would otherwise find there.
+          const px = pixelFromCursor(state);
+          erasePixelMaterialAt(state, px.x, px.y);
+          lastDragPixelX = px.x;
+          lastDragPixelY = px.y;
+        } else {
+          deleteAtCursor(state);
+          syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+        }
         applyEdits('placement');
       }
     }

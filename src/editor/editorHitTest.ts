@@ -221,9 +221,63 @@ function cellOverlapsEditorPoints(
 }
 
 /**
+ * Returns true if the given block cell is occupied by any editor-authored
+ * object that becomes SOLID, NON-PLATFORM runtime wall geometry — i.e. the
+ * same policy `buildSolidMaskFromWorld` (sim/pixelMaterials/pixelMaterialSolid.ts)
+ * uses when it scans `WorldState.wallXWorld/Y/W/H` to build the pixel-material
+ * solid mask. This is the single shared source of truth for "is this cell
+ * solid for pixel-material purposes" on the editor side — do not duplicate
+ * these per-object-type checks elsewhere; extend this function instead.
+ *
+ * Deliberately DIFFERENT from `cellOverlapsSolidWall` (which excludes ramps
+ * and is used by grapple-carry/phantasmal-tile placement — those have their
+ * own, older policy). Runtime treats ramp walls as full solid AABB rects in
+ * the wall array (rampOrientationIndex only affects rendering/movement-surface
+ * logic elsewhere, not the base rect), so this function does too.
+ *
+ * Runtime wall-geometry sources covered (see gameRoomWalls.ts / gameRoomHazards.ts
+ * / gameRoomFallingBlocks.ts, which all push full-rect entries into the wall
+ * arrays for these object types):
+ *   - interior walls, INCLUDING ramps (excluded only when isPlatformFlag === 1,
+ *     matching the one-way-platform skip in `buildSolidMaskFromWorld`).
+ *   - crumble blocks (full 1-cell-per-block-unit rect).
+ *   - bounce pads.
+ *   - kinetic blocks.
+ *   - falling block tiles (their authored rest position — the runtime group
+ *     may move once it starts falling, but that can't be predicted at author
+ *     time; see docs/pixelMaterials.md § dynamic solid geometry).
+ *
+ * Deliberately EXCLUDED (these do NOT become wall-array entries at runtime,
+ * per gameRoomHazards.ts): grapple-carry blocks, phantasmal tiles. Sand may
+ * be placed through/inside them because runtime sand can too.
+ *
+ * NOTE: "breakable blocks" also become wall entries at runtime, but are not
+ * currently authorable through the editor (no `EditorRoomData.breakableBlocks`
+ * field exists), so there is nothing to check here yet — add a branch if that
+ * ever becomes editor-authorable.
+ */
+export function isPixelMaterialSolidAtBlockCell(room: EditorRoomData, bx: number, by: number): boolean {
+  if (room.interiorWalls.some(w => w.isPlatformFlag !== 1 && wallsOverlap(w, bx, by, 1, 1))) return true;
+  if ((room.crumbleBlocks ?? []).some(b => {
+    const bw = b.wBlock ?? 1;
+    const bh = b.hBlock ?? 1;
+    return bx < b.xBlock + bw && bx + 1 > b.xBlock && by < b.yBlock + bh && by + 1 > b.yBlock;
+  })) return true;
+  if ((room.bouncePads ?? []).some(b =>
+    bx < b.xBlock + b.wBlock && bx + 1 > b.xBlock && by < b.yBlock + b.hBlock && by + 1 > b.yBlock,
+  )) return true;
+  if ((room.kineticBlocks ?? []).some(kb =>
+    bx < kb.xBlock + kb.wBlock && bx + 1 > kb.xBlock && by < kb.yBlock + kb.hBlock && by + 1 > kb.yBlock,
+  )) return true;
+  if (isFallingBlockAt(room, bx, by)) return true;
+  return false;
+}
+
+/**
  * Returns true if a pixel-material particle may be placed at the given
  * NATIVE-PIXEL coordinate (not block units) — inside room bounds, not inside
- * solid world geometry, and not already occupied by another placed particle.
+ * anything `isPixelMaterialSolidAtBlockCell` treats as solid, and not already
+ * occupied by another placed particle.
  */
 export function canPlacePixelMaterialAt(room: EditorRoomData, xPixel: number, yPixel: number): boolean {
   const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
@@ -231,8 +285,7 @@ export function canPlacePixelMaterialAt(room: EditorRoomData, xPixel: number, yP
   if (xPixel < 0 || yPixel < 0 || xPixel >= widthPx || yPixel >= heightPx) return false;
   const bx = Math.floor(xPixel / BLOCK_SIZE_SMALL);
   const by = Math.floor(yPixel / BLOCK_SIZE_SMALL);
-  if (cellOverlapsSolidWall(room, bx, by)) return false;
-  if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return false;
+  if (isPixelMaterialSolidAtBlockCell(room, bx, by)) return false;
   if ((room.pixelMaterials ?? []).some(p => p.xPixel === xPixel && p.yPixel === yPixel)) return false;
   return true;
 }

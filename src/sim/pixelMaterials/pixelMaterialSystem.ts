@@ -27,6 +27,7 @@ import {
   SLEEP_DELAY_STEPS,
   WIND_MOMENTUM_DAMPING,
   WIND_MOMENTUM_EPSILON,
+  getMaterialFootprintSize,
   type MaterialId,
   type PixelMaterialParticle,
   type RoomPixelMaterialDef,
@@ -46,6 +47,20 @@ export class PixelMaterialSystem {
   private readonly occupancy = new Map<number, PixelMaterialParticle>();
   private readonly activeSet = new Set<PixelMaterialParticle>();
   private stepCounter = 0;
+
+  /**
+   * Tracks the last-seen (x, y, w, h) of runtime wall slots that can move or
+   * be destroyed after room load (falling blocks, crumble/breakable blocks),
+   * keyed by wall index. Owned here (rather than as a module-level map) so
+   * it resets automatically whenever a fresh `PixelMaterialSystem` is created
+   * on room load — see `syncPixelMaterialSolidGeometry` in
+   * `pixelMaterialSolidSync.ts`, which is the sole reader/writer.
+   */
+  readonly dynamicWallSnapshots = new Map<number, { x: number; y: number; w: number; h: number }>();
+
+  /** Diagnostics for the current tick — see `resetWindDiagnostics()`. Dev-only consumers. */
+  windImpulsesThisTick = 0;
+  windParticlesAffectedThisTick = 0;
 
   constructor(widthPx: number, heightPx: number, solid: SolidMask | null = null) {
     this.widthPx = Math.max(0, Math.floor(widthPx));
@@ -83,6 +98,26 @@ export class PixelMaterialSystem {
     return this.isFree(x, y);
   }
 
+  /**
+   * Returns true if every cell of a `size x size` footprint anchored at
+   * (x, y) is free. `size` comes from `getMaterialFootprintSize()` — for
+   * every material today (`footprintSize === 1`) this is identical to
+   * `isFree(x, y)`. Exists so `place()` already asks the material for its
+   * footprint instead of hard-coding "1 cell", per the 2x2-readiness prep in
+   * pixelMaterialTypes.ts — a future multi-cell material would extend this
+   * (and `moveParticle`/`stepParticle`) to reserve/move all footprint cells
+   * as a rigid unit, which is NOT implemented yet.
+   */
+  private isRegionFree(x: number, y: number, size: number): boolean {
+    if (size <= 1) return this.isFree(x, y);
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        if (!this.isFree(x + dx, y + dy)) return false;
+      }
+    }
+    return true;
+  }
+
   get occupiedCount(): number {
     return this.occupancy.size;
   }
@@ -103,7 +138,8 @@ export class PixelMaterialSystem {
   // ── Editing (place / erase) ────────────────────────────────────────────
 
   place(x: number, y: number, material: MaterialId = MATERIAL_SAND): boolean {
-    if (!this.isFree(x, y)) return false;
+    // Footprint-aware check (currently always 1x1 — see isRegionFree doc comment).
+    if (!this.isRegionFree(x, y, getMaterialFootprintSize(material))) return false;
     const p: PixelMaterialParticle = {
       x, y, material, active: true, unchangedSteps: 0, windVelX: 0, windVelY: 0,
     };
@@ -127,6 +163,7 @@ export class PixelMaterialSystem {
     this.occupancy.clear();
     this.activeSet.clear();
     this.stepCounter = 0;
+    this.dynamicWallSnapshots.clear();
   }
 
   private wake(p: PixelMaterialParticle): void {
@@ -149,6 +186,34 @@ export class PixelMaterialSystem {
     }
   }
 
+  /**
+   * Wakes every particle (sleeping or already active) whose cell falls
+   * within the given native-pixel AABB. Used when solid geometry changes in
+   * a bounded region (a falling block moving, a crumble block being
+   * destroyed) — see `notifySolidGeometryChanged` in `pixelMaterialSolidSync.ts`.
+   * Bounded loop over the region only, not the full occupancy map.
+   */
+  wakeRegion(x0: number, y0: number, x1: number, y1: number): void {
+    const minX = Math.max(0, Math.floor(x0));
+    const maxX = Math.min(this.widthPx - 1, Math.ceil(x1));
+    const minY = Math.max(0, Math.floor(y0));
+    const maxY = Math.min(this.heightPx - 1, Math.ceil(y1));
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const p = this.occupancy.get(this.key(x, y));
+        if (p !== undefined) this.wake(p);
+      }
+    }
+  }
+
+  /** Resets the per-tick wind diagnostic counters. Call once per tick before
+   *  any wind emitters run (see `pixelMaterialMovementWind.ts`). Cheap
+   *  (two integer writes) — safe to call unconditionally every tick. */
+  resetWindDiagnostics(): void {
+    this.windImpulsesThisTick = 0;
+    this.windParticlesAffectedThisTick = 0;
+  }
+
   // ── External force (wind) ──────────────────────────────────────────────
 
   /**
@@ -166,6 +231,7 @@ export class PixelMaterialSystem {
     const maxX = Math.min(this.widthPx - 1, Math.ceil(centerXPx + radiusPx));
     const minY = Math.max(0, Math.floor(centerYPx - radiusPx));
     const maxY = Math.min(this.heightPx - 1, Math.ceil(centerYPx + radiusPx));
+    let affected = 0;
     for (let y = minY; y <= maxY; y++) {
       for (let x = minX; x <= maxX; x++) {
         const p = this.occupancy.get(this.key(x, y));
@@ -180,14 +246,55 @@ export class PixelMaterialSystem {
         p.windVelX += forceX * strength;
         p.windVelY += forceY * strength;
         this.wake(p);
+        affected++;
       }
     }
+    this.windImpulsesThisTick++;
+    this.windParticlesAffectedThisTick += affected;
+    this.recordWindDebugEvent(centerXPx, centerYPx, radiusPx, forceX, forceY);
+  }
+
+  // ── Debug wind-event visualization (dev-only consumer) ──────────────────
+  //
+  // Fixed-capacity ring buffer of typed arrays — recording a wind event is an
+  // O(1) write into pre-allocated storage, never a per-event object
+  // allocation. `ageSteps` increments in `step()`; a debug renderer reads
+  // `windDebugEventCount`/the typed arrays and ignores anything past its own
+  // fade lifetime. See `render/pixelMaterials/pixelMaterialDebugRenderer.ts`.
+
+  private static readonly DEBUG_WIND_EVENT_CAPACITY = 24;
+  readonly windDebugCenterX = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
+  readonly windDebugCenterY = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
+  readonly windDebugRadius = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
+  readonly windDebugDirX = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
+  readonly windDebugDirY = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY);
+  readonly windDebugAgeSteps = new Float32Array(PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY).fill(Infinity);
+  private windDebugWriteIndex = 0;
+
+  private recordWindDebugEvent(cx: number, cy: number, radius: number, forceX: number, forceY: number): void {
+    const mag = Math.sqrt(forceX * forceX + forceY * forceY);
+    const i = this.windDebugWriteIndex;
+    this.windDebugCenterX[i] = cx;
+    this.windDebugCenterY[i] = cy;
+    this.windDebugRadius[i] = radius;
+    this.windDebugDirX[i] = mag > 0 ? forceX / mag : 0;
+    this.windDebugDirY[i] = mag > 0 ? forceY / mag : 0;
+    this.windDebugAgeSteps[i] = 0;
+    this.windDebugWriteIndex = (i + 1) % PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY;
+  }
+
+  /** Capacity of the debug wind-event ring buffer (for iterating the typed arrays above). */
+  get windDebugEventCapacity(): number {
+    return PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY;
   }
 
   // ── Simulation step (fixed timestep — call once per fixed sim tick) ────
 
   step(): void {
     this.stepCounter++;
+    for (let i = 0; i < PixelMaterialSystem.DEBUG_WIND_EVENT_CAPACITY; i++) {
+      this.windDebugAgeSteps[i]++;
+    }
     if (this.activeSet.size === 0) return;
     const particles = Array.from(this.activeSet);
     for (const p of particles) this.stepParticle(p);

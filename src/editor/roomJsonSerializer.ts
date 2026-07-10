@@ -9,7 +9,7 @@
  * runtime can skip the expensive buildRoomWallTemplate() merge pass.
  */
 
-import { blockThemeToId, DEFAULT_ROPE_SEGMENT_COUNT, indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
+import { blockThemeToId, BLOCK_SIZE_SMALL, DEFAULT_ROPE_SEGMENT_COUNT, indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import type {
   EditorRoomData,
 } from './editorState';
@@ -354,11 +354,25 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     }));
   }
   if ((data.pixelMaterials ?? []).length > 0) {
-    json.pixelMaterials = (data.pixelMaterials ?? []).map(p => ({
-      xPixel: p.xPixel,
-      yPixel: p.yPixel,
-      material: p.material,
-    }));
+    // Defensive bounds filter: even if in-memory data somehow contains
+    // out-of-bounds entries (e.g. a bug elsewhere, or hand-edited JSON that
+    // was re-imported), never export them. This is a belt-and-suspenders
+    // check — `applyRoomDimensionChange`/`applyEdgeResize` already clip on
+    // resize — but export is the last line of defense before the data leaves
+    // the editor.
+    const widthPx = data.widthBlocks * BLOCK_SIZE_SMALL;
+    const heightPx = data.heightBlocks * BLOCK_SIZE_SMALL;
+    const inBounds = (data.pixelMaterials ?? []).filter(
+      p => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) &&
+        p.xPixel >= 0 && p.xPixel < widthPx && p.yPixel >= 0 && p.yPixel < heightPx,
+    );
+    if (inBounds.length > 0) {
+      json.pixelMaterials = inBounds.map(p => ({
+        xPixel: p.xPixel,
+        yPixel: p.yPixel,
+        material: p.material,
+      }));
+    }
   }
   if ((data.fallingBlocks ?? []).length > 0) {
     json.fallingBlocks = (data.fallingBlocks ?? []).map(fb => ({

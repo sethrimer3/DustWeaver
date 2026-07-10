@@ -17,17 +17,54 @@ export const MATERIAL_SAND = 1;
 export type MaterialId = typeof MATERIAL_EMPTY | typeof MATERIAL_SAND;
 
 /**
+ * Per-material definition: visual + footprint size, so additional materials
+ * (and eventually 2x2 variants) can be added by extending this table rather
+ * than touching the renderer or collision code.
+ *
+ * `footprintSize` is the material's square footprint in native pixels — 1 for
+ * every material implemented so far. It is threaded through placement
+ * (`PixelMaterialSystem.place`/`canOccupy`) and the editor solid-check so a
+ * future `footprintSize: 2` material only needs those call sites to already
+ * be querying this table (which they do) rather than assuming 1x1 everywhere.
+ *
+ * IMPORTANT: `stepParticle()` (pixelMaterialSystem.ts) still only implements
+ * single-cell movement — a `footprintSize > 1` material would fall through
+ * the current gravity/diagonal logic incorrectly (it moves the particle's
+ * anchor cell only, without sweeping/reserving the other footprint cells).
+ * Adding a real 2x2 material requires extending `stepParticle`/`moveParticle`
+ * to treat the footprint as a rigid multi-cell unit (check + reserve all
+ * `footprintSize x footprintSize` cells atomically before moving); this table
+ * only prepares the data model, per the current phase's scope (no 2x2 yet).
+ */
+export interface MaterialDef {
+  /** Square footprint size in native pixels. 1 for all materials today. */
+  readonly footprintSize: number;
+  /** CSS color string used for solid-fill rendering. */
+  readonly color: string;
+}
+
+export const MATERIAL_DEFS: Readonly<Record<number, MaterialDef>> = {
+  [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a' },
+};
+
+/** Returns the material's square footprint size in native pixels (defaults to 1 for unknown ids). */
+export function getMaterialFootprintSize(material: number): number {
+  return MATERIAL_DEFS[material]?.footprintSize ?? 1;
+}
+
+/**
  * Centralized visual properties per material, so additional materials can be
- * added later without touching the renderer.
+ * added later without touching the renderer. Structurally a view over
+ * `MATERIAL_DEFS` (every `MaterialDef` already has a `color`), kept as a
+ * separate exported type so renderer code doesn't need to know about
+ * footprints.
  */
 export interface MaterialVisual {
   /** CSS color string used for solid-fill rendering. */
   readonly color: string;
 }
 
-export const MATERIAL_VISUALS: Readonly<Record<number, MaterialVisual>> = {
-  [MATERIAL_SAND]: { color: '#d9c07a' },
-};
+export const MATERIAL_VISUALS: Readonly<Record<number, MaterialVisual>> = MATERIAL_DEFS;
 
 /** Ticks (fixed sim steps) an unmoving particle waits before it goes to sleep. */
 export const SLEEP_DELAY_STEPS = 20;
