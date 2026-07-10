@@ -60,6 +60,8 @@ import {
 } from './editorCampaignSpawn';
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
+import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
+import { formatRoomComplexityWarningMessage, isRoomComplexitySeverityAtLeast } from '../levels/roomComplexity';
 import { invalidateRoomContour } from '../ui/mapSketchRenderer';
 import { setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
 import { editorRoomDataToJson } from './roomJson';
@@ -702,6 +704,7 @@ export function createEditorController(
   function applyEdits(changeKind: 'placement' | 'metadata' = 'metadata'): void {
     if (!state.roomData) return;
     isCurrentRoomDirty = true;
+    state.pendingComplexityCheck = true;
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
       campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
@@ -719,11 +722,33 @@ export function createEditorController(
     }
   }
 
+  /**
+   * Runs the room-complexity analyzer and shows a non-blocking toast if the
+   * severity has risen to a strictly higher tier than the last one warned
+   * about for this room (so growing/shrinking within the same tier, or
+   * every single placement during a batch, does not spam popups).
+   * Called at most once per completed operation — see the
+   * `pendingComplexityCheck` flag in update().
+   */
+  function maybeWarnRoomComplexity(): void {
+    if (!state.roomData) return;
+    const report = analyzeEditorRoomComplexity(state.roomData);
+    if (report.shouldWarn && !isRoomComplexitySeverityAtLeast(state.lastWarnedComplexitySeverity, report.severity)) {
+      state.lastWarnedComplexitySeverity = report.severity;
+      showEditorToast(uiRoot, formatRoomComplexityWarningMessage(report));
+    }
+  }
+
   // Campaign spawn management (syncCampaignSpawnBlockFromSession,
   // syncCampaignSpawnToSessionAfterDelete, placeCampaignSpawn,
   // showCampaignSpawnReplaceModal) have been extracted to editorCampaignSpawn.ts.
 
   function loadRoomForEditing(room: RoomDef): void {
+    // Reset complexity-warning state for the newly-loaded room so a density
+    // warning already shown for a previous room doesn't suppress a fresh
+    // warning here, and so this room doesn't inherit a stale check flag.
+    state.pendingComplexityCheck = false;
+    state.lastWarnedComplexitySeverity = 'normal';
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       const loaded = campaignSession.campaignStore.getRoom(room.id, state.nextUid);
       state.roomData = loaded.roomData;
@@ -1367,6 +1392,13 @@ export function createEditorController(
       state.hoverElement = selectAtCursor(state);
     } else {
       state.hoverElement = null;
+    }
+
+    // Room-complexity warning: check at most once per completed operation
+    // (drag/paint/paste/fill/undo/redo), never mid-drag.
+    if (state.pendingComplexityCheck && !inputState.isMouseDown) {
+      state.pendingComplexityCheck = false;
+      maybeWarnRoomComplexity();
     }
 
     // Update UI panel

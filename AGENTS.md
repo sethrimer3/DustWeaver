@@ -45,6 +45,7 @@ npm run desktop
 - Do not casually change `mapSketchRenderer.ts`, `buildCompleteBoundaryWalls`, or transition trigger geometry. These areas are called out in `nextSteps.md` as regression-prone.
 - Room transitions use complete boundary walls plus independent trigger strips. Do not reintroduce boundary holes.
 - For documentation-only changes, do not modify source code, saved room data, version numbers, or build numbers unless an existing repo rule explicitly requires it.
+- Every coherent set of codebase changes made by an AI agent must increment the patch component of `BUILD_NUMBER` in `src/build-info.ts` exactly once (for example, `1.0.0` becomes `1.0.1`). The main menu displays this value. Documentation-only changes do not require a bump unless they accompany code changes.
 - If a task discovers deferred work, add a concise item to `docs/TODO.md`. If a TODO is completed, check it off with the validating command or reason.
 
 ## How to make changes

@@ -387,6 +387,46 @@ export function analyzeCampaignComplexity(
   };
 }
 
+// ── Campaign analysis caching ─────────────────────────────────────────────────
+
+/**
+ * Cache of the last computed `CampaignComplexityReport` per campaign object.
+ * Keyed by object identity (a `WeakMap`, so entries are GC'd automatically
+ * once the campaign object itself is no longer referenced) rather than by a
+ * campaign id string, because campaign ids can repeat across freshly-loaded
+ * instances (e.g. reloading the same file); the safest "has this exact data
+ * changed" signal is the object reference itself.
+ */
+const campaignComplexityCache = new WeakMap<object, CampaignComplexityReport>();
+
+/**
+ * Cached wrapper around `analyzeCampaignComplexity`. `campaignKey` should be
+ * the loaded campaign object (e.g. the `SavedCampaignV1`) — callers must
+ * call `invalidateCampaignComplexityCache(campaignKey)` whenever they mutate
+ * that object's room content in place (the editor's live per-room checks
+ * don't use this cache at all, so in-editor edits never need to invalidate
+ * it; this exists for the campaign-wide pre-play check, which normally
+ * operates on freshly-loaded, immutable campaign data).
+ *
+ * `getRooms` is only invoked on a cache miss, so a cache hit skips the
+ * (comparatively expensive) full-campaign hydration entirely.
+ */
+export function analyzeCampaignComplexityCached(
+  campaignKey: object,
+  getRooms: () => ReadonlyMap<string, RoomDef> | readonly RoomDef[],
+): CampaignComplexityReport {
+  const cached = campaignComplexityCache.get(campaignKey);
+  if (cached !== undefined) return cached;
+  const report = analyzeCampaignComplexity(getRooms());
+  campaignComplexityCache.set(campaignKey, report);
+  return report;
+}
+
+/** Evicts the cached report for `campaignKey`, forcing recomputation on the next call. */
+export function invalidateCampaignComplexityCache(campaignKey: object): void {
+  campaignComplexityCache.delete(campaignKey);
+}
+
 /**
  * Builds the pre-play confirmation message for a custom campaign. Returns
  * `null` when no warning is warranted (caller should skip showing a dialog).

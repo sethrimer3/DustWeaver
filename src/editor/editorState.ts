@@ -15,6 +15,7 @@ import type { LightType } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { BrushMode, PaletteCategory, PaletteItem } from './editorDropdownData';
 import type { SelectedElement, EditorRoomData } from './editorElementTypes';
+import type { RoomComplexitySeverity } from '../levels/roomComplexity';
 
 // Re-export element types so existing consumers need not change their imports.
 export type {
@@ -172,6 +173,20 @@ export interface EditorState {
    * currently highlighted / being dragged. Null when no control point is active.
    */
   guideDustPathSelectedPointIndex: number | null;
+  /**
+   * Set by applyEdits() whenever room content changes; consumed once at the
+   * end of the next frame where the mouse is not held down (i.e. once per
+   * completed placement/paint/paste/fill/undo/redo operation, not once per
+   * per-pixel drag step) to run a room-complexity check.
+   */
+  pendingComplexityCheck: boolean;
+  /**
+   * Highest complexity severity tier already warned about for the
+   * currently-open room. Prevents re-showing a warning for every additional
+   * placement — only a strictly higher tier than this re-triggers a toast.
+   * Reset to 'normal' whenever a room is (re)loaded into the editor.
+   */
+  lastWarnedComplexitySeverity: RoomComplexitySeverity;
 }
 
 export function createEditorState(): EditorState {
@@ -219,6 +234,8 @@ export function createEditorState(): EditorState {
     brushRectStartBlockX: null,
     brushRectStartBlockY: null,
     guideDustPathSelectedPointIndex: null,
+    pendingComplexityCheck: false,
+    lastWarnedComplexitySeverity: 'normal',
   };
 }
 

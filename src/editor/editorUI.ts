@@ -34,6 +34,8 @@ import { createFloaterLatticeEffect } from '../render/effects/floaterLatticeEffe
 import { createTetrisBlockEffect } from '../render/effects/tetrisBlockEffect';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import type { BackgroundId } from '../levels/roomDef';
+import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
+import { dominantCategory, ROOM_COMPLEXITY_CATEGORY_LABELS, type RoomComplexitySeverity } from '../levels/roomComplexity';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
@@ -104,6 +106,22 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
   `;
   container.appendChild(exportAllBtn);
+
+  // ── Room density indicator ───────────────────────────────────────────────
+  // Lightweight, non-modal readout of the current room's estimated
+  // performance cost (see levels/roomComplexity.ts for the analyzer).
+  const DENSITY_SEVERITY_COLORS: Record<RoomComplexitySeverity, string> = {
+    normal: '#88cc88',
+    elevated: '#ffcc66',
+    high: '#ff9944',
+    extreme: '#ff5544',
+  };
+  const densityIndicator = document.createElement('div');
+  densityIndicator.style.cssText = `
+    font-size: 10.5px; color: #aaaaaa; margin-bottom: 10px; line-height: 1.5;
+    padding: 4px 6px; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
+  `;
+  container.appendChild(densityIndicator);
 
   if (import.meta.env.DEV) {
     const devToolsDiv = document.createElement('div');
@@ -552,6 +570,19 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   root.appendChild(topRightBar);
 
   function update(state: EditorState): void {
+    // Update room density indicator
+    if (state.roomData) {
+      const report = analyzeEditorRoomComplexity(state.roomData);
+      const severityLabel = report.severity.charAt(0).toUpperCase() + report.severity.slice(1);
+      const topCategory = ROOM_COMPLEXITY_CATEGORY_LABELS[dominantCategory(report.categoryCounts)];
+      densityIndicator.innerHTML =
+        `Room density: ${report.totalPlacedCount.toLocaleString()} elements<br>` +
+        `Severity: <span style="color:${DENSITY_SEVERITY_COLORS[report.severity]};font-weight:bold;">${severityLabel}</span> ` +
+        `&mdash; mostly ${topCategory}`;
+    } else {
+      densityIndicator.textContent = '';
+    }
+
     // Update tool highlight
     for (const btn of toolBtns) {
       btn.style.background = btn.dataset.tool === state.activeTool ? ACTIVE_BG : BTN_BG;

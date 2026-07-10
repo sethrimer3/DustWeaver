@@ -21,10 +21,12 @@ import {
   getActiveRoomAdjacency,
   getActiveCampaignId,
 } from './levels/roomFileLoader';
-import { getCampaignStartRoomId } from './levels/campaignSchema';
+import { getCampaignStartRoomId, hydrateSavedCampaignToRoomDefs } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
 import type { GameScreenRunOptions } from './screens/gameScreen';
+import { analyzeCampaignComplexityCached, formatCampaignComplexityWarningMessage } from './levels/roomComplexity';
+import { showPerformanceWarningDialog } from './ui/performanceWarningDialog';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -251,6 +253,26 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         let campaignStartProgress: PlayerProgress | undefined;
         if (source.loadPackedCampaign !== undefined) {
           const campaign = await source.loadPackedCampaign();
+
+          // ── Performance pre-check ────────────────────────────────────────
+          // Analyze every room's authored data directly (no registry mutation,
+          // no room instantiation — see hydrateSavedCampaignToRoomDefs), so
+          // this works even for rooms the player has never visited. The
+          // player is never blocked from playing; Cancel just returns to the
+          // main menu, Continue proceeds exactly as if this check didn't run.
+          const campaignComplexity = analyzeCampaignComplexityCached(campaign, () => hydrateSavedCampaignToRoomDefs(campaign));
+          if (campaignComplexity.shouldWarnBeforePlay) {
+            const warningMessage = formatCampaignComplexityWarningMessage(campaignComplexity);
+            if (warningMessage !== null) {
+              const shouldContinue = await new Promise<boolean>((resolve) => {
+                showPerformanceWarningDialog(uiRoot, warningMessage, () => resolve(true), () => resolve(false));
+              });
+              if (!shouldContinue) {
+                navigate('mainMenu');
+                return;
+              }
+            }
+          }
 
           // ── Electron: validate / generate room file cache ─────────────────
           // In Electron, prefer lazy loading from the derived room file cache
