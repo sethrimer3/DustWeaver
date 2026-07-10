@@ -51,6 +51,7 @@ import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRende
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderPixelMaterials } from '../render/pixelMaterials/pixelMaterialRenderer';
+import { renderPixelMaterialDebug } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
@@ -536,6 +537,10 @@ export function renderFrame(r: RenderFrameContext): void {
   }
   // Pixel-material particles (falling sand) — crisp one-native-pixel squares.
   renderPixelMaterials(ctx, world, ox, oy, zoom);
+  // Dev-only diagnostics: occupied/active/sleeping counters + wind-impulse
+  // visualization (center, radius, direction, short fade). Disabled outside
+  // debug mode; see render/pixelMaterials/pixelMaterialDebugRenderer.ts.
+  if (isDebugMode) renderPixelMaterialDebug(ctx, world, ox, oy, zoom);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)

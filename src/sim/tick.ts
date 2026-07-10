@@ -74,6 +74,8 @@ import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
 import { tickIceMoteAura } from './iceMoteAura';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
+import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
+import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
 
 export function tick(world: WorldState): void {
   // Sync world.combatMode from the module singleton (which is updated by the pause menu toggle).
@@ -118,6 +120,17 @@ export function tick(world: WorldState): void {
   // 0.06. Kinetic block animation phase advancement
   tickKineticBlocks(world);
   tickGrappleCarryBlocks(world);
+
+  // 0.065. Keep the pixel-material solid mask in sync with dynamic wall
+  //         geometry (falling blocks moving, crumble/breakable blocks being
+  //         destroyed) and wake sand near any changed region.
+  syncPixelMaterialSolidGeometry(world);
+
+  // 0.066. Movement-driven wind — convert player/enemy velocity into local
+  //         wind impulses BEFORE sand steps this tick, so disturbance and
+  //         settling happen in the same visual frame.
+  world.pixelMaterialSystem.resetWindDiagnostics();
+  applyMovementWindToPixelMaterials(world);
 
   // 0.07. Pixel-material simulation (falling sand) — fixed-step, deterministic.
   tickPixelMaterials(world);
