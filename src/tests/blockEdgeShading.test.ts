@@ -130,3 +130,45 @@ test('south exposure mask shades the bottom row but not the top row', () => {
   assert.notDeepEqual(pixelAt(data, SIZE, 4, SIZE - 1), [70, 70, 70, 255]);
   assert.deepEqual(pixelAt(data, SIZE, 4, 0), [70, 70, 70, 255]);
 });
+
+// ── Regression: the baked shader must never add a white/bright additive rim ──
+//
+// `applyOrganicEdgeShading` used to also apply an additive RGB "rim light"
+// brighten on exposed depth-0 pixels (`_EDGE_HIGHLIGHT_ADD`/`_TOP`), which
+// stacked with `surfaceEdgeOverlay.ts`'s guaranteed highlight and made
+// isolated exposed tiles blow out to near-white. That additive term has been
+// removed — this shader is now multiply-only, so it can only ever darken
+// (never exceed) the source pixel.
+
+test('applyOrganicEdgeShading never increases any RGB channel above its source value, for every exposed-side mask', () => {
+  const SIZE = 8;
+  const masksToTry = [
+    OPEN_AIR_ALL_SIDES,
+    OPEN_AIR_SIDE_N,
+    OPEN_AIR_SIDE_E,
+    OPEN_AIR_SIDE_S,
+    OPEN_AIR_SIDE_W,
+    OPEN_AIR_SIDE_N | OPEN_AIR_SIDE_E,
+  ];
+  for (const mask of masksToTry) {
+    const source: [number, number, number, number] = [128, 64, 32, 255];
+    const { ctx, data } = makeFakeCtx(SIZE, SIZE, source);
+    applyOrganicEdgeShading(ctx, SIZE, SIZE, mask, 0, 0, 1);
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const [r, g, b] = pixelAt(data, SIZE, x, y);
+        assert.ok(r <= source[0], `mask ${mask}: R channel at (${x},${y}) exceeded source (${r} > ${source[0]})`);
+        assert.ok(g <= source[1], `mask ${mask}: G channel at (${x},${y}) exceeded source (${g} > ${source[1]})`);
+        assert.ok(b <= source[2], `mask ${mask}: B channel at (${x},${y}) exceeded source (${b} > ${source[2]})`);
+      }
+    }
+  }
+});
+
+test('an isolated fully-exposed tile does not blow out to near-white (no additive rim highlight)', () => {
+  const SIZE = 8;
+  const { ctx, data } = makeFakeCtx(SIZE, SIZE, [100, 100, 100, 255]);
+  applyOrganicEdgeShading(ctx, SIZE, SIZE, OPEN_AIR_ALL_SIDES, 0, 0, 1);
+  const corner = pixelAt(data, SIZE, 0, 0);
+  assert.ok(corner[0] <= 100 && corner[1] <= 100 && corner[2] <= 100, 'exposed corner pixel must not brighten past its source value');
+});

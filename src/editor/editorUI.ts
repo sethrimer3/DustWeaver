@@ -24,6 +24,15 @@ import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePre
 import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
 import { createEditorLightingPanel } from './editorUILightingPanel';
+import type { TheroBackgroundEffect } from '../render/effects/theroBackgroundEffect';
+import { createPrologueShapeEffect } from '../render/effects/prologueShapeEffect';
+import { createVermiculateEffect } from '../render/effects/vermiculateEffect';
+import { createGravityGridEffect } from '../render/effects/gravityGridEffect';
+import { createEulerFluidEffect } from '../render/effects/eulerFluidEffect';
+import { createFloaterLatticeEffect } from '../render/effects/floaterLatticeEffect';
+import { createTetrisBlockEffect } from '../render/effects/tetrisBlockEffect';
+import { createSubstrateEffect } from '../render/effects/substrateEffect';
+import type { BackgroundId } from '../levels/roomDef';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
@@ -42,6 +51,9 @@ export type { RoomEdge, EditorUICallbacks } from './editorState';
 
 export function createEditorUI(root: HTMLElement, campaignTitle?: string | null): EditorUI {
   let callbacks: EditorUICallbacks | null = null;
+  let animatedBackgroundPreviewCanvases: HTMLCanvasElement[] = [];
+  const animatedBackgroundPreviewEffects = new WeakMap<HTMLCanvasElement, TheroBackgroundEffect>();
+  let animatedBackgroundPreviewFrame: number | null = null;
 
   const container = document.createElement('div');
   container.id = 'editor-ui';
@@ -253,10 +265,84 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     }
     return '#000';
   }
+  function createAnimatedBackgroundPreviewEffect(backgroundId: BackgroundId): TheroBackgroundEffect | null {
+    switch (backgroundId) {
+      case 'crystallineCracks':
+      case 'thero_ch6':
+        return createSubstrateEffect();
+      case 'thero_prologue':
+        return createPrologueShapeEffect();
+      case 'thero_ch1':
+        return createVermiculateEffect();
+      case 'thero_ch2':
+        return createGravityGridEffect();
+      case 'thero_ch3':
+        return createEulerFluidEffect();
+      case 'thero_ch4':
+        return createFloaterLatticeEffect();
+      case 'thero_ch5':
+        return createTetrisBlockEffect();
+      default:
+        return null;
+    }
+  }
+  function drawAnimatedBackgroundPreview(canvas: HTMLCanvasElement, nowMs: number): void {
+    const backgroundId = canvas.dataset.backgroundId as BackgroundId | undefined;
+    if (backgroundId === undefined) return;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) return;
+    const effect = animatedBackgroundPreviewEffects.get(canvas);
+    if (effect === undefined) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    effect.update(nowMs, canvas.width, canvas.height);
+    effect.draw(ctx);
+  }
+  function drawAnimatedBackgroundPreviews(nowMs: number): void {
+    animatedBackgroundPreviewCanvases = animatedBackgroundPreviewCanvases.filter(canvas => canvas.isConnected);
+    for (const canvas of animatedBackgroundPreviewCanvases) {
+      drawAnimatedBackgroundPreview(canvas, nowMs);
+    }
+    animatedBackgroundPreviewFrame = requestAnimationFrame(drawAnimatedBackgroundPreviews);
+  }
+  function ensureAnimatedBackgroundPreviewLoop(): void {
+    if (animatedBackgroundPreviewFrame !== null) return;
+    animatedBackgroundPreviewFrame = requestAnimationFrame(drawAnimatedBackgroundPreviews);
+  }
+  function makeAnimatedBackgroundPreviewCanvas(backgroundId: BackgroundId, width: number, height: number): HTMLCanvasElement {
+    const effect = createAnimatedBackgroundPreviewEffect(backgroundId);
+    if (effect === null) {
+      throw new Error(`No animated background preview effect for ${backgroundId}`);
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.dataset.backgroundId = backgroundId;
+    canvas.style.cssText = `
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      display: block; pointer-events: none; background: #000;
+    `;
+    animatedBackgroundPreviewCanvases.push(canvas);
+    animatedBackgroundPreviewEffects.set(canvas, effect);
+    ensureAnimatedBackgroundPreviewLoop();
+    return canvas;
+  }
   function syncCurrentBackgroundButton(backgroundId: string): void {
     const option = findBackgroundOption(backgroundId);
     bgCurrentLabel.textContent = option?.label ?? backgroundId;
     bgCurrentBtn.style.background = backgroundPreviewCss(option ?? { previewUrl: null });
+    const existingCanvas = bgCurrentBtn.querySelector<HTMLCanvasElement>('canvas[data-current-background-preview="1"]');
+    if (existingCanvas !== null) {
+      existingCanvas.remove();
+      animatedBackgroundPreviewCanvases = animatedBackgroundPreviewCanvases.filter(canvas => canvas !== existingCanvas);
+    }
+    if (option?.isProcedural) {
+      const canvas = makeAnimatedBackgroundPreviewCanvas(option.id, 148, 58);
+      canvas.dataset.currentBackgroundPreview = '1';
+      bgCurrentBtn.insertBefore(canvas, bgCurrentLabel);
+    }
   }
   function makeBackgroundPreviewButton(option: (typeof BACKGROUND_OPTIONS)[number]): HTMLButtonElement {
     const btn = document.createElement('button');
@@ -268,6 +354,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       border: 1px solid ${PANEL_BORDER}; border-radius: 3px; padding: 0;
       background: ${backgroundPreviewCss(option)}; color: #fff; font-family: 'Cinzel', monospace;
     `;
+    if (option.isProcedural) {
+      btn.appendChild(makeAnimatedBackgroundPreviewCanvas(option.id, 120, 64));
+    }
     const label = document.createElement('span');
     label.textContent = option.label;
     label.style.cssText = `
@@ -708,6 +797,11 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       lightingPanel.resetState();
       dimWidthInput = null;
       dimHeightInput = null;
+      if (animatedBackgroundPreviewFrame !== null) {
+        cancelAnimationFrame(animatedBackgroundPreviewFrame);
+        animatedBackgroundPreviewFrame = null;
+      }
+      animatedBackgroundPreviewCanvases = [];
       if (container.parentElement) container.parentElement.removeChild(container);
       if (topRightBar.parentElement) topRightBar.parentElement.removeChild(topRightBar);
     },
