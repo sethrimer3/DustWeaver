@@ -289,7 +289,7 @@ export function tickGrappleZip(
       // away from the grapple point using the surface-normal vector.
       const preservedVx = player.velocityXWorld;
       const preservedVy = player.velocityYWorld;
-      releaseGrapple(world, false);
+      releaseGrapple(world, false, true);
       player.velocityXWorld = preservedVx * ZIP_CANCEL_MOMENTUM_X_MULTIPLIER;
       player.velocityYWorld = preservedVy * ZIP_CANCEL_MOMENTUM_Y_MULTIPLIER
         - PLAYER_JUMP_SPEED_WORLD * ZIP_CANCEL_JUMP_Y_CONTRIBUTION;
@@ -348,7 +348,7 @@ export function tickGrappleZip(
       player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
       player.varJumpSpeedWorld = player.velocityYWorld;
     }
-    releaseGrapple(world, false);
+    releaseGrapple(world, false, true);
     return true;
   }
 

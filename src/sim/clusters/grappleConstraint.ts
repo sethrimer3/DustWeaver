@@ -199,7 +199,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     player.velocityYWorld -= GRAPPLE_JUMP_OFF_SPEED_WORLD;
     player.varJumpTimerTicks = VAR_JUMP_TIME_TICKS;
     player.varJumpSpeedWorld = player.velocityYWorld;
-    releaseGrapple(world, false);
+    releaseGrapple(world, false, true);
     return;
   }
 

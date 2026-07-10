@@ -49,6 +49,8 @@ const GRAPPLE_RELEASE_FADE_TICK_RANGE = 12.0;
 const GRAPPLE_RELEASE_SPEED_MIN_WORLD_PER_SEC = 70.0;
 const GRAPPLE_RELEASE_SPEED_RANGE_WORLD_PER_SEC = 40.0;
 const GRAPPLE_RELEASE_SPREAD_RAD = 20.0 * Math.PI / 180.0;
+const GRAPPLE_JUMP_RELEASE_MAX_DOWN_BIAS = 0.9;
+const GRAPPLE_JUMP_RELEASE_MAX_SPEED_BOOST = 0.9;
 
 /** Stable [0, 1) noise so grapple release visuals remain deterministic. */
 function grappleReleaseNoise(seed: number): number {
@@ -271,8 +273,10 @@ export function clearLegacyGrappleMissState(world: WorldState): void {
  *   a jump pressed in the next few frames still counts.  Pass false when the
  *   release is itself a jump (jump-off and stuck-jump paths) because those paths
  *   already apply an upward velocity impulse directly.
+ * @param isJumpOff  Adds a downward, player-proximity-weighted burst to the
+ *   released chain motes. Only true for player-initiated grapple jumps.
  */
-export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void {
+export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJumpOff = false): void {
   const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
 
   // Let the visible chain break into free-flying motes instead of vanishing.
@@ -280,6 +284,20 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   // grapple anchor, with a small deterministic spread and individual fade.
   if (shouldRetractFromActiveGrapple && world.grappleParticleStartIndex >= 0) {
     const start = world.grappleParticleStartIndex;
+    const player = world.clusters[0];
+    let farthestParticleDistance = 0.0;
+    if (isJumpOff && player !== undefined) {
+      for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+        const idx = start + i;
+        const playerDx = world.positionXWorld[idx] - player.positionXWorld;
+        const playerDy = world.positionYWorld[idx] - player.positionYWorld;
+        farthestParticleDistance = Math.max(
+          farthestParticleDistance,
+          Math.sqrt(playerDx * playerDx + playerDy * playerDy),
+        );
+      }
+    }
+
     for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
       const idx = start + i;
       const dx = world.grappleAnchorXWorld - world.positionXWorld[idx];
@@ -288,11 +306,29 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
       const baseAngle = distance > 1e-6 ? Math.atan2(dy, dx) : 0.0;
       const seed = (world.noiseTickSeed[idx] ^ world.tick ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0;
       const angle = baseAngle + (grappleReleaseNoise(seed) * 2.0 - 1.0) * GRAPPLE_RELEASE_SPREAD_RAD;
-      const speed = GRAPPLE_RELEASE_SPEED_MIN_WORLD_PER_SEC
+      let dirX = Math.cos(angle);
+      let dirY = Math.sin(angle);
+      let speed = GRAPPLE_RELEASE_SPEED_MIN_WORLD_PER_SEC
         + grappleReleaseNoise(seed ^ 0xa511e9b3) * GRAPPLE_RELEASE_SPEED_RANGE_WORLD_PER_SEC;
 
-      world.velocityXWorld[idx] = Math.cos(angle) * speed;
-      world.velocityYWorld[idx] = Math.sin(angle) * speed;
+      if (isJumpOff && player !== undefined && farthestParticleDistance > 1e-6) {
+        const playerDx = world.positionXWorld[idx] - player.positionXWorld;
+        const playerDy = world.positionYWorld[idx] - player.positionYWorld;
+        const playerDistance = Math.sqrt(playerDx * playerDx + playerDy * playerDy);
+        const proximity = 1.0 - Math.min(1.0, playerDistance / farthestParticleDistance);
+        const downBias = proximity * GRAPPLE_JUMP_RELEASE_MAX_DOWN_BIAS;
+        dirX *= 1.0 - downBias;
+        dirY = dirY * (1.0 - downBias) + downBias;
+        const biasedLength = Math.sqrt(dirX * dirX + dirY * dirY);
+        if (biasedLength > 1e-6) {
+          dirX /= biasedLength;
+          dirY /= biasedLength;
+        }
+        speed *= 1.0 + proximity * GRAPPLE_JUMP_RELEASE_MAX_SPEED_BOOST;
+      }
+
+      world.velocityXWorld[idx] = dirX * speed;
+      world.velocityYWorld[idx] = dirY * speed;
       world.forceX[idx] = 0.0;
       world.forceY[idx] = 0.0;
       world.ageTicks[idx] = 0.0;
