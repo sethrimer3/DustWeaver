@@ -402,6 +402,8 @@ export interface SavedRoomV2 {
   bgBlocks?: SavedBgBlock[];
   /** Golden dust guide paths. */
   guidePaths?: SavedGuideDustPath[];
+  /** Pixel-material (falling sand) placements as [xPixel, yPixel, material]. */
+  pixelMaterials?: [number, number, number][];
   /**
    * Pre-baked runtime wall template produced during export.
    * Optional — absent in old v2/v3 files. When present and valid, the

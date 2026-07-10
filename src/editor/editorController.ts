@@ -34,7 +34,8 @@ import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
-import { ROOM_REGISTRY, initRoomRegistry, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
+import { ROOM_REGISTRY, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
+import { loadRoomForGameplayAsync } from '../levels/roomFileLoader';
 import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
@@ -762,15 +763,26 @@ export function createEditorController(
     rebuildLiveEditorRoomDef();
   }
 
+  // Room ids that failed to load during the most recent map-overlay catalogue
+  // build. Non-empty means the map is showing a partial campaign — surfaced
+  // to the user via a toast rather than silently rendering as "complete".
+  let lastMapCatalogueFailedRoomIds: string[] = [];
+
   /**
    * Ensures ROOM_REGISTRY holds every room in the active campaign before a
    * map overlay reads it. Two cases can leave it only partially populated:
    *   - Main campaign on Electron: gameplay uses lazy per-room file loading
-   *     (see main.ts), so only visited rooms are registered. Reload eagerly.
+   *     (see main.ts), so only visited rooms are registered.
    *   - Custom campaign session: rooms only get registered once opened in
    *     the editor (loadRoomForEditing). Register the rest from the store.
+   *
+   * This function is ADDITIVE ONLY — it never clears or reloads ROOM_REGISTRY
+   * wholesale (that would discard in-progress editor edits and any dirty
+   * campaign-store rooms). It only fetches and registers rooms that are
+   * currently missing, and never overwrites a room ROOM_REGISTRY already has.
    */
   async function ensureFullRoomRegistryForMapOverlay(): Promise<void> {
+    lastMapCatalogueFailedRoomIds = [];
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       const store = campaignSession.campaignStore;
       for (const id of store.rawRoomsById.keys()) {
@@ -779,20 +791,55 @@ export function createEditorController(
         state.nextUid = loaded.nextUid;
         registerRoom(editorRoomDataToRoomDef(loaded.roomData));
       }
+      if (import.meta.env.DEV) {
+        console.log(
+          `[editor-map] expectedRooms=${store.rawRoomsById.size} loadedRooms=${ROOM_REGISTRY.size} ` +
+          `displayedRooms=${ROOM_REGISTRY.size} source=campaignStore`,
+        );
+      }
       return;
     }
-    if (ROOM_REGISTRY.size < WORLD_MAP_POSITIONS.size) {
-      try {
-        await initRoomRegistry();
-      } catch (err) {
-        console.error('[editor] Failed to reload room registry before opening map overlay:', err);
+
+    // Main campaign: WORLD_MAP_POSITIONS is fully populated at startup (both
+    // the eager and Electron lazy-file-cache init paths populate world-map
+    // metadata for every campaign room up front — see main.ts), so it is the
+    // authoritative room-id catalogue even when ROOM_REGISTRY itself is only
+    // partially populated (lazy gameplay loading). Fetch only what's missing.
+    const missingIds = [...WORLD_MAP_POSITIONS.keys()].filter(id => !ROOM_REGISTRY.has(id));
+    if (missingIds.length > 0) {
+      const results = await Promise.all(missingIds.map(async id => {
+        try {
+          return await loadRoomForGameplayAsync(id);
+        } catch (err) {
+          console.error(`[editor-map] Failed to load room "${id}" for map overlay:`, err);
+          return undefined;
+        }
+      }));
+      lastMapCatalogueFailedRoomIds = missingIds.filter((id, i) => results[i] === undefined && !ROOM_REGISTRY.has(id));
+      if (lastMapCatalogueFailedRoomIds.length > 0) {
+        console.error(
+          `[editor-map] ${lastMapCatalogueFailedRoomIds.length} room(s) could not be loaded for the map overlay: ` +
+          lastMapCatalogueFailedRoomIds.join(', '),
+        );
       }
+    }
+    if (import.meta.env.DEV) {
+      console.log(
+        `[editor-map] expectedRooms=${WORLD_MAP_POSITIONS.size} loadedRooms=${ROOM_REGISTRY.size} ` +
+        `displayedRooms=${ROOM_REGISTRY.size - lastMapCatalogueFailedRoomIds.length} source=main`,
+      );
     }
   }
 
   async function openWorldMap(): Promise<void> {
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     await ensureFullRoomRegistryForMapOverlay();
+    if (lastMapCatalogueFailedRoomIds.length > 0) {
+      showEditorToast(
+        uiRoot,
+        `⚠ ${lastMapCatalogueFailedRoomIds.length} room(s) failed to load — map is showing a partial campaign.`,
+      );
+    }
     if (state.roomData) {
       registerRoom(editorRoomDataToRoomDef(state.roomData));
     }
@@ -885,6 +932,12 @@ export function createEditorController(
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
 
     await ensureFullRoomRegistryForMapOverlay();
+    if (lastMapCatalogueFailedRoomIds.length > 0) {
+      showEditorToast(
+        uiRoot,
+        `⚠ ${lastMapCatalogueFailedRoomIds.length} room(s) failed to load — map is showing a partial campaign.`,
+      );
+    }
 
     // Refresh the currently edited room before the visual map snapshots
     // ROOM_REGISTRY. Door moves can otherwise render from a stale RoomDef.

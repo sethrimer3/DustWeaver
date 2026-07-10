@@ -5,6 +5,7 @@ import { SolidMask, buildSolidMaskFromWorld } from '../sim/pixelMaterials/pixelM
 import { MATERIAL_SAND } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { createWorldState } from '../sim/world';
 import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
+import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
 import type { EditorRoomData } from '../editor/editorState';
 import { canPlacePixelMaterialAt } from '../editor/editorHitTest';
 import { pixelFromCursor, placePixelMaterialAt, paintPixelMaterialLine } from '../editor/editorPixelMaterialTool';
@@ -206,6 +207,35 @@ test('room JSON serialization preserves pixel materials', () => {
   assert.deepEqual(json.pixelMaterials, [{ xPixel: 40, yPixel: 12, material: 1 }]);
   assert.equal(roundTrip.pixelMaterials?.[0]?.xPixel, 40);
   assert.equal(roundTrip.pixelMaterials?.[0]?.yPixel, 12);
+});
+
+test('SavedRoomV2 dehydrate/hydrate round-trips pixel materials (campaign-store & file-cache path)', () => {
+  const room = {
+    id: 'roomB', name: 'Room B', worldNumber: 1,
+    blockTheme: 'blackRock', backgroundId: 'brownRock', lightingEffect: 'Ambient',
+    songId: '_continue', widthBlocks: 20, heightBlocks: 14,
+    playerSpawnBlock: [2, 2], interiorWalls: [], enemies: [], transitions: [],
+    saveTombs: [], skillTombs: [], dustPiles: [], grasshopperAreas: [], fireflyAreas: [],
+    decorations: [], ambientLightBlockers: [], lightSources: [], waterZones: [], lavaZones: [],
+    crumbleBlocks: [], spikes: [], bouncePads: [], kineticBlocks: [], ropes: [], sunbeams: [],
+    sceneLights: [], fallingBlocks: [], backgroundBlocks: [], dialogueTriggers: [], guideDustPaths: [],
+    dustContainers: [], dustContainerPieces: [], dustBoostJars: [], dustSwarms: [], lambdaAnchors: [],
+    grappleCarryBlocks: [], phantasmalTiles: [],
+    pixelMaterials: [
+      { uid: 1, xPixel: 40, yPixel: 12, material: 1 },
+      { uid: 2, xPixel: 41, yPixel: 12, material: 1 },
+    ],
+  } as EditorRoomData;
+
+  const json = editorRoomDataToJson(room);
+  const saved = dehydrateRoom(json);
+  assert.deepEqual(saved.pixelMaterials, [[40, 12, 1], [41, 12, 1]]);
+
+  const rehydrated = hydrateV2Room(saved);
+  assert.deepEqual(rehydrated.pixelMaterials, [
+    { xPixel: 40, yPixel: 12, material: 1 },
+    { xPixel: 41, yPixel: 12, material: 1 },
+  ]);
 });
 
 // 13. Legacy rooms without pixel-material data load fine

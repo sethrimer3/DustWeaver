@@ -480,6 +480,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.decorations && json.decorations.length > 0) {
     out.decorations = json.decorations.map(d => [d.xBlock, d.yBlock, d.kind] as [number, number, string]);
   }
+  if (json.pixelMaterials && json.pixelMaterials.length > 0) {
+    out.pixelMaterials = json.pixelMaterials.map(p => [p.xPixel, p.yPixel, p.material] as [number, number, number]);
+  }
   // ── Lighting authoring data ────────────────────────────────────────────
   if (json.ambientLightDirection) {
     out.ambientDir = json.ambientLightDirection;

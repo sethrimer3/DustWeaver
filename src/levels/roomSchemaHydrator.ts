@@ -36,6 +36,7 @@ import type {
   RoomJsonLambdaAnchor,
   RoomJsonBackgroundBlock,
 } from '../editor/roomJson';
+import type { RoomJsonPixelMaterial } from '../editor/roomJsonSchema';
 import type {
   SavedSolids,
   Saved1x1Layer,
@@ -307,6 +308,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count]) => ({ xBlock: x, yBlock: y, dustCount: count }) as RoomJsonDustPile);
   if (saved.grasshopperAreas) json.grasshopperAreas = saved.grasshopperAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }) as RoomJsonGrasshopperArea);
   if (saved.decorations)    json.decorations     = saved.decorations.map(([x, y, kind]) => ({ xBlock: x, yBlock: y, kind }) as RoomJsonDecoration);
+  if (saved.pixelMaterials) json.pixelMaterials  = saved.pixelMaterials.map(([x, y, material]) => ({ xPixel: x, yPixel: y, material }) as RoomJsonPixelMaterial);
   if (saved.ambientDir) {
     // Cast — the JSON field is typed as the literal union `AmbientLightDirection`.
     json.ambientLightDirection = saved.ambientDir as RoomJsonDef['ambientLightDirection'];
