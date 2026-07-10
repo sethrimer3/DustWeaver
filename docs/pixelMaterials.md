@@ -1,7 +1,8 @@
 # Pixel-Material System (falling sand)
 
 A pixel-scale physics layer separate from the existing tile/collision/entity
-architecture. Initial scope: one material (1×1 sand).
+architecture. Current materials: 1×1 sand (`MATERIAL_SAND`), 2×2 sand
+(`MATERIAL_SAND_2X2`), and 1×1 water (`MATERIAL_WATER`).
 
 > **Phase 2 update**: editor/runtime solid parity hardening, room-resize
 > clipping, right-click erase, allocation-free rendering, movement-driven
@@ -26,6 +27,14 @@ architecture. Initial scope: one material (1×1 sand).
 > now also have a `windResponse` multiplier (`pixelMaterialTypes.ts`) — 2×2
 > sand accumulates noticeably less wind momentum than 1×1 sand from an
 > identical gust, so it reads as heavier.
+>
+> **Phase 5 update**: adds `MATERIAL_WATER` (1×1, `behavior: 'liquid'`) and a
+> `MaterialBehavior` (`'sand' | 'liquid'`) dispatched in `stepParticle` via
+> `getMaterialBehavior()` — `stepSandParticle` (unchanged sand logic, now able
+> to sink through water while falling/diagonal-falling) and
+> `stepLiquidParticle` (new: falls, then diagonals, then spreads horizontally
+> instead of piling). Sand/water displacement is a footprint-size-agnostic
+> atomic swap (`trySwapWithLiquid`) — see "Sand/water interaction" below.
 
 ## Coordinate space
 
@@ -60,9 +69,12 @@ Inside `sim/tick.ts`, right after falling-block/kinetic-block ticking and
 before hazards:
 
 ```
-0.06 tickKineticBlocks / tickGrappleCarryBlocks
-0.07 tickPixelMaterials(world)   <-- world.pixelMaterialSystem.step()
-0.1  applyHazards
+0.06  tickKineticBlocks / tickGrappleCarryBlocks
+0.065 syncPixelMaterialSolidGeometry(world)        — dynamic solid-mask sync
+0.066 world.pixelMaterialSystem.resetWindDiagnostics()
+0.066 applyMovementWindToPixelMaterials(world)     — movement-driven wind
+0.07  tickPixelMaterials(world)                    <-- world.pixelMaterialSystem.step()
+0.1   applyHazards
 ```
 
 ## Solid occupancy
@@ -124,16 +136,72 @@ not oversights):
   via `loadRoomPixelMaterials`, so edits are always correct the next time the
   room loads.
 
+## Material behavior dispatch (Phase 5)
+
+Each `MaterialDef` has a `behavior: 'sand' | 'liquid'`. `stepParticle`
+dispatches on `getMaterialBehavior(p.material)` to `stepSandParticle` or
+`stepLiquidParticle` — no material-id branching (`if material === ...`)
+anywhere else in the sim. Adding a third behavior means adding one `switch`
+case plus a new `stepXParticle` method, not touching existing behaviors.
+
 ## Sand simulation
 
-Per active particle, per fixed step (`PixelMaterialSystem.stepParticle`):
-1. Attempt straight down.
-2. Attempt diagonal down-left/down-right. Preference alternates
-   deterministically (`(stepCounter + x) & 1`, no RNG) so piles don't lean
-   consistently to one side.
-3. Attempt a wind-driven upward step, if wind momentum is pushing up.
-4. Attempt a wind-driven horizontal step, if wind momentum is nonzero.
+Per active particle, per fixed step (`PixelMaterialSystem.stepSandParticle`):
+1. Attempt straight down — may sink through water (see "Sand/water
+   interaction" below).
+2. Attempt diagonal down-left/down-right (also may sink through water).
+   Preference alternates deterministically (`(stepCounter + x) & 1`, no RNG)
+   so piles don't lean consistently to one side.
+3. Attempt a wind-driven upward step, if wind momentum is pushing up
+   (does NOT displace water — conservative on wind-only moves).
+4. Attempt a wind-driven horizontal step, if wind momentum is nonzero (same).
 5. Otherwise remain stationary and accumulate toward sleep.
+
+## Water simulation
+
+Per active particle, per fixed step (`PixelMaterialSystem.stepLiquidParticle`):
+1. Attempt straight down.
+2. Attempt diagonal down-left/down-right, same alternating chooser as sand.
+3. Attempt a wind-driven upward step, if wind momentum is pushing up.
+4. Attempt a horizontal step — direction is wind-biased when momentum is
+   nonzero, otherwise a deterministic alternation using a different
+   `stepCounter` phase than the diagonal chooser (still no RNG); the other
+   horizontal direction is tried too before giving up. This is what makes
+   water spread along a floor instead of piling into a small mound like sand.
+5. Otherwise remain stationary and accumulate toward sleep — same
+   `SLEEP_DELAY_STEPS`/wake rules as sand. A lone water particle on a wide
+   open floor may wander for a long time before finding a spot with no open
+   neighbor in either direction; this is expected — "spreading" only
+   produces a settled puddle once multiple water particles or solid
+   boundaries actually box it in.
+Water never swaps with sand — its move attempts only ever check for a
+genuinely free (non-solid, unoccupied) cell, so it flows around sand rather
+than through it.
+
+## Sand/water interaction
+
+`PixelMaterialSystem.trySwapWithLiquid(p, nx, ny)` lets a falling/diagonal-
+falling sand particle swap places with any liquid particle(s) occupying its
+destination footprint:
+1. Compute the destination cells not already part of `p`'s current footprint
+   ("entering") and the current-footprint cells that won't be part of the
+   destination ("leaving") — these always have equal length for a same-size
+   footprint moved by one step, so every displaced liquid always has
+   somewhere to go.
+2. Classify every entering cell: solid → fail; a liquid particle → queue for
+   displacement; anything else (sand) → fail. No mutation during this pass.
+3. Only on full success: clear old keys (sand + each displaced liquid),
+   write sand's new footprint keys, write each displaced liquid into one
+   leaving cell. A failed classification never mutates occupancy — the swap
+   is all-or-nothing.
+
+This is footprint-size-agnostic — the same code path handles 1×1 sand
+swapping with 1×1 water AND (if it ever occupies the destination) a 2×2
+sand's footprint swapping with multiple 1×1 liquids at once. **Current
+limitation**: with only 1×1 water implemented, a 2×2 sand particle displaces
+individual 1×1 water cells the same way 1×1 sand does — there is no 2×2
+liquid yet to test the reverse (a 2×2 body of water being displaced), so that
+path is exercised structurally but not by a dedicated "2×2 liquid" test.
 
 ## Sleeping and reactivation
 
@@ -141,8 +209,11 @@ Per active particle, per fixed step (`PixelMaterialSystem.stepParticle`):
   steps, and has no residual wind momentum, goes to sleep (removed from the
   active `Set`, but stays in the occupancy map — still collidable).
 - Reactivation ("wake") happens when:
-  - A neighboring cell (any of the 8 neighbors) changes — a particle moves
-    out of it, or it's placed/erased directly (`wakeNeighbors`).
+  - A particle's footprint region (plus a 1-cell margin) changes — it moves,
+    or is placed/erased directly (`wakeAround`, footprint-size-aware; for
+    1x1 particles this is the original "8 neighbours + self" wake).
+  - Solid geometry changes in a bounded region (`wakeRegion`, used by
+    `notifySolidGeometryChanged`).
   - Wind force is applied within `radiusPx` of the particle (`applyWindForce`
     wakes every particle it touches, in addition to adding momentum).
 
@@ -246,7 +317,11 @@ system existed simply have no `pixelMaterials` key, and load unchanged.
 
 ## Editor placement
 
-- Palette entry: "Sand 1×1" (`editorDropdownData.ts`, `isPixelMaterialItem: 1`).
+- Palette entries: "Sand 1×1", "Sand 2×2", "Water 1×1" (`editorDropdownData.ts`,
+  `isPixelMaterialItem: 1`, `pixelMaterialId` = the material id). Water reuses
+  every existing pixel-material code path (placement, erase, drag-paint,
+  right-click erase, serialization) with zero material-specific branches —
+  adding it required only a new `MATERIAL_DEFS` entry and a palette line.
 - Placement/erase/drag-paint live in `editor/editorPixelMaterialTool.ts` and
   are wired into `editorController.ts` as dedicated branches (checked before
   the normal block-grid Place/Delete paths), so **existing tile editing is

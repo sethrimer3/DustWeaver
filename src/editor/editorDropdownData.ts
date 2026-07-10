@@ -220,6 +220,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Kept as a numeric literal (not imported) to avoid pulling sim modules into
   // this already-heavy dropdown-data module for a single constant.
   { id: 'sand_2x2', label: 'Sand 2×2', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 2 },
+  // pixelMaterialId: 3 === MATERIAL_WATER (sim/pixelMaterials/pixelMaterialTypes.ts).
+  { id: 'water_1x1', label: 'Water 1×1', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 3 },
   // Objects (interactive world objects)
   { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },

@@ -426,55 +426,208 @@ export class PixelMaterialSystem {
     this.wakeAround(nx, ny, size);
   }
 
-  private stepParticle(p: PixelMaterialParticle): void {
+  /**
+   * Attempts a plain footprint move: succeeds only if every destination cell
+   * is free (in bounds, not solid, not occupied by anything other than `p`
+   * itself). Leaves occupancy completely unchanged on failure. This is the
+   * one shared "can this particle just walk there" primitive used by both
+   * sand and liquid movement, and by wind-driven displacement (which does
+   * NOT swap with liquids — see `trySwapWithLiquid` for the version that does).
+   */
+  private tryMoveParticle(p: PixelMaterialParticle, nx: number, ny: number): boolean {
     const size = getMaterialFootprintSize(p.material);
+    if (!this.isRegionFree(nx, ny, size, p)) return false;
+    this.moveParticle(p, nx, ny);
+    return true;
+  }
 
-    // Decay wind momentum every step regardless of whether it moves this step.
+  /**
+   * Attempts a footprint move that may SWAP with liquid particles occupying
+   * the destination — used for sand sinking through water while falling or
+   * diagonal-falling (never for wind-driven moves, which stay conservative
+   * via `tryMoveParticle`). Works uniformly for any footprint size:
+   *
+   * 1. Compute the destination cells not already part of `p`'s current
+   *    footprint ("entering" cells) and the current-footprint cells that
+   *    won't be part of the destination ("leaving" cells) — these two sets
+   *    always have equal size for a same-size footprint translated by one
+   *    step (a basic set-symmetry fact: |A\B| = |B\A| when |A| = |B|), so
+   *    every displaced liquid particle always has a leaving cell to go to.
+   * 2. Classify every entering cell: solid → fail immediately; a liquid
+   *    particle → queue it for displacement; anything else occupied (sand,
+   *    itself already excluded by construction) → fail immediately; empty →
+   *    fine. No mutation happens during this classification pass.
+   * 3. Only if classification fully succeeds: clear `p`'s old footprint keys
+   *    and every displaced liquid's old (single) key, write `p`'s new
+   *    footprint keys, then write each displaced liquid into one leaving
+   *    cell. This is the atomic commit — a failed classification never
+   *    reaches here, so occupancy is never left partially updated.
+   */
+  private trySwapWithLiquid(p: PixelMaterialParticle, nx: number, ny: number): boolean {
+    const size = getMaterialFootprintSize(p.material);
+    const ox = p.x;
+    const oy = p.y;
+    if (nx === ox && ny === oy) return false;
+
+    const oldKeys = new Set<number>();
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) oldKeys.add(this.key(ox + dx, oy + dy));
+    }
+    const newKeys = new Set<number>();
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) newKeys.add(this.key(nx + dx, ny + dy));
+    }
+
+    const enteringCells: Array<[number, number]> = [];
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const ex = nx + dx;
+        const ey = ny + dy;
+        if (!oldKeys.has(this.key(ex, ey))) enteringCells.push([ex, ey]);
+      }
+    }
+    const leavingCells: Array<[number, number]> = [];
+    for (let dy = 0; dy < size; dy++) {
+      for (let dx = 0; dx < size; dx++) {
+        const lx = ox + dx;
+        const ly = oy + dy;
+        if (!newKeys.has(this.key(lx, ly))) leavingCells.push([lx, ly]);
+      }
+    }
+
+    const displaced: PixelMaterialParticle[] = [];
+    for (const [ex, ey] of enteringCells) {
+      if (!this.inBounds(ex, ey) || this.isCellSolid(ex, ey)) return false;
+      const occupant = this.occupancy.get(this.key(ex, ey));
+      if (occupant === undefined) continue;
+      if (getMaterialBehavior(occupant.material) === 'liquid') { displaced.push(occupant); continue; }
+      return false; // occupied by sand (or anything else non-liquid) — cannot swap
+    }
+    if (displaced.length > leavingCells.length) return false; // defensive; geometrically always false
+
+    // Commit — every check above passed, so this section cannot fail partway.
+    this.clearFootprintKeys(ox, oy, size);
+    for (const w of displaced) this.clearFootprintKeys(w.x, w.y, 1);
+    p.x = nx;
+    p.y = ny;
+    this.setFootprintKeys(p, nx, ny, size);
+    p.unchangedSteps = 0;
+    this.wake(p);
+    for (let i = 0; i < displaced.length; i++) {
+      const w = displaced[i];
+      const [lx, ly] = leavingCells[i];
+      w.x = lx;
+      w.y = ly;
+      this.setFootprintKeys(w, lx, ly, 1);
+      w.unchangedSteps = 0;
+      this.wake(w);
+    }
+    this.wakeAround(ox, oy, size);
+    this.wakeAround(nx, ny, size);
+    return true;
+  }
+
+  /** Shared wind-momentum decay — identical for every behavior. */
+  private decayWindMomentum(p: PixelMaterialParticle): void {
     p.windVelX *= WIND_MOMENTUM_DAMPING;
     p.windVelY *= WIND_MOMENTUM_DAMPING;
     if (Math.abs(p.windVelX) < WIND_MOMENTUM_EPSILON) p.windVelX = 0;
     if (Math.abs(p.windVelY) < WIND_MOMENTUM_EPSILON) p.windVelY = 0;
+  }
 
-    // 1. Gravity: attempt straight down (whole footprint must be free).
-    if (this.isRegionFree(p.x, p.y + 1, size, p)) {
-      this.moveParticle(p, p.x, p.y + 1);
-      return;
-    }
-
-    // 2. Diagonal fall, alternating preference so piles don't lean one way.
-    const leftFirst = preferLeftFirst(this.stepCounter, p.x);
-    const dx1 = leftFirst ? -1 : 1;
-    const dx2 = -dx1;
-    if (this.isRegionFree(p.x + dx1, p.y + 1, size, p)) {
-      this.moveParticle(p, p.x + dx1, p.y + 1);
-      return;
-    }
-    if (this.isRegionFree(p.x + dx2, p.y + 1, size, p)) {
-      this.moveParticle(p, p.x + dx2, p.y + 1);
-      return;
-    }
-
-    // 3. Wind-driven upward displacement (temporary disturbance).
-    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.isRegionFree(p.x, p.y - 1, size, p)) {
-      this.moveParticle(p, p.x, p.y - 1);
-      return;
-    }
-
-    // 4. Wind-driven sideways displacement.
-    if (p.windVelX !== 0) {
-      const dir = p.windVelX > 0 ? 1 : -1;
-      if (this.isRegionFree(p.x + dir, p.y, size, p)) {
-        this.moveParticle(p, p.x + dir, p.y);
-        return;
-      }
-    }
-
-    // 5. No valid movement — remain stationary; count toward sleep.
+  /** Shared "no move happened this step" bookkeeping — counts toward sleep for any behavior. */
+  private countUnchangedAndMaybeSleep(p: PixelMaterialParticle): void {
     p.unchangedSteps++;
     if (p.unchangedSteps >= SLEEP_DELAY_STEPS && p.windVelX === 0 && p.windVelY === 0) {
       p.active = false;
       this.activeSet.delete(p);
     }
+  }
+
+  /** Behavior dispatch — see `MaterialBehavior` in pixelMaterialTypes.ts. */
+  private stepParticle(p: PixelMaterialParticle): void {
+    switch (getMaterialBehavior(p.material)) {
+      case 'sand':
+        this.stepSandParticle(p);
+        break;
+      case 'liquid':
+        this.stepLiquidParticle(p);
+        break;
+    }
+  }
+
+  /**
+   * Sand movement (1x1 and 2x2 alike, via footprint size): straight down,
+   * then diagonal, alternating preference so piles don't lean one way, then
+   * wind-driven displacement, then sleep. Falling/diagonal-falling moves may
+   * SINK THROUGH WATER (`trySwapWithLiquid`) — wind-driven moves stay
+   * conservative and only use `tryMoveParticle` (no swap), per the task's
+   * "sand sinks while falling, not while merely blown sideways" scope.
+   */
+  private stepSandParticle(p: PixelMaterialParticle): void {
+    this.decayWindMomentum(p);
+
+    // 1. Gravity: straight down, sinking through water if present.
+    if (this.tryMoveParticle(p, p.x, p.y + 1) || this.trySwapWithLiquid(p, p.x, p.y + 1)) return;
+
+    // 2. Diagonal fall, alternating preference; also sinks through water.
+    const leftFirst = preferLeftFirst(this.stepCounter, p.x);
+    const dx1 = leftFirst ? -1 : 1;
+    const dx2 = -dx1;
+    if (this.tryMoveParticle(p, p.x + dx1, p.y + 1) || this.trySwapWithLiquid(p, p.x + dx1, p.y + 1)) return;
+    if (this.tryMoveParticle(p, p.x + dx2, p.y + 1) || this.trySwapWithLiquid(p, p.x + dx2, p.y + 1)) return;
+
+    // 3. Wind-driven upward displacement (temporary disturbance).
+    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.tryMoveParticle(p, p.x, p.y - 1)) return;
+
+    // 4. Wind-driven sideways displacement.
+    if (p.windVelX !== 0) {
+      const dir = p.windVelX > 0 ? 1 : -1;
+      if (this.tryMoveParticle(p, p.x + dir, p.y)) return;
+    }
+
+    // 5. No valid movement — remain stationary; count toward sleep.
+    this.countUnchangedAndMaybeSleep(p);
+  }
+
+  /**
+   * Liquid movement: straight down, then diagonal (same alternating
+   * preference logic as sand), then horizontal spread instead of piling —
+   * this is what keeps water from sleeping in a small mound and instead
+   * flattening out along a floor. Horizontal direction is wind-biased when
+   * momentum is present, otherwise alternates deterministically (a
+   * DIFFERENT stepCounter phase than the diagonal chooser, so the two
+   * choices don't always agree — still fully deterministic, no RNG).
+   * Liquids never swap with sand — they can only move into genuinely empty,
+   * non-solid cells, so water flows around sand rather than through it.
+   */
+  private stepLiquidParticle(p: PixelMaterialParticle): void {
+    this.decayWindMomentum(p);
+
+    // 1. Gravity: straight down.
+    if (this.tryMoveParticle(p, p.x, p.y + 1)) return;
+
+    // 2. Diagonal fall, alternating preference.
+    const leftFirst = preferLeftFirst(this.stepCounter, p.x);
+    const dx1 = leftFirst ? -1 : 1;
+    const dx2 = -dx1;
+    if (this.tryMoveParticle(p, p.x + dx1, p.y + 1)) return;
+    if (this.tryMoveParticle(p, p.x + dx2, p.y + 1)) return;
+
+    // 3. Wind-driven upward displacement.
+    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.tryMoveParticle(p, p.x, p.y - 1)) return;
+
+    // 4. Horizontal spread — wind-biased direction if momentum is present,
+    //    otherwise a deterministic alternation independent of the diagonal
+    //    chooser above; tries the other direction too before giving up.
+    const dir = p.windVelX !== 0
+      ? (p.windVelX > 0 ? 1 : -1)
+      : (preferLeftFirst(this.stepCounter + 1, p.x) ? -1 : 1);
+    if (this.tryMoveParticle(p, p.x + dir, p.y)) return;
+    if (this.tryMoveParticle(p, p.x - dir, p.y)) return;
+
+    // 5. No valid movement — remain stationary; count toward sleep.
+    this.countUnchangedAndMaybeSleep(p);
   }
 
   // ── Serialization ───────────────────────────────────────────────────────
