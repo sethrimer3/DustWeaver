@@ -15,6 +15,7 @@
 import type { TileVariant } from './blockSpriteSets';
 import { isSpriteReady } from './blockSpriteSets';
 import { isWallOccupied } from './blockWallLayoutCache';
+import { getStairsSolidRects, type StairsOrientation } from '../../levels/stairsGeometry';
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
 
@@ -182,8 +183,75 @@ export function drawPlatformLine(
 }
 
 /**
+ * Builds the stair outline as a list of pixel-space rectangles, scaled from the
+ * mask's step rectangles into the on-screen AABB.
+ *
+ * `wwPx`/`whPx` are already screen-scaled, so the step rects (which are in
+ * world pixels local to the stair) are scaled by the same factor. Rectangles
+ * are snapped to whole screen pixels and made to share edges exactly, which is
+ * what prevents hairline seams between adjacent steps.
+ */
+function _stairsScreenRects(
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+): { x: number; y: number; w: number; h: number }[] {
+  const rects = getStairsSolidRects(
+    (ori & 3) as StairsOrientation, widthWorldPx, heightWorldPx,
+  );
+  const sx = wwPx / widthWorldPx;
+  const sy = whPx / heightWorldPx;
+  return rects.map(r => {
+    const x0 = Math.round(wxPx + r.xPx * sx);
+    const y0 = Math.round(wyPx + r.yPx * sy);
+    const x1 = Math.round(wxPx + (r.xPx + r.wPx) * sx);
+    const y1 = Math.round(wyPx + (r.yPx + r.hPx) * sy);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  });
+}
+
+/**
+ * Draws stairs as solid-color filled step rectangles.
+ * Used as fallback for themes without a procedural material and while
+ * procedural sprites are still loading.
+ */
+export function drawStairsShape(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+  fillColor: string,
+): void {
+  ctx.fillStyle = fillColor;
+  for (const r of _stairsScreenRects(wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx)) {
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+}
+
+/**
+ * Applies a clip path matching the stair's step rectangles.  Call `ctx.clip()`
+ * after this to restrict drawing to the stair shape.  The caller is responsible
+ * for `ctx.save()` / `ctx.restore()`.
+ */
+export function applyStairsClipPath(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+): void {
+  ctx.beginPath();
+  for (const r of _stairsScreenRects(wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx)) {
+    ctx.rect(r.x, r.y, r.w, r.h);
+  }
+}
+
+/**
  * Draws a ramp as a solid-color filled triangle with a hypotenuse edge stroke.
- * Used as fallback for non-blackRock themes and while procedural sprites load.
+ * LEGACY — ramps are retired from editor placement.  Used as fallback for
+ * non-blackRock themes and while procedural sprites load.
  */
 export function drawRampTriangle(
   ctx: CanvasRenderingContext2D,

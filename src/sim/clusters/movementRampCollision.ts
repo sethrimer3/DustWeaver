@@ -1,14 +1,20 @@
 /**
- * Ramp surface collision resolver.
+ * Ramp surface collision resolver — LEGACY.
+ *
+ * Ramps are retired: the editor no longer offers plain ramps for new
+ * placement (stairs replace them, see movementStairsCollision.ts). This
+ * resolver remains so that existing rooms and campaigns containing ramps —
+ * including the bounce-pad ramp variants, which are still placeable — keep
+ * loading and playing correctly.
  *
  * Extracted from movementCollision.ts so that the rectangular-wall collision
- * module stays focused on axis-separated AABB resolution.  All logic and
- * comments are preserved verbatim from the original location.
+ * module stays focused on axis-separated AABB resolution.
  */
 
 import type { WorldState } from '../world';
 import type { ClusterState } from './state';
 import { COLLISION_EPSILON } from './movementConstants';
+import { isRampOrientationIndex } from '../../levels/stairsGeometry';
 
 /**
  * Ramp surface collision resolver.
@@ -42,7 +48,8 @@ export function resolveRampSurfaces(
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     const ori = world.wallRampOrientationIndex[wi];
-    if (ori === 255) continue; // not a ramp
+    // Skips plain rectangles (255) and stairs (4-7), which share this slot.
+    if (!isRampOrientationIndex(ori)) continue;
 
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];

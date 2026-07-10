@@ -12,6 +12,7 @@
  */
 
 import { WorldState } from '../world';
+import { forEachWallSolidRect } from '../stairsWorldGeometry';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
 import { COYOTE_TIME_TICKS } from './movementConstants';
 
@@ -115,47 +116,47 @@ export function raycastWalls(
   let bestHitAxis = 1;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    const minX = world.wallXWorld[wi];
-    const minY = world.wallYWorld[wi];
-    const maxX = minX + world.wallWWorld[wi];
-    const maxY = minY + world.wallHWorld[wi];
+    // Stair walls resolve into their step rectangles, so the ray can enter the
+    // stair's empty upper region and strike an exposed tread or riser face
+    // rather than the bounding box's outer edge.
+    forEachWallSolidRect(world, wi, (minX, minY, maxX, maxY) => {
+      let tMin = 0;
+      let tMax = maxDist;
+      // hitAxis for this rect: updated as each axis tightens tMin.
+      let hitAxis = 1;
 
-    let tMin = 0;
-    let tMax = maxDist;
-    // hitAxis for this wall: updated as each axis tightens tMin.
-    let hitAxis = 1;
+      if (Math.abs(dx) < 1e-6) {
+        if (ox < minX || ox > maxX) return;
+      } else {
+        const tx1 = (minX - ox) / dx;
+        const tx2 = (maxX - ox) / dx;
+        const txMin = tx1 < tx2 ? tx1 : tx2;
+        const txMax = tx1 > tx2 ? tx1 : tx2;
+        if (txMin > tMin) { tMin = txMin; hitAxis = 0; }
+        tMax = txMax < tMax ? txMax : tMax;
+        if (tMin > tMax) return;
+      }
 
-    if (Math.abs(dx) < 1e-6) {
-      if (ox < minX || ox > maxX) continue;
-    } else {
-      const tx1 = (minX - ox) / dx;
-      const tx2 = (maxX - ox) / dx;
-      const txMin = tx1 < tx2 ? tx1 : tx2;
-      const txMax = tx1 > tx2 ? tx1 : tx2;
-      if (txMin > tMin) { tMin = txMin; hitAxis = 0; }
-      tMax = txMax < tMax ? txMax : tMax;
-      if (tMin > tMax) continue;
-    }
+      if (Math.abs(dy) < 1e-6) {
+        if (oy < minY || oy > maxY) return;
+      } else {
+        const ty1 = (minY - oy) / dy;
+        const ty2 = (maxY - oy) / dy;
+        const tyMin = ty1 < ty2 ? ty1 : ty2;
+        const tyMax = ty1 > ty2 ? ty1 : ty2;
+        if (tyMin > tMin) { tMin = tyMin; hitAxis = 1; }
+        tMax = tyMax < tMax ? tyMax : tMax;
+        if (tMin > tMax) return;
+      }
 
-    if (Math.abs(dy) < 1e-6) {
-      if (oy < minY || oy > maxY) continue;
-    } else {
-      const ty1 = (minY - oy) / dy;
-      const ty2 = (maxY - oy) / dy;
-      const tyMin = ty1 < ty2 ? ty1 : ty2;
-      const tyMax = ty1 > ty2 ? ty1 : ty2;
-      if (tyMin > tMin) { tMin = tyMin; hitAxis = 1; }
-      tMax = tyMax < tMax ? tyMax : tMax;
-      if (tMin > tMax) continue;
-    }
-
-    if (tMin >= 0 && tMin <= maxDist && tMin < bestT) {
-      bestT = tMin;
-      bestX = ox + dx * tMin;
-      bestY = oy + dy * tMin;
-      bestWi = wi;
-      bestHitAxis = hitAxis;
-    }
+      if (tMin >= 0 && tMin <= maxDist && tMin < bestT) {
+        bestT = tMin;
+        bestX = ox + dx * tMin;
+        bestY = oy + dy * tMin;
+        bestWi = wi;
+        bestHitAxis = hitAxis;
+      }
+    });
   }
 
   if (!Number.isFinite(bestT)) return null;

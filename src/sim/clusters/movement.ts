@@ -75,6 +75,7 @@ import {
   resolveClusterSolidWallCollision,
   resolveRampSurfaces,
 } from './movementCollision';
+import { resolveStairsSurfaces } from './movementStairsCollision';
 import { resolvePlayerRopeCollisions } from '../ropes/ropeCollision';
 import { getWallJumpCandidate } from './playerWallJump';
 
@@ -254,6 +255,7 @@ export function applyClusterMovement(world: WorldState): void {
       const wallResult  = resolveClusterSolidWallCollision(cluster, world, prevX, prevY, dtSec, wasGrounded);
       const thickLanded = wallResult.landed;
       const rampLanded  = resolveRampSurfaces(cluster, world, prevX, prevY);
+      const stairsLanded = resolveStairsSurfaces(cluster, world, prevX, prevY);
 
       // Thin platform / world floor check (position already integrated by solid wall resolver)
       const thinLanded  = resolveClusterFloorCollision(cluster, world);
@@ -264,7 +266,7 @@ export function applyClusterMovement(world: WorldState): void {
         resolvePlayerRopeCollisions(cluster, world, prevY);
       }
 
-      const justLanded  = thinLanded || thickLanded || rampLanded || cluster.isGroundedFlag === 1;
+      const justLanded  = thinLanded || thickLanded || rampLanded || stairsLanded || cluster.isGroundedFlag === 1;
 
       if (cluster.isPlayerFlag === 1) {
         // ── Wall slide: cap downward velocity when pressing into a wall ─────

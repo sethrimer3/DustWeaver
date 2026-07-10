@@ -14,6 +14,8 @@
 import { WorldState, MAX_GRAPPLE_WRAP_POINTS } from '../world';
 import { ClusterState } from './state';
 import { raycastWalls, GRAPPLE_MIN_LENGTH_WORLD } from './grappleShared';
+import { forEachWallSolidRect } from '../stairsWorldGeometry';
+import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
 
 // ============================================================================
 // Constants
@@ -80,11 +82,13 @@ function _grapplePointInSolid(world: WorldState, px: number, py: number, skipWal
     if (wi === skipWallIndex) continue;
     if (world.wallIsPlatformFlag[wi] === 1) continue;
     if (world.wallIsBouncePadFlag[wi] === 1) continue;
-    const minX = world.wallXWorld[wi];
-    const minY = world.wallYWorld[wi];
-    const maxX = minX + world.wallWWorld[wi];
-    const maxY = minY + world.wallHWorld[wi];
-    if (px > minX && px < maxX && py > minY && py < maxY) return true;
+    // Stairs report their step rectangles, so a point in a stair's empty upper
+    // region is correctly treated as open space.
+    let inside = false;
+    forEachWallSolidRect(world, wi, (minX, minY, maxX, maxY) => {
+      if (px > minX && px < maxX && py > minY && py < maxY) inside = true;
+    });
+    if (inside) return true;
   }
   return false;
 }
@@ -200,8 +204,10 @@ export function tickGrappleWrapping(world: WorldState, player: ClusterState): vo
   if (hitWallIdx < 0 || hitWallIdx >= world.wallCount) return;
   if (world.wallIsPlatformFlag[hitWallIdx] === 1) return;
   if (world.wallIsBouncePadFlag[hitWallIdx] === 1) return;
-  // Ignore ramp walls for wrapping (geometry is ambiguous at corners of ramps).
-  if (world.wallRampOrientationIndex[hitWallIdx] !== 255) return;
+  // Ignore shaped walls (legacy ramps, stairs) for wrapping: the corner
+  // selection below uses the wall's bounding box, whose corners are not the
+  // shape's real corners, so the rope would wrap through empty space.
+  if (!isPlainRectOrientationIndex(world.wallRampOrientationIndex[hitWallIdx])) return;
 
   // ── Select best corner of the blocking wall ───────────────────────────────
   const minX = world.wallXWorld[hitWallIdx];

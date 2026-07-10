@@ -23,6 +23,8 @@ import {
   ov,
 } from './movementConstants';
 import { KINETIC_BLOCK_BOOST_SPEED_WORLD } from '../kineticBlocks/kineticBlockTypes';
+import { aabbOverlapsWallSolid } from '../stairsWorldGeometry';
+import { isPlainRectOrientationIndex, isRampOrientationIndex } from '../../levels/stairsGeometry';
 
 /** Set to true to log bounce pad events to the console for debugging. */
 const DEBUG_BOUNCE_PADS = false;
@@ -75,6 +77,10 @@ function logBouncePadHit(
  * Returns true when the cluster's AABB at (positionXWorld, positionYWorld)
  * overlaps any wall (including platforms and ramps).
  * Used for step-up and position-probe checks before committing a position.
+ *
+ * Stair walls are tested against their individual step rectangles, not their
+ * bounding box — otherwise a step-up onto a stair's lowest tread would be
+ * rejected by the empty space above the higher steps.
  */
 export function hasWallOverlapAtPosition(
   cluster: ClusterState,
@@ -90,20 +96,19 @@ export function hasWallOverlapAtPosition(
   const bottom = positionYWorld + hh;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    const wallLeft = world.wallXWorld[wi];
-    const wallTop = world.wallYWorld[wi];
-    const wallRight = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop + world.wallHWorld[wi];
-    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
-    return true;
+    if (aabbOverlapsWallSolid(world, wi, left, top, right, bottom)) return true;
   }
   return false;
 }
 
 /**
- * Tests whether the player AABB at (posX, posY) overlaps any solid (non-platform,
- * non-ramp) wall.  Used for forgiveness collision probes so that corrections do
- * not push the player into adjacent solid geometry.
+ * Tests whether the player AABB at (posX, posY) overlaps any solid wall.
+ * Used for forgiveness collision probes so that corrections do not push the
+ * player into adjacent solid geometry.
+ *
+ * Platforms are excluded (they are one-way) and legacy ramps are excluded
+ * (their diagonal is resolved separately). Stairs ARE included, tested against
+ * their step rectangles.
  */
 function hasSolidWallOverlapAtPosition(
   cluster: ClusterState,
@@ -120,13 +125,8 @@ function hasSolidWallOverlapAtPosition(
 
   for (let wi = 0; wi < world.wallCount; wi++) {
     if (world.wallIsPlatformFlag[wi] === 1) continue;
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
-    const wallLeft = world.wallXWorld[wi];
-    const wallTop = world.wallYWorld[wi];
-    const wallRight = wallLeft + world.wallWWorld[wi];
-    const wallBottom = wallTop + world.wallHWorld[wi];
-    if (right <= wallLeft || left >= wallRight || bottom <= wallTop || top >= wallBottom) continue;
-    return true;
+    if (isRampOrientationIndex(world.wallRampOrientationIndex[wi])) continue;
+    if (aabbOverlapsWallSolid(world, wi, left, top, right, bottom)) return true;
   }
   return false;
 }
@@ -146,13 +146,12 @@ function hasSolidWallOverlapAtPosition(
 function tryJumpCornerCorrection(
   cluster: ClusterState,
   world: WorldState,
-  wallIndex: number,
+  wallLeft: number,
+  wallRight: number,
 ): boolean {
   if (cluster.isPlayerFlag === 0) return false;
   if (cluster.velocityYWorld >= 0) return false; // only for upward motion
 
-  const wallLeft  = world.wallXWorld[wallIndex];
-  const wallRight = wallLeft + world.wallWWorld[wallIndex];
   const hw = cluster.halfWidthWorld;
   const maxCorrection = ov(debugSpeedOverrides.jumpCornerCorrectionPixels, JUMP_CORNER_CORRECTION_PIXELS);
 
@@ -191,7 +190,7 @@ function tryJumpCornerCorrection(
  * instead of stopping them.  Only for grounded or falling players moving in the
  * direction of the wall.  Returns true if the step-up was applied.
  */
-function tryStepUpSingleBlock(
+export function tryStepUpSingleBlock(
   cluster: ClusterState,
   world: WorldState,
   wallLeftWorld: number,
@@ -242,7 +241,7 @@ function isWallSegmentBelowAnotherWall(
 ): boolean {
   for (let wi = 0; wi < world.wallCount; wi++) {
     if (world.wallIsPlatformFlag[wi] === 1) continue;
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+    if (!isPlainRectOrientationIndex(world.wallRampOrientationIndex[wi])) continue;
 
     const otherLeft   = world.wallXWorld[wi];
     const otherRight  = otherLeft + world.wallWWorld[wi];
@@ -262,7 +261,8 @@ function isWallSegmentBelowAnotherWall(
  * Pushes cluster left/right out of walls and zeros velX on contact.
  * Sets isTouchingWallLeftFlag / isTouchingWallRightFlag for player.
  * Platform walls (wallIsPlatformFlag=1) are skipped — no side collision.
- * Ramp walls (wallRampOrientationIndex !== 255) are skipped — handled by resolveRampSurfaces.
+ * Shaped walls are skipped: legacy ramps are handled by `resolveRampSurfaces`,
+ * stairs by `resolveStairsSurfaces`.
  */
 export function resolveWallsX(
   cluster: ClusterState,
@@ -275,9 +275,9 @@ export function resolveWallsX(
   const hh = cluster.halfHeightWorld;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    // Platforms and ramps have no horizontal collision
+    // Platforms and shaped walls (ramps, stairs) have no plain horizontal collision
     if (world.wallIsPlatformFlag[wi] === 1) continue;
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+    if (!isPlainRectOrientationIndex(world.wallRampOrientationIndex[wi])) continue;
 
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
@@ -385,7 +385,8 @@ export function resolveWallsX(
  * Pushes cluster up/down out of walls and zeros velY on contact.
  * Sets isGroundedFlag when landing on a top face.
  * Platform walls (wallIsPlatformFlag=1) only collide from the configured edge.
- * Ramp walls (wallRampOrientationIndex !== 255) are skipped — handled by resolveRampSurfaces.
+ * Shaped walls are skipped: legacy ramps are handled by `resolveRampSurfaces`,
+ * stairs by `resolveStairsSurfaces`.
  * Returns true if the cluster landed on a top surface.
  */
 export function resolveWallsY(
@@ -399,8 +400,8 @@ export function resolveWallsY(
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
-    // Skip ramps — handled by resolveRampSurfaces
-    if (world.wallRampOrientationIndex[wi] !== 255) continue;
+    // Skip shaped walls — ramps go through resolveRampSurfaces, stairs through resolveStairsSurfaces
+    if (!isPlainRectOrientationIndex(world.wallRampOrientationIndex[wi])) continue;
 
     const wallLeft   = world.wallXWorld[wi];
     const wallTop    = world.wallYWorld[wi];
@@ -476,7 +477,7 @@ export function resolveWallsY(
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
       // Was below wall — bonked ceiling moving upward.
       // Attempt jump corner correction before committing to the ceiling response.
-      if (!isBounce && !isKinetic && tryJumpCornerCorrection(cluster, world, wi)) {
+      if (!isBounce && !isKinetic && tryJumpCornerCorrection(cluster, world, wallLeft, wallRight)) {
         // Corner was cleared — skip velocity zeroing for this wall and continue.
         continue;
       }

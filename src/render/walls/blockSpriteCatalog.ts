@@ -17,10 +17,15 @@ const _TEMPLATE_BASE_PATH = 'SPRITES/BLOCKS/block_templates';
 export const TEMPLATE_URLS = {
   '1x1 block':    `${_TEMPLATE_BASE_PATH}/1x1 block/1x1 block_template.png`,
   '1x1 platform': `${_TEMPLATE_BASE_PATH}/1x1 platform/1x1 platform_template.png`,
-  '1x1 ramp':     `${_TEMPLATE_BASE_PATH}/1x1 ramp/1x1 ramp_template.png`,
-  '1x2 ramp':     `${_TEMPLATE_BASE_PATH}/1x2 ramp/1x2 ramp_template.png`,
+  '1x1 stairs':   `${_TEMPLATE_BASE_PATH}/1x1 stairs/1x1 stairs_template.png`,
+  '1x2 stairs':   `${_TEMPLATE_BASE_PATH}/1x2 stairs/1x2 stairs_template.png`,
   '2x2 block':    `${_TEMPLATE_BASE_PATH}/2x2 block/2x2 block_template.png`,
   '2x2 platform': `${_TEMPLATE_BASE_PATH}/2x2 platform/2x2 platform_template.png`,
+  '2x2 stairs':   `${_TEMPLATE_BASE_PATH}/2x2 stairs/2x2 stairs_template.png`,
+  // Legacy ramp masks — retired from editor placement, retained so that rooms
+  // and campaigns authored before stairs replaced ramps still render.
+  '1x1 ramp':     `${_TEMPLATE_BASE_PATH}/1x1 ramp/1x1 ramp_template.png`,
+  '1x2 ramp':     `${_TEMPLATE_BASE_PATH}/1x2 ramp/1x2 ramp_template.png`,
   '2x2 ramp':     `${_TEMPLATE_BASE_PATH}/2x2 ramp/2x2 ramp_template.png`,
 } as const;
 

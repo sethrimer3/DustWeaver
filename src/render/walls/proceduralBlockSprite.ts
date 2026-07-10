@@ -308,7 +308,9 @@ function _pickFromPool(probePool: readonly string[], hash: number): string | nul
 // ── Orientation helpers ───────────────────────────────────────────────────────
 
 /**
- * Returns the flip flags for a ramp orientation index.
+ * Returns the flip flags for a ramp or stairs orientation index.
+ * Both shapes share this convention — their templates are authored in the
+ * same base orientation (solid in the lower-right).
  *   0 = / rises right  → no flip (template default)
  *   1 = \ rises left   → flip horizontally
  *   2 = ⌐ ceiling      → flip vertically
@@ -485,7 +487,59 @@ export function getPlatformSprite2x2(
 }
 
 /**
- * Returns the procedural sprite for a ramp wall.
+ * Returns the procedural sprite for a stairs wall.
+ *
+ * The stair mask is cut from the base texture by the same `destination-in`
+ * template compositing every other shape uses, so transparent template pixels
+ * never draw and the organic edge shading (which derives open air from the
+ * canvas alpha channel) automatically highlights each individual step edge.
+ *
+ * @param col           Tile column of the stairs top-left corner.
+ * @param row           Tile row of the stairs top-left corner.
+ * @param widthBlocks   Stairs width in blocks (1 or 2).
+ * @param heightBlocks  Stairs height in blocks (1 or 2).
+ * @param orientation   Stairs orientation index (0–3), same convention as ramps.
+ * @param material      Block material name.
+ * @param blockSizePx   Block size in virtual pixels.
+ * @param seed          Hash seed.
+ */
+export function getStairsSprite(
+  col: number,
+  row: number,
+  widthBlocks: number,
+  heightBlocks: number,
+  orientation: number,
+  material: string,
+  blockSizePx: number,
+  seed: number,
+): HTMLCanvasElement | null {
+  const use2x2Pool = widthBlocks >= 2 || heightBlocks >= 2;
+  const pool = getBaseSpriteProbePool(material, use2x2Pool);
+  if (pool.length === 0) return null;
+
+  const hash    = hashTilePosition(col, row, seed);
+  const baseUrl = _pickFromPool(pool, hash);
+  if (baseUrl === null) return null;
+
+  const widthPx  = widthBlocks  * blockSizePx;
+  const heightPx = heightBlocks * blockSizePx;
+
+  let shapeName: BlockShapeName;
+  if (widthBlocks === 1 && heightBlocks === 1) {
+    shapeName = '1x1 stairs';
+  } else if (widthBlocks === 2 && heightBlocks === 1) {
+    shapeName = '1x2 stairs';
+  } else {
+    shapeName = '2x2 stairs';
+  }
+
+  const [flipX, flipY] = _rampOriToFlips(orientation);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+}
+
+/**
+ * Returns the procedural sprite for a ramp wall.  LEGACY — ramps are retired
+ * from editor placement; this keeps pre-existing rooms rendering.
  *
  * Base-pool selection:
  *   - 2×2 or 1×2 ramps use the 2×2 pool (wider texture detail).

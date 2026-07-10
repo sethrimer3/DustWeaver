@@ -12,12 +12,16 @@
  * unoccupied space is tracked (per the task's "Solid occupancy" requirements).
  *
  * One-way platforms do not block sand (sand falls through them, matching
- * their one-way gameplay semantics). Ramps are conservatively treated as
- * full solid rectangles for this first version — a documented simplification
- * (see docs/pixelMaterials.md).
+ * their one-way gameplay semantics).
+ *
+ * Stair walls are expanded into their individual step rectangles, so sand
+ * falls into the empty space above a stair's upper steps and settles on each
+ * tread. Legacy ramps remain conservatively treated as full solid rectangles —
+ * a documented simplification (see docs/pixelMaterials.md).
  */
 
 import type { WorldState } from '../world';
+import { forEachWallSolidRect } from '../stairsWorldGeometry';
 
 export class SolidMask {
   readonly widthPx: number;
@@ -60,12 +64,10 @@ export function buildSolidMaskFromWorld(world: WorldState, widthPx: number, heig
   const mask = new SolidMask(widthPx, heightPx);
   for (let wi = 0; wi < world.wallCount; wi++) {
     if (world.wallIsPlatformFlag[wi] === 1) continue; // one-way platforms don't block sand
-    const x0 = world.wallXWorld[wi];
-    const y0 = world.wallYWorld[wi];
-    const x1 = x0 + world.wallWWorld[wi];
-    const y1 = y0 + world.wallHWorld[wi];
-    if (x1 <= x0 || y1 <= y0) continue;
-    mask.markRect(x0, y0, x1, y1);
+    forEachWallSolidRect(world, wi, (x0, y0, x1, y1) => {
+      if (x1 <= x0 || y1 <= y0) return;
+      mask.markRect(x0, y0, x1, y1);
+    });
   }
   return mask;
 }

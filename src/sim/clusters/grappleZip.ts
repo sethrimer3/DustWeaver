@@ -17,6 +17,7 @@ import { ClusterState } from './state';
 import { PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER } from './movement';
 import { debugSpeedOverrides, ov } from './movementConstants';
 import { resolveAABBPenetration } from '../physics/collision';
+import { forEachWallSolidRect } from '../stairsWorldGeometry';
 import {
   resolveClusterSolidWallCollision,
   resolveClusterFloorCollision,
@@ -523,11 +524,11 @@ export function tickGrappleZip(
       const halfW = player.halfWidthWorld;
       const halfH = player.halfHeightWorld;
       for (let wi = 0; wi < world.wallCount; wi++) {
-        const wLeft   = world.wallXWorld[wi];
-        const wTop    = world.wallYWorld[wi];
-        const wRight  = wLeft + world.wallWWorld[wi];
-        const wBottom = wTop + world.wallHWorld[wi];
-        resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom);
+        // Stairs resolve per step rectangle so a player stuck to a tread is not
+        // ejected from the stair's whole bounding box.
+        forEachWallSolidRect(world, wi, (wLeft, wTop, wRight, wBottom) => {
+          resolveAABBPenetration(player, halfW, halfH, wLeft, wTop, wRight, wBottom);
+        });
       }
     }
 

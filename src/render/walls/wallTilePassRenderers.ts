@@ -49,7 +49,7 @@ import { getLegacyShadedSprite } from './legacyBlockShading';
 import * as FP from '../../debug/perfFreezeProfiler';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
-import type { CachedTileCoord, RampWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
+import type { CachedTileCoord, ShapedWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
 import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceExposure';
 import { renderSurfaceEdgeOverlayPass as _renderSurfaceEdgeOverlayPass } from './surfaceEdgeOverlay';
 import {
@@ -197,7 +197,7 @@ function surfaceMaskToOpenAirBits(mask: SurfaceMask): number {
 
 // Pre-allocated empty arrays used as fallbacks when a chunk has no items of a type.
 const _EMPTY_TILES: CachedTileCoord[]     = [];
-const _EMPTY_RAMPS: RampWallInfo[]         = [];
+const _EMPTY_RAMPS: ShapedWallInfo[]         = [];
 const _EMPTY_PILLARS: HalfPillarWallInfo[] = [];
 const _EMPTY_2X2: ReadonlyArray<readonly [string, number]> = [];
 
@@ -635,13 +635,20 @@ export function renderPlatformPass(
   return hadFallbacks;
 }
 
-// ── Pass 4: Ramp walls ────────────────────────────────────────────────────────
+// ── Pass 4: Shaped walls (stairs, legacy ramps) ───────────────────────────────
 
 /**
- * Draws all diagonal ramp walls.
+ * Draws every wall whose solid area is not its full bounding rectangle: stairs,
+ * and the legacy ramps retained for pre-existing rooms.
+ *
+ * Both shapes are cut from the same base texture by their template mask, so
+ * transparent template pixels never draw. The stair sprite's alpha channel also
+ * drives the organic edge shading, which is why each step edge is highlighted
+ * rather than only the stair's outer bounding box.
+ *
  * Returns `true` if any placeholder tile was drawn.
  */
-export function renderRampPass(
+export function renderShapedWallPass(
   ctx: CanvasRenderingContext2D,
   pctx: WallTilePassContext,
 ): boolean {
@@ -652,85 +659,103 @@ export function renderRampPass(
           filterColMinBlocks, filterColMaxBlocks, filterRowMinBlocks, filterRowMaxBlocks,
           chunkKey } = pctx;
 
-  // Pre-bucketed path: only iterate ramps that overlap this chunk.
-  const rampList: RampWallInfo[] = chunkKey !== null
-    ? (wallLayout.rampByChunkKey.get(chunkKey) ?? _EMPTY_RAMPS)
-    : wallLayout.rampWalls;
+  // Pre-bucketed path: only iterate shaped walls that overlap this chunk.
+  const shapedList: ShapedWallInfo[] = chunkKey !== null
+    ? (wallLayout.shapedByChunkKey.get(chunkKey) ?? _EMPTY_SHAPED)
+    : wallLayout.shapedWalls;
 
-  for (let ri = 0; ri < rampList.length; ri++) {
-    const wi = rampList[ri].wallIndex;
-    const ori = walls.rampOrientationIndex[wi];
+  for (let ri = 0; ri < shapedList.length; ri++) {
+    const wi = shapedList[ri].wallIndex;
+    const oriIndex = walls.rampOrientationIndex[wi];
+    const isStairs = isStairsOrientationIndex(oriIndex);
+    // Stairs and ramps share the flip convention, so both reduce to 0-3 here.
+    const ori = isStairs ? decodeStairsOrientationIndex(oriIndex) : oriIndex;
+
     const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
     const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;
     const wwPx = walls.wWorld[wi] * scalePx;
     const whPx = walls.hWorld[wi] * scalePx;
+    const widthWorldPx  = walls.wWorld[wi];
+    const heightWorldPx = walls.hWorld[wi];
 
-    const rampColFirst = Math.floor(walls.xWorld[wi] / blockSizePx);
-    const rampRowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
-    const rampColLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
-    const rampRowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
-    if (rampColLast < filterColMinBlocks || rampColFirst > filterColMaxBlocks) continue;
-    if (rampRowLast < filterRowMinBlocks || rampRowFirst > filterRowMaxBlocks) continue;
+    const colFirst = Math.floor(walls.xWorld[wi] / blockSizePx);
+    const rowFirst = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const colLast  = Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / blockSizePx) - 1;
+    const rowLast  = Math.ceil((walls.yWorld[wi] + walls.hWorld[wi]) / blockSizePx) - 1;
+    if (colLast < filterColMinBlocks || colFirst > filterColMaxBlocks) continue;
+    if (rowLast < filterRowMinBlocks || rowFirst > filterRowMaxBlocks) continue;
 
-    const rampTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
+    const theme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
       : roomTheme;
-    const rampMaterial = themeToProceduralMaterial(rampTheme, activeWorldNumber);
+    const material = themeToProceduralMaterial(theme, activeWorldNumber);
 
-    if (rampMaterial !== null) {
-      const col = Math.floor(walls.xWorld[wi] / blockSizePx);
-      const row = Math.floor(walls.yWorld[wi] / blockSizePx);
+    const drawFallbackShape = (fillColor: string, edgeColor: string): void => {
+      if (isStairs) {
+        drawStairsShape(ctx, wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx, fillColor);
+      } else {
+        drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, fillColor, edgeColor, scalePx);
+      }
+    };
+
+    if (material !== null) {
+      const col = colFirst;
+      const row = rowFirst;
       const widthBlocks  = Math.max(1, Math.round(walls.wWorld[wi] / blockSizePx));
       const heightBlocks = Math.max(1, Math.round(walls.hWorld[wi] / blockSizePx));
-      const procSprite = getRampSprite(col, row, widthBlocks, heightBlocks, ori, rampMaterial, blockSizePx, activeWorldNumber);
+      const procSprite = isStairs
+        ? getStairsSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber)
+        : getRampSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
       } else {
         hadFallbacks = true;
-        drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#1a2535', '#5080b0', scalePx);
+        drawFallbackShape('#1a2535', '#5080b0');
       }
-    } else if (isFolderBasedTheme(rampTheme)) {
-      const rCol = Math.floor(walls.xWorld[wi] / blockSizePx);
-      const rRow = Math.floor(walls.yWorld[wi] / blockSizePx);
+    } else if (isFolderBasedTheme(theme)) {
       const use2x2 = Math.round(walls.wWorld[wi] / blockSizePx) >= 2 ||
                      Math.round(walls.hWorld[wi] / blockSizePx) >= 2;
-      const folderRampSprite = use2x2
-        ? getTheme2x2Sprite(rampTheme, rCol, rRow, activeWorldNumber)
-        : getTheme1x1Sprite(rampTheme, rCol, rRow, activeWorldNumber);
-      if (folderRampSprite !== null) {
+      const folderSprite = use2x2
+        ? getTheme2x2Sprite(theme, colFirst, rowFirst, activeWorldNumber)
+        : getTheme1x1Sprite(theme, colFirst, rowFirst, activeWorldNumber);
+      if (folderSprite !== null) {
         const rX = Math.round(wxPx);
         const rY = Math.round(wyPx);
         const rW = Math.round(wwPx);
         const rH = Math.round(whPx);
         ctx.save();
-        applyRampClipPath(ctx, rX, rY, rW, rH, ori);
+        if (isStairs) {
+          applyStairsClipPath(ctx, rX, rY, rW, rH, ori, widthWorldPx, heightWorldPx);
+        } else {
+          applyRampClipPath(ctx, rX, rY, rW, rH, ori);
+        }
         ctx.clip();
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(folderRampSprite, rX, rY, rW, rH);
+        ctx.drawImage(folderSprite, rX, rY, rW, rH);
         ctx.restore();
       } else {
         hadFallbacks = true;
-        drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, '#555555', '#777777', scalePx);
+        drawFallbackShape('#555555', '#777777');
       }
     } else {
-      const isLegacyBR = (rampTheme === null) && (activeWorldNumber === 0);
+      const isLegacyBR = (theme === null) && (activeWorldNumber === 0);
       let fillColor: string;
-      if (rampTheme === 'dirt') {
+      if (theme === 'dirt') {
         fillColor = '#5a3e1b';
-      } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+      } else if (theme === 'brownRock' || (theme === null && !isLegacyBR)) {
         fillColor = '#4a3828';
       } else {
         fillColor = '#1a2535';
       }
       let edgeColor: string;
-      if (rampTheme === 'dirt') {
+      if (theme === 'dirt') {
         edgeColor = '#8b6914';
-      } else if (rampTheme === 'brownRock' || (rampTheme === null && !isLegacyBR)) {
+      } else if (theme === 'brownRock' || (theme === null && !isLegacyBR)) {
         edgeColor = '#7a5840';
       } else {
         edgeColor = '#5080b0';
       }
-      drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, fillColor, edgeColor, scalePx);
+      drawFallbackShape(fillColor, edgeColor);
     }
   }
   return hadFallbacks;

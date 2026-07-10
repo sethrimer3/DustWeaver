@@ -14,6 +14,7 @@ import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDe
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
+import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -47,8 +48,10 @@ function _computeLayoutSignature(walls: WallSnapshot, blockSizePx: number): stri
       (walls.isPlatformFlag[wi])        |
       (walls.platformEdge[wi]      << 1) |
       (walls.themeIndex[wi]        << 3) |
-      (walls.rampOrientationIndex[wi] === 255 ? 0 : 1 << 11) |
-      (walls.isPillarHalfWidthFlag[wi] << 12)
+      // Full orientation index, not just an "is shaped" bit: a stair and a ramp
+      // occupying the same rect must produce different layout signatures.
+      (walls.rampOrientationIndex[wi]  << 11) |
+      (walls.isPillarHalfWidthFlag[wi] << 20)
     );
   }
   return `${visible}|${h >>> 0}`;
@@ -64,7 +67,12 @@ export interface CachedTileCoord {
   readonly platformEdge: number;
 }
 
-export interface RampWallInfo {
+/**
+ * A wall whose solid area is not its full bounding rectangle — stairs, or a
+ * legacy ramp.  Rendered by `renderShapedWallPass` from the shape's template
+ * mask instead of via the regular tile grid.
+ */
+export interface ShapedWallInfo {
   readonly wallIndex: number;
 }
 
@@ -79,8 +87,8 @@ export interface CachedWallLayout {
   platformOccupied: Set<string>;
   occupiedTiles: CachedTileCoord[];
   platformTiles: CachedTileCoord[];
-  /** Ramp walls (rampOrientationIndex !== 255): rendered as filled triangles. */
-  rampWalls: RampWallInfo[];
+  /** Shaped walls (stairs, legacy ramps): rendered from their template mask. */
+  shapedWalls: ShapedWallInfo[];
   /** Half-pillar walls (isPillarHalfWidthFlag === 1): rendered narrow. */
   halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
@@ -121,8 +129,8 @@ export interface CachedWallLayout {
   occupiedByChunkKey: Map<string, CachedTileCoord[]>;
   /** Platform tiles grouped by chunk key. */
   platformByChunkKey: Map<string, CachedTileCoord[]>;
-  /** Ramp walls grouped by every chunk they overlap. */
-  rampByChunkKey: Map<string, RampWallInfo[]>;
+  /** Shaped walls grouped by every chunk they overlap. */
+  shapedByChunkKey: Map<string, ShapedWallInfo[]>;
   /** Half-pillar walls grouped by every chunk they overlap. */
   halfPillarByChunkKey: Map<string, HalfPillarWallInfo[]>;
   /**
@@ -185,8 +193,9 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isPlatformFlag[wi] === 1) continue;
     if (walls.isInvisibleFlag[wi] === 1) continue;
-    // Ramp walls are rendered by the ramp path (triangles/sprites), never as solid 2×2 blocks.
-    if (walls.rampOrientationIndex[wi] !== 255) continue;
+    // Shaped walls (stairs, legacy ramps) are drawn from their template mask by
+    // the shaped-wall path, never as solid 2×2 blocks.
+    if (!isPlainRectOrientationIndex(walls.rampOrientationIndex[wi])) continue;
     // Half-pillar walls are rendered by the half-pillar path, never as solid 2×2 blocks.
     if (walls.isPillarHalfWidthFlag[wi] === 1) continue;
 
@@ -241,16 +250,17 @@ export function getWallLayoutCache(
   const platformOccupied = new Set<string>();
   const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
-  const rampWalls: RampWallInfo[] = [];
+  const shapedWalls: ShapedWallInfo[] = [];
   const halfPillarWalls: HalfPillarWallInfo[] = [];
 
   for (let wi = 0; wi < walls.count; wi++) {
     // Skip invisible boundary walls
     if (walls.isInvisibleFlag[wi] === 1) continue;
 
-    // Ramp walls render as triangles — skip them from the regular tile grid
-    if (walls.rampOrientationIndex[wi] !== 255) {
-      rampWalls.push({ wallIndex: wi });
+    // Shaped walls (stairs, legacy ramps) render from their template mask —
+    // skip them from the regular tile grid.
+    if (!isPlainRectOrientationIndex(walls.rampOrientationIndex[wi])) {
+      shapedWalls.push({ wallIndex: wi });
       continue;
     }
 
@@ -346,7 +356,7 @@ export function getWallLayoutCache(
     platformOccupied,
     occupiedTiles,
     platformTiles,
-    rampWalls,
+    shapedWalls,
     halfPillarWalls,
     tileTheme,
     surfaceExposureMap,
@@ -354,7 +364,7 @@ export function getWallLayoutCache(
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
     occupiedByChunkKey:   new Map(),
     platformByChunkKey:   new Map(),
-    rampByChunkKey:       new Map(),
+    shapedByChunkKey:       new Map(),
     halfPillarByChunkKey: new Map(),
     solid2x2ByChunkKey:   new Map(),
   };
@@ -398,9 +408,9 @@ function _buildChunkBuckets(layout: CachedWallLayout, walls: WallSnapshot): void
     arr.push(tile);
   }
 
-  // ── Ramp walls: may span multiple tile-columns/rows → multiple chunks ───────
-  for (const rampInfo of layout.rampWalls) {
-    const wi = rampInfo.wallIndex;
+  // ── Shaped walls: may span multiple tile-columns/rows → multiple chunks ─────
+  for (const shapedInfo of layout.shapedWalls) {
+    const wi = shapedInfo.wallIndex;
     const colFirst = Math.floor(walls.xWorld[wi] / BSZ);
     const rowFirst = Math.floor(walls.yWorld[wi] / BSZ);
     const colLast  = Math.max(colFirst, Math.ceil((walls.xWorld[wi] + walls.wWorld[wi]) / BSZ) - 1);
@@ -412,14 +422,14 @@ function _buildChunkBuckets(layout: CachedWallLayout, walls: WallSnapshot): void
     for (let cy = cyMin; cy <= cyMax; cy++) {
       for (let cx = cxMin; cx <= cxMax; cx++) {
         const ck = `${cx},${cy}`;
-        let arr = layout.rampByChunkKey.get(ck);
-        if (arr === undefined) { arr = []; layout.rampByChunkKey.set(ck, arr); }
-        arr.push(rampInfo);
+        let arr = layout.shapedByChunkKey.get(ck);
+        if (arr === undefined) { arr = []; layout.shapedByChunkKey.set(ck, arr); }
+        arr.push(shapedInfo);
       }
     }
   }
 
-  // ── Half-pillar walls: same multi-chunk logic as ramps ─────────────────────
+  // ── Half-pillar walls: same multi-chunk logic as shaped walls ──────────────
   for (const hpInfo of layout.halfPillarWalls) {
     const wi = hpInfo.wallIndex;
     const colFirst = Math.floor(walls.xWorld[wi] / BSZ);
