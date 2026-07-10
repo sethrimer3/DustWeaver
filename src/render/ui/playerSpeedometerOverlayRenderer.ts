@@ -31,6 +31,9 @@ const GAP_ABOVE_PLAYER_CSS_PX = 12;
 
 export interface PlayerSpeedometerOverlayUpdate {
   readonly world: WorldState;
+  /** Interpolated render position used by the player sprite this frame. */
+  readonly playerRenderXWorld: number;
+  readonly playerRenderYWorld: number;
   readonly canvas: HTMLCanvasElement;
   readonly nativeWidthPx: number;
   readonly nativeHeightPx: number;
@@ -83,8 +86,13 @@ export class PlayerSpeedometerOverlayRenderer {
       return;
     }
 
-    const nativePlayerCenterXPx = player.positionXWorld * params.zoom + params.offsetXPx;
-    const nativePlayerTopYPx = (player.positionYWorld - player.halfHeightWorld) * params.zoom + params.offsetYPx;
+    // Match renderClusters exactly: the sprite center is interpolated and then
+    // snapped to an integer pixel in the native game canvas. Converting that
+    // already-snapped anchor to CSS keeps this high-resolution DOM label locked
+    // to the sprite instead of jittering between simulation/render positions.
+    const nativePlayerCenterXPx = Math.round(params.playerRenderXWorld * params.zoom + params.offsetXPx);
+    const nativePlayerCenterYPx = Math.round(params.playerRenderYWorld * params.zoom + params.offsetYPx);
+    const nativePlayerTopYPx = nativePlayerCenterYPx - player.halfHeightWorld * params.zoom;
     const canvasRect = params.canvas.getBoundingClientRect();
     const rootRect = this._root.getBoundingClientRect();
     const point = nativeGamePointToOverlayCssPoint({

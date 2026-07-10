@@ -43,6 +43,24 @@ export const BEHAVIOR_MODE_GRAPPLE_CHAIN = 3;
  */
 export const GRAPPLE_CHAIN_LIFETIME_TICKS = 9999999.0;
 
+/** Released chain motes fade independently over 0.2-0.4 seconds at 60 Hz. */
+const GRAPPLE_RELEASE_FADE_MIN_TICKS = 12.0;
+const GRAPPLE_RELEASE_FADE_TICK_RANGE = 12.0;
+const GRAPPLE_RELEASE_SPEED_MIN_WORLD_PER_SEC = 70.0;
+const GRAPPLE_RELEASE_SPEED_RANGE_WORLD_PER_SEC = 40.0;
+const GRAPPLE_RELEASE_SPREAD_RAD = 20.0 * Math.PI / 180.0;
+
+/** Stable [0, 1) noise so grapple release visuals remain deterministic. */
+function grappleReleaseNoise(seed: number): number {
+  let value = seed >>> 0;
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  value ^= value >>> 16;
+  return (value >>> 0) / 0x100000000;
+}
+
 // ============================================================================
 // Raycast helpers (shared with grapple.ts)
 // ============================================================================
@@ -257,6 +275,35 @@ export function clearLegacyGrappleMissState(world: WorldState): void {
 export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void {
   const shouldRetractFromActiveGrapple = world.isGrappleActiveFlag === 1;
 
+  // Let the visible chain break into free-flying motes instead of vanishing.
+  // Each mote continues away from the player's release position toward the
+  // grapple anchor, with a small deterministic spread and individual fade.
+  if (shouldRetractFromActiveGrapple && world.grappleParticleStartIndex >= 0) {
+    const start = world.grappleParticleStartIndex;
+    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
+      const idx = start + i;
+      const dx = world.grappleAnchorXWorld - world.positionXWorld[idx];
+      const dy = world.grappleAnchorYWorld - world.positionYWorld[idx];
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const baseAngle = distance > 1e-6 ? Math.atan2(dy, dx) : 0.0;
+      const seed = (world.noiseTickSeed[idx] ^ world.tick ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0;
+      const angle = baseAngle + (grappleReleaseNoise(seed) * 2.0 - 1.0) * GRAPPLE_RELEASE_SPREAD_RAD;
+      const speed = GRAPPLE_RELEASE_SPEED_MIN_WORLD_PER_SEC
+        + grappleReleaseNoise(seed ^ 0xa511e9b3) * GRAPPLE_RELEASE_SPEED_RANGE_WORLD_PER_SEC;
+
+      world.velocityXWorld[idx] = Math.cos(angle) * speed;
+      world.velocityYWorld[idx] = Math.sin(angle) * speed;
+      world.forceX[idx] = 0.0;
+      world.forceY[idx] = 0.0;
+      world.ageTicks[idx] = 0.0;
+      world.lifetimeTicks[idx] = GRAPPLE_RELEASE_FADE_MIN_TICKS
+        + grappleReleaseNoise(seed ^ 0x63d83595) * GRAPPLE_RELEASE_FADE_TICK_RANGE;
+      world.behaviorMode[idx] = 0;
+      world.ownerEntityId[idx] = -1;
+      world.isAliveFlag[idx] = 1;
+    }
+  }
+
   // Grant coyote time so the player can jump in the first few frames after
   // releasing the grapple without pressing jump at the exact release moment.
   if (grantCoyoteTime && shouldRetractFromActiveGrapple) {
@@ -291,10 +338,4 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true): void 
   // Keep debug fields so the overlay can still show the last sweep until the
   // next grapple fire; isGrappleDebugActiveFlag persists for the current frame.
 
-  if (world.grappleParticleStartIndex >= 0) {
-    const start = world.grappleParticleStartIndex;
-    for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
-      world.isAliveFlag[start + i] = 0;
-    }
-  }
 }
