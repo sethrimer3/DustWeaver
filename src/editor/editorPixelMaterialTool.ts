@@ -10,7 +10,7 @@
  * tools would complicate those hot paths for every other placement kind.
  */
 
-import { EditorState, allocateUid, type EditorPixelMaterial } from './editorState';
+import type { EditorState, EditorPixelMaterial } from './editorState';
 import { canPlacePixelMaterialAt } from './editorHitTest';
 
 /** Converts the editor's world-space cursor position (already in native
@@ -24,7 +24,7 @@ export function placePixelMaterialAt(state: EditorState, xPixel: number, yPixel:
   if (room === null) return false;
   if (!canPlacePixelMaterialAt(room, xPixel, yPixel)) return false;
   if (!room.pixelMaterials) room.pixelMaterials = [];
-  const entry: EditorPixelMaterial = { uid: allocateUid(state), xPixel, yPixel, material };
+  const entry: EditorPixelMaterial = { uid: state.nextUid++, xPixel, yPixel, material };
   room.pixelMaterials.push(entry);
   return true;
 }

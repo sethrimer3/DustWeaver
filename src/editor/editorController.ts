@@ -25,6 +25,7 @@ import {
 } from './editorInput';
 import { selectAtCursor, deleteAtCursor, getAllElementsInRect } from './editorTools';
 import { placeAtCursor } from './editorPlaceTool';
+import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -151,6 +152,10 @@ export function createEditorController(
   const INVALID_DRAG_BLOCK = -0x7fff;
   let lastDragBlockX = INVALID_DRAG_BLOCK;
   let lastDragBlockY = INVALID_DRAG_BLOCK;
+
+  // Drag-paint tracking for the pixel-material tool, at native-pixel granularity.
+  let lastDragPixelX = INVALID_DRAG_BLOCK;
+  let lastDragPixelY = INVALID_DRAG_BLOCK;
 
   // Saved source room data for transition linking across rooms
   let linkSourceRoomData: typeof state.roomData = null;
@@ -1002,6 +1007,13 @@ export function createEditorController(
             state.selectionBoxStartBlockX = state.cursorBlockX;
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
+        } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+          pushSnapshot(history, state.roomData);
+          const px = pixelFromCursor(state);
+          placePixelMaterialAt(state, px.x, px.y, state.selectedPaletteItem.pixelMaterialId ?? 1);
+          applyEdits('placement');
+          lastDragPixelX = px.x;
+          lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Place) {
           if (state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
             // Rect brush: first click sets the drag start — don't place yet.
@@ -1102,6 +1114,13 @@ export function createEditorController(
               });
             }
           }
+        } else if (state.activeTool === EditorTool.Delete && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+          pushSnapshot(history, state.roomData);
+          const px = pixelFromCursor(state);
+          erasePixelMaterialAt(state, px.x, px.y);
+          applyEdits('placement');
+          lastDragPixelX = px.x;
+          lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
           pushSnapshot(history, state.roomData);
           deleteAtCursor(state);
@@ -1191,7 +1210,21 @@ export function createEditorController(
       inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX &&
       (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
 
-    if (canDragPaint) {
+    if (canDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+      const px = pixelFromCursor(state);
+      if (px.x !== lastDragPixelX || px.y !== lastDragPixelY) {
+        const fromX = lastDragPixelX === INVALID_DRAG_BLOCK ? px.x : lastDragPixelX;
+        const fromY = lastDragPixelY === INVALID_DRAG_BLOCK ? px.y : lastDragPixelY;
+        paintPixelMaterialLine(
+          state, fromX, fromY, px.x, px.y,
+          state.selectedPaletteItem.pixelMaterialId ?? 1,
+          state.activeTool === EditorTool.Delete,
+        );
+        lastDragPixelX = px.x;
+        lastDragPixelY = px.y;
+        applyEdits('placement');
+      }
+    } else if (canDragPaint) {
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
         lastDragBlockX = state.cursorBlockX;
         lastDragBlockY = state.cursorBlockY;

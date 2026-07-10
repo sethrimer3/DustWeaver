@@ -52,6 +52,7 @@ export {
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
   drawEditorPhantasmalTiles,
+  drawEditorPixelMaterials,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,

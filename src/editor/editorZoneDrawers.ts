@@ -341,6 +341,25 @@ export function drawEditorPhantasmalTiles(
   }
 }
 
+/** Draws placed 1x1 pixel-material particles (native-pixel granularity, not block-snapped). */
+export function drawEditorPixelMaterials(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const size = Math.max(1, zoom);
+  for (const p of (room.pixelMaterials ?? [])) {
+    const sel = isSelected('pixelMaterial', p.uid);
+    const xPx = p.xPixel * zoom + offsetXPx;
+    const yPx = p.yPixel * zoom + offsetYPx;
+    ctx.fillStyle = sel ? '#f2e3a0' : '#d9c07a';
+    ctx.fillRect(xPx, yPx, size, size);
+  }
+}
+
 export function drawEditorEnvironmentItems(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,

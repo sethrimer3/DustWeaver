@@ -148,6 +148,47 @@ export function drawGrid(
   ctx.stroke();
 }
 
+/**
+ * Native-pixel placement grid overlay for the pixel-material tool. Editor-only
+ * screen-space overlay — never drawn during gameplay, never part of native
+ * render output. Single stroke pass (one draw call) rather than per-cell line
+ * objects. Hidden below a minimum zoom to avoid visual noise (1px-spaced
+ * lines become solid mush at low zoom).
+ */
+const PIXEL_GRID_MIN_ZOOM = 3;
+
+export function drawPixelGrid(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  ox: number, oy: number, zoom: number,
+  canvasW: number, canvasH: number,
+): void {
+  if (zoom < PIXEL_GRID_MIN_ZOOM) return;
+  const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
+  const heightPx = room.heightBlocks * BLOCK_SIZE_SMALL;
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+
+  const startCol = Math.max(0, Math.floor(-ox / zoom));
+  const endCol = Math.min(widthPx, Math.ceil((canvasW - ox) / zoom));
+  const startRow = Math.max(0, Math.floor(-oy / zoom));
+  const endRow = Math.min(heightPx, Math.ceil((canvasH - oy) / zoom));
+
+  for (let col = startCol; col <= endCol; col++) {
+    const x = col * zoom + ox;
+    ctx.moveTo(x, startRow * zoom + oy);
+    ctx.lineTo(x, endRow * zoom + oy);
+  }
+  for (let row = startRow; row <= endRow; row++) {
+    const y = row * zoom + oy;
+    ctx.moveTo(startCol * zoom + ox, y);
+    ctx.lineTo(endCol * zoom + ox, y);
+  }
+  ctx.stroke();
+}
+
 export function drawBlockRect(
   ctx: CanvasRenderingContext2D,
   xBlock: number, yBlock: number, wBlock: number, hBlock: number,

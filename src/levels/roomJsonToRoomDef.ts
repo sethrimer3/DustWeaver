@@ -238,6 +238,16 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     }));
   }
 
+  if (json.pixelMaterials && json.pixelMaterials.length > 0) {
+    room.pixelMaterials = json.pixelMaterials
+      .filter(p => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && Number.isFinite(p.material))
+      .map(p => ({
+        xPixel: Math.floor(p.xPixel),
+        yPixel: Math.floor(p.yPixel),
+        material: p.material,
+      }));
+  }
+
   if (json.fireflyAreas && json.fireflyAreas.length > 0) {
     room.fireflyAreas = json.fireflyAreas.map(a => ({
       xBlock: a.xBlock,

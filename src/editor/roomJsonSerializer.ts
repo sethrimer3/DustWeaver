@@ -353,6 +353,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: b.yBlock,
     }));
   }
+  if ((data.pixelMaterials ?? []).length > 0) {
+    json.pixelMaterials = (data.pixelMaterials ?? []).map(p => ({
+      xPixel: p.xPixel,
+      yPixel: p.yPixel,
+      material: p.material,
+    }));
+  }
   if ((data.fallingBlocks ?? []).length > 0) {
     json.fallingBlocks = (data.fallingBlocks ?? []).map(fb => ({
       xBlock: fb.xBlock,

@@ -141,6 +141,21 @@ export function drawPlacementPreview(
 ): void {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return;
 
+  // Pixel-material tool: highlight the exact native pixel that will be painted.
+  if (state.selectedPaletteItem.isPixelMaterialItem === 1) {
+    const px = Math.floor(state.cursorWorldX);
+    const py = Math.floor(state.cursorWorldY);
+    const size = Math.max(1, zoom);
+    const x = px * zoom + offsetXPx;
+    const y = py * zoom + offsetYPx;
+    ctx.fillStyle = 'rgba(255,230,150,0.55)';
+    ctx.fillRect(x, y, size, size);
+    ctx.strokeStyle = 'rgba(255,240,190,0.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, size, size);
+    return;
+  }
+
   // Rect brush: show the selection rectangle while first click is pending.
   if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null) {
     const rectPreview = getRectBrushPreview(

@@ -36,6 +36,7 @@ import type {
   RoomJsonDef,
   RoomJsonGrappleCarryBlock,
   RoomJsonPhantasmalTile,
+  RoomJsonPixelMaterial,
   RoomJsonWall,
   RoomJsonTransition,
   ValidationError,
@@ -476,6 +477,15 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: b.yBlock,
   }));
 
+  const pixelMaterials = (json.pixelMaterials ?? [])
+    .filter((p: RoomJsonPixelMaterial) => Number.isFinite(p.xPixel) && Number.isFinite(p.yPixel) && Number.isFinite(p.material))
+    .map((p: RoomJsonPixelMaterial) => ({
+      uid: uid++,
+      xPixel: Math.floor(p.xPixel),
+      yPixel: Math.floor(p.yPixel),
+      material: p.material,
+    }));
+
   const ropes: EditorRope[] = (json.ropes ?? []).map(r => ({
     uid: uid++,
     anchorAXBlock: r.aax,
@@ -568,6 +578,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       kineticBlocks,
       grappleCarryBlocks,
       phantasmalTiles,
+      pixelMaterials,
       ropes,
       sunbeams,
       sceneLights,

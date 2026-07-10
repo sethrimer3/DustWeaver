@@ -40,6 +40,7 @@ import type {
   EditorGuideDustPath,
   EditorGrappleCarryBlock,
   EditorPhantasmalTile,
+  EditorPixelMaterial,
 } from './editorState';
 import { particleKindToString } from './roomJsonSchema';
 
@@ -391,6 +392,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     yBlock: t.yBlock,
   }));
 
+  const pixelMaterials: EditorPixelMaterial[] = (room.pixelMaterials ?? []).map(p => ({
+    uid: uid++,
+    xPixel: p.xPixel,
+    yPixel: p.yPixel,
+    material: p.material,
+  }));
+
   return {
     data: {
       id: room.id,
@@ -439,6 +447,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       fallingBlocks,
       grappleCarryBlocks,
       phantasmalTiles,
+      pixelMaterials,
       dialogueTriggers,
       guideDustPaths,
     },

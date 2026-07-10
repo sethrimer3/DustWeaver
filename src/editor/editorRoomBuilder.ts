@@ -149,6 +149,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: a.yBlock,
     })),
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
+    pixelMaterials: (data.pixelMaterials ?? []).map(p => ({ xPixel: p.xPixel, yPixel: p.yPixel, material: p.material })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({
       xBlock: a.xBlock,
       yBlock: a.yBlock,

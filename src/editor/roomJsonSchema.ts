@@ -320,6 +320,13 @@ export interface RoomJsonPhantasmalTile {
   yBlock: number;
 }
 
+/** Authored 1x1 pixel-material placement — native-pixel coordinates (NOT block units). */
+export interface RoomJsonPixelMaterial {
+  xPixel: number;
+  yPixel: number;
+  material: number;
+}
+
 export interface RoomJsonRope {
   aax: number;
   aay: number;
@@ -453,6 +460,7 @@ export interface RoomJsonDef {
   kineticBlocks?: RoomJsonKineticBlock[];
   grappleCarryBlocks?: RoomJsonGrappleCarryBlock[];
   phantasmalTiles?: RoomJsonPhantasmalTile[];
+  pixelMaterials?: RoomJsonPixelMaterial[];
   ropes?: RoomJsonRope[];
   dustBoostJars?: RoomJsonDustBoostJar[];
   dustSwarms?: RoomJsonDustSwarm[];

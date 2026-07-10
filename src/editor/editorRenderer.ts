@@ -10,6 +10,7 @@ import type { EditorState } from './editorState';
 import { EditorTool } from './editorState';
 import {
   drawGrid,
+  drawPixelGrid,
 } from './editorRendererHelpers';
 import {
   drawEditorWalls,
@@ -26,6 +27,7 @@ import {
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
   drawEditorPhantasmalTiles,
+  drawEditorPixelMaterials,
   drawEditorEnvironmentItems,
   drawEditorRopes,
   drawEditorDialogueTriggers,
@@ -100,6 +102,10 @@ export function renderEditorOverlays(
   drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+    drawPixelGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
+  }
   drawEditorEnvironmentItems(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
