@@ -15,8 +15,27 @@ export const MATERIAL_EMPTY = 0;
 export const MATERIAL_SAND = 1;
 /** 2x2 sand — a real multi-cell footprint (see MATERIAL_DEFS), not four independent grains. */
 export const MATERIAL_SAND_2X2 = 2;
+/** 1x1 water — `behavior: 'liquid'` (see MaterialBehavior), spreads laterally instead of piling. */
+export const MATERIAL_WATER = 3;
 
-export type MaterialId = typeof MATERIAL_EMPTY | typeof MATERIAL_SAND | typeof MATERIAL_SAND_2X2;
+export type MaterialId =
+  | typeof MATERIAL_EMPTY
+  | typeof MATERIAL_SAND
+  | typeof MATERIAL_SAND_2X2
+  | typeof MATERIAL_WATER;
+
+/**
+ * High-level movement behavior a material follows in `PixelMaterialSystem.stepParticle`.
+ * - `'sand'`   — falls straight down, then diagonally; sinks through liquids when
+ *                falling/diagonal-falling; sleeps when it can't move.
+ * - `'liquid'` — falls straight down, then diagonally, then spreads horizontally
+ *                instead of piling/sleeping immediately; does not displace sand.
+ *
+ * Dispatch lives in `stepParticle`'s `switch (getMaterialBehavior(p.material))`
+ * — add a new case there (and a `stepXParticle` method) for a new behavior,
+ * rather than branching on material id throughout the sim.
+ */
+export type MaterialBehavior = 'sand' | 'liquid';
 
 /**
  * Per-material definition: visual + footprint size + wind response, so
@@ -45,20 +64,31 @@ export interface MaterialDef {
   readonly color: string;
   /** Wind momentum multiplier (0–1 typical). Omit for the default of 1 (full response). */
   readonly windResponse?: number;
+  /** Movement behavior — see `MaterialBehavior`. */
+  readonly behavior: MaterialBehavior;
 }
 
 export const MATERIAL_DEFS: Readonly<Record<number, MaterialDef>> = {
-  [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a', windResponse: 1 },
+  [MATERIAL_SAND]: { footprintSize: 1, color: '#d9c07a', windResponse: 1, behavior: 'sand' },
   // Distinct but related hue (deeper/more saturated tan) so a 2x2 grain reads
   // as visually different from 1x1 sand at a glance, not just "bigger sand".
   // Reduced windResponse: a bigger grain should feel heavier/less reactive
   // than 1x1 sand under the same gust, not equally easy to blow around.
-  [MATERIAL_SAND_2X2]: { footprintSize: 2, color: '#b8925a', windResponse: 0.55 },
+  [MATERIAL_SAND_2X2]: { footprintSize: 2, color: '#b8925a', windResponse: 0.55, behavior: 'sand' },
+  // Distinct blue/cyan, clearly different from either sand tone. Higher
+  // windResponse than sand — water is meant to feel lighter/more reactive.
+  [MATERIAL_WATER]: { footprintSize: 1, color: '#4fa3d1', windResponse: 1.3, behavior: 'liquid' },
 };
 
 /** Returns the material's square footprint size in native pixels (defaults to 1 for unknown ids). */
 export function getMaterialFootprintSize(material: number): number {
   return MATERIAL_DEFS[material]?.footprintSize ?? 1;
+}
+
+/** Returns the material's movement behavior (defaults to `'sand'` for unknown ids — callers should
+ *  gate on `isKnownMaterialId` first; this fallback only exists so the lookup itself can't throw). */
+export function getMaterialBehavior(material: number): MaterialBehavior {
+  return MATERIAL_DEFS[material]?.behavior ?? 'sand';
 }
 
 /** Returns true if `material` is a recognized, placeable material id (not `MATERIAL_EMPTY`, not unknown). */
@@ -94,9 +124,15 @@ export const WIND_MOMENTUM_DAMPING = 0.85;
 /** Minimum |momentum| (px/s) below which it is snapped to zero. */
 export const WIND_MOMENTUM_EPSILON = 4;
 
-/** One occupied pixel-material particle. Kept as a small plain record — the
- *  system stores these in a Map keyed by cell index, not as heavyweight
- *  per-particle objects/entities. */
+/**
+ * One pixel-material particle (1x1 or a larger rigid footprint). Kept as a
+ * small plain record, not a heavyweight object/entity. `PixelMaterialSystem`
+ * holds exactly one of these per particle in a `particles: Set` (for unique
+ * iteration) and additionally indexes it by every occupied cell in an
+ * `occupancy: Map<cellKey, particle>` (one key per cell — N*N keys all
+ * pointing at this same record for an N×N footprint), so per-cell lookup
+ * stays O(1) regardless of footprint size.
+ */
 export interface PixelMaterialParticle {
   x: number;
   y: number;

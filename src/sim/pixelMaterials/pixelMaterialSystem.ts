@@ -54,6 +54,7 @@ import {
   SLEEP_DELAY_STEPS,
   WIND_MOMENTUM_DAMPING,
   WIND_MOMENTUM_EPSILON,
+  getMaterialBehavior,
   getMaterialFootprintSize,
   getMaterialWindResponse,
   isKnownMaterialId,
@@ -139,6 +140,16 @@ export class PixelMaterialSystem {
 
   isOccupied(x: number, y: number): boolean {
     return this.occupancy.has(this.key(x, y));
+  }
+
+  /** Returns the particle occupying (x, y), or `undefined` if the cell is empty. */
+  getParticleAtCell(x: number, y: number): PixelMaterialParticle | undefined {
+    return this.occupancy.get(this.key(x, y));
+  }
+
+  /** Returns true if (x, y) is blocked by immutable world geometry (independent of particle occupancy). */
+  isCellSolid(x: number, y: number): boolean {
+    return this.solid !== null && this.solid.isSolid(x, y);
   }
 
   /** Returns true if a 1x1 particle could occupy this single cell (in bounds, not solid, not already occupied). */
