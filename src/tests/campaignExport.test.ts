@@ -20,16 +20,68 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import campaignExportModule from '../../electron/campaignExport.cjs';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const campaignExport = require('../../electron/campaignExport.cjs');
+type TestRoom = {
+  id: string;
+  name: string;
+  transitions: Array<{ to?: string }>;
+};
+
+type TestCampaign = {
+  v: number;
+  kind: string;
+  campaign: { id: string; title: string };
+  metadata: { version: number };
+  worldMap: Record<string, unknown>;
+  rooms: TestRoom[];
+};
+
+type CampaignProgressEvent = {
+  step: string;
+  message?: string;
+  roomIndex?: number;
+  totalRooms?: number;
+  roomId?: string;
+};
+
+type ExportCampaignArgs = {
+  campaign: TestCampaign;
+  campaignMeta: TestCampaign['campaign'];
+  campaignId: string;
+  rooms: TestRoom[];
+  roomIdFirstIndex: Map<string, number>;
+  isOfficialCampaign: boolean;
+  campaignDir: string;
+  onProgress?: (event: CampaignProgressEvent) => void;
+};
+
+type ExportCampaignResult =
+  | { ok: true; campaignDir: string; writtenRooms: number; skippedRooms: number; removedCount: number }
+  | { ok: false; error: string };
+
+type RoomCacheValidationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+type CampaignExportModule = {
+  exportCampaignToDisk(args: ExportCampaignArgs): ExportCampaignResult;
+  validateRoomCacheOnDisk(
+    roomsDir: string,
+    manifest: Record<string, unknown>,
+    expectedRoomIds?: string[],
+  ): RoomCacheValidationResult;
+  MAX_BACKUPS: number;
+};
+
+const campaignExport = campaignExportModule as CampaignExportModule;
 const { exportCampaignToDisk, validateRoomCacheOnDisk, MAX_BACKUPS } = campaignExport;
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dw-campaign-export-test-'));
 }
 
-function makeCampaign(roomIds: string[]) {
+function makeCampaign(roomIds: string[]): TestCampaign {
   return {
     v: 1,
     kind: 'DustWeaverCampaign',
@@ -67,10 +119,10 @@ test('room write failure fails the whole export', () => {
   // Make the target room file path a directory so writing to it fails.
   fs.mkdirSync(path.join(roomsDir, 'roomA_room.json'));
 
-  const events: any[] = [];
+  const events: CampaignProgressEvent[] = [];
   const result = exportCampaignToDisk({
     ...baseArgs(campaignDir, ['roomA']),
-    onProgress: (e: any) => events.push(e),
+    onProgress: (e) => events.push(e),
   });
 
   assert.equal(result.ok, false);
@@ -89,10 +141,10 @@ test('manifest write failure fails the whole export', () => {
   // Make manifest.json a directory so the atomic write fails.
   fs.mkdirSync(path.join(roomsDir, 'manifest.json'));
 
-  const events: any[] = [];
+  const events: CampaignProgressEvent[] = [];
   const result = exportCampaignToDisk({
     ...baseArgs(campaignDir, ['roomA']),
-    onProgress: (e: any) => events.push(e),
+    onProgress: (e) => events.push(e),
   });
 
   assert.equal(result.ok, false);

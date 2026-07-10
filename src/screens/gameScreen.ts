@@ -367,8 +367,6 @@ export function startGameScreen(
   // Prepares all rooms in the active worldNumber zone before gameplay starts,
   // and shows a loading screen when the player crosses a zone boundary.
   // Initialized lazily after roomRuntimeCache is declared (below).
-  let _zoneLoader!: ZoneResidentLoader;
-
   // State for mid-game cross-zone transition loads.
   // When isActive is true, gameplay is paused and the zone loader is ticking
   // to prepare the target zone before activating the target room.
@@ -617,7 +615,7 @@ export function startGameScreen(
   // Bounded LRU with 16 slots (current room + 3-hop radius + headroom).
   const roomRuntimeCache = new RoomRuntimeCache();
   // Zone loader initialized here after roomRuntimeCache is available.
-  _zoneLoader = new ZoneResidentLoader(ROOM_REGISTRY, roomRuntimeCache);
+  const _zoneLoader = new ZoneResidentLoader(ROOM_REGISTRY, roomRuntimeCache);
 
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.
