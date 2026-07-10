@@ -84,7 +84,7 @@ function buildBgBlockMap(blocks: RoomJsonBackgroundBlock[] | undefined): Map<str
 function buildCoverageMap(walls: RoomJsonWall[]): Map<string, string | undefined> {
   const map = new Map<string, string | undefined>();
   for (const w of walls) {
-    if (w.isPlatform || w.rampOrientation !== undefined || w.isPillarHalfWidth) continue;
+    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth) continue;
     const themeVal = w.blockTheme ?? undefined;
     for (const key of wallCells(w)) map.set(key, themeVal);
   }
@@ -99,7 +99,7 @@ function buildV1GrainSet(walls: RoomJsonWall[]): Set<string> {
   const v1 = new Set<string>();
   const v2plus = new Set<string>();
   for (const w of walls) {
-    if (w.isPlatform || w.rampOrientation !== undefined || w.isPillarHalfWidth) continue;
+    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth) continue;
     const cells = wallCells(w);
     if (w.hBlock === 1) {
       for (const k of cells) if (!v2plus.has(k)) v1.add(k);
@@ -127,7 +127,7 @@ export interface RoundTripValidationResult {
  *  1. Solid cell coverage (no cells added or dropped)
  *  2. Per-cell theme (no theme changes)
  *  3. 1×1 vs 2×2 visual grain (cells that had hBlock=1 remain hBlock=1)
- *  4. Special wall count (platforms/ramps/pillars)
+ *  4. Special wall count (platforms/stairs/ramps/pillars)
  *  5. Water zone cell coverage
  *  6. Lava zone cell coverage
  *  7. Ambient blocker cells (clear and dark identity)
@@ -186,10 +186,10 @@ export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult 
 
   // ── 3. Special walls ──────────────────────────────────────────────────────
   const specialBefore = json.interiorWalls.filter(w =>
-    w.isPlatform || w.rampOrientation !== undefined || w.isPillarHalfWidth,
+    w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth,
   );
   const specialAfter = roundTripped.interiorWalls.filter(w =>
-    w.isPlatform || w.rampOrientation !== undefined || w.isPillarHalfWidth,
+    w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth,
   );
   if (specialBefore.length !== specialAfter.length) {
     errors.push(`Special wall count changed: ${specialBefore.length} → ${specialAfter.length}`);

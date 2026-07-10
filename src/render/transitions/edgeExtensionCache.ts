@@ -174,10 +174,11 @@ function _buildOccupancyMap(room: RoomDef): Map<string, string | null> {
   const map = new Map<string, string | null>();
   for (let wi = 0; wi < room.walls.length; wi++) {
     const w = room.walls[wi];
-    // Exclude invisible boundary walls, ramps, and platforms
+    // Exclude invisible boundary walls, shaped walls (stairs/ramps), and platforms
     // (they don't produce solid tiles that look continuous when extended)
     if (w.isInvisibleFlag === 1) continue;
     if (w.rampOrientation !== undefined) continue;
+    if (w.stairsOrientation !== undefined) continue;
     const theme: string | null = w.blockTheme ?? null;
     for (let col = w.xBlock; col < w.xBlock + w.wBlock; col++) {
       for (let row = w.yBlock; row < w.yBlock + w.hBlock; row++) {

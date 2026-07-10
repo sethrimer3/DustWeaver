@@ -72,7 +72,7 @@ import {
   render2x2Pass,
   render1x1Pass,
   renderPlatformPass,
-  renderRampPass,
+  renderShapedWallPass,
   renderHalfPillarPass,
   renderSurfaceEdgeOverlayPass,
   clearWallCellDiag,
@@ -932,7 +932,7 @@ function _doRenderWallTilesDirect(
   hadFallbacks = render2x2Pass(ctx, pctx)      || hadFallbacks;
   hadFallbacks = render1x1Pass(ctx, pctx)      || hadFallbacks;
   hadFallbacks = renderPlatformPass(ctx, pctx) || hadFallbacks;
-  hadFallbacks = renderRampPass(ctx, pctx)     || hadFallbacks;
+  hadFallbacks = renderShapedWallPass(ctx, pctx) || hadFallbacks;
   hadFallbacks = renderHalfPillarPass(ctx, pctx) || hadFallbacks;
 
   // Guaranteed surface-edge overlay: drawn from the authoritative

@@ -147,7 +147,7 @@ function hydrateSolidsByTheme(solids) {
 }
 
 // ── hydrateSpecialWalls (mirrors roomSchemaHydrator.ts) ────────────────────────
-/** Expands saved special walls (platforms, ramps, pillars) into RoomJsonWall-like objects. */
+/** Expands saved special walls (platforms, stairs, ramps, pillars) into RoomJsonWall-like objects. */
 function hydrateSpecialWalls(specialWalls) {
   if (!specialWalls || specialWalls.length === 0) return [];
   return specialWalls.map(sw => {
@@ -162,6 +162,7 @@ function hydrateSpecialWalls(specialWalls) {
       if (sw.edge !== undefined && sw.edge !== 0) wall.platformEdge = sw.edge;
     }
     if (sw.ramp !== undefined) wall.rampOrientation = sw.ramp;
+    if (sw.stairs !== undefined) wall.stairsOrientation = sw.stairs;
     if (sw.half === 1) wall.isPillarHalfWidth = true;
     return wall;
   });
@@ -195,7 +196,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
   const ts  = []; // themeIndex
   const sh  = []; // soundHardnessIndex
   const iv  = []; // isInvisibleFlag
-  const ro  = []; // rampOrientationIndex (255 = not a ramp)
+  const ro  = []; // shape orientation: 0-3 legacy ramp, 4-7 stairs, 255 plain rect
   const ph  = []; // isPillarHalfWidthFlag
   const ic  = []; // isIceFlag
   const uic = []; // isUltraIceFlag
@@ -220,7 +221,12 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
     ts.push(themeIdx);
     sh.push(resolveWallSoundHardnessIndex(def.blockTheme, roomBlockTheme, roomSoundHardness));
     iv.push((def.isInvisible === true || def.isInvisibleFlag === 1) ? 1 : 0);
-    ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
+    // Mirrors wallShapeOrientationIndex() in src/levels/stairsGeometry.ts.
+    ro.push(
+      def.stairsOrientation !== undefined ? def.stairsOrientation + 4
+      : def.rampOrientation !== undefined ? def.rampOrientation
+      : 255,
+    );
     ph.push(isHalfWidthPillar ? 1 : 0);
     // Ice flag derived from resolved theme name (mirrors gameRoomWalls.ts)
     const resolvedTheme = themeIdx === WALL_THEME_DEFAULT_INDEX
@@ -232,7 +238,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
 
   // Iterative merge pass — identical to the TypeScript generator implementation.
   // Two walls may merge only when: same platform type, same theme, same sound
-  // hardness, same invisibility; neither is a ramp; neither is a half-width
+  // hardness, same invisibility; neither is a shaped wall (stairs/ramp); neither is a half-width
   // pillar; and they share a complete face on one axis.
   let merged = true;
   while (merged) {
@@ -339,6 +345,7 @@ function computeWallTemplateSourceHash(
     hashStr(w.blockTheme  ?? '');
     hashStr(w.blockThemeId ?? '');
     hashStr(String(w.rampOrientation ?? ''));
+    hashStr(String(w.stairsOrientation ?? ''));
     hashBool(w.isPillarHalfWidth);
   }
   return ((h >>> 0)).toString(16).padStart(8, '0');

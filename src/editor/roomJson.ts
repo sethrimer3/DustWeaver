@@ -214,6 +214,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     platformEdge: w.platformEdge ?? 0,
     blockTheme: resolveJsonBlockTheme(w.blockTheme, w.blockThemeId),
     rampOrientation: w.rampOrientation,
+    stairsOrientation: w.stairsOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
   }));
 

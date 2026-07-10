@@ -22,6 +22,7 @@
 
 import type { WorldState } from '../sim/world';
 import { MAX_WALLS } from '../sim/world';
+import { wallShapeOrientationIndex } from '../levels/stairsGeometry';
 import {
   type RoomDef,
   type RoomWallTemplate,
@@ -88,7 +89,7 @@ export function* buildRoomWallTemplateIncremental(
   const ts: number[] = []; // themeIndex
   const sh: number[] = []; // soundHardnessIndex
   const iv: number[] = []; // isInvisibleFlag (0 or 1)
-  const ro: number[] = []; // rampOrientationIndex (255 = not a ramp)
+  const ro: number[] = []; // shape orientation: 0-3 legacy ramp, 4-7 stairs, 255 plain rect
   const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
   const ic: number[] = []; // isIceFlag (0 or 1)
   const uic: number[] = []; // isUltraIceFlag (0 or 1)
@@ -111,7 +112,7 @@ export function* buildRoomWallTemplateIncremental(
     ts.push(themeIdx);
     sh.push(resolveWallSoundHardnessIndex(room, def.blockTheme));
     iv.push(def.isInvisibleFlag === 1 ? 1 : 0);
-    ro.push(def.rampOrientation !== undefined ? def.rampOrientation : 255);
+    ro.push(wallShapeOrientationIndex(def));
     ph.push(isHalfWidthPillar ? 1 : 0);
     // Derive ice flag from theme: wall is ice if its resolved theme is 'ice'.
     const resolvedTheme = themeIdx === WALL_THEME_DEFAULT_INDEX
@@ -124,7 +125,9 @@ export function* buildRoomWallTemplateIncremental(
   // ── Incremental merge pass ────────────────────────────────────────────────
   // Two rectangles may merge if they share a complete face AND have the same
   // isPlatformFlag (platform walls must not merge with solid walls).
-  // Ramps (ro !== 255) and half-width pillars (ph === 1) are never merged.
+  // Shaped walls — stairs and legacy ramps, both encoded as ro !== 255 — and
+  // half-width pillars (ph === 1) are never merged: their solid area is not the
+  // bounding rectangle, so a merged rect would over-report solidity.
   //
   // Each outer while-loop iteration finds at most one merge.  After each
   // iteration the deadline is checked: if the budget (WALL_MERGE_BUDGET_MS) has
@@ -142,7 +145,7 @@ export function* buildRoomWallTemplateIncremental(
         if (ts[i] !== ts[j]) continue;
         if (sh[i] !== sh[j]) continue;
         if (iv[i] !== iv[j]) continue;
-        // Never merge ramps or half-width pillars
+        // Never merge shaped walls (stairs, legacy ramps) or half-width pillars
         if (ro[i] !== 255 || ro[j] !== 255) continue;
         if (ph[i] !== 0 || ph[j] !== 0) continue;
         // Horizontal merge: same Y, same H, contiguous on X axis

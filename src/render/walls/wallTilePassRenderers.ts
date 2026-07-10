@@ -9,7 +9,7 @@
  *   1. render2x2Pass        — 2×2 full-sprite blocks
  *   2. render1x1Pass        — 1×1 auto-tiling tiles
  *   3. renderPlatformPass   — one-way platform tiles
- *   4. renderRampPass       — diagonal ramp walls
+ *   4. renderShapedWallPass — stairs and legacy ramps (template-mask shapes)
  *   5. renderHalfPillarPass — narrow half-width pillar walls
  */
 
@@ -22,6 +22,7 @@ import {
   getPlatformSprite1x1,
   getPlatformSpriteFromBaseUrl,
   getRampSprite,
+  getStairsSprite,
   OPEN_AIR_SIDE_N,
   OPEN_AIR_SIDE_E,
   OPEN_AIR_SIDE_S,
@@ -51,6 +52,7 @@ import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, ShapedWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
 import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceExposure';
+import { decodeStairsOrientationIndex, isStairsOrientationIndex } from '../../levels/stairsGeometry';
 import { renderSurfaceEdgeOverlayPass as _renderSurfaceEdgeOverlayPass } from './surfaceEdgeOverlay';
 import {
   TILE_MASK_N,
@@ -62,6 +64,8 @@ import {
   drawVertexOverlays,
   drawPlatformLine,
   drawRampTriangle,
+  drawStairsShape,
+  applyStairsClipPath,
   applyRampClipPath,
 } from './wallTileDrawHelpers';
 
@@ -197,7 +201,7 @@ function surfaceMaskToOpenAirBits(mask: SurfaceMask): number {
 
 // Pre-allocated empty arrays used as fallbacks when a chunk has no items of a type.
 const _EMPTY_TILES: CachedTileCoord[]     = [];
-const _EMPTY_RAMPS: ShapedWallInfo[]         = [];
+const _EMPTY_SHAPED: ShapedWallInfo[]        = [];
 const _EMPTY_PILLARS: HalfPillarWallInfo[] = [];
 const _EMPTY_2X2: ReadonlyArray<readonly [string, number]> = [];
 

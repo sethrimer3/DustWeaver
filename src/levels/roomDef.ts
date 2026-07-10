@@ -390,15 +390,33 @@ export interface RoomWallDef {
   /** 1 if this wall is an invisible collision boundary (not rendered). */
   isInvisibleFlag?: 0 | 1;
   /**
-   * Ramp orientation. When set, this wall is a diagonal triangle (ramp) rather
-   * than a full rectangle. The four orientations are:
+   * Ramp orientation — LEGACY. When set, this wall is a diagonal triangle
+   * (ramp) rather than a full rectangle. The four orientations are:
    *   0 = ramp rises going right  ( / shape, hypotenuse from bottom-left to top-right )
    *   1 = ramp rises going left   ( \ shape, hypotenuse from bottom-right to top-left )
    *   2 = ceiling ramp going left ( ⌐ shape, upside-down /, hypotenuse top-left to bottom-right )
    *   3 = ceiling ramp going right( ¬ shape, upside-down \, hypotenuse top-right to bottom-left )
    * Omit (or set to undefined) for a normal rectangular wall.
+   *
+   * Plain ramps are retired: the editor no longer offers them for new
+   * placement (stairs replace them, see `stairsOrientation`). This field is
+   * retained so pre-existing rooms and campaigns keep loading, and because
+   * bounce-pad ramps still use it.
+   *
+   * `rampOrientation` and `stairsOrientation` are mutually exclusive.
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation. When set, this wall is a stepped staircase whose solid
+   * cells come from the authored stair template mask rather than the wall's
+   * full rectangle. Orientation uses the same convention as `rampOrientation`:
+   *   0 = rises going right, 1 = rises going left,
+   *   2 = ceiling stairs (rises right), 3 = ceiling stairs (rises left)
+   * Omit (or set to undefined) for a normal rectangular wall.
+   *
+   * See `levels/stairsGeometry.ts` for the authoritative solidity definition.
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
   /**
    * 1 if this pillar wall is rendered and collides at half-block width (4 px).
    * Only meaningful for walls that are 1×2 blocks and serve as pillars.
@@ -798,6 +816,14 @@ export interface RoomWallTemplate {
   readonly themeIndex: Uint8Array;
   readonly soundHardnessIndex: Uint8Array;
   readonly isInvisibleFlag: Uint8Array;
+  /**
+   * Shape orientation slot, shared by ramps and stairs:
+   *   0-3 = legacy ramp orientation
+   *   4-7 = stairs orientation + 4
+   *   255 = plain rectangular wall
+   * Discriminate with the helpers in `levels/stairsGeometry.ts`; never compare
+   * against a bare literal.
+   */
   readonly rampOrientationIndex: Uint8Array;
   readonly isPillarHalfWidthFlag: Uint8Array;
   /** 1 for walls whose theme is 'ice' — used for ice-surface physics and grapple rejection. */

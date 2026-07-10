@@ -86,10 +86,16 @@ export interface EditorWall {
   /** Per-wall block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
   /**
-   * Ramp orientation (0-3). Undefined or -1 = not a ramp.
+   * Ramp orientation (0-3) — LEGACY, retired from editor placement.
+   * Undefined = not a ramp.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation (0-3). Undefined = not stairs.
+   * 0=rises right, 1=rises left, 2=ceiling (rises right), 3=ceiling (rises left).
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
   /** 1 if this pillar wall should be rendered and collide at half-block width. */
   isPillarHalfWidthFlag: 0 | 1;
 }

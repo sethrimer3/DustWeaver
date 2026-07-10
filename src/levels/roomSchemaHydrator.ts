@@ -218,6 +218,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       if (sw.edge !== undefined && sw.edge !== 0) wall.platformEdge = sw.edge;
     }
     if (sw.ramp !== undefined) wall.rampOrientation = sw.ramp;
+    if (sw.stairs !== undefined) wall.stairsOrientation = sw.stairs;
     if (sw.half === 1) wall.isPillarHalfWidth = true;
     return wall;
   });

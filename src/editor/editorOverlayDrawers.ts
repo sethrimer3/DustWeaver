@@ -16,6 +16,7 @@ import {
   WALL_HIGHLIGHT, WALL_SELECTED,
   PLATFORM_HIGHLIGHT, PLATFORM_SELECTED,
   RAMP_HIGHLIGHT, RAMP_SELECTED,
+  STAIRS_HIGHLIGHT, STAIRS_SELECTED,
   PILLAR_HALF_HIGHLIGHT, PILLAR_HALF_SELECTED,
   ENEMY_COLOR, ENEMY_SELECTED,
   TRANSITION_COLOR, TRANSITION_SELECTED,
@@ -35,7 +36,7 @@ import {
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
-  drawMergedWallOutline, drawWallTileGrid, drawRampTriangle,
+  drawMergedWallOutline, drawWallTileGrid, drawRampTriangle, drawStairsShape,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
 } from './editorRendererHelpers';
@@ -61,7 +62,7 @@ export {
 } from './editorZoneDrawers';
 
 // ============================================================================
-// Interior walls (solid, platform, ramp, half-pillar)
+// Interior walls (solid, platform, stairs, legacy ramp, half-pillar)
 // ============================================================================
 
 export function drawEditorWalls(
@@ -72,7 +73,7 @@ export function drawEditorWalls(
   offsetYPx: number,
   zoom: number,
 ): void {
-  // Precompute which cells are covered by a solid (non-ramp, non-platform,
+  // Precompute which cells are covered by a solid (non-shaped, non-platform,
   // non-half-pillar) wall so adjacent solid blocks can share a single merged
   // outline instead of each drawing its own per-cell border. Also track which
   // wall instance (uid) owns each cell so the per-tile grid can distinguish
@@ -81,7 +82,7 @@ export function drawEditorWalls(
   const occupied = new Set<string>();
   const cellOwner = new Map<string, number>();
   for (const w of room.interiorWalls) {
-    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
+    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
     for (let dy = 0; dy < w.hBlock; dy++) {
       for (let dx = 0; dx < w.wBlock; dx++) {
         const key = `${w.xBlock + dx},${w.yBlock + dy}`;
@@ -94,10 +95,14 @@ export function drawEditorWalls(
   for (const w of room.interiorWalls) {
     const sel = isSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
+    const isStairs = w.stairsOrientation !== undefined;
     const isRamp = w.rampOrientation !== undefined;
     const isHalfPillar = w.isPillarHalfWidthFlag === 1;
 
-    if (isRamp) {
+    if (isStairs) {
+      const color = sel ? STAIRS_SELECTED : STAIRS_HIGHLIGHT;
+      drawStairsShape(ctx, w, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+    } else if (isRamp) {
       const color = sel ? RAMP_SELECTED : RAMP_HIGHLIGHT;
       drawRampTriangle(ctx, w, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
     } else if (isPlatform) {

@@ -208,6 +208,7 @@ function _buildCurrentRoomSeamSolid(
     const w = currentRoom.walls[wi];
     if (w.isInvisibleFlag === 1) continue;
     if (w.rampOrientation !== undefined) continue;
+    if (w.stairsOrientation !== undefined) continue;
 
     if (exitDir === 'right') {
       // Seam at col W-1: include if wall extends to or past col W-1.
@@ -308,6 +309,7 @@ function _buildNextRoomFacingEdge(
     const w = connectedRoom.walls[wi];
     if (w.isInvisibleFlag === 1) continue;
     if (w.rampOrientation !== undefined) continue;
+    if (w.stairsOrientation !== undefined) continue;
     const theme: string | null = w.blockTheme ?? null;
     for (let col = w.xBlock; col < w.xBlock + w.wBlock; col++) {
       for (let row = w.yBlock; row < w.yBlock + w.hBlock; row++) {

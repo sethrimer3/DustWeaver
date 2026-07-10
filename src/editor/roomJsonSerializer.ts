@@ -62,6 +62,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (w.blockTheme !== undefined) wall.blockTheme = w.blockTheme;
       if (w.blockTheme !== undefined) wall.blockThemeId = blockThemeToId(w.blockTheme);
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
+      if (w.stairsOrientation !== undefined) wall.stairsOrientation = w.stairsOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       return wall;
     }),

@@ -39,12 +39,16 @@ import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 function getPlacementWidth(item: PaletteItem, rotSteps: number): number {
   const w = item.defaultWidthBlocks ?? 1;
   const h = item.defaultHeightBlocks ?? 1;
+  // Stairs keep their authored bounding box: their four orientations are axis
+  // mirrors of one mask, not rotations, so the box never transposes.
+  if (item.isStairsItem === 1) return w;
   return (rotSteps % 2 === 0) ? w : h;
 }
 
 function getPlacementHeight(item: PaletteItem, rotSteps: number): number {
   const w = item.defaultWidthBlocks ?? 1;
   const h = item.defaultHeightBlocks ?? 1;
+  if (item.isStairsItem === 1) return h;
   return (rotSteps % 2 === 0) ? h : w;
 }
 
@@ -222,11 +226,19 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;
     const placementBlockTheme = item.blockThemeOverride ?? state.selectedBlockTheme;
 
+    // Rotation cycles through the four orientations; flipH mirrors left/right
+    // by toggling the low bit.  Stairs use the identical convention as ramps.
+    const shapeOrientation = (
+      state.placementFlipH
+        ? ((state.placementRotationSteps % 4) ^ 1)
+        : (state.placementRotationSteps % 4)
+    ) as 0 | 1 | 2 | 3;
+
     let rampOrientation: 0 | 1 | 2 | 3 | undefined;
-    if (item.isRampItem === 1) {
-      const base = state.placementRotationSteps % 4;
-      rampOrientation = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
-    }
+    if (item.isRampItem === 1) rampOrientation = shapeOrientation;
+
+    let stairsOrientation: 0 | 1 | 2 | 3 | undefined;
+    if (item.isStairsItem === 1) stairsOrientation = shapeOrientation;
 
     const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
     const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
@@ -447,6 +459,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       platformEdge,
       blockTheme: placementBlockTheme,
       rampOrientation,
+      stairsOrientation,
       isPillarHalfWidthFlag,
     });
   } else if (placeEnemyAtCursor(state, room, item, bx, by)) {

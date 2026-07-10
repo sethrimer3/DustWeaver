@@ -43,6 +43,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     platformEdge: w.platformEdge,
     blockTheme: w.blockTheme,
     rampOrientation: w.rampOrientation,
+    stairsOrientation: w.stairsOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 

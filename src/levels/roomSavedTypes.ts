@@ -88,8 +88,8 @@ export interface SavedSolids {
 
 /**
  * A "special" wall entry that cannot participate in the uniform tile-grid
- * cover used by `SavedSolids` — i.e. one-way platforms, ramps, and
- * half-width pillars.  These travel in `specialWalls` and bypass the
+ * cover used by `SavedSolids` — i.e. one-way platforms, stairs, legacy ramps,
+ * and half-width pillars.  These travel in `specialWalls` and bypass the
  * tile-grid compressor entirely.
  */
 export interface SavedSpecialWall {
@@ -101,8 +101,10 @@ export interface SavedSpecialWall {
   plat?: 1;
   /** Platform edge: 0=top,1=bottom,2=left,3=right. */
   edge?: 0 | 1 | 2 | 3;
-  /** Ramp orientation 0-3. */
+  /** Ramp orientation 0-3 (legacy; omit if not a ramp). */
   ramp?: 0 | 1 | 2 | 3;
+  /** Stairs orientation 0-3 (omit if not stairs). */
+  stairs?: 0 | 1 | 2 | 3;
   /** 1 if half-width pillar. */
   half?: 1;
 }

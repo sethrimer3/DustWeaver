@@ -101,8 +101,18 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   /** 1 if the corresponding wall is invisible (collision-only boundary, not rendered). */
   wallIsInvisibleFlag: Uint8Array;
   /**
-   * Ramp orientation index. 255 = not a ramp (treat as full AABB).
-   * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
+   * Shape orientation index, shared by ramps and stairs:
+   *   0-3 = legacy ramp   — 0=rises right(/), 1=rises left(\), 2=ceiling(⌐), 3=ceiling(¬)
+   *   4-7 = stairs        — same four orientations, offset by 4
+   *   255 = plain rectangular wall (treat as full AABB)
+   *
+   * Discriminate with `isRampOrientationIndex` / `isStairsOrientationIndex` /
+   * `isPlainRectOrientationIndex` from `levels/stairsGeometry.ts`. A bare
+   * `!== 255` test means "this wall is not a plain rectangle" and is correct
+   * only where both shapes should be excluded.
+   *
+   * The name is retained (rather than renamed to `wallShapeOrientationIndex`)
+   * because it is mirrored verbatim into serialized baked wall templates.
    */
   wallRampOrientationIndex: Uint8Array;
   /**

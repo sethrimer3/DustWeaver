@@ -30,8 +30,13 @@ export interface PaletteItem {
   defaultHeightBlocks?: number;
   /** 1 if this palette item places a one-way platform. */
   isPlatformItem?: 1;
-  /** 1 if this palette item places a ramp (diagonal triangle). */
+  /**
+   * 1 if this palette item places a ramp (diagonal triangle).
+   * Plain ramps are retired; only the bounce-pad ramp items still set this.
+   */
   isRampItem?: 1;
+  /** 1 if this palette item places stairs (stepped, mask-defined shape). */
+  isStairsItem?: 1;
   /** 1 if this palette item places a half-width pillar (4 px wide). */
   isPillarHalfWidthItem?: 1;
   /** 1 if this palette item paints ambient-light blocker tiles. */
@@ -150,9 +155,12 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'block_1x1', label: '1×1 Block',   category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
   { id: 'block_2x2', label: '2×2 Block',   category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
   { id: 'platform',  label: 'Platform',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
-  { id: 'ramp_1x1',  label: '1×1 Ramp',    category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isRampItem: 1 },
-  { id: 'ramp_1x2',  label: '1×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isRampItem: 1 },
-  { id: 'ramp_2x2',  label: '2×2 Ramp',    category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isRampItem: 1 },
+  // Stairs replaced plain ramps.  The `ramp_1x1` / `ramp_1x2` / `ramp_2x2`
+  // palette items are intentionally absent: existing rooms containing ramps
+  // still load and render, but ramps are no longer offered for new placement.
+  { id: 'stairs_1x1', label: '1×1 Stairs', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isStairsItem: 1 },
+  { id: 'stairs_1x2', label: '1×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isStairsItem: 1 },
+  { id: 'stairs_2x2', label: '2×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isStairsItem: 1 },
   { id: 'spike_1x1', label: '1×1 Spike',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSpikeItem: 1, spikeSize: '1x1' },
   { id: 'spike_2x2', label: '2×2 Spike',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSpikeItem: 1, spikeSize: '2x2' },
   // Enemies

@@ -96,6 +96,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
   // re-assembles them into compact wall rects via the normal serialisation path.
   //
   // Special cases that should NOT be split into 1×1 tiles:
+  //   • Stairs (stairsOrientation set) — the mask spans the whole placement.
   //   • Ramps (rampOrientation set) — they represent a triangle block, not a rect.
   //   • Half-width pillars (isPillarHalfWidthFlag) — single-column elements.
   //   • Platforms (isPlatformFlag) — keep their original width for natural editing.
@@ -103,6 +104,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
   for (const w of extractInteriorWalls(room)) {
     const shouldExpand =
       w.rampOrientation == null &&
+      w.stairsOrientation == null &&
       (w.isPillarHalfWidthFlag ?? 0) === 0 &&
       (w.isPlatformFlag ?? 0) === 0 &&
       (w.wBlock > 1 || w.hBlock > 1);
@@ -121,6 +123,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
             platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
             blockTheme: w.blockTheme,
             rampOrientation: undefined,
+            stairsOrientation: undefined,
             isPillarHalfWidthFlag: 0,
           });
         }
@@ -136,6 +139,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
         platformEdge: (w.platformEdge ?? 0) as 0 | 1 | 2 | 3,
         blockTheme: w.blockTheme,
         rampOrientation: w.rampOrientation,
+        stairsOrientation: w.stairsOrientation,
         isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
       });
     }

@@ -38,6 +38,7 @@
  */
 
 import type { WorldState } from '../sim/world';
+import { wallShapeOrientationIndex } from '../levels/stairsGeometry';
 import { MAX_WALLS } from '../sim/world';
 import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import {
@@ -319,9 +320,7 @@ export function appendRoomWallsAtOffset(
       room.soundHardness ?? blockThemeToSoundHardness(def.blockTheme ?? room.blockTheme),
     );
     world.wallIsInvisibleFlag[idx]       = def.isInvisibleFlag === 1 ? 1 : 0;
-    world.wallRampOrientationIndex[idx]  = def.rampOrientation !== undefined
-      ? def.rampOrientation
-      : 255;
+    world.wallRampOrientationIndex[idx]  = wallShapeOrientationIndex(def);
     world.wallIsPillarHalfWidthFlag[idx] = isHalfWidth ? 1 : 0;
     world.wallIsBouncePadFlag[idx]       = 0;
     world.wallBouncePadSpeedFactorIndex[idx] = 0;

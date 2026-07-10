@@ -139,7 +139,11 @@ export function renderEditorIndicator(
     const rampLabels = ['/', '\\', '⌐', '¬'];
     const item = state.selectedPaletteItem;
     let rotHint: string;
-    if (item.isRampItem === 1) {
+    if (item.isStairsItem === 1) {
+      const base = state.placementRotationSteps % 4;
+      const ori = state.placementFlipH ? (base ^ 1) : base;
+      rotHint = `Stairs:${rampLabels[ori]}`;
+    } else if (item.isRampItem === 1) {
       const base = state.placementRotationSteps % 4;
       const ori = state.placementFlipH ? (base ^ 1) : base;
       rotHint = `Ramp:${rampLabels[ori]}`;

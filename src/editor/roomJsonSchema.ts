@@ -105,10 +105,17 @@ export interface RoomJsonWall {
   /** Compact per-wall block theme override used by newer JSON exports. */
   blockThemeId?: BlockThemeId;
   /**
-   * Ramp orientation. When present, this wall is a diagonal triangle.
+   * Ramp orientation — LEGACY, retired from editor placement.
+   * When present, this wall is a diagonal triangle.
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation. When present, this wall is a stepped staircase whose
+   * solid cells come from the stair template mask.
+   * 0=rises right, 1=rises left, 2=ceiling (rises right), 3=ceiling (rises left).
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
   /** true if this pillar wall is half-block wide (4 px). */
   isPillarHalfWidth?: boolean;
 }

@@ -9,6 +9,7 @@
 
 import type { EditorRoomData, EditorWall, EditorTransition } from './editorState';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { isStairsSolidAtLocalPx } from '../levels/stairsGeometry';
 import { getMaterialFootprintSize, MATERIAL_SAND } from '../sim/pixelMaterials/pixelMaterialTypes';
 
 // ── Basic hit-test primitives ────────────────────────────────────────────────
@@ -196,6 +197,7 @@ export function cellOverlapsSolidWall(room: EditorRoomData, bx: number, by: numb
   return room.interiorWalls.some(w =>
     w.isPlatformFlag !== 1 &&
     w.rampOrientation === undefined &&
+    w.stairsOrientation === undefined &&
     wallsOverlap(w, bx, by, 1, 1),
   );
 }
@@ -231,7 +233,7 @@ function cellOverlapsEditorPoints(
  * pixel-material purposes" on the editor side — do not duplicate these
  * per-object-type checks elsewhere; extend this function instead.
  *
- * Deliberately DIFFERENT from `cellOverlapsSolidWall` (which excludes ramps,
+ * Deliberately DIFFERENT from `cellOverlapsSolidWall` (which excludes shaped walls,
  * works at whole-block granularity, and is used by grapple-carry/phantasmal-
  * tile placement — those have their own, older, coarser policy). Pixel
  * materials need native-PIXEL precision, not block-cell precision, because
@@ -245,14 +247,19 @@ function cellOverlapsEditorPoints(
  *     treat the ENTIRE 8x8 block as solid and incorrectly reject placement
  *     in the empty right half — this function tests the real 4px-wide AABB
  *     instead, matching runtime exactly.
- *   - Ramps: still full-rect (matches how they're stored in the wall array —
- *     `rampOrientationIndex` only affects rendering/movement-surface logic
- *     elsewhere, the base AABB rect is always solid unless it's a platform).
+ *   - Stairs (`EditorWall.stairsOrientation !== undefined`): solid only where
+ *     the stair template mask is, matching `buildSolidMaskFromWorld`'s
+ *     step-rectangle expansion at runtime. Sand may be placed in a stair's
+ *     empty upper region, exactly as it may settle there in game.
+ *   - Legacy ramps: still full-rect (matches how they're stored in the wall
+ *     array — `rampOrientationIndex` 0-3 only affects rendering/movement-
+ *     surface logic elsewhere, the base AABB rect is always solid unless it's
+ *     a platform).
  *
  * Runtime wall-geometry sources covered (see gameRoomWalls.ts / gameRoomHazards.ts
  * / gameRoomFallingBlocks.ts, which all push full-rect entries into the wall
  * arrays for these object types):
- *   - interior walls, INCLUDING ramps and half-width pillars (excluded only
+ *   - interior walls, INCLUDING stairs, ramps and half-width pillars (excluded only
  *     when isPlatformFlag === 1, matching the one-way-platform skip in
  *     `buildSolidMaskFromWorld`).
  *   - crumble blocks, bounce pads, kinetic blocks, falling block tiles — none
@@ -277,7 +284,14 @@ export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number
       ? Math.max(BLOCK_SIZE_SMALL / 2, w.wBlock * (BLOCK_SIZE_SMALL / 2))
       : Math.max(BLOCK_SIZE_SMALL, w.wBlock * BLOCK_SIZE_SMALL);
     const hPx = Math.max(BLOCK_SIZE_SMALL, w.hBlock * BLOCK_SIZE_SMALL);
-    if (xPixel >= x0 && xPixel < x0 + wPx && yPixel >= y0 && yPixel < y0 + hPx) return true;
+    if (!(xPixel >= x0 && xPixel < x0 + wPx && yPixel >= y0 && yPixel < y0 + hPx)) continue;
+    // Stairs are only solid where the template mask is — mirrors the runtime
+    // `buildSolidMaskFromWorld` expansion so the editor and the sand sim agree.
+    if (w.stairsOrientation !== undefined
+        && !isStairsSolidAtLocalPx(w.stairsOrientation, wPx, hPx, xPixel - x0, yPixel - y0)) {
+      continue;
+    }
+    return true;
   }
 
   const bx = Math.floor(xPixel / BLOCK_SIZE_SMALL);
@@ -402,13 +416,15 @@ export function rectFitsInsideRoom(
 // ── Surface scan helpers ─────────────────────────────────────────────────────
 
 /**
- * Returns true if any solid interior wall (non-platform, non-ramp) occupies
- * the grid cell at (col, row).
+ * Returns true if any solid interior wall — non-platform, and not a shaped
+ * wall (stairs or legacy ramp), whose solid area is not its bounding rect —
+ * occupies the grid cell at (col, row).
  */
 function isSolidWallAt(room: EditorRoomData, col: number, row: number): boolean {
   for (const w of room.interiorWalls) {
     if (w.isPlatformFlag === 1) continue;
     if (w.rampOrientation !== undefined) continue;
+    if (w.stairsOrientation !== undefined) continue;
     if (col >= w.xBlock && col < w.xBlock + w.wBlock &&
         row >= w.yBlock && row < w.yBlock + w.hBlock) {
       return true;

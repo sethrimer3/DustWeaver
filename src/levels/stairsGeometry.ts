@@ -83,6 +83,25 @@ export function decodeStairsOrientationIndex(value: number): StairsOrientation {
   return (value - STAIRS_ORIENTATION_ENCODING_OFFSET) as StairsOrientation;
 }
 
+/** The shape-orientation fields a wall definition may carry. */
+export interface ShapedWallDefLike {
+  readonly rampOrientation?: 0 | 1 | 2 | 3;
+  readonly stairsOrientation?: 0 | 1 | 2 | 3;
+}
+
+/**
+ * Packs a wall definition's shape into the single `rampOrientationIndex` slot
+ * used by the runtime wall arrays.
+ *
+ * `stairsOrientation` wins if a hand-edited room somehow sets both, since a
+ * stair is the shape the editor can still produce.
+ */
+export function wallShapeOrientationIndex(def: ShapedWallDefLike): number {
+  if (def.stairsOrientation !== undefined) return encodeStairsOrientationIndex(def.stairsOrientation);
+  if (def.rampOrientation !== undefined) return def.rampOrientation;
+  return SHAPE_ORIENTATION_NONE;
+}
+
 /** An axis-aligned solid rectangle, in pixels local to the stair's top-left corner. */
 export interface StairsRect {
   readonly xPx: number;

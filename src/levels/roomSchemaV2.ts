@@ -157,12 +157,14 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
 
 /**
  * A wall participates in the uniform tile-grid solid encoding iff it has
- * none of the "special" flags (platform, ramp, half-width pillar).
+ * none of the "special" flags (platform, stairs, legacy ramp, half-width
+ * pillar) — i.e. iff its solid area really is its full bounding rectangle.
  */
 export function isUniformSolidWall(w: RoomJsonWall): boolean {
-  if (w.isPlatform === true)           return false;
-  if (w.rampOrientation !== undefined) return false;
-  if (w.isPillarHalfWidth === true)    return false;
+  if (w.isPlatform === true)             return false;
+  if (w.rampOrientation !== undefined)   return false;
+  if (w.stairsOrientation !== undefined) return false;
+  if (w.isPillarHalfWidth === true)      return false;
   return true;
 }
 
@@ -280,7 +282,7 @@ function dehydrateBgLayers(
 
 /**
  * Compresses a list of uniform solid walls into byTheme/rects/runs/points.
- * Walls with special flags (platform/ramp/pillar half) MUST be filtered out
+ * Walls with special flags (platform/stairs/ramp/pillar half) MUST be filtered out
  * before calling this — they travel in `specialWalls` and bypass the grid.
  *
  * `v1Walls` are walls with hBlock === 1 that must keep their 1×1 visual grain.
@@ -361,7 +363,7 @@ export function dehydrateSolidsByTheme(
 export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   const defaultTheme: BlockTheme = blockThemeRefToTheme(json.blockThemeId) ?? json.blockTheme ?? 'blackRock';
 
-  // Partition walls: special (platform/ramp/pillar) go into specialWalls;
+  // Partition walls: special (platform/stairs/ramp/pillar) go into specialWalls;
   // all uniform solid walls go through dehydrateSolidsByTheme which further
   // splits into byTheme (hBlock>1 bulk) and v1ByTheme (hBlock=1 single-row).
   const uniformWallsBulk: RoomJsonWall[] = [];
@@ -386,6 +388,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       if (w.platformEdge !== undefined && w.platformEdge !== 0) sw.edge = w.platformEdge;
     }
     if (w.rampOrientation !== undefined) sw.ramp = w.rampOrientation;
+    if (w.stairsOrientation !== undefined) sw.stairs = w.stairsOrientation;
     if (w.isPillarHalfWidth) sw.half = 1;
     return sw;
   });

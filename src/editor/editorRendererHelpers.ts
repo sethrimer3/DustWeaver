@@ -11,6 +11,7 @@
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { getStairsSolidRects } from '../levels/stairsGeometry';
 import type { CrumbleVariant, EditorRoomData, EditorTransition, EditorWall, AmbientLightDirection, EditorEnemy } from './editorState';
 import { getTransitionEditorHitbox } from './editorHitTest';
 
@@ -25,6 +26,8 @@ export const PLATFORM_HIGHLIGHT = 'rgba(255,200,50,0.35)';
 export const PLATFORM_SELECTED = 'rgba(255,200,50,0.8)';
 export const RAMP_HIGHLIGHT = 'rgba(120,220,120,0.4)';
 export const RAMP_SELECTED = 'rgba(80,255,80,0.8)';
+export const STAIRS_HIGHLIGHT = 'rgba(120,220,120,0.4)';
+export const STAIRS_SELECTED = 'rgba(80,255,80,0.8)';
 export const PILLAR_HALF_HIGHLIGHT = 'rgba(180,130,255,0.45)';
 export const PILLAR_HALF_SELECTED = 'rgba(180,100,255,0.9)';
 export const ENEMY_COLOR = 'rgba(255,80,80,0.5)';
@@ -45,6 +48,7 @@ export const SKILL_TOMB_COLOR = 'rgba(120,80,220,0.55)';
 export const SKILL_TOMB_SELECTED = 'rgba(160,120,255,0.9)';
 export const PREVIEW_COLOR = 'rgba(0,200,255,0.25)';
 export const PREVIEW_RAMP_COLOR = 'rgba(80,255,80,0.35)';
+export const PREVIEW_STAIRS_COLOR = 'rgba(80,255,80,0.35)';
 export const PREVIEW_PLATFORM_COLOR = 'rgba(255,200,50,0.4)';
 export const PREVIEW_PILLAR_HALF_COLOR = 'rgba(180,130,255,0.35)';
 export const CURSOR_COLOR = 'rgba(255,255,255,0.4)';
@@ -305,7 +309,41 @@ export function drawMergedWallOutline(
 }
 
 /**
+ * Draws a stairs wall as its filled step rectangles, using the wall's
+ * `stairsOrientation`.  Shares `levels/stairsGeometry.ts` with collision and
+ * with the in-game renderer, so the editor silhouette always matches play.
+ *
+ * `overrideOrientation` lets the placement preview draw a stair whose
+ * orientation is still being chosen by the rotate/flip keys.
+ */
+export function drawStairsShape(
+  ctx: CanvasRenderingContext2D,
+  w: EditorWall,
+  ox: number, oy: number, zoom: number,
+  color: string, lineWidth: number,
+  overrideOrientation?: 0 | 1 | 2 | 3,
+): void {
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const widthWorldPx  = w.wBlock * BLOCK_SIZE_SMALL;
+  const heightWorldPx = w.hBlock * BLOCK_SIZE_SMALL;
+  const ori = overrideOrientation ?? w.stairsOrientation ?? 0;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  for (const r of getStairsSolidRects(ori, widthWorldPx, heightWorldPx)) {
+    ctx.rect(x + r.xPx * zoom, y + r.yPx * zoom, r.wPx * zoom, r.hPx * zoom);
+  }
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
  * Draws a ramp wall as a colored triangle using the wall's rampOrientation.
+ * LEGACY — ramps are retired from editor placement, but existing rooms still
+ * contain them and must remain visible and selectable.
  */
 export function drawRampTriangle(
   ctx: CanvasRenderingContext2D,
