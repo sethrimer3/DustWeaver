@@ -45,6 +45,9 @@ export { loadRoomHazards } from './gameRoomHazards';
 // loadRoomFallingBlocks extracted to gameRoomFallingBlocks.ts.
 export { loadRoomFallingBlocks } from './gameRoomFallingBlocks';
 
+// loadRoomPixelMaterials extracted to gameRoomPixelMaterials.ts.
+export { loadRoomPixelMaterials, rebuildPixelMaterialSolidMask } from './gameRoomPixelMaterials';
+
 
 // ── Rendering/utility helpers re-exported from gameRoomHelpers.ts ─────────────
 // These were previously defined in this file but have been moved to keep

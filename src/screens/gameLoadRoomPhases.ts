@@ -93,6 +93,7 @@ import {
   loadRoomRopes,
   loadRoomFallingBlocks,
   loadRoomGrasshoppers,
+  loadRoomPixelMaterials,
   worldBgColor,
 } from './gameRoom';
 import {
@@ -623,6 +624,11 @@ export function* makeLoadRoomPhases(
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     loadRoomFallingBlocks(world, room);
     FP.recordLoadPhaseStep('E:fallingBlocks', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    loadRoomPixelMaterials(world, room);
+    FP.recordLoadPhaseStep('E:pixelMaterials', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;

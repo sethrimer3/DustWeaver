@@ -22,6 +22,8 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
+import type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTypes';
+export type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTypes';
 import type { RoomSongId } from '../audio/musicManager';
 import type { BlockTheme, BlockSoundHardness } from './blockTheme';
 import type {
@@ -748,6 +750,12 @@ export interface RoomDef {
   backgroundBlocks?: readonly RoomBackgroundBlockDef[];
   /** Dialogue trigger zones — start a conversation when the player enters. */
   dialogueTriggers?: readonly RoomDialogueTriggerDef[];
+  /**
+   * Authored 1x1 pixel-material placements (currently: sand), in native-pixel
+   * coordinates (NOT block units — see docs/pixelMaterials.md). Sparse list;
+   * absent/empty on rooms authored before this system existed.
+   */
+  pixelMaterials?: readonly RoomPixelMaterialDef[];
   /** Golden dust guide paths — Catmull-Rom splines with organic mote particles. */
   guideDustPaths?: readonly RoomGuideDustPathDef[];
   /**

@@ -50,6 +50,7 @@ import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDus
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
+import { renderPixelMaterials } from '../render/pixelMaterials/pixelMaterialRenderer';
 import type { BloomSystem } from '../render/effects/bloomSystem';
 import type { DarkRoomOverlay } from '../render/effects/darkRoomOverlay';
 import {
@@ -533,6 +534,8 @@ export function renderFrame(r: RenderFrameContext): void {
   if (world.fallingBlockGroups.length > 0) {
     renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial(), r.renderAlpha, r.prevFallingBlockOffsetY);
   }
+  // Pixel-material particles (falling sand) — crisp one-native-pixel squares.
+  renderPixelMaterials(ctx, world, ox, oy, zoom);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)

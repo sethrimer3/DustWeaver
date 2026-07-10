@@ -84,6 +84,13 @@ export interface PaletteItem {
   isSpikeItem?: 1;
   /** Which spike footprint size this item places. Only meaningful when isSpikeItem === 1. */
   spikeSize?: import('../levels/roomElementDefs').SpikeSize;
+  /**
+   * 1 if this palette item paints individual 1x1 pixel-material particles
+   * (native-pixel granularity, not block-grid — see docs/pixelMaterials.md).
+   */
+  isPixelMaterialItem?: 1;
+  /** Which material id this pixel-material item places. Only meaningful when isPixelMaterialItem === 1. */
+  pixelMaterialId?: number;
 }
 
 export type RopeDestructibility = 'indestructible' | 'playerOnly' | 'any';
@@ -208,6 +215,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'decoration_mushroom',  label: 'Glow Mushroom',    category: 'environment' },
   { id: 'decoration_glowgrass', label: 'Glow Grass',       category: 'environment' },
   { id: 'decoration_vine',      label: 'Glow Vine',        category: 'environment' },
+  { id: 'sand_1x1', label: 'Sand 1×1', category: 'environment', isPixelMaterialItem: 1, pixelMaterialId: 1 },
   // Objects (interactive world objects)
   { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },

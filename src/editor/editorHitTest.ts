@@ -8,6 +8,7 @@
  */
 
 import type { EditorRoomData, EditorWall, EditorTransition } from './editorState';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 
 // ── Basic hit-test primitives ────────────────────────────────────────────────
 
@@ -217,6 +218,23 @@ function cellOverlapsEditorPoints(
   by: number,
 ): boolean {
   return (points ?? []).some(p => p.xBlock === bx && p.yBlock === by);
+}
+
+/**
+ * Returns true if a pixel-material particle may be placed at the given
+ * NATIVE-PIXEL coordinate (not block units) — inside room bounds, not inside
+ * solid world geometry, and not already occupied by another placed particle.
+ */
+export function canPlacePixelMaterialAt(room: EditorRoomData, xPixel: number, yPixel: number): boolean {
+  const widthPx = room.widthBlocks * BLOCK_SIZE_SMALL;
+  const heightPx = room.heightBlocks * BLOCK_SIZE_SMALL;
+  if (xPixel < 0 || yPixel < 0 || xPixel >= widthPx || yPixel >= heightPx) return false;
+  const bx = Math.floor(xPixel / BLOCK_SIZE_SMALL);
+  const by = Math.floor(yPixel / BLOCK_SIZE_SMALL);
+  if (cellOverlapsSolidWall(room, bx, by)) return false;
+  if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return false;
+  if ((room.pixelMaterials ?? []).some(p => p.xPixel === xPixel && p.yPixel === yPixel)) return false;
+  return true;
 }
 
 export function canPlaceGrappleCarryBlockAt(room: EditorRoomData, bx: number, by: number): boolean {

@@ -4,6 +4,8 @@ import { RngState, createRng } from './rng';
 import { GrappleWorldState, createGrappleWorldState } from './worldGrappleState';
 import { HazardWorldState, createHazardWorldState, MAX_WATER_ZONES } from './worldHazardState';
 import { type CombatMode, DEFAULT_COMBAT_MODE } from './combatMode';
+import { PixelMaterialSystem } from './pixelMaterials/pixelMaterialSystem';
+import { NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX } from './pixelMaterials/pixelMaterialTypes';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -484,6 +486,15 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Managed by iceMoteAura.ts; reset to all-0 on each room load.
    */
   frozenWaterZoneMask: Uint8Array;
+
+  /**
+   * Pixel-scale falling-sand material simulation layer. Owns material
+   * occupancy, active/sleep tracking, and its own fixed-step tick — a
+   * separate simulation layer from the tile/collision/entity architecture.
+   * Rebuilt (new instance + solid mask) whenever a room is loaded; see
+   * `loadRoomPixelMaterials` in screens/gameRoomPixelMaterials.ts.
+   */
+  pixelMaterialSystem: PixelMaterialSystem;
 }
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
@@ -630,6 +641,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     momentumTrailXWorld: new Float32Array(MOMENTUM_TRAIL_MAX_POINTS),
     momentumTrailYWorld: new Float32Array(MOMENTUM_TRAIL_MAX_POINTS),
     momentumTrailAgeTicks: new Uint8Array(MOMENTUM_TRAIL_MAX_POINTS),
+    pixelMaterialSystem: new PixelMaterialSystem(NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX),
   };
 }
 

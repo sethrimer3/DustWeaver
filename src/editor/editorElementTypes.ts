@@ -286,6 +286,19 @@ export interface EditorPhantasmalTile {
   yBlock: number;
 }
 
+/**
+ * A single authored 1x1 pixel-material placement (currently: sand).
+ * Coordinates are in native-pixel units (NOT block units) — see
+ * docs/pixelMaterials.md.
+ */
+export interface EditorPixelMaterial {
+  uid: number;
+  xPixel: number;
+  yPixel: number;
+  /** Material id — 1 = sand (see sim/pixelMaterials/pixelMaterialTypes.ts). */
+  material: number;
+}
+
 // ── Tombs ─────────────────────────────────────────────────────────────────────
 
 /** Save Tomb — where the player saves their progress. */
@@ -579,6 +592,8 @@ export interface EditorRoomData {
   kineticBlocks?: EditorKineticBlock[];
   grappleCarryBlocks?: EditorGrappleCarryBlock[];
   phantasmalTiles?: EditorPhantasmalTile[];
+  /** Authored 1x1 pixel-material placements (currently: sand). */
+  pixelMaterials?: EditorPixelMaterial[];
   /** Ropes placed in this room. */
   ropes?: EditorRope[];
   /** Sunbeams placed in this room. */
