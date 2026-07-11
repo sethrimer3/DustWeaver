@@ -165,13 +165,53 @@ function registerElectronAppProtocol() {
       });
     }
     try {
-      const data = await fs.promises.readFile(filePath);
+      const stat = await fs.promises.stat(filePath);
+      const rangeHeader = request.headers.get("range");
+      let status = 200;
+      let data;
+      const responseHeaders = {
+        "Content-Type": getContentTypeForPath(filePath),
+        "Content-Security-Policy": ELECTRON_PROD_CSP,
+        "Accept-Ranges": "bytes",
+      };
+
+      if (rangeHeader !== null) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+        if (match === null || (match[1] === "" && match[2] === "")) {
+          return new Response(null, {
+            status: 416,
+            headers: { ...responseHeaders, "Content-Range": `bytes */${stat.size}` },
+          });
+        }
+
+        const requestedStart = match[1] === "" ? Math.max(0, stat.size - Number(match[2])) : Number(match[1]);
+        const requestedEnd = match[2] === "" ? stat.size - 1 : Number(match[2]);
+        if (!Number.isSafeInteger(requestedStart) || !Number.isSafeInteger(requestedEnd)
+            || requestedStart < 0 || requestedStart >= stat.size || requestedEnd < requestedStart) {
+          return new Response(null, {
+            status: 416,
+            headers: { ...responseHeaders, "Content-Range": `bytes */${stat.size}` },
+          });
+        }
+
+        const end = Math.min(requestedEnd, stat.size - 1);
+        const handle = await fs.promises.open(filePath, "r");
+        try {
+          const buffer = Buffer.alloc(end - requestedStart + 1);
+          await handle.read(buffer, 0, buffer.length, requestedStart);
+          data = buffer;
+        } finally {
+          await handle.close();
+        }
+        status = 206;
+        responseHeaders["Content-Range"] = `bytes ${requestedStart}-${end}/${stat.size}`;
+      } else {
+        data = await fs.promises.readFile(filePath);
+      }
+      responseHeaders["Content-Length"] = String(data.length);
       return new Response(data, {
-        status: 200,
-        headers: {
-          "Content-Type": getContentTypeForPath(filePath),
-          "Content-Security-Policy": ELECTRON_PROD_CSP,
-        },
+        status,
+        headers: responseHeaders,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
