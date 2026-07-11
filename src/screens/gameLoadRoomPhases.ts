@@ -1011,6 +1011,10 @@ export function applyResidentRoomActivation(
     world.characterId            = ctx.progress?.characterId ?? 'knight';
 
     initMoteQueueFromParticles(world, playerCluster.entityId);
+    // Resident worlds are prebuilt without a player, so they do not yet have
+    // the player's reserved grapple-chain slots. Allocate them after restoring
+    // player dust, matching the normal Phase D room-load lifecycle.
+    initGrappleChainParticles(world, playerCluster.entityId);
     resetSwordWeaveState(world);
   }
 

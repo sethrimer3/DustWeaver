@@ -18,6 +18,7 @@ import { buildCustomCampaignsUI } from './mainMenuCustomCampaigns';
 import { buildSaveSlotUI } from './mainMenuSaveSlots';
 import { MENU_ANIMATION_ASSETS } from './animatedAssetPaths';
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
+import { createMusicManager } from '../audio/musicManager';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -53,15 +54,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   // ── Background canvas ────────────────────────────────────────────────────
   // ── Music ────────────────────────────────────────────────────────────────
-  const music = new Audio(`${BASE}music/titleMenu.mp3`);
-  music.loop = false;
-  music.volume = 0.5;
+  const music = createMusicManager(BASE);
+  music.setVolume(0.5);
+  music.notifyRoomEntered('titleMenu');
 
   /** Try to play music; browsers may block autoplay until interaction. */
   function tryPlayMusic(): void {
-    if (music.paused && !isDestroyed) {
-      music.play().catch(() => { /* autoplay blocked — will retry on interaction */ });
-    }
+    if (!isDestroyed) music.notifyRoomEntered('titleMenu');
   }
 
   // ── UI container ─────────────────────────────────────────────────────────
@@ -304,8 +303,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   // ── Cleanup ──────────────────────────────────────────────────────────────
   return () => {
     isDestroyed = true;
-    music.pause();
-    music.src = '';
+    music.dispose();
     window.removeEventListener('keydown', onAnyKey);
     container.removeEventListener('click', onAnyClick);
     animatedBackground.destroy();

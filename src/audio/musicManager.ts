@@ -15,6 +15,8 @@
  *   mgr.dispose();
  */
 
+import { resolveMusicAssetUrl, type ConcreteSongId } from './musicCatalog';
+
 /** Special sentinels plus the real song IDs. */
 export type RoomSongId =
   | '_continue'
@@ -33,7 +35,7 @@ export const SONG_DISPLAY_NAMES: Readonly<Record<RoomSongId, string>> = {
 };
 
 /** Ordered list of concrete (non-sentinel) song IDs, for building dropdowns. */
-export const AVAILABLE_SONGS: readonly RoomSongId[] = [
+export const AVAILABLE_SONGS: readonly ConcreteSongId[] = [
   'rainWindAtmosphere',
   'thoughtfulLevel',
   'titleMenu',
@@ -43,12 +45,7 @@ const DEFAULT_GAMEPLAY_SONG_ID = 'thoughtfulLevel';
 
 // ── Internal constants ────────────────────────────────────────────────────────
 
-/** Relative path to each song inside ASSETS/music/. */
-const SONG_FILE: Readonly<Record<string, string>> = {
-  rainWindAtmosphere: 'music/rainWindAtmosphere.mp3',
-  thoughtfulLevel:    'music/thoughtfulLevel.mp3',
-  titleMenu:          'music/titleMenu.mp3',
-};
+export { MUSIC_ASSET_PATHS, resolveMusicAssetUrl } from './musicCatalog';
 
 /** Duration of the room-to-room crossfade in milliseconds. */
 const CROSSFADE_ROOM_MS = 4000;
@@ -112,9 +109,14 @@ export class MusicManager {
 
   private rafId: number | null = null;
   private isDisposed = false;
+  private readonly warnedFailures = new Set<string>();
+  private readonly retryOnGesture = () => this.retryPlayback();
 
   constructor(base: string) {
     this.base = base;
+    window.addEventListener('pointerdown', this.retryOnGesture);
+    window.addEventListener('keydown', this.retryOnGesture);
+    window.addEventListener('touchstart', this.retryOnGesture);
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -156,6 +158,9 @@ export class MusicManager {
   dispose(): void {
     if (this.isDisposed) return;
     this.isDisposed = true;
+    window.removeEventListener('pointerdown', this.retryOnGesture);
+    window.removeEventListener('keydown', this.retryOnGesture);
+    window.removeEventListener('touchstart', this.retryOnGesture);
 
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
@@ -198,7 +203,7 @@ export class MusicManager {
       this.primaryAudio = audio;
       this.primaryGain = 0;
       audio.volume = 0;
-      audio.play().catch(() => { /* autoplay may be blocked */ });
+      this.playAudio(audio, newSongId);
     } else {
       this.primaryAudio = null;
       this.primaryGain = 0;
@@ -235,17 +240,20 @@ export class MusicManager {
     const nextAudio = this.createAudio(songId);
     this.loopNextAudio = nextAudio;
     nextAudio.volume = 0;
-    nextAudio.play().catch(() => {});
+    this.playAudio(nextAudio, songId);
 
     this.scheduleUpdate();
   }
 
   /** Allocate and configure a new HTMLAudioElement for the given song. */
   private createAudio(songId: string): HTMLAudioElement {
-    const url = this.base + (SONG_FILE[songId] ?? '');
+    const url = resolveMusicAssetUrl(this.base, songId as ConcreteSongId);
     const audio = new Audio(url);
     audio.loop = false; // Looping is managed manually so we can crossfade.
     audio.volume = 0;
+    audio.addEventListener('error', () => {
+      this.warnOnce(songId, url, 'media load', audio.error ?? 'unknown media error');
+    }, { once: true });
 
     // Monitor progress so we can trigger the loop crossfade before it ends.
     const onTimeUpdate = () => {
@@ -276,10 +284,28 @@ export class MusicManager {
       if (this.isLoopCrossfading) return;
       // Restart immediately without a crossfade as a fallback.
       audio.currentTime = 0;
-      audio.play().catch(() => {});
+      this.playAudio(audio, songId);
     });
 
     return audio;
+  }
+
+  private playAudio(audio: HTMLAudioElement, songId: string): void {
+    const url = resolveMusicAssetUrl(this.base, songId as ConcreteSongId);
+    audio.play().catch((reason: unknown) => this.warnOnce(songId, url, 'playback', reason));
+  }
+
+  private retryPlayback(): void {
+    if (this.isDisposed || this.activeSongId === null) return;
+    if (this.primaryAudio?.paused) this.playAudio(this.primaryAudio, this.activeSongId);
+    if (this.loopNextAudio?.paused) this.playAudio(this.loopNextAudio, this.activeSongId);
+  }
+
+  private warnOnce(songId: string, url: string, kind: string, reason: unknown): void {
+    const key = `${kind}:${songId}:${url}`;
+    if (this.warnedFailures.has(key)) return;
+    this.warnedFailures.add(key);
+    console.warn(`[MusicManager] ${kind} failed for "${songId}" (${url}):`, reason);
   }
 
   /** Pause an audio element and clear its src to free memory. */
