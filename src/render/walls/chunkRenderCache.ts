@@ -64,6 +64,24 @@ const CHUNK_MARGIN = 1;
 const _rangeOut = { cxMin: 0, cyMin: 0, cxMax: 0, cyMax: 0 };
 
 /**
+ * `true` once a DEV warning has been logged for a degenerate chunk-range
+ * input this session.  Logged once (not per-frame) to avoid log spam while
+ * still surfacing the condition — see task item 6 (defensive diagnostics).
+ */
+let _loggedDegenerateRangeWarning = false;
+
+/**
+ * Safe DEV-mode check: `import.meta.env` is a Vite-only global and is
+ * `undefined` under the plain node/tsx test runner used for unit tests, so a
+ * bare `import.meta.env.DEV` read throws there. Existing call sites in this
+ * file only run in code paths tests don't reach; this helper covers the ones
+ * added here that ARE reachable from unit tests (`isViewportCovered` etc).
+ */
+function _isDevMode(): boolean {
+  return typeof import.meta.env !== 'undefined' && import.meta.env.DEV === true;
+}
+
+/**
  * Compute the chunk grid range that covers the viewport (± `margin` chunks).
  *
  * This is the single source of truth for chunk-range arithmetic shared by
@@ -88,19 +106,53 @@ function _fillChunkRange(
   margin:      number,
   out: { cxMin: number; cyMin: number; cxMax: number; cyMax: number },
 ): void {
+  const cellPx = blockSizePx * scalePx;
+  const inputsFinite =
+    Number.isFinite(offsetXPx) && Number.isFinite(offsetYPx) &&
+    Number.isFinite(vpWPx) && Number.isFinite(vpHPx) &&
+    Number.isFinite(cellPx) && cellPx > 0;
+
+  if (!inputsFinite) {
+    // Non-finite or zero/negative cell size (NaN/Infinity camera state, or a
+    // caller passing blockSizePx/scalePx <= 0) would otherwise propagate
+    // NaN/Infinity chunk indices into a `for` loop that never terminates or
+    // allocates unbounded canvases.  Fail safe to an empty range instead.
+    if (_isDevMode() && !_loggedDegenerateRangeWarning) {
+      _loggedDegenerateRangeWarning = true;
+      console.warn(
+        '[chunkRenderCache] degenerate chunk-range inputs — rendering nothing this frame.',
+        { offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx },
+      );
+    }
+    out.cxMin = 0;
+    out.cyMin = 0;
+    out.cxMax = -1;
+    out.cyMax = -1;
+    return;
+  }
+
   // Block index of the left/top/right/bottom viewport edges.
   // screen pixel 0 → world unit (−offsetXPx / scalePx)
   // block index   = floor(world / blockSizePx)
-  const blockLeft  = Math.floor(-offsetXPx / (blockSizePx * scalePx));
-  const blockTop   = Math.floor(-offsetYPx / (blockSizePx * scalePx));
-  const blockRight = Math.ceil((vpWPx - offsetXPx) / (blockSizePx * scalePx));
-  const blockBot   = Math.ceil((vpHPx - offsetYPx)  / (blockSizePx * scalePx));
+  const blockLeft  = Math.floor(-offsetXPx / cellPx);
+  const blockTop   = Math.floor(-offsetYPx / cellPx);
+  const blockRight = Math.ceil((vpWPx - offsetXPx) / cellPx);
+  const blockBot   = Math.ceil((vpHPx - offsetYPx)  / cellPx);
   // Chunk grid indices — min is clamped to 0; max is left unclamped so it
-  // extends to the room edge naturally.
+  // extends to the room edge naturally (no dependency on room width/height —
+  // a very tall or very wide room simply produces a larger cyMax/cxMax here).
   out.cxMin = Math.max(0, Math.floor(blockLeft  / CHUNK_SIZE_BLOCKS) - margin);
   out.cyMin = Math.max(0, Math.floor(blockTop   / CHUNK_SIZE_BLOCKS) - margin);
   out.cxMax =              Math.floor(blockRight / CHUNK_SIZE_BLOCKS) + margin;
   out.cyMax =              Math.floor(blockBot   / CHUNK_SIZE_BLOCKS) + margin;
+
+  if (_isDevMode() && (out.cxMax < out.cxMin || out.cyMax < out.cyMin) && !_loggedDegenerateRangeWarning) {
+    _loggedDegenerateRangeWarning = true;
+    console.warn(
+      '[chunkRenderCache] chunk range culled to empty while camera appears to be in a valid viewport.',
+      { offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, out: { ...out } },
+    );
+  }
 }
 
 // ── Prewarm result ────────────────────────────────────────────────────────────
@@ -510,10 +562,16 @@ export class RoomChunkCache {
     if (this._scalePx === 0 || this._scalePx !== scalePx) return false;
 
     const chunkSizePx = CHUNK_SIZE_BLOCKS * blockSizePx * scalePx;
-    if (chunkSizePx <= 0) return false;
+    // `chunkSizePx <= 0` is false for NaN (all NaN comparisons are false), so
+    // a NaN blockSizePx/scalePx would otherwise fall through to the loop
+    // below and, since _fillChunkRange fails safe to an empty range, be
+    // vacuously reported as "covered" (the loop body just never runs).
+    if (!(chunkSizePx > 0)) return false;
 
     _fillChunkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, margin, _rangeOut);
     const { cxMin, cyMin, cxMax, cyMax } = _rangeOut;
+    // An empty range (degenerate inputs) must never read as "covered".
+    if (cxMax < cxMin || cyMax < cyMin) return false;
 
     for (let cy = cyMin; cy <= cyMax; cy++) {
       for (let cx = cxMin; cx <= cxMax; cx++) {

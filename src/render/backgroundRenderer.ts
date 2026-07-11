@@ -252,7 +252,20 @@ export function renderWorldBackground(
 
   const tw = img.naturalWidth;
   const th = img.naturalHeight;
-  if (tw === 0 || th === 0) return;
+  if (tw === 0 || th === 0) {
+    // Degenerate image dimensions (decode race, corrupt asset): fall back to
+    // a solid fill so the room never shows a raw/undefined canvas region.
+    ctx.fillStyle = worldFallbackColor(worldNumber);
+    ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
+    _bgFallbacksThisFrame++;
+    return;
+  }
+
+  // Safe fallback fill behind the tiled image: if the tiling loop below ever
+  // leaves a sub-pixel seam (float rounding) or the room is far taller/wider
+  // than the loaded texture, this guarantees no gap ever shows raw black.
+  ctx.fillStyle = worldFallbackColor(worldNumber);
+  ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
 
   // Anchor background to room centre, then apply relative camera parallax.
   const roomCenterOffsetXPx = viewportWidthPx * 0.5 - (roomWidthWorld * 0.5 * zoom);
