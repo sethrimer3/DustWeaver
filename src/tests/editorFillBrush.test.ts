@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getFillBrushCells } from '../editor/editorBrush';
 import type { EditorRoomData } from '../editor/editorElementTypes';
+import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
+import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
 
 /** Minimal room stub — only the fields the fill brush / hit-test helpers read. */
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
@@ -173,6 +175,35 @@ test('block fill (tile kind): preserves original occupied/empty flood-fill behav
   // And flood the empty rows below when clicked there.
   const emptyCells = getFillBrushCells(room, 2, 1);
   assert.equal(emptyCells.length, 10);
+});
+
+test('serialization round trip: fill boundaries match after dehydrate/hydrate', () => {
+  const room = {
+    id: 'fillRoom', name: 'Fill Room', worldNumber: 1,
+    blockTheme: 'blackRock', backgroundId: 'brownRock', lightingEffect: 'Ambient',
+    songId: '_continue', widthBlocks: 6, heightBlocks: 5,
+    playerSpawnBlock: [1, 1], interiorWalls: [], enemies: [], transitions: [],
+    saveTombs: [], skillTombs: [], dustPiles: [], grasshopperAreas: [], fireflyAreas: [],
+    decorations: [], ambientLightBlockers: [], lightSources: [],
+    waterZones: [{ uid: 1, xBlock: 0, yBlock: 2, wBlock: 6, hBlock: 1 }],
+    lavaZones: [],
+    crumbleBlocks: [], spikes: [], bouncePads: [], kineticBlocks: [], ropes: [], sunbeams: [],
+    sceneLights: [], fallingBlocks: [], backgroundBlocks: [], dialogueTriggers: [], guideDustPaths: [],
+    dustContainers: [], dustContainerPieces: [], dustBoostJars: [], dustSwarms: [], lambdaAnchors: [],
+    grappleCarryBlocks: [], phantasmalTiles: [], pixelMaterials: [],
+  } as unknown as EditorRoomData;
+
+  const before = getFillBrushCells(room, 2, 0, 'water');
+
+  const json = editorRoomDataToJson(room);
+  const saved = dehydrateRoom(json);
+  const rehydratedJson = hydrateV2Room(saved);
+  const rehydrated = jsonToEditorRoomData(rehydratedJson, 100).data;
+
+  const after = getFillBrushCells(rehydrated as unknown as EditorRoomData, 2, 0, 'water');
+
+  assert.deepEqual(cellSet(before), cellSet(after));
+  for (const c of after) assert.ok(c.y < 2, `rehydrated fill crossed the water boundary at ${key(c)}`);
 });
 
 test('large empty room: fill completes without duplicate or repeated coordinates', () => {
