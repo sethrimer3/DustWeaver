@@ -8,8 +8,8 @@
     118
   ],
   "spawn": [
-    2,
-    113
+    14,
+    109
   ],
   "solids": {
     "byTheme": {},
@@ -1156,7 +1156,8 @@
       "spawn": [
         54,
         33
-      ]
+      ],
+      "gw": 2
     },
     {
       "dir": "right",
@@ -1172,7 +1173,7 @@
   ],
   "bakedWallTemplate": {
     "schemaVersion": 1,
-    "sourceHash": "34ffe9bc",
+    "sourceHash": "8e675bfc",
     "wallCount": 124,
     "xWorld": [
       0,

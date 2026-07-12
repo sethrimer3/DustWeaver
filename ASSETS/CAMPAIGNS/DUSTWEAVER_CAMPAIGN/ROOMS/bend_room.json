@@ -128,7 +128,7 @@
   ],
   "bakedWallTemplate": {
     "schemaVersion": 1,
-    "sourceHash": "25a13ddd",
+    "sourceHash": "718c7cbd",
     "wallCount": 12,
     "xWorld": [
       0,
@@ -221,17 +221,16 @@
       255,
       255,
       255,
-      6,
-      6,
-      6,
-      6,
-      6,
-      6
+      5,
+      5,
+      5,
+      5,
+      5,
+      5
     ],
     "themeNames": [
-      "grayStone",
-      "magma",
       "overgrowth",
+      "waterStone",
       "darkStone"
     ],
     "soundHardnessIndex": [
