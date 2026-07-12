@@ -30,8 +30,10 @@ import {
   findCeilingBlockRow,
   canPlaceGrappleCarryBlockAt,
   canPlacePhantasmalTileAt,
+  isCellCoveredByWaterZone,
+  isCellCoveredByLavaZone,
 } from './editorHitTest';
-import { getBrushCells, getFillBrushCells } from './editorBrush';
+import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
@@ -95,7 +97,11 @@ export function placeAtCursor(state: EditorState): void {
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   if (isBrushable && state.brushMode === 'fill') {
-    const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY);
+    let fillKind: FillKind = 'tile';
+    if (item.category === 'liquids') {
+      fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
+    }
+    const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
     for (const cell of cells) {
       placeAt(state, cell.x, cell.y);
     }
@@ -201,19 +207,17 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
     if (item.id === 'water_zone') {
+      // No-op (not an error) if this cell is already covered by any existing
+      // water zone (including a larger merged/hydrated rectangle, not just an
+      // exact position+size match) — avoids duplicate/overlapping water. Also
+      // a safe no-op over existing lava: replacing one liquid with another via
+      // Fill/paint is not a supported editor feature.
+      if (isCellCoveredByWaterZone(room, bx, by) || isCellCoveredByLavaZone(room, bx, by)) return;
       if (!room.waterZones) room.waterZones = [];
-      // Dedup: skip if an identical zone already exists at this position+size.
-      const alreadyWater = room.waterZones.some(
-        z => z.xBlock === bx && z.yBlock === by && z.wBlock === wBlock && z.hBlock === hBlock,
-      );
-      if (alreadyWater) return;
       room.waterZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     } else if (item.id === 'lava_zone') {
+      if (isCellCoveredByLavaZone(room, bx, by) || isCellCoveredByWaterZone(room, bx, by)) return;
       if (!room.lavaZones) room.lavaZones = [];
-      const alreadyLava = room.lavaZones.some(
-        z => z.xBlock === bx && z.yBlock === by && z.wBlock === wBlock && z.hBlock === hBlock,
-      );
-      if (alreadyLava) return;
       room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     }
     markLiquidBodiesDirty();

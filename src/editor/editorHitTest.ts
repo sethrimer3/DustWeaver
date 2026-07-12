@@ -397,6 +397,27 @@ export function isCellOccupiedByTile(room: EditorRoomData, xBlock: number, yBloc
   return false;
 }
 
+/**
+ * Returns true if the given block cell is geometrically covered by any
+ * existing water zone — including a merged/hydrated rectangle larger than
+ * 1×1, not just a zone that exactly matches this cell's position and size.
+ *
+ * This is editor fill-occupancy, not runtime solidity: water never becomes
+ * solid for gameplay collision. It exists so the Fill brush (and liquid
+ * placement dedup) can treat existing water as a boundary/already-covered
+ * region without touching `isCellOccupiedByTile` or any simulation code.
+ */
+export function isCellCoveredByWaterZone(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return (room.waterZones ?? []).some(z => hitTestZone(z, xBlock, yBlock));
+}
+
+/**
+ * Same as `isCellCoveredByWaterZone` but for lava zones.
+ */
+export function isCellCoveredByLavaZone(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return (room.lavaZones ?? []).some(z => hitTestZone(z, xBlock, yBlock));
+}
+
 // ── Bounds helpers ───────────────────────────────────────────────────────────
 
 export function isInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number): boolean {

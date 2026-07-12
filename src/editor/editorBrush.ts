@@ -7,7 +7,21 @@
  */
 
 import type { BrushMode, EditorRoomData } from './editorState';
-import { isCellOccupiedByTile, isInsideRoom } from './editorHitTest';
+import {
+  isCellOccupiedByTile,
+  isCellCoveredByWaterZone,
+  isCellCoveredByLavaZone,
+  isInsideRoom,
+} from './editorHitTest';
+
+/**
+ * Fill traversal policy for the Fill brush. `'tile'` is the original
+ * occupied/empty tile semantics (blocks, special blocks, ambient-light
+ * blockers). `'water'`/`'lava'` are editor fill-occupancy semantics for
+ * liquid painting: existing water AND existing lava both act as flood-fill
+ * boundaries, matching neither runtime solidity nor `isCellOccupiedByTile`.
+ */
+export type FillKind = 'tile' | 'water' | 'lava';
 
 export interface BrushCell {
   x: number;
@@ -79,18 +93,41 @@ export function getBrushCells(
 }
 
 /**
+ * Classifies a single cell for fill-traversal purposes under the given
+ * policy. For `'tile'` this is the original occupied/empty boolean state.
+ * For `'water'`/`'lava'` it additionally treats BOTH existing water and
+ * existing lava as "blocked" (a flood-fill boundary), since one liquid must
+ * not flood through a pocket of the other liquid or through itself.
+ */
+export function getFillCellClass(room: EditorRoomData, x: number, y: number, fillKind: FillKind): boolean {
+  if (fillKind === 'tile') return isCellOccupiedByTile(room, x, y);
+  return isCellOccupiedByTile(room, x, y)
+    || isCellCoveredByWaterZone(room, x, y)
+    || isCellCoveredByLavaZone(room, x, y);
+}
+
+/**
  * Flood-fills the contiguous region of cells (4-directionally connected —
- * never diagonally) that share the same occupied/empty state as the clicked
- * cell.  Used by the "fill" brush to paint an entire empty area or replace an
- * entire mass of placed tiles in one click.
+ * never diagonally) that share the same class as the clicked cell, under the
+ * given fill policy.  Used by the "fill" brush to paint an entire empty area
+ * or replace an entire mass of placed tiles in one click.
+ *
+ * For `fillKind` `'water'`/`'lava'`: if the start cell is itself blocked
+ * (solid tile, existing water, or existing lava) the fill is a no-op — an
+ * empty array is returned rather than flooding through the clicked liquid or
+ * geometry, since a Fill click is only meaningful from empty space for those
+ * kinds. Passing no `fillKind` (or `'tile'`) preserves the original
+ * behavior: fills painted or empty tile regions alike, starting from either.
  */
 export function getFillBrushCells(
   room: EditorRoomData,
   startX: number,
   startY: number,
+  fillKind: FillKind = 'tile',
 ): BrushCell[] {
   if (!isInsideRoom(room, startX, startY)) return [];
-  const targetOccupied = isCellOccupiedByTile(room, startX, startY);
+  const targetClass = getFillCellClass(room, startX, startY, fillKind);
+  if (fillKind !== 'tile' && targetClass) return [];
 
   const visited = new Set<string>();
   const key = (x: number, y: number) => `${x},${y}`;
@@ -111,7 +148,7 @@ export function getFillBrushCells(
       const k = key(n.x, n.y);
       if (visited.has(k)) continue;
       if (!isInsideRoom(room, n.x, n.y)) continue;
-      if (isCellOccupiedByTile(room, n.x, n.y) !== targetOccupied) continue;
+      if (getFillCellClass(room, n.x, n.y, fillKind) !== targetClass) continue;
       visited.add(k);
       stack.push(n);
     }
