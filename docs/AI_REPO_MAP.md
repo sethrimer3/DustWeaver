@@ -81,7 +81,8 @@ Common risks:
 
 - `src/levels/roomBoundaryWalls.ts`: shared complete boundary wall builder. Boundary walls should remain complete solid edges.
 - `src/screens/gameTransitions.ts`: trigger strip detection. Transitions are independent trigger strips, not holes.
-- `src/screens/gameRoomTransitionOrchestrator.ts`: transition flow and camera/activation orchestration.
+- `src/screens/gameRoomTransitionOrchestrator.ts`: transition boundary detection, cooldown, and activation callback dispatch.
+- `src/screens/roomTransitionLoadCoordinator.ts`: transition execution after the boundary fires — path selection (cross-zone → hot-swap → prepared instant → async), async load-generator state, pre-transition velocity, cross-zone pending activation, blocking-gameplay contract. Ports-injected and Node-testable (`tests/roomTransitionLoadCoordinator.test.ts`); never imports gameScreen.
 
 Do not change boundary holes/trigger geometry casually. Planning notes explicitly warn this has caused regressions.
 

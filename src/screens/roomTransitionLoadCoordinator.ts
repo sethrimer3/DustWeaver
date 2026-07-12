@@ -270,6 +270,22 @@ export class RoomTransitionLoadCoordinator {
    */
   private preTransVX = 0;
   private preTransVY = 0;
+  /**
+   * True only for the duration of the re-issued submitTransition call made
+   * from `tickZoneTransition` after the target zone became ready.  The
+   * cross-zone guard skips deferral while set, so the deferred activation
+   * proceeds through the normal hot-swap/instant/async selection.
+   *
+   * NOTE — intentional behavioral fix over the closure implementation: the
+   * old code cleared the pending flag BEFORE re-calling and its guard checked
+   * `!isActive`, so the re-issued call matched the cross-zone condition again
+   * and re-deferred forever (the comments in gameScreen.ts and the BUILD 430
+   * review both *intended* the re-issue to be treated as intra-zone, but the
+   * polarity of the check made that impossible).  This flag implements the
+   * documented intent while preserving the clear-pending-before-re-entry
+   * ordering invariant.
+   */
+  private isReissuingZoneActivation = false;
 
   constructor(deps: RoomTransitionLoadCoordinatorDeps) {
     this.deps = deps;
@@ -342,7 +358,7 @@ export class RoomTransitionLoadCoordinator {
     // takePendingActivation() re-calls submitTransition).
     const targetWorldNumber = room.worldNumber ?? 1;
     const currentWorldNumber = currentRoom.worldNumber ?? 1;
-    if (targetWorldNumber !== currentWorldNumber && !this.zoneTransition.isActive) {
+    if (targetWorldNumber !== currentWorldNumber && !this.zoneTransition.isActive && !this.isReissuingZoneActivation) {
       this.zoneTransition.begin({
         targetRoom: room,
         spawnXBlock,
@@ -497,7 +513,12 @@ export class RoomTransitionLoadCoordinator {
     const prevWorldNumber = d.getCurrentRoom().worldNumber ?? 1;
     // Queue zone entry viewport prewarm tasks for the new zone.
     d.queueZoneEntryViewportTasks(d.zoneLoader.getZoneRoomIds(pending.targetWorldNumber));
-    this.submitTransition(pending.targetRoom, pending.spawnXBlock, pending.spawnYBlock, pending.vx, pending.vy, pending.dir);
+    this.isReissuingZoneActivation = true;
+    try {
+      this.submitTransition(pending.targetRoom, pending.spawnXBlock, pending.spawnYBlock, pending.vx, pending.vy, pending.dir);
+    } finally {
+      this.isReissuingZoneActivation = false;
+    }
     // Evict old-zone residents (keep some for backtrack).
     d.zoneLoader.evictInactiveZoneResidents(pending.targetWorldNumber, prevWorldNumber);
     if (d.isDevMode) {
@@ -523,6 +544,7 @@ export class RoomTransitionLoadCoordinator {
     this.asyncLoad.spawnXBlock = 0;
     this.asyncLoad.spawnYBlock = 0;
     this.zoneTransition.clear();
+    this.isReissuingZoneActivation = false;
     this.preTransVX = 0;
     this.preTransVY = 0;
   }

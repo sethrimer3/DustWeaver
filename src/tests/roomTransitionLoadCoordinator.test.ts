@@ -510,6 +510,23 @@ test('cross-zone completion: pending cleared before re-issue, no recursive defer
   assert.ok(idx('setWorld:b') < idx('evictInactiveZone:2:1'), 'activation precedes old-zone eviction');
 });
 
+test('regression: re-issued cross-zone activation without a ready resident falls to async, not re-deferral', () => {
+  // The closure implementation cleared the pending flag before the re-issued
+  // startTransitionLoad, whose guard checked `!isActive` — so the re-issue
+  // matched the cross-zone condition again and deferred forever.  The
+  // coordinator must instead run the deferred activation through the normal
+  // path selection (async here, since nothing is resident or prepared).
+  const a = makeRoom('a', 1), b = makeRoom('b', 2);
+  const h = makeHarness([a, b]);
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  h.state.zoneReady = true;
+  h.coord.tickZoneTransition();
+  assert.equal(h.coord.isZoneTransitionActive(), false, 'must not re-defer');
+  assert.equal(h.events.filter(e => e.startsWith('startZoneLoad')).length, 1);
+  assert.ok(h.events.includes('createLoadGenerator:b'), 'deferred activation took the async path');
+  assert.equal(h.coord.isAsyncLoadActive(), true);
+});
+
 test('reset clears pending cross-zone work', () => {
   const a = makeRoom('a', 1), b = makeRoom('b', 2);
   const h = makeHarness([a, b]);

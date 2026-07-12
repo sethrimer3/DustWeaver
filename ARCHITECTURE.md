@@ -95,9 +95,9 @@ closure:
   blocked non-urgent work force-starts after a frame cap).  Dependencies are
   injected as narrow ports (`ResidentBuildSchedulerDeps`), which keeps the
   state machine testable under plain `node --test`.
-- **`ZoneTransitionState`** — the pending cross-zone transition;
-  `takePendingActivation()` encodes the clear-before-reissue contract that
-  lets the deferred `startTransitionLoad` pass the cross-zone guard.
+- **`ZoneTransitionState`** — the pending cross-zone transition record;
+  `takePendingActivation()` encodes the clear-before-reissue contract.  Owned
+  and driven by the transition coordinator (below) since BUILD 442.
 - **`InitialZoneLoadProgress`** — startup zone-load blocking state and
   overlay progress.
 
@@ -106,6 +106,49 @@ in the screen's cleanup.  The game screen owns orchestration (when to
 enqueue, refresh, or tick the zone loader); the module owns the state.
 New enqueue sources or gating rules belong in the module, pinned by
 `tests/residentBuildScheduler.test.ts`.
+
+### Room Transition Execution Coordinator (BUILD 442)
+
+`screens/roomTransitionLoadCoordinator.ts` owns everything that happens after
+`screens/gameRoomTransitionOrchestrator.ts` (the boundary detector, which
+keeps cooldown and trigger-strip logic) emits a transition request:
+
+- **Path selection**, in fixed precedence: (1) cross-zone deferral when the
+  target `worldNumber` differs, (2) resident-world hot-swap when a
+  runtime-ready resident with matching `builtForRoomId` exists (mismatches are
+  rejected loudly and invalidated), (3) prepared instant load when the runtime
+  cache entry is fully prepared, (4) async cache-miss load otherwise.
+- **State owned**: the async load state (generator, captured spawn/velocity/
+  direction), the captured pre-transition velocity exposed to Phase-F prewarm
+  ordering, the pending cross-zone activation (`ZoneTransitionState`), and the
+  blocking-gameplay flag (`isBlockingGameplay()` — true while an async or
+  cross-zone load is in flight; the RAF loop skips sim/input and resets its
+  frame clock afterwards so frozen time is never charged to physics or the
+  speedrun timer).
+- **Lifecycle**: `submitTransition()` selects and runs/starts a path;
+  `advanceAsyncLoad()` advances exactly one generator phase per frame and, on
+  completion, applies the deferred velocity, registers the resident world,
+  starts the entry warm, and refreshes neighborhood builds;
+  `tickZoneTransition()` drives the zone loader and re-issues the deferred
+  activation through the normal path once the zone is ready (pending state is
+  cleared before the re-issue; an internal flag suppresses the cross-zone
+  guard for the re-issued call); `reset()` abandons all in-flight work on
+  screen shutdown.
+- **Orchestrates but does not reimplement**: room loading
+  (`makeLoadRoomPhases`/`loadRoom`), resident storage (`ResidentRoomManager`),
+  background builds (`ResidentBuildScheduler`), zone preparation
+  (`ZoneResidentLoader`), entry warming (`entryViewportWarm`), chunk-prewarm
+  diagnostics, transition profiling, and loading-overlay presentation — all
+  injected as narrow structural ports
+  (`RoomTransitionLoadCoordinatorDeps`), which keeps the path-selection state
+  machine testable under plain `node --test`.  The module never imports
+  `gameScreen.ts`.
+
+Semantics (mode classification `residentWorldHot`/`residentRestore`/
+`residentFallback`/`legacyLoad`, hot-swap miss reasons, entry-warm skip
+criteria, ordering invariants such as capture-before-detach and
+freeze-before-swap) are pinned by
+`tests/roomTransitionLoadCoordinator.test.ts`.
 
 ### Asset Preloading (`render/roomAssetPreloader.ts`)
 
