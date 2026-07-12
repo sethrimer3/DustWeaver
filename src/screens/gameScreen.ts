@@ -1212,6 +1212,12 @@ export function startGameScreen(
       residentRoomManager.ensureResident(currentRoom);
       residentRoomManager.freezeRoom(world, currentRoom.id, currentRoom);
       residentRoomManager.freezeSimState(world, currentRoom.id);
+      // Invalidate outgoing resident world — the async generator rebuilds the
+      // shared `world` object in place for the target room, so any resident
+      // entry still referencing it would hold wrong-room geometry.  (Mirrors
+      // the same invalidation on the instant path; without it every return to
+      // this room tripped the hot-swap room-id integrity guard.)
+      residentRoomManager.invalidateResidentWorld(currentRoom.id);
       residentRoomManager.recordTransitionMode('legacyLoad', _hotSwapMissReason);
       asyncLoadState.preTransVX    = vx;
       asyncLoadState.preTransVY    = vy;
