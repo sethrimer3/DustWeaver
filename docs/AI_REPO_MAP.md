@@ -63,6 +63,7 @@ Important files and roles:
 - `src/screens/gameRoomWalls.ts`: wall template building and incremental wall-template generator.
 - `src/screens/residentWorldBuilder.ts`: background resident world construction. Known area to verify for first-entry large-room wall-template costs.
 - `src/screens/residentRoomManager.ts`: resident room ownership/lookup/activation management.
+- `src/screens/residentBuildScheduler.ts`: background resident-build priority queue, single active build session, per-room version counters (stale-build guard), frame-budget gating, cross-zone transition state, and initial zone-load progress. Owns its state; gameScreen interacts only through its interface. Queue/priority/stale semantics are pinned by `tests/residentBuildScheduler.test.ts`.
 - `src/screens/zoneResidentLoader.ts`: zone/world-level resident loading direction.
 - `src/screens/playerTransfer.ts`: preserves player state across resident hot-swap.
 - `src/screens/entryViewportWarm.ts`: entry viewport warm-up behavior.

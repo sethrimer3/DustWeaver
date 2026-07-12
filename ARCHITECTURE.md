@@ -80,6 +80,33 @@ key derived from it must be identical at prewarm time and adoption time or
 prewarmed chunks are silently discarded (`staleRenderState`); this invariant is
 unit-tested in `tests/roomRenderState.test.ts`.
 
+### Resident Build Scheduler (BUILD 441)
+
+Background resident-world builds and cross-zone transition state live in
+`screens/residentBuildScheduler.ts`, extracted from the `startGameScreen`
+closure:
+
+- **`ResidentBuildScheduler`** — priority queue (1 hot-swap proximity,
+  2 velocity-direction, 3 radius-1, 4 radius-2, 5 rebuildAfterEdit; lower =
+  more urgent), roomId dedup with in-place priority upgrades (never
+  downgrades), one active incremental build session (one generator phase per
+  `advanceFrame()`), per-room version counters that reject stale builds at
+  completion, and frame-budget gating (urgent work bypasses the budget;
+  blocked non-urgent work force-starts after a frame cap).  Dependencies are
+  injected as narrow ports (`ResidentBuildSchedulerDeps`), which keeps the
+  state machine testable under plain `node --test`.
+- **`ZoneTransitionState`** — the pending cross-zone transition;
+  `takePendingActivation()` encodes the clear-before-reissue contract that
+  lets the deferred `startTransitionLoad` pass the cross-zone guard.
+- **`InitialZoneLoadProgress`** — startup zone-load blocking state and
+  overlay progress.
+
+One instance of each per game screen; `ResidentBuildScheduler.reset()` runs
+in the screen's cleanup.  The game screen owns orchestration (when to
+enqueue, refresh, or tick the zone loader); the module owns the state.
+New enqueue sources or gating rules belong in the module, pinned by
+`tests/residentBuildScheduler.test.ts`.
+
 ### Asset Preloading (`render/roomAssetPreloader.ts`)
 
 - `preloadRoomThemeSprites(room)` — fires `loadImg()` for every sprite URL in the room's

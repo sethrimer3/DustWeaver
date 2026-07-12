@@ -1,4 +1,4 @@
-import { createWorldState, type WorldState } from '../sim/world';
+import { createWorldState } from '../sim/world';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
@@ -1491,11 +1491,7 @@ export function startGameScreen(
     // Drives the ZoneResidentLoader one tick per RAF frame.  The zone loader
     // handles its own yield frames internally.  The loading overlay is updated
     // with progress text each frame.
-    if (_initialResidentBuildPhase.isActive) {
-      if (_initialResidentBuildPhase.t0 === 0) {
-        _initialResidentBuildPhase.t0 = performance.now();
-      }
-
+    if (initialZoneLoad.isActive) {
       const _zoneDone = _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED);
 
       // Update overlay progress text.
@@ -1506,24 +1502,23 @@ export function startGameScreen(
           _zoneProgress.residentsReady,
           _zoneProgress.totalRooms,
         );
-        _initialResidentBuildPhase.built  = _zoneProgress.residentsReady;
-        _initialResidentBuildPhase.total  = _zoneProgress.totalRooms;
+        initialZoneLoad.recordProgress(_zoneProgress.residentsReady, _zoneProgress.totalRooms);
       }
 
-      const _initElapsed = performance.now() - _initialResidentBuildPhase.t0;
+      const _initElapsed = initialZoneLoad.elapsedMs(performance.now());
       residentRoomManager.setInitialRadius2Progress(
-        _initialResidentBuildPhase.total,
-        _initialResidentBuildPhase.built,
-        _initialResidentBuildPhase.failed,
+        initialZoneLoad.total,
+        initialZoneLoad.built,
+        initialZoneLoad.failed,
         _initElapsed,
         _zoneDone,
       );
       if (_zoneDone) {
-        _initialResidentBuildPhase.isActive = false;
+        initialZoneLoad.finish();
         if (import.meta.env.DEV) {
           console.log(
-            `[startup] initial zone load done: ${_initialResidentBuildPhase.built}/${_initialResidentBuildPhase.total} built` +
-            (_initialResidentBuildPhase.failed > 0 ? `, ${_initialResidentBuildPhase.failed} failed` : '') +
+            `[startup] initial zone load done: ${initialZoneLoad.built}/${initialZoneLoad.total} built` +
+            (initialZoneLoad.failed > 0 ? `, ${initialZoneLoad.failed} failed` : '') +
             ` in ${_initElapsed.toFixed(0)}ms`,
           );
           logWallTemplateDiagnosticsSummary('startup');
@@ -1624,11 +1619,11 @@ export function startGameScreen(
     // simulation, movement, or player input is processed.
 
     // ── Cross-zone transition load phase (BUILD 430) ──────────────────────────
-    // When the player crosses a zone boundary, _zoneTransitionLoad.isActive is
-    // set by startTransitionLoad().  Each RAF frame advances the zone loader one
+    // When the player crosses a zone boundary, zoneTransition.begin() is called
+    // by startTransitionLoad().  Each RAF frame advances the zone loader one
     // tick until the target zone is fully ready, then re-activates the target room
     // through the normal startTransitionLoad() hot-swap path.
-    if (_zoneTransitionLoad.isActive) {
+    if (zoneTransition.isActive) {
       const _zoneTick = _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED);
       const _ztp = _zoneLoader.getZoneProgress(residentRoomManager);
       if (_ztp !== null) {
@@ -1636,13 +1631,11 @@ export function startGameScreen(
       }
       if (_zoneTick) {
         // Zone ready — activate target room via startTransitionLoad (takes hot-swap).
-        // We capture _tr before clearing isActive so its fields remain accessible.
-        // isActive is cleared BEFORE the call so startTransitionLoad's cross-zone guard
-        // (which checks !_zoneTransitionLoad.isActive) treats this as a normal intra-zone
-        // transition.  startTransitionLoad is synchronous JS: no RAF can interleave
-        // between the clear and the call, so re-entry is impossible.
-        const _tr = _zoneTransitionLoad;
-        _zoneTransitionLoad.isActive = false;
+        // takePendingActivation() clears isActive BEFORE the call so
+        // startTransitionLoad's cross-zone guard treats this as a normal
+        // intra-zone transition.  startTransitionLoad is synchronous JS: no RAF
+        // can interleave between the clear and the call, so re-entry is impossible.
+        const _tr = zoneTransition.takePendingActivation();
         const _prevWorldNumber = currentRoom.worldNumber ?? 1;
         // Queue zone entry viewport prewarm tasks for the new zone.
         addZoneEntryViewportTasks(
@@ -1652,20 +1645,20 @@ export function startGameScreen(
           virtualHeightPx,
           camera.zoom,
         );
-        startTransitionLoad(_tr.targetRoom!, _tr.spawnXBlock, _tr.spawnYBlock, _tr.vx, _tr.vy, _tr.dir);
+        startTransitionLoad(_tr.targetRoom, _tr.spawnXBlock, _tr.spawnYBlock, _tr.vx, _tr.vy, _tr.dir);
         // Evict old-zone residents (keep some for backtrack).
         _zoneLoader.evictInactiveZoneResidents(
           _tr.targetWorldNumber, _prevWorldNumber, residentRoomManager,
         );
         if (import.meta.env.DEV) {
           console.log(
-            `[zoneTransition] zone ${_prevWorldNumber} → ${_tr.targetWorldNumber} ready, activated ${_tr.targetRoom!.id}`,
+            `[zoneTransition] zone ${_prevWorldNumber} → ${_tr.targetWorldNumber} ready, activated ${_tr.targetRoom.id}`,
           );
         }
         residentBuildScheduler.refreshFromNeighborhood();
         _updateRadiusReadyCounts();
       }
-      if (_zoneTransitionLoad.isActive) {
+      if (zoneTransition.isActive) {
         // Still loading — hold overlay, skip gameplay.
         tickLoadingOverlay();
         if (import.meta.env.DEV) FP.setFrameGameContext('loading');
@@ -1875,7 +1868,7 @@ export function startGameScreen(
             {
               const _tResident = residentRoomManager.getResident(_tId);
               if (_tResident === undefined || !_tResident.runtimeReady) {
-                _enqueueResidentBuild({ roomId: _tId, priority: 1, reason: 'proximity' });
+                residentBuildScheduler.enqueue({ roomId: _tId, priority: 1, reason: 'proximity' });
               }
             }
             break; // one priority boost per frame is sufficient
@@ -1900,7 +1893,7 @@ export function startGameScreen(
               if (_vt.direction === _velDir) {
                 const _vtResident = residentRoomManager.getResident(_vt.targetRoomId);
                 if (_vtResident === undefined || !_vtResident.runtimeReady) {
-                  _enqueueResidentBuild({ roomId: _vt.targetRoomId, priority: 2, reason: 'velocityDirection' });
+                  residentBuildScheduler.enqueue({ roomId: _vt.targetRoomId, priority: 2, reason: 'velocityDirection' });
                 }
                 break;
               }
@@ -2203,18 +2196,10 @@ export function startGameScreen(
     // Tick the loading overlay — hides it once sprites are ready.
     tickLoadingOverlay();
 
-    // ── Resident build queue scheduler (BUILD 418+) ──────────────────────────
-    // Incremental multi-phase build scheduler.  One generator phase per frame so
-    // no single frame bears the full cost of a synchronous build (~15–25 ms).
-    //
-    // Session lifecycle:
-    //   1. If a session is active, advance one phase per frame unconditionally.
-    //      Each phase is bounded (< ~10 ms) so the per-phase cost is tolerable.
-    //   2. When the session generator is exhausted, check the room version to
-    //      detect stale builds (room was edited after session started) and
-    //      discard if stale.
-    //   3. If no session is active and the queue is non-empty, start a new
-    //      session only when the previous frame was fast (< 10 ms).
+    // ── Resident build queue scheduler (BUILD 418+; extracted BUILD 441) ─────
+    // Advances at most one incremental build phase per frame, then starts a
+    // new session budget-permitting.  Session lifecycle, stale-build
+    // rejection, and budget gating live in residentBuildScheduler.ts.
     //
     // Scheduling note (BUILD 419): build phases execute post-render, before
     // FP.endFrame(), so their cost is included in the current frame's wall time
@@ -2225,136 +2210,7 @@ export function startGameScreen(
     // callback that races with the RAF loop.  Deferred to a future pass;
     // the per-phase debug overlay (currentBuildPhase) gives sufficient
     // visibility into the cost of individual phases in the interim.
-    {
-      // Sort the queue only when dirty.  Lower number = more urgent.
-      if (_residentBuildQueueDirty) {
-        _residentBuildQueue.sort((a, b) => a.priority - b.priority);
-        _residentBuildQueueDirty = false;
-      }
-
-      // Step 1: advance active session one phase.
-      if (_activeBuildSession !== null) {
-        const _sess = _activeBuildSession;
-        const _lastFrameMs = renderProfiler.getLastFrameMs();
-        const _isNonUrgent = _sess.task.priority > urgentResidentBuildPriorityThreshold;
-        // The current phase is 'phaseD_walls_lookup', meaning the NEXT gen.next() call
-        // will execute the expensive phaseD_walls_build step.  Gate that step on frame
-        // budget so large rooms don't cause a hitch when build priority is non-urgent.
-        const _isAboutToRunHeavyWallsBuild = _sess.currentPhase === 'phaseD_walls_lookup';
-        const _shouldDeferHeavyWallsStep = _isNonUrgent
-          && _isAboutToRunHeavyWallsBuild
-          && _lastFrameMs >= residentBuildBackgroundFrameBudgetMs
-          && _sess.deferredFrames < nonUrgentWallsBuildDeferralFramesCap;
-        if (_shouldDeferHeavyWallsStep) {
-          _sess.deferredFrames++;
-        } else {
-          _sess.deferredFrames = 0;
-          try {
-            const _phaseResult = _sess.gen.next();
-            if (_phaseResult.done) {
-              // Generator returned the completed WorldState.
-              const _buildMs = performance.now() - _sess.t0;
-              const _currentVer = _roomVersions.get(_sess.task.roomId) ?? 0;
-              if (_sess.capturedVersion === _currentVer) {
-                residentRoomManager.ensureResident(_sess.task.room);
-                residentRoomManager.setResidentWorld(_sess.task.roomId, _phaseResult.value, false);
-                residentRoomManager.setLastBuildInfo(_sess.task.roomId, _buildMs);
-                if (import.meta.env.DEV) {
-                  console.log(
-                    `[resident] incremental build done: ${_sess.task.roomId}` +
-                    ` (reason=${_sess.task.reason} pri=${_sess.task.priority}) in ${_buildMs.toFixed(1)}ms`,
-                  );
-                }
-                _updateRadiusReadyCounts();
-              } else if (import.meta.env.DEV) {
-                console.warn(
-                  `[resident] incremental build DISCARDED (stale): ${_sess.task.roomId}` +
-                  ` ver=${_sess.capturedVersion} but current=${_currentVer}`,
-                );
-              }
-              _activeBuildSession = null;
-              residentRoomManager.setCurrentBuildInfo(null, null, null);
-            } else {
-              _sess.currentPhase = _phaseResult.value;
-              residentRoomManager.setCurrentBuildInfo(_sess.task.roomId, _sess.task.reason, _phaseResult.value);
-            }
-          } catch (_sessErr) {
-            if (import.meta.env.DEV) {
-              console.warn(`[resident] incremental build FAILED: ${_sess.task.roomId}`, _sessErr);
-            }
-            _activeBuildSession = null;
-            residentRoomManager.setCurrentBuildInfo(null, null, null);
-          }
-        }
-      }
-
-      // Step 2: start a new session if idle and queue has work.
-      // Priority-1/2 tasks (near-boundary / velocity-direction targets) are
-      // allowed to start even when the previous frame was >= 10 ms so urgent
-      // transition candidates don't starve under sustained load.
-      // Background priorities (3–5) still respect the <10 ms gate.
-      const nextPriority = _residentBuildQueue.length > 0 ? _residentBuildQueue[0].priority : null;
-      const lastFrameMs = renderProfiler.getLastFrameMs();
-      const isUrgentHead = nextPriority !== null && nextPriority <= urgentResidentBuildPriorityThreshold;
-      if (nextPriority !== null && !isUrgentHead && lastFrameMs >= residentBuildBackgroundFrameBudgetMs) {
-        _nonUrgentQueueBlockedFrames++;
-      } else {
-        _nonUrgentQueueBlockedFrames = 0;
-      }
-      const forceStartNonUrgent = nextPriority !== null
-        && nextPriority > urgentResidentBuildPriorityThreshold
-        && _nonUrgentQueueBlockedFrames >= nonUrgentResidentBuildForcedStartFrames;
-      const canStartSession = nextPriority !== null
-        && (isUrgentHead || lastFrameMs < residentBuildBackgroundFrameBudgetMs || forceStartNonUrgent);
-      if (_activeBuildSession === null && _residentBuildQueue.length > 0 && canStartSession) {
-        // Purge already-built or active-room entries from the front of the queue.
-        let _dequeued: ResidentBuildTask | null = null;
-        while (_residentBuildQueue.length > 0) {
-          const _candidate = _residentBuildQueue[0];
-          if (_candidate.roomId === currentRoom.id) {
-            _residentBuildQueue.shift();
-            _residentBuildQueueIds.delete(_candidate.roomId);
-            continue;
-          }
-          const _existing = residentRoomManager.getResident(_candidate.roomId);
-          if (_existing !== undefined && _existing.runtimeReady) {
-            _residentBuildQueue.shift();
-            _residentBuildQueueIds.delete(_candidate.roomId);
-            continue;
-          }
-          _dequeued = _residentBuildQueue.shift()!;
-          _residentBuildQueueIds.delete(_dequeued.roomId);
-          break;
-        }
-        if (_dequeued !== null) {
-          if (_dequeued.priority > urgentResidentBuildPriorityThreshold) {
-            _nonUrgentQueueBlockedFrames = 0;
-          }
-          const capturedDequeued = _dequeued; // capture for closure
-          _activeBuildSession = {
-            task:            _dequeued,
-            gen:             createResidentBuildGenerator(_dequeued.room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, {
-              reason:       _dequeued.reason,
-              priority:     _dequeued.priority,
-              onLongPhase:  (phase, ms) => { residentRoomManager.recordLongPhase(phase, ms, capturedDequeued.roomId); },
-            }),
-            t0:              performance.now(),
-            capturedVersion: _roomVersions.get(_dequeued.roomId) ?? 0,
-            currentPhase:    'starting',
-            deferredFrames:  0,
-          };
-          residentRoomManager.setCurrentBuildInfo(_dequeued.roomId, _dequeued.reason, 'starting');
-        }
-      }
-
-      // Step 3: update diagnostics each frame.
-      const _qByPri: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-      for (const _qt of _residentBuildQueue) {
-        const _pi = (_qt.priority - 1) as 0 | 1 | 2 | 3 | 4;
-        _qByPri[_pi]++;
-      }
-      residentRoomManager.setResidentBuildQueueLength(_residentBuildQueue.length, _qByPri);
-    }
+    residentBuildScheduler.advanceFrame();
 
     // ── Frame-budget-driven background preload slice ────────────────────────
     // Supplements the requestIdleCallback-based schedulers with deterministic
@@ -2470,6 +2326,9 @@ export function startGameScreen(
     _preloadScheduleHandle = null;
     _warmScheduleHandle?.cancel();
     _warmScheduleHandle = null;
+    // Discard queued/in-flight resident builds — the screen (and its worlds)
+    // is going away, so no result could ever be adopted.
+    residentBuildScheduler.reset();
     pauseController.destroy();
     gameOverlayController.destroy();
     // Stop background music and release resources
