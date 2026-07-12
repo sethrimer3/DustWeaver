@@ -26,15 +26,10 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
 import type { PrewarmAdoptResult } from '../render/walls/roomRenderCacheStore';
 import {
-  DEFAULT_DIRECTIONAL_BIAS,
-  DEFAULT_SIDE_EXPOSURE_STRENGTH,
-  DEFAULT_MINIMUM_WALL_LIGHT,
-  DEFAULT_FALLOFF_POWER,
-  DEFAULT_BACKGROUND_LIGHT_SPILL,
-  DEFAULT_SOLID_LIGHT_SOFTNESS,
-} from '../render/walls/ambientLightDepths';
+  makeWallPrewarmCtx,
+  wallTemplateToSnapshot,
+} from '../render/walls/roomRenderState';
 import {
-  type WallPrewarmContext,
   prewarmWallChunksForRoom,
   adoptPrewarmedWallChunks,
   getPrewarmWallStats,
@@ -53,7 +48,6 @@ import {
 import { areRoomSpritesReady } from '../render/roomAssetPreloader';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { isEntryFullyPrepared } from './roomRuntimeCache';
-import type { WallSnapshot } from '../render/snapshot';
 import * as FP from '../debug/perfFreezeProfiler';
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
@@ -138,40 +132,6 @@ function _cancelIdle(handle: IdleCallbackHandle): void {
   } else {
     clearTimeout(handle as unknown as ReturnType<typeof setTimeout>);
   }
-}
-
-// ── WallSnapshot adapter ──────────────────────────────────────────────────────
-
-/**
- * Zero-copy view of a `RoomWallTemplate` as a `WallSnapshot`.
- * Both share the same underlying typed-array buffers.
- */
-function _wallTemplateToSnapshot(t: {
-  readonly wallCount: number;
-  readonly xWorld: Float32Array;
-  readonly yWorld: Float32Array;
-  readonly wWorld: Float32Array;
-  readonly hWorld: Float32Array;
-  readonly isPlatformFlag: Uint8Array;
-  readonly platformEdge: Uint8Array;
-  readonly themeIndex: Uint8Array;
-  readonly isInvisibleFlag: Uint8Array;
-  readonly rampOrientationIndex: Uint8Array;
-  readonly isPillarHalfWidthFlag: Uint8Array;
-}): WallSnapshot {
-  return {
-    count:                  t.wallCount,
-    xWorld:                 t.xWorld,
-    yWorld:                 t.yWorld,
-    wWorld:                 t.wWorld,
-    hWorld:                 t.hWorld,
-    isPlatformFlag:         t.isPlatformFlag,
-    platformEdge:           t.platformEdge,
-    themeIndex:             t.themeIndex,
-    isInvisibleFlag:        t.isInvisibleFlag,
-    rampOrientationIndex:   t.rampOrientationIndex,
-    isPillarHalfWidthFlag:  t.isPillarHalfWidthFlag,
-  };
 }
 
 // ── Transition outcome tracking ───────────────────────────────────────────────
@@ -1125,10 +1085,10 @@ function _runSlice(deadline: IdleDeadline): void {
 
     // ── Build wall chunks ─────────────────────────────────────────────────
     // Only defer when blockerKeys is null (not yet computed).
-    // undefined = computed, no blockers — _makeWallPrewarmCtx converts to empty Set.
+    // undefined = computed, no blockers — makeWallPrewarmCtx converts to empty Set.
     if (!task.wallDone && entry.blockerKeys !== null) {
-      const wallSnap = _wallTemplateToSnapshot(entry.wallTemplate);
-      const wallCtx  = _makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
+      const wallSnap = wallTemplateToSnapshot(entry.wallTemplate);
+      const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
       const wallResult = prewarmWallChunksForRoom(
         task.roomId,
         wallCtx,
@@ -1212,34 +1172,6 @@ function _runSlice(deadline: IdleDeadline): void {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/**
- * Constructs a `WallPrewarmContext` from a `RoomDef` and its runtime data.
- * This is the single place that maps RoomDef field names to the prewarm API.
- */
-function _makeWallPrewarmCtx(
-  room: RoomDef,
-  wallSnapshot: WallSnapshot,
-  blockerKeys: Set<string> | undefined,
-): WallPrewarmContext {
-  return {
-    wallSnapshot,
-    worldNumber:          room.worldNumber ?? 1,
-    blockTheme:           room.blockTheme ?? null,
-    lightingEffect:       room.lightingEffect ?? 'Ambient',
-    ambientDirection:     room.ambientLightDirection ?? 'omni',
-    roomWidthBlocks:      room.widthBlocks,
-    roomHeightBlocks:     room.heightBlocks,
-    blockerKeys:          blockerKeys ?? new Set<string>(),
-    directionalBias:      room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
-    sideExposureStrength: room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
-    minimumWallLight:     room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
-    falloffPower:         room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
-    backgroundLightSpill: room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
-    solidLightSoftness:   room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
-    seamBlending:         room.blockSeamBlending  ?? 'off',
-  };
-}
 
 function _refreshStatsObj(): PrewarmStats {
   const ws = getPrewarmWallStats();

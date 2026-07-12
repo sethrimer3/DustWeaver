@@ -53,15 +53,7 @@ import {
   setActiveDarkAmbientBlockers,
   setActiveSeamBlending,
 } from '../render/walls/blockSpriteRenderer';
-import { computeRenderStateKey } from '../render/walls/roomRenderCacheStore';
-import {
-  DEFAULT_DIRECTIONAL_BIAS,
-  DEFAULT_SIDE_EXPOSURE_STRENGTH,
-  DEFAULT_MINIMUM_WALL_LIGHT,
-  DEFAULT_FALLOFF_POWER,
-  DEFAULT_BACKGROUND_LIGHT_SPILL,
-  DEFAULT_SOLID_LIGHT_SOFTNESS,
-} from '../render/walls/ambientLightDepths';
+import { computeRoomRenderStateKey } from '../render/walls/roomRenderState';
 import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
 import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
@@ -213,6 +205,358 @@ export interface LoadRoomCtx {
   getPreTransitionVelocity: () => { vx: number; vy: number };
 }
 
+// ── Shared room-activation helpers ────────────────────────────────────────────
+// Every code path that makes a room the ACTIVE room must route through these
+// helpers.  There are exactly two such paths:
+//   1. `makeLoadRoomPhases`          — full load into a reset WorldState.
+//   2. `applyResidentRoomActivation` — hot-swap onto a prebuilt resident WorldState.
+// Before consolidation these paths hand-duplicated ~240 lines; a change applied
+// to one but not the other produced stale renderer/sim state on the other path.
+// If you add a new per-room renderer, effect, or module-level sim singleton,
+// wire it into the appropriate helper below — NOT into one of the two callers.
+
+/** DEV-logging / profiling options for the shared activation helpers. */
+interface RoomActivationOpts {
+  /** DEV console log prefix for cache HIT/MISS lines; null disables the logs. */
+  logLabel: string | null;
+  /**
+   * When true, record freeze-profiler load-phase steps.  True only for the
+   * full load generator so hot-swap work never pollutes load-phase stats.
+   */
+  recordPhaseSteps: boolean;
+}
+
+interface RoomPresentationResult {
+  blockerKeys: Set<string> | undefined;
+  darkBlockerKeys: Set<string> | undefined;
+  roomWidthWorld: number;
+  roomHeightWorld: number;
+}
+
+/**
+ * Applies all presentation-layer state for entering `room`: outer-scope room
+ * metadata (via ctx setters), camera-transition cancel, block sprite theme,
+ * ambient blocker keys (cache → build), block lighting, dark blockers, seam
+ * blending, prewarmed-chunk adoption, and the room's music track.
+ */
+function applyRoomPresentationState(
+  ctx: LoadRoomCtx,
+  room: RoomDef,
+  opts: RoomActivationOpts,
+): RoomPresentationResult {
+  const { camera, camState, musicManager, roomRuntimeCache } = ctx;
+  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
+  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+
+  ctx.setCurrentRoom(room);
+  ctx.setBgColor(worldBgColor(room.worldNumber));
+  ctx.setRoomWidthWorld(roomWidthWorld);
+  ctx.setRoomHeightWorld(roomHeightWorld);
+
+  // Reset camera transition state on any room activation.  The transition
+  // callback sets isTransitionActive true AFTER the activation returns, so
+  // clearing it here is always safe.
+  cancelCameraTransition(camState);
+
+  // Apply world-specific block sprites and background.
+  if (room.blockTheme) {
+    setActiveBlockSpriteTheme(room.blockTheme);
+  } else {
+    setActiveBlockSpriteWorld(room.worldNumber);
+  }
+
+  // Use cached blocker keys if the entry has already been prepared (avoids
+  // re-allocating Sets on every room visit after the first preload).
+  const cacheEntry = roomRuntimeCache.get(room.id);
+  let blockerKeys: Set<string> | undefined;
+  let darkBlockerKeys: Set<string> | undefined;
+  const _t0 = import.meta.env.DEV ? performance.now() : 0;
+  if (cacheEntry !== undefined && cacheEntry.blockerKeys !== null) {
+    // null = not computed; undefined = no blockers (valid); Set = populated.
+    blockerKeys     = cacheEntry.blockerKeys;
+    darkBlockerKeys = cacheEntry.darkBlockerKeys ?? undefined;
+    if (import.meta.env.DEV && opts.logLabel !== null) {
+      console.log(`[${opts.logLabel}] ${room.id} blockerKeys: cache HIT`);
+    }
+  } else {
+    // Build from scratch (shared builder — identical output to the prewarm
+    // cache-population path so render-state keys match and prewarmed chunks
+    // are adopted, not discarded) and store back into the entry if one exists.
+    const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
+    ({ blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room));
+    if (cacheEntry !== undefined) {
+      // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
+      // fields are computed.  `null` is the "not yet computed" sentinel.
+      cacheEntry.blockerKeys     = blockerKeys;
+      cacheEntry.darkBlockerKeys = darkBlockerKeys;
+    }
+    if (import.meta.env.DEV && opts.logLabel !== null) {
+      console.log(`[${opts.logLabel}] ${room.id} blockerKeys: cache MISS (build ${(performance.now() - _blockerT0).toFixed(1)}ms)`);
+    }
+  }
+  setActiveBlockLighting(
+    room.lightingEffect ?? 'Ambient',
+    room.widthBlocks,
+    room.heightBlocks,
+    room.ambientLightDirection,
+    blockerKeys,
+    room.directionalBias,
+    room.sideExposureStrength,
+    room.minimumWallLight,
+    room.falloffPower,
+    room.backgroundLightSpill,
+    room.solidLightSoftness,
+  );
+  setActiveDarkAmbientBlockers(darkBlockerKeys);
+  setActiveSeamBlending(room.blockSeamBlending ?? 'off');
+  // Adopt any pre-warmed chunks built during idle time for this room.  Must
+  // run after the lighting/theme setters and before the first render frame so
+  // the active chunk caches are seeded with pre-built data.  The adoption key
+  // is derived from the same canonical mapping the prewarm scheduler used
+  // (roomRenderState.ts), so stale snapshots are detected and discarded.
+  adoptPrewarmedChunksForRoom(room, camera.zoom, computeRoomRenderStateKey(room, blockerKeys));
+  if (opts.recordPhaseSteps) {
+    FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+  musicManager.notifyRoomEntered(room.songId ?? '_continue');
+
+  return { blockerKeys, darkBlockerKeys, roomWidthWorld, roomHeightWorld };
+}
+
+/**
+ * Resets all room-scoped simulation state that lives OUTSIDE WorldState:
+ * module-level AI singletons (snake pathing/segments, Radiant Tether chains,
+ * Radiant Web beams) plus the world's grapple flags (the player always arrives
+ * in a newly activated room with no active grapple and a full charge).
+ *
+ * Must run on the frame a world becomes the active world.  When adding a new
+ * module-level sim singleton, reset it here — one call site covers every
+ * activation path.
+ */
+function resetRoomScopedSimState(world: WorldState): void {
+  resetSnakeRuntimeState();
+  resetRadiantTetherState();
+  resetRadiantWebState();
+
+  world.isGrappleActiveFlag       = 0;
+  world.isGrappleMissActiveFlag   = 0;
+  world.isGrappleRetractingFlag   = 0;
+  world.isGrappleZipActiveFlag    = 0;
+  world.isGrappleStuckFlag        = 0;
+  world.hasGrappleChargeFlag      = 1;
+  world.grappleParticleStartIndex = -1;
+}
+
+/** Sanitizes the player's weave loadout against current progress. */
+function resolveEffectiveWeaveLoadout(ctx: LoadRoomCtx): PlayerWeaveLoadout {
+  return sanitizePlayerWeaveLoadoutForProgress(
+    ctx.progress?.weaveLoadout ?? ctx.playerWeaveLoadout,
+    ctx.progress,
+  );
+}
+
+/**
+ * Writes the player's equipped-weave state and character id onto `world`.
+ * `characterId` is re-applied on every activation: the initial world receives
+ * it in startGameScreen, but resident worlds are prebuilt without a player and
+ * must receive it when they become active.  (Idempotent on the full-load path
+ * — same progress-derived value.)
+ */
+function applyPlayerWeaveWorldFields(
+  ctx: LoadRoomCtx,
+  world: WorldState,
+  effectiveWeaveLoadout: PlayerWeaveLoadout,
+): void {
+  world.playerPrimaryWeaveId           = effectiveWeaveLoadout.primary.weaveId;
+  world.playerSecondaryWeaveId         = effectiveWeaveLoadout.secondary.weaveId;
+  world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
+  world.isMoteSourceOrbitFlag          = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
+  world.characterId                    = ctx.progress?.characterId ?? 'knight';
+}
+
+/** Camera / spawn inputs for `applyRoomEnvironmentAndScheduling`. */
+interface RoomEnvironmentOpts extends RoomActivationOpts {
+  spawnXWorld: number;
+  spawnYWorld: number;
+  roomWidthWorld: number;
+  roomHeightWorld: number;
+  /** False only on full loads with preserveCamera (editor room jumps). */
+  snapCameraToSpawn: boolean;
+}
+
+/**
+ * Applies all environment-effect, render-cache, camera, sprite-preload, and
+ * background-scheduler state for the newly active `room` (the "Phase F"
+ * sequence).  Reads `ctx.world`, which the caller must already have pointed
+ * at the active WorldState.
+ */
+function applyRoomEnvironmentAndScheduling(
+  ctx: LoadRoomCtx,
+  room: RoomDef,
+  opts: RoomEnvironmentOpts,
+): void {
+  const {
+    world,
+    camera,
+    camState,
+    roomRuntimeCache,
+    playerCloak,
+    phantomCloak,
+    momentumTrail,
+    decorationWaveState,
+    environmentalDust,
+    sunbeamRenderer,
+    sunraysRenderer,
+    atmosphericLightDust,
+    guideDustPathRenderer,
+    reusableSnapshot,
+    interpolationBuffers,
+    skillTombRenderer,
+    skillTombEffectRenderer,
+    consumedSkillTombKeySet,
+    renderProfiler,
+    cachedDecorationCenterX,
+    cachedDecorationCenterY,
+  } = ctx;
+  const { recordPhaseSteps } = opts;
+
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    environmentalDust.initFromWorld(world, room.worldNumber);
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:environmentalDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    sunbeamRenderer.initFromRoom(room);
+    sunraysRenderer.initFromRoom(room);
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:sunbeamRenderer', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    atmosphericLightDust.initFromRoom(room);
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:atmosphericLightDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+  guideDustPathRenderer.initFromRoom(room);
+
+  playerCloak.reset();
+  phantomCloak.reset();
+  momentumTrail?.reset();
+
+  decorationWaveState.reset(room.decorations?.length ?? 0);
+
+  // Use cached wall decorations if available (pure geometry, no mutable state).
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    const decorCacheEntry = roomRuntimeCache.get(room.id);
+    let wallDecorations: WallDecoration[];
+    if (decorCacheEntry !== undefined && decorCacheEntry.wallDecorations !== null) {
+      wallDecorations = decorCacheEntry.wallDecorations;
+      if (import.meta.env.DEV && opts.logLabel !== null) {
+        console.log(`[${opts.logLabel}] ${room.id} decorations: cache HIT`);
+      }
+    } else {
+      const _decorT0 = import.meta.env.DEV ? performance.now() : 0;
+      wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+      if (decorCacheEntry !== undefined) {
+        decorCacheEntry.wallDecorations = wallDecorations;
+      }
+      if (import.meta.env.DEV && opts.logLabel !== null) {
+        console.log(`[${opts.logLabel}] ${room.id} decorations: cache MISS (build ${(performance.now() - _decorT0).toFixed(1)}ms)`);
+      }
+    }
+    ctx.setCachedWallDecorations(wallDecorations);
+    for (let di = 0; di < wallDecorations.length; di++) {
+      const decoration = wallDecorations[di];
+      cachedDecorationCenterX[di] = decoration.worldLeftPx + BLOCK_SIZE_SMALL / 2;
+      cachedDecorationCenterY[di] = decoration.worldAnchorYPx;
+    }
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:wallDecorations', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+
+  resetReusableSnapshot(reusableSnapshot, world);
+
+  captureClusterInterpolationState(world, interpolationBuffers);
+
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    skillTombRenderer.init(room.saveTombs, room.walls);
+    skillTombEffectRenderer.init(room.skillTombs);
+    const roomSkillTombs = room.skillTombs ?? [];
+    for (let i = roomSkillTombs.length - 1; i >= 0; i--) {
+      const st = roomSkillTombs[i];
+      if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
+        skillTombEffectRenderer.removeTomb(i);
+      }
+    }
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:skillTombInit', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+
+  if (ctx.progress && !ctx.progress.exploredRoomIds.includes(room.id)) {
+    ctx.progress.exploredRoomIds.push(room.id);
+  }
+
+  if (opts.snapCameraToSpawn) {
+    snapCamera(camera, opts.spawnXWorld, opts.spawnYWorld, opts.roomWidthWorld, opts.roomHeightWorld, ctx.getVirtualWidthPx(), ctx.getVirtualHeightPx());
+  }
+
+  // Reset effective camera clamp bounds to the new room's single-room bounds.
+  resetCameraEffBoundsForRoom(camState, opts.roomWidthWorld, opts.roomHeightWorld);
+
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    preloadRoomThemeSprites(room);
+    // Fire decode() for the current room's sprites so they are GPU-rasterized
+    // before the first wall chunks render. Fire-and-forget — never blocks the frame.
+    void decodeRoomThemeSprites(room);
+    decodeRoomBackground(room);
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+
+  // Warm the transition sprite cache for all non-none profile kinds.
+  // Missing sprites are cached as misses after the first 404 — no per-frame cost.
+  if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
+    preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
+  }
+
+  // Cancel any in-flight preload schedule from the previous room and start
+  // a new one for the rooms adjacent to the newly loaded room.
+  ctx.getPreloadScheduleHandle()?.cancel();
+  {
+    const _t0 = import.meta.env.DEV ? performance.now() : 0;
+    ctx.setPreloadScheduleHandle(scheduleRoomPreloads(
+      room,
+      ROOM_REGISTRY,
+      roomRuntimeCache,
+      import.meta.env.DEV,
+      // In file-cache mode (Electron lazy loading): also load room DATA for
+      // adjacent rooms that are not yet in ROOM_REGISTRY.
+      // In packed-campaign / browser mode: omit — all rooms are already loaded.
+      isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
+      // Pass manifest adjacency index so the scheduler can discover radius-2
+      // rooms via BFS even when intermediate rooms are not yet in ROOM_REGISTRY.
+      // Absent when no file cache is active or the manifest lacks adjacency
+      // (old manifests) — falls back to registry-only BFS.
+      getActiveRoomAdjacency() ?? undefined,
+    ));
+    if (recordPhaseSteps) FP.recordLoadPhaseStep('F:scheduleRoomPreloads', import.meta.env.DEV ? performance.now() - _t0 : 0);
+  }
+
+  // Start render-chunk prewarm scheduler for nearby rooms.
+  // Runs only during idle time after room data and sprites are ready.
+  ctx.getWarmScheduleHandle()?.cancel();
+  ctx.setWarmScheduleHandle(scheduleChunkPrewarms(
+    room,
+    ROOM_REGISTRY,
+    roomRuntimeCache,
+    ctx.getGraphicsQuality,
+    () => renderProfiler.getLastFrameMs(),
+    ctx.getVirtualWidthPx(),
+    ctx.getVirtualHeightPx(),
+    camera.zoom,
+    ctx.getPreTransitionVelocity(),
+  ));
+}
+
 /**
  * Generator that executes the room-load in 6 incremental phases.
  * Yields between each phase so the RAF loop can interleave rendering
@@ -236,129 +580,23 @@ export function* makeLoadRoomPhases(
   preserveCamera: boolean,
 ): Generator<void, void, void> {
   // Destructure frequently-accessed read-only references for ergonomics.
+  // (Presentation, weave-field, and environment state is applied through the
+  // shared helpers above, which read from `ctx` directly.)
   const {
     world,
-    camera,
-    camState,
-    musicManager,
     roomRuntimeCache,
-    playerWeaveLoadout,
     progress,
-    playerCloak,
-    phantomCloak,
-    momentumTrail,
-    decorationWaveState,
-    environmentalDust,
-    sunbeamRenderer,
-    sunraysRenderer,
-    atmosphericLightDust,
-    guideDustPathRenderer,
-    reusableSnapshot,
-    interpolationBuffers,
-    skillTombRenderer,
-    skillTombEffectRenderer,
-    consumedSkillTombKeySet,
     dialogueState,
     dialogueRenderer,
     levelRng,
-    renderProfiler,
-    cachedDecorationCenterX,
-    cachedDecorationCenterY,
   } = ctx;
 
   // ── Phase A: room metadata + world reset ──────────────────────────────
-  // These local variables shadow the outer-scope lets only within this
-  // generator; setters propagate the values back to gameScreen.ts immediately.
-  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
-  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
-
-  ctx.setCurrentRoom(room);
-  ctx.setBgColor(worldBgColor(room.worldNumber));
-  ctx.setRoomWidthWorld(roomWidthWorld);
-  ctx.setRoomHeightWorld(roomHeightWorld);
-
-  // Reset camera transition state on any full room load.
-  // The transition callback sets isTransitionActive true AFTER
-  // loadRoom returns, so clearing it here is always safe.
-  cancelCameraTransition(camState);
-
-  // Apply world-specific block sprites and background
-  if (room.blockTheme) {
-    setActiveBlockSpriteTheme(room.blockTheme);
-  } else {
-    setActiveBlockSpriteWorld(room.worldNumber);
-  }
-
-  // Use cached blocker keys if the entry has already been prepared (avoids
-  // re-allocating Sets on every room visit after the first preload).
-  const _phaseAEntry = roomRuntimeCache.get(room.id);
-  let blockerKeys: Set<string> | undefined;
-  let darkBlockerKeys: Set<string> | undefined;
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    if (_phaseAEntry !== undefined && _phaseAEntry.blockerKeys !== null) {
-      // null = not computed; undefined = no blockers (valid); Set = populated.
-      blockerKeys     = _phaseAEntry.blockerKeys;
-      darkBlockerKeys = _phaseAEntry.darkBlockerKeys ?? undefined;
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} blockerKeys: cache HIT`);
-      }
-    } else {
-      // Build from scratch (shared builder — identical output to the prewarm
-      // cache-population path so render-state keys match and prewarmed chunks
-      // are adopted, not discarded) and store back into the entry if one exists.
-      const _blockerT0 = import.meta.env.DEV ? performance.now() : 0;
-      ({ blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room));
-      if (_phaseAEntry !== undefined) {
-        // Store `undefined` (not `null`) so `isEntryFullyPrepared` can see these
-        // fields are computed.  `null` is the "not yet computed" sentinel.
-        _phaseAEntry.blockerKeys     = blockerKeys;
-        _phaseAEntry.darkBlockerKeys = darkBlockerKeys;
-      }
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} blockerKeys: cache MISS (build ${(performance.now() - _blockerT0).toFixed(1)}ms)`);
-      }
-    }
-    setActiveBlockLighting(
-      room.lightingEffect ?? 'Ambient',
-      room.widthBlocks,
-      room.heightBlocks,
-      room.ambientLightDirection,
-      blockerKeys,
-      room.directionalBias,
-      room.sideExposureStrength,
-      room.minimumWallLight,
-      room.falloffPower,
-      room.backgroundLightSpill,
-      room.solidLightSoftness,
-    );
-    setActiveDarkAmbientBlockers(darkBlockerKeys);
-    setActiveSeamBlending(room.blockSeamBlending ?? 'off');
-    // Adopt any pre-warmed chunks that were built during idle time for this
-    // room.  Must be called after lighting/theme setters but before the first
-    // render frame so the active chunk caches are seeded with pre-built data.
-    // Compute the same renderStateKey that the prewarm scheduler used so the
-    // adoption can detect and discard snapshots built for a stale render state.
-    const adoptRenderStateKey = computeRenderStateKey(
-      room.blockTheme ?? null,
-      room.worldNumber ?? 1,
-      room.lightingEffect ?? 'Ambient',
-      room.ambientLightDirection ?? 'omni',
-      room.blockSeamBlending ?? 'off',
-      blockerKeys ?? new Set<string>(),
-      room.widthBlocks,
-      room.heightBlocks,
-      room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
-      room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
-      room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
-      room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
-      room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
-      room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
-    );
-    adoptPrewarmedChunksForRoom(room, camera.zoom, adoptRenderStateKey);
-    FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-  musicManager.notifyRoomEntered(room.songId ?? '_continue');
+  // Presentation state (room metadata setters, theme, lighting, blockers,
+  // prewarm adoption, music) is shared with the resident hot-swap path —
+  // see applyRoomPresentationState.
+  const { blockerKeys, darkBlockerKeys, roomWidthWorld, roomHeightWorld } =
+    applyRoomPresentationState(ctx, room, { logLabel: 'loadRoom', recordPhaseSteps: true });
 
   let carryHealthPoints = PLAYER_INITIAL_HEALTH;
   if (
@@ -382,18 +620,8 @@ export function* makeLoadRoomPhases(
   world.builtForRoomId = room.id;
   world.worldWidthWorld = roomWidthWorld;
   world.worldHeightWorld = roomHeightWorld;
-  resetSnakeRuntimeState();
 
-  world.isGrappleActiveFlag     = 0;
-  world.isGrappleMissActiveFlag = 0;
-  world.isGrappleRetractingFlag = 0;
-  world.isGrappleZipActiveFlag  = 0;
-  world.isGrappleStuckFlag      = 0;
-  world.hasGrappleChargeFlag    = 1;
-  world.grappleParticleStartIndex = -1;
-
-  resetRadiantTetherState();
-  resetRadiantWebState();
+  resetRoomScopedSimState(world);
 
   yield; // ── Phase A complete ─────────────────────────────────────────────
 
@@ -406,10 +634,7 @@ export function* makeLoadRoomPhases(
 
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
-      progress?.weaveLoadout ?? playerWeaveLoadout,
-      progress,
-    );
+    const effectiveWeaveLoadout = resolveEffectiveWeaveLoadout(ctx);
     const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
     const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
       || effectiveWeaveLoadout.secondary.boundDust.length > 0;
@@ -424,10 +649,7 @@ export function* makeLoadRoomPhases(
       }
     }
 
-    world.playerPrimaryWeaveId = effectiveWeaveLoadout.primary.weaveId;
-    world.playerSecondaryWeaveId = effectiveWeaveLoadout.secondary.weaveId;
-    world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
-    world.isMoteSourceOrbitFlag = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
+    applyPlayerWeaveWorldFields(ctx, world, effectiveWeaveLoadout);
 
     initMoteQueueFromParticles(world, playerCluster.entityId);
     resetSwordWeaveState(world);
@@ -653,141 +875,16 @@ export function* makeLoadRoomPhases(
   yield; // ── Phase E complete ─────────────────────────────────────────────
 
   // ── Phase F: environment effects + rendering state + camera setup ─────
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    environmentalDust.initFromWorld(world, room.worldNumber);
-    FP.recordLoadPhaseStep('F:environmentalDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    sunbeamRenderer.initFromRoom(room);
-    sunraysRenderer.initFromRoom(room);
-    FP.recordLoadPhaseStep('F:sunbeamRenderer', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    atmosphericLightDust.initFromRoom(room);
-    FP.recordLoadPhaseStep('F:atmosphericLightDust', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-  guideDustPathRenderer.initFromRoom(room);
-
-  playerCloak.reset();
-  phantomCloak.reset();
-  momentumTrail?.reset();
-
-  decorationWaveState.reset(room.decorations?.length ?? 0);
-
-  // Use cached wall decorations if available (pure geometry, no mutable state).
-  const _decorEntry = roomRuntimeCache.get(room.id);
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    let _localWallDecorations: WallDecoration[];
-    if (_decorEntry !== undefined && _decorEntry.wallDecorations !== null) {
-      _localWallDecorations = _decorEntry.wallDecorations;
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} decorations: cache HIT`);
-      }
-    } else {
-      const _decorT0 = import.meta.env.DEV ? performance.now() : 0;
-      _localWallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
-      if (_decorEntry !== undefined) {
-        _decorEntry.wallDecorations = _localWallDecorations;
-      }
-      if (import.meta.env.DEV) {
-        console.log(`[loadRoom] ${room.id} decorations: cache MISS (build ${(performance.now() - _decorT0).toFixed(1)}ms)`);
-      }
-    }
-    ctx.setCachedWallDecorations(_localWallDecorations);
-    for (let _di = 0; _di < _localWallDecorations.length; _di++) {
-      const _d = _localWallDecorations[_di];
-      cachedDecorationCenterX[_di] = _d.worldLeftPx + BLOCK_SIZE_SMALL / 2;
-      cachedDecorationCenterY[_di] = _d.worldAnchorYPx;
-    }
-    FP.recordLoadPhaseStep('F:wallDecorations', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-
-  resetReusableSnapshot(reusableSnapshot, world);
-
-  captureClusterInterpolationState(world, interpolationBuffers);
-
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    skillTombRenderer.init(room.saveTombs, room.walls);
-    skillTombEffectRenderer.init(room.skillTombs);
-    const roomSkillTombsForInit = room.skillTombs ?? [];
-    for (let i = roomSkillTombsForInit.length - 1; i >= 0; i--) {
-      const st = roomSkillTombsForInit[i];
-      if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
-        skillTombEffectRenderer.removeTomb(i);
-      }
-    }
-    FP.recordLoadPhaseStep('F:skillTombInit', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-
-  if (progress && !progress.exploredRoomIds.includes(room.id)) {
-    progress.exploredRoomIds.push(room.id);
-  }
-
-  if (!preserveCamera) {
-    snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, ctx.getVirtualWidthPx(), ctx.getVirtualHeightPx());
-  }
-
-  // Reset effective camera clamp bounds to the new room's single-room bounds.
-  resetCameraEffBoundsForRoom(camState, roomWidthWorld, roomHeightWorld);
-
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    preloadRoomThemeSprites(room);
-    // Fire decode() for the current room's sprites so they are GPU-rasterized
-    // before the first wall chunks render. Fire-and-forget — never blocks the frame.
-    void decodeRoomThemeSprites(room);
-    decodeRoomBackground(room);
-    FP.recordLoadPhaseStep('F:preloadRoomThemeSprites', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-
-  // Warm the transition sprite cache for all non-none profile kinds.
-  // Missing sprites are cached as misses after the first 404 — no per-frame cost.
-  if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
-    preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
-  }
-
-  // Cancel any in-flight preload schedule from the previous room and start
-  // a new one for the rooms adjacent to the newly loaded room.
-  ctx.getPreloadScheduleHandle()?.cancel();
-  {
-    const _t0 = import.meta.env.DEV ? performance.now() : 0;
-    ctx.setPreloadScheduleHandle(scheduleRoomPreloads(
-      room,
-      ROOM_REGISTRY,
-      roomRuntimeCache,
-      import.meta.env.DEV,
-      // In file-cache mode (Electron lazy loading): also load room DATA for
-      // adjacent rooms that are not yet in ROOM_REGISTRY.
-      // In packed-campaign / browser mode: omit — all rooms are already loaded.
-      isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
-      // Pass manifest adjacency index so the scheduler can discover radius-2
-      // rooms via BFS even when intermediate rooms are not yet in ROOM_REGISTRY.
-      // Absent when no file cache is active or the manifest lacks adjacency
-      // (old manifests) — falls back to registry-only BFS.
-      getActiveRoomAdjacency() ?? undefined,
-    ));
-    FP.recordLoadPhaseStep('F:scheduleRoomPreloads', import.meta.env.DEV ? performance.now() - _t0 : 0);
-  }
-
-  // Start render-chunk prewarm scheduler for nearby rooms.
-  // Runs only during idle time after room data and sprites are ready.
-  ctx.getWarmScheduleHandle()?.cancel();
-  ctx.setWarmScheduleHandle(scheduleChunkPrewarms(
-    room,
-    ROOM_REGISTRY,
-    roomRuntimeCache,
-    ctx.getGraphicsQuality,
-    () => renderProfiler.getLastFrameMs(),
-    ctx.getVirtualWidthPx(),
-    ctx.getVirtualHeightPx(),
-    camera.zoom,
-    ctx.getPreTransitionVelocity(),
-  ));
+  // Shared with the resident hot-swap path — see applyRoomEnvironmentAndScheduling.
+  applyRoomEnvironmentAndScheduling(ctx, room, {
+    logLabel: 'loadRoom',
+    recordPhaseSteps: true,
+    spawnXWorld,
+    spawnYWorld,
+    roomWidthWorld,
+    roomHeightWorld,
+    snapCameraToSpawn: !preserveCamera,
+  });
 
   // Generator complete — Phase F has no trailing yield.
 }
@@ -848,114 +945,19 @@ export function applyResidentRoomActivation(
 ): ResidentActivationResult {
   const {
     world,
-    camera,
-    camState,
-    musicManager,
-    roomRuntimeCache,
-    playerWeaveLoadout,
     progress,
-    playerCloak,
-    phantomCloak,
-    momentumTrail,
-    decorationWaveState,
-    environmentalDust,
-    sunbeamRenderer,
-    sunraysRenderer,
-    atmosphericLightDust,
-    guideDustPathRenderer,
-    reusableSnapshot,
-    interpolationBuffers,
-    skillTombRenderer,
-    skillTombEffectRenderer,
-    consumedSkillTombKeySet,
     dialogueState,
     dialogueRenderer,
     levelRng,
-    renderProfiler,
-    cachedDecorationCenterX,
-    cachedDecorationCenterY,
   } = ctx;
 
-  const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
-  const roomHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
+  // ── Phase A equivalent: room metadata + renderer setup (shared) ──────────
+  const { roomWidthWorld, roomHeightWorld } =
+    applyRoomPresentationState(ctx, room, { logLabel: null, recordPhaseSteps: false });
 
-  // ── Phase A equivalent: room metadata + renderer setup ───────────────────
-  ctx.setCurrentRoom(room);
-  ctx.setBgColor(worldBgColor(room.worldNumber));
-  ctx.setRoomWidthWorld(roomWidthWorld);
-  ctx.setRoomHeightWorld(roomHeightWorld);
-
-  cancelCameraTransition(camState);
-
-  if (room.blockTheme) {
-    setActiveBlockSpriteTheme(room.blockTheme);
-  } else {
-    setActiveBlockSpriteWorld(room.worldNumber);
-  }
-
-  let blockerKeys: Set<string> | undefined;
-  let darkBlockerKeys: Set<string> | undefined;
-  {
-    const cacheEntry = roomRuntimeCache.get(room.id);
-    if (cacheEntry !== undefined && cacheEntry.blockerKeys !== null) {
-      blockerKeys     = cacheEntry.blockerKeys;
-      darkBlockerKeys = cacheEntry.darkBlockerKeys ?? undefined;
-    } else {
-      // Shared builder — identical output to the prewarm cache-population path.
-      ({ blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room));
-      if (cacheEntry !== undefined) {
-        cacheEntry.blockerKeys     = blockerKeys;
-        cacheEntry.darkBlockerKeys = darkBlockerKeys;
-      }
-    }
-    setActiveBlockLighting(
-      room.lightingEffect ?? 'Ambient',
-      room.widthBlocks,
-      room.heightBlocks,
-      room.ambientLightDirection,
-      blockerKeys,
-      room.directionalBias,
-      room.sideExposureStrength,
-      room.minimumWallLight,
-      room.falloffPower,
-      room.backgroundLightSpill,
-      room.solidLightSoftness,
-    );
-    setActiveDarkAmbientBlockers(darkBlockerKeys);
-    setActiveSeamBlending(room.blockSeamBlending ?? 'off');
-    const adoptRenderStateKey = computeRenderStateKey(
-      room.blockTheme ?? null,
-      room.worldNumber ?? 1,
-      room.lightingEffect ?? 'Ambient',
-      room.ambientLightDirection ?? 'omni',
-      room.blockSeamBlending ?? 'off',
-      blockerKeys ?? new Set<string>(),
-      room.widthBlocks,
-      room.heightBlocks,
-      room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
-      room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
-      room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
-      room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
-      room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
-      room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
-    );
-    adoptPrewarmedChunksForRoom(room, camera.zoom, adoptRenderStateKey);
-  }
-  musicManager.notifyRoomEntered(room.songId ?? '_continue');
-
-  // Reset module-level singletons (must run on the frame this world becomes active).
-  resetSnakeRuntimeState();
-  resetRadiantTetherState();
-  resetRadiantWebState();
-
-  // Reset world-level grapple state (player arrives in the new room with no active grapple).
-  world.isGrappleActiveFlag      = 0;
-  world.isGrappleMissActiveFlag  = 0;
-  world.isGrappleRetractingFlag  = 0;
-  world.isGrappleZipActiveFlag   = 0;
-  world.isGrappleStuckFlag       = 0;
-  world.hasGrappleChargeFlag     = 1;
-  world.grappleParticleStartIndex = -1;
+  // Reset module-level singletons and grapple flags (must run on the frame
+  // this world becomes active).
+  resetRoomScopedSimState(world);
 
   // ── Phase B equivalent: insert player at clusters[0] ─────────────────────
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
@@ -972,6 +974,7 @@ export function applyResidentRoomActivation(
   let particlesRestored = 0;
   let particlesSkipped  = 0;
   {
+    const effectiveWeaveLoadout = resolveEffectiveWeaveLoadout(ctx);
     if (playerTransfer !== undefined && playerTransfer.ownedParticles.length > 0) {
       // Restore transferred dust particles rather than spawning a fresh loadout.
       const result = restoreTransferredPlayerParticles(
@@ -981,10 +984,6 @@ export function applyResidentRoomActivation(
       particlesSkipped  = result.skipped;
     } else {
       // Fresh spawn path: first visit or no particles to carry.
-      const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
-        progress?.weaveLoadout ?? playerWeaveLoadout,
-        progress,
-      );
       const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
       const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
         || effectiveWeaveLoadout.secondary.boundDust.length > 0;
@@ -1000,15 +999,7 @@ export function applyResidentRoomActivation(
       }
     }
 
-    const effectiveWeaveLoadout = sanitizePlayerWeaveLoadoutForProgress(
-      progress?.weaveLoadout ?? playerWeaveLoadout,
-      progress,
-    );
-    world.playerPrimaryWeaveId   = effectiveWeaveLoadout.primary.weaveId;
-    world.playerSecondaryWeaveId = effectiveWeaveLoadout.secondary.weaveId;
-    world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
-    world.isMoteSourceOrbitFlag  = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
-    world.characterId            = ctx.progress?.characterId ?? 'knight';
+    applyPlayerWeaveWorldFields(ctx, world, effectiveWeaveLoadout);
 
     initMoteQueueFromParticles(world, playerCluster.entityId);
     // Resident worlds are prebuilt without a player, so they do not yet have
@@ -1023,87 +1014,16 @@ export function applyResidentRoomActivation(
   ctx.setFiredDialogueTriggerUids(dialogueVisitState.firedDialogueTriggerUids);
   ctx.setCachedRoomConversations(dialogueVisitState.cachedRoomConversations);
 
-  // ── Phase F equivalent: environment effects + rendering state + camera ────
-  environmentalDust.initFromWorld(world, room.worldNumber);
-  sunbeamRenderer.initFromRoom(room);
-  sunraysRenderer.initFromRoom(room);
-  atmosphericLightDust.initFromRoom(room);
-  guideDustPathRenderer.initFromRoom(room);
-
-  playerCloak.reset();
-  phantomCloak.reset();
-  momentumTrail?.reset();
-  decorationWaveState.reset(room.decorations?.length ?? 0);
-
-  {
-    const decorCacheEntry = roomRuntimeCache.get(room.id);
-    let wallDecorations: import('../render/effects/wallDecorations').WallDecoration[];
-    if (decorCacheEntry !== undefined && decorCacheEntry.wallDecorations !== null) {
-      wallDecorations = decorCacheEntry.wallDecorations;
-    } else {
-      wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
-      if (decorCacheEntry !== undefined) {
-        decorCacheEntry.wallDecorations = wallDecorations;
-      }
-    }
-    ctx.setCachedWallDecorations(wallDecorations);
-    for (let di = 0; di < wallDecorations.length; di++) {
-      const decoration = wallDecorations[di];
-      cachedDecorationCenterX[di] = decoration.worldLeftPx + BLOCK_SIZE_SMALL / 2;
-      cachedDecorationCenterY[di] = decoration.worldAnchorYPx;
-    }
-  }
-
-  resetReusableSnapshot(reusableSnapshot, world);
-  captureClusterInterpolationState(world, interpolationBuffers);
-
-  skillTombRenderer.init(room.saveTombs, room.walls);
-  skillTombEffectRenderer.init(room.skillTombs);
-  const roomSkillTombs = room.skillTombs ?? [];
-  for (let i = roomSkillTombs.length - 1; i >= 0; i--) {
-    const st = roomSkillTombs[i];
-    if (consumedSkillTombKeySet.has(`${room.id}:${st.xBlock}:${st.yBlock}`)) {
-      skillTombEffectRenderer.removeTomb(i);
-    }
-  }
-
-  if (progress && !progress.exploredRoomIds.includes(room.id)) {
-    progress.exploredRoomIds.push(room.id);
-  }
-
-  snapCamera(camera, spawnXWorld, spawnYWorld, roomWidthWorld, roomHeightWorld, ctx.getVirtualWidthPx(), ctx.getVirtualHeightPx());
-  resetCameraEffBoundsForRoom(camState, roomWidthWorld, roomHeightWorld);
-
-  preloadRoomThemeSprites(room);
-  void decodeRoomThemeSprites(room);
-  decodeRoomBackground(room);
-
-  if (room.blockSeamBlending && room.blockSeamBlending !== 'off') {
-    preloadTransitionSprites(['mossy', 'crumbly', 'cracked', 'rooted', 'dusty', 'veined', 'corrupted']);
-  }
-
-  ctx.getPreloadScheduleHandle()?.cancel();
-  ctx.setPreloadScheduleHandle(scheduleRoomPreloads(
-    room,
-    ROOM_REGISTRY,
-    roomRuntimeCache,
-    import.meta.env.DEV,
-    isRoomFileCacheActive() ? loadRoomForGameplayAsync : undefined,
-    getActiveRoomAdjacency() ?? undefined,
-  ));
-
-  ctx.getWarmScheduleHandle()?.cancel();
-  ctx.setWarmScheduleHandle(scheduleChunkPrewarms(
-    room,
-    ROOM_REGISTRY,
-    roomRuntimeCache,
-    ctx.getGraphicsQuality,
-    () => renderProfiler.getLastFrameMs(),
-    ctx.getVirtualWidthPx(),
-    ctx.getVirtualHeightPx(),
-    camera.zoom,
-    ctx.getPreTransitionVelocity(),
-  ));
+  // ── Phase F equivalent (shared): env effects + render state + camera ─────
+  applyRoomEnvironmentAndScheduling(ctx, room, {
+    logLabel: null,
+    recordPhaseSteps: false,
+    spawnXWorld,
+    spawnYWorld,
+    roomWidthWorld,
+    roomHeightWorld,
+    snapCameraToSpawn: true,
+  });
 
   return { particlesRestored, particlesSkipped };
 }

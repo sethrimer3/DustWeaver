@@ -24,8 +24,6 @@
 
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import type { WallSnapshot } from '../render/snapshotTypes';
-import type { WallPrewarmContext } from '../render/walls/blockSpriteRenderer';
 import {
   prewarmWallChunksForRoom,
   adoptPrewarmedWallChunks,
@@ -42,16 +40,12 @@ import {
   getBgChunkFallbackCounts,
   retryBgGameplayFallbackChunksNow,
 } from '../render/walls/backgroundBlockRenderer';
-import { computeRenderStateKey } from '../render/walls/roomRenderCacheStore';
-import type { RoomRuntimeCache } from './roomRuntimeCache';
 import {
-  DEFAULT_DIRECTIONAL_BIAS,
-  DEFAULT_SIDE_EXPOSURE_STRENGTH,
-  DEFAULT_MINIMUM_WALL_LIGHT,
-  DEFAULT_FALLOFF_POWER,
-  DEFAULT_BACKGROUND_LIGHT_SPILL,
-  DEFAULT_SOLID_LIGHT_SOFTNESS,
-} from '../render/walls/ambientLightDepths';
+  computeRoomRenderStateKey,
+  makeWallPrewarmCtx,
+  wallTemplateToSnapshot,
+} from '../render/walls/roomRenderState';
+import type { RoomRuntimeCache } from './roomRuntimeCache';
 import {
   decideEntryWarm,
   type EntryWarmCoverageSnapshot,
@@ -272,30 +266,15 @@ export function tickEntryWarm(
   }
 
   // Compute the current render-state key for adoption-time validation.
-  // This mirrors the key computed in Phase A of makeLoadRoomPhases and by
-  // prewarmWallChunksForRoom, ensuring chunks built here are adopted with the
-  // correct key and stale chunks (if any) are rejected.
-  const currentRenderStateKey = computeRenderStateKey(
-    room.blockTheme ?? null,
-    room.worldNumber ?? 1,
-    room.lightingEffect ?? 'Ambient',
-    room.ambientLightDirection ?? 'omni',
-    room.blockSeamBlending ?? 'off',
-    entry.blockerKeys ?? new Set<string>(),
-    room.widthBlocks,
-    room.heightBlocks,
-    room.directionalBias    ?? DEFAULT_DIRECTIONAL_BIAS,
-    room.sideExposureStrength ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
-    room.minimumWallLight   ?? DEFAULT_MINIMUM_WALL_LIGHT,
-    room.falloffPower       ?? DEFAULT_FALLOFF_POWER,
-    room.backgroundLightSpill ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
-    room.solidLightSoftness ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
-  );
+  // Derived from the same canonical mapping used by makeLoadRoomPhases and
+  // prewarmWallChunksForRoom (see roomRenderState.ts), ensuring chunks built
+  // here are adopted with the correct key and stale chunks are rejected.
+  const currentRenderStateKey = computeRoomRenderStateKey(room, entry.blockerKeys);
 
   const t0 = performance.now();
 
-  const wallSnap = _wallTemplateToSnapshot(entry.wallTemplate);
-  const wallCtx  = _makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
+  const wallSnap = wallTemplateToSnapshot(entry.wallTemplate);
+  const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
 
   const wallResult = prewarmWallChunksForRoom(
     room.id,
@@ -600,61 +579,3 @@ function _finishWarm(
   }
 }
 
-/**
- * Wraps a RoomWallTemplate as a WallSnapshot (zero-copy — shares typed arrays).
- */
-function _wallTemplateToSnapshot(t: {
-  readonly wallCount:            number;
-  readonly xWorld:               Float32Array;
-  readonly yWorld:               Float32Array;
-  readonly wWorld:               Float32Array;
-  readonly hWorld:               Float32Array;
-  readonly isPlatformFlag:       Uint8Array;
-  readonly platformEdge:         Uint8Array;
-  readonly themeIndex:           Uint8Array;
-  readonly isInvisibleFlag:      Uint8Array;
-  readonly rampOrientationIndex: Uint8Array;
-  readonly isPillarHalfWidthFlag: Uint8Array;
-}): WallSnapshot {
-  return {
-    count:                 t.wallCount,
-    xWorld:                t.xWorld,
-    yWorld:                t.yWorld,
-    wWorld:                t.wWorld,
-    hWorld:                t.hWorld,
-    isPlatformFlag:        t.isPlatformFlag,
-    platformEdge:          t.platformEdge,
-    themeIndex:            t.themeIndex,
-    isInvisibleFlag:       t.isInvisibleFlag,
-    rampOrientationIndex:  t.rampOrientationIndex,
-    isPillarHalfWidthFlag: t.isPillarHalfWidthFlag,
-  };
-}
-
-/**
- * Builds a WallPrewarmContext from a room def and pre-computed runtime data.
- * Mirrors the private `_makeWallPrewarmCtx` in roomRenderChunkWarmScheduler.ts.
- */
-function _makeWallPrewarmCtx(
-  room: RoomDef,
-  wallSnapshot: WallSnapshot,
-  blockerKeys: Set<string> | undefined,
-): WallPrewarmContext {
-  return {
-    wallSnapshot,
-    worldNumber:          room.worldNumber ?? 1,
-    blockTheme:           room.blockTheme ?? null,
-    lightingEffect:       room.lightingEffect ?? 'Ambient',
-    ambientDirection:     room.ambientLightDirection ?? 'omni',
-    roomWidthBlocks:      room.widthBlocks,
-    roomHeightBlocks:     room.heightBlocks,
-    blockerKeys:          blockerKeys ?? new Set<string>(),
-    directionalBias:      room.directionalBias      ?? DEFAULT_DIRECTIONAL_BIAS,
-    sideExposureStrength: room.sideExposureStrength  ?? DEFAULT_SIDE_EXPOSURE_STRENGTH,
-    minimumWallLight:     room.minimumWallLight      ?? DEFAULT_MINIMUM_WALL_LIGHT,
-    falloffPower:         room.falloffPower          ?? DEFAULT_FALLOFF_POWER,
-    backgroundLightSpill: room.backgroundLightSpill  ?? DEFAULT_BACKGROUND_LIGHT_SPILL,
-    solidLightSoftness:   room.solidLightSoftness    ?? DEFAULT_SOLID_LIGHT_SOFTNESS,
-    seamBlending:         room.blockSeamBlending     ?? 'off',
-  };
-}
