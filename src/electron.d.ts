@@ -17,6 +17,12 @@ export interface ElectronSaveResult {
   error?: string;
   /** Present when ok is true. Absolute path of the directory that was written. */
   campaignDir?: string;
+  /** Present when ok is true, from `exportCampaignWithProgress`: rooms written or updated. */
+  writtenRooms?: number;
+  /** Present when ok is true, from `exportCampaignWithProgress`: rooms whose hash matched (unchanged). */
+  skippedRooms?: number;
+  /** Present when ok is true, from `exportCampaignWithProgress`: stale cache files removed. */
+  removedCount?: number;
 }
 
 /** Options for `exportCampaignWithProgress`. */
@@ -104,9 +110,12 @@ export interface DustWeaverElectronAPI {
   /**
    * Registers a callback that receives live `ExportProgressEvent` objects
    * while `exportCampaignWithProgress` is running.
-   * Call `offExportProgress()` once the export resolves.
+   *
+   * Returns an unsubscribe function that removes exactly this listener.
+   * Prefer it over `offExportProgress()` when concurrent exports are
+   * possible, since that removes every listener on the channel.
    */
-  onExportProgress(callback: (event: ExportProgressEvent) => void): void;
+  onExportProgress(callback: (event: ExportProgressEvent) => void): () => void;
 
   /**
    * Removes all progress event listeners registered via `onExportProgress`.

@@ -5,7 +5,7 @@
  * rotate, flip, multi-select, and rope-anchor hit-test operations.
  */
 
-import { EditorState } from './editorState';
+import { EditorState, allocateUid } from './editorState';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import {
   hitTestZone,
@@ -14,6 +14,35 @@ import {
   hitTestTransition,
 } from './editorHitTest';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+
+interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
+
+/**
+ * Splits a rectangular zone around a single removed cell, returning up to
+ * four rectangles that tile the remaining area. Lets deleting one tile of a
+ * multi-tile water/lava zone leave the rest of the zone intact instead of
+ * removing the whole rectangle.
+ */
+function splitZoneAroundCell(zone: BlockRect, cellX: number, cellY: number): BlockRect[] {
+  const x0 = zone.xBlock;
+  const y0 = zone.yBlock;
+  const x1 = zone.xBlock + zone.wBlock;
+  const y1 = zone.yBlock + zone.hBlock;
+  const pieces: BlockRect[] = [];
+  if (cellY > y0) {
+    pieces.push({ xBlock: x0, yBlock: y0, wBlock: x1 - x0, hBlock: cellY - y0 });
+  }
+  if (cellY + 1 < y1) {
+    pieces.push({ xBlock: x0, yBlock: cellY + 1, wBlock: x1 - x0, hBlock: y1 - (cellY + 1) });
+  }
+  if (cellX > x0) {
+    pieces.push({ xBlock: x0, yBlock: cellY, wBlock: cellX - x0, hBlock: 1 });
+  }
+  if (cellX + 1 < x1) {
+    pieces.push({ xBlock: cellX + 1, yBlock: cellY, wBlock: x1 - (cellX + 1), hBlock: 1 });
+  }
+  return pieces;
+}
 
 /**
  * Deletes the element at the cursor location.
@@ -227,24 +256,33 @@ export function deleteAtCursor(state: EditorState): void {
     }
   }
 
-  // Check water zones
+  // Check water zones. If the hit zone spans more than one tile, split it
+  // into the remaining rectangles instead of removing the whole thing.
   const waterZones = room.waterZones ?? [];
   for (let i = 0; i < waterZones.length; i++) {
-    if (hitTestZone(waterZones[i], bx, by)) {
-      const removedUid = waterZones[i].uid;
+    const zone = waterZones[i];
+    if (hitTestZone(zone, bx, by)) {
+      const removedUid = zone.uid;
       waterZones.splice(i, 1);
+      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
+        waterZones.push({ uid: allocateUid(state), ...piece });
+      }
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       markLiquidBodiesDirty();
       return;
     }
   }
 
-  // Check lava zones
+  // Check lava zones. Same split-instead-of-remove behaviour as water zones.
   const lavaZones = room.lavaZones ?? [];
   for (let i = 0; i < lavaZones.length; i++) {
-    if (hitTestZone(lavaZones[i], bx, by)) {
-      const removedUid = lavaZones[i].uid;
+    const zone = lavaZones[i];
+    if (hitTestZone(zone, bx, by)) {
+      const removedUid = zone.uid;
       lavaZones.splice(i, 1);
+      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
+        lavaZones.push({ uid: allocateUid(state), ...piece });
+      }
       state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       markLiquidBodiesDirty();
       return;

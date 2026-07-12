@@ -209,6 +209,69 @@ test('validateRoomCacheOnDisk rejects a file path that escapes ROOMS/', () => {
   assert.match(result.error, /escapes ROOMS directory/);
 });
 
+test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes normally', () => {
+  // Regression test for the "export stuck at room 19/20: Crimson Throne"
+  // report. The room's boss enemy object and dialogueTriggers data were
+  // suspected (but not confirmed) as the cause — this exercises the real
+  // room file through the actual write path to confirm it serializes,
+  // hashes, and writes like any other room.
+  const roomPath = path.join(
+    __dirname, '..', '..', 'ASSETS', 'CAMPAIGNS', 'DUSTWEAVER_CAMPAIGN', 'ROOMS', 'crimson_throne_room.json',
+  );
+  const crimsonThroneRoom = JSON.parse(fs.readFileSync(roomPath, 'utf8')) as TestRoom & Record<string, unknown>;
+  assert.ok('enemies' in crimsonThroneRoom, 'fixture must still contain the boss enemy data');
+  assert.ok('dialogueTriggers' in crimsonThroneRoom, 'fixture must still contain dialogue trigger data');
+
+  const campaignDir = makeTmpDir();
+  const otherRooms: TestRoom[] = Array.from({ length: 19 }, (_, i) => ({
+    id: `room${i}`,
+    name: `room${i}`,
+    transitions: [],
+  }));
+  const rooms = [...otherRooms, crimsonThroneRoom as unknown as TestRoom];
+
+  const campaign: TestCampaign = {
+    v: 1,
+    kind: 'DustWeaverCampaign',
+    campaign: { id: 'TEST_CAMPAIGN', title: 'Test Campaign' },
+    metadata: { version: 1 },
+    worldMap: {},
+    rooms,
+  };
+
+  const events: CampaignProgressEvent[] = [];
+  const result = exportCampaignToDisk({
+    campaign,
+    campaignMeta: campaign.campaign,
+    campaignId: campaign.campaign.id,
+    rooms,
+    roomIdFirstIndex: roomIdFirstIndexFor(campaign as unknown as ReturnType<typeof makeCampaign>),
+    isOfficialCampaign: false,
+    campaignDir,
+    onProgress: (e) => events.push(e),
+  });
+
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.writtenRooms, 20);
+  }
+  assert.ok(
+    events.some((e) => e.step === 'exporting-room' && e.roomId === 'crimson_throne' && e.roomIndex === 20),
+    'crimson_throne must be reported as room 20/20, not stuck at 19/20',
+  );
+  // The 'complete' event itself is sent by the IPC handler after
+  // exportCampaignToDisk() returns (see electron/main.cjs), not by
+  // exportCampaignToDisk() itself — so it's not expected in `events` here.
+  // What matters is that exportCampaignToDisk() resolves ok:true, which the
+  // handler uses to unconditionally send 'complete'.
+
+  const writtenPath = path.join(campaignDir, 'ROOMS', 'crimson_throne_room.json');
+  assert.ok(fs.existsSync(writtenPath));
+  const written = JSON.parse(fs.readFileSync(writtenPath, 'utf8')) as Record<string, unknown>;
+  assert.ok('enemies' in written, 'boss enemy data must survive the write');
+  assert.ok('dialogueTriggers' in written, 'dialogue trigger data must survive the write');
+});
+
 test('rolling backups are pruned to MAX_BACKUPS after repeated exports', () => {
   const campaignDir = makeTmpDir();
 

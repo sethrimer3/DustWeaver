@@ -48,13 +48,23 @@ contextBridge.exposeInMainWorld('dustweaverElectron', {
   /**
    * Registers a callback that receives ExportProgressEvent objects while
    * `exportCampaignWithProgress` is running.
-   * Call `offExportProgress()` once the export promise resolves.
+   *
+   * Returns an unsubscribe function that removes exactly this listener —
+   * prefer calling it over `offExportProgress()` when multiple exports could
+   * be in flight, since `offExportProgress()` removes ALL listeners on the
+   * channel and can discard an unrelated/concurrent export's callback.
    */
   onExportProgress: (callback) => {
-    ipcRenderer.on('dw:export-progress', (_event, data) => callback(data));
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('dw:export-progress', listener);
+    return () => ipcRenderer.removeListener('dw:export-progress', listener);
   },
 
-  /** Removes all progress event listeners added via `onExportProgress`. */
+  /**
+   * Removes all progress event listeners added via `onExportProgress`.
+   * Retained for backward compatibility; prefer the unsubscribe function
+   * returned by `onExportProgress` when possible.
+   */
   offExportProgress: () => {
     ipcRenderer.removeAllListeners('dw:export-progress');
   },

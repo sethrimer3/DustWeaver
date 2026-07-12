@@ -27,6 +27,7 @@ import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCam
 import { WORLD_NAMES, WORLD_ORDER } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
 import { createExportProgressModal } from './editorExportProgressModal';
+import { resolveExportOutcomeEvent } from './exportOutcome';
 import type { SavedCampaignV1, CampaignSpawnData } from '../levels/campaignSchema';
 import {
   ROOM_CACHE_VERSION,
@@ -281,28 +282,37 @@ async function runElectronProgressExport(
   const modal = createExportProgressModal(progressRoot);
   modal.update({ step: 'serializing', message: 'Serializing campaign…' });
 
+  // The final 'complete'/'error' progress event and the resolved IPC result
+  // both report completion, and their relative arrival order isn't
+  // guaranteed. Track whether the modal already reached a terminal state so
+  // whichever arrives second doesn't get discarded (leaving the modal stuck)
+  // or double-applied.
+  let settled = false;
+
   // Register progress listener before invoking so no events are missed.
-  electronApi.onExportProgress((event) => {
+  // Use the returned unsubscribe function rather than offExportProgress() so
+  // a concurrent export's listener can't be torn down by this one.
+  const unsubscribe = electronApi.onExportProgress((event) => {
     modal.update(event);
+    if (event.step === 'complete' || event.step === 'error') settled = true;
   });
 
-  let result: Awaited<ReturnType<typeof electronApi.exportCampaignWithProgress>>;
   try {
-    result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign });
+    const result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign });
+
+    // The invoke result is authoritative: if the final progress event was
+    // delayed or missed, drive the modal to its terminal state directly
+    // using the completion metadata the IPC result carries.
+    const outcomeEvent = resolveExportOutcomeEvent(settled, result);
+    if (outcomeEvent !== null) modal.update(outcomeEvent);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    modal.update({ step: 'error', message: `Export failed: ${msg}` });
-    electronApi.offExportProgress();
-    return;
+    if (!settled) {
+      const msg = err instanceof Error ? err.message : String(err);
+      modal.update({ step: 'error', message: `Export failed: ${msg}` });
+    }
+  } finally {
+    unsubscribe();
   }
-
-  // Clean up the listener immediately after the IPC call resolves.
-  electronApi.offExportProgress();
-
-  if (!result.ok) {
-    modal.update({ step: 'error', message: `Export failed: ${result.error ?? 'Unknown error'}` });
-  }
-  // On success the modal auto-dismisses via the 'complete' event sent by main.
 }
 
 /**

@@ -457,7 +457,7 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
     });
 
     console.log(`[dw:export-campaign-with-progress] ${completeMsg} → ${campaignDir}`);
-    return { ok: true, campaignDir };
+    return { ok: true, campaignDir, writtenRooms, skippedRooms, removedCount };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[dw:export-campaign-with-progress] Write failed:", message);
