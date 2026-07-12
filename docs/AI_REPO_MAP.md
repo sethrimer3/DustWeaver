@@ -50,13 +50,14 @@ Important files and roles:
 - `src/render/walls/backgroundBlockRenderer.ts`: background block chunks and prewarm/adopt APIs.
 - `src/render/walls/chunkRenderCache.ts`: chunk cache extraction/injection.
 - `src/render/walls/roomRenderCacheStore.ts`: render-state key and memoization.
+- `src/render/walls/roomRenderState.ts`: single source of truth for RoomDef → render-state params (defaults, render-state key, WallPrewarmContext, wall-template snapshot adapter). Pure, Node-testable. Change defaults here only deliberately — they feed the prewarm/adopt key.
 - `src/render/mapSketchRenderer.ts`: world/room sketch output. Marked regression-prone in planning notes.
 
 ## Room and world loading
 
 Important files and roles:
 
-- `src/screens/gameLoadRoomPhases.ts`: six-phase room-load generator extracted from `gameScreen.ts`. It uses setter callbacks so Phase A updates outer `gameScreen.ts` state immediately. Read this before changing load order.
+- `src/screens/gameLoadRoomPhases.ts`: six-phase room-load generator extracted from `gameScreen.ts`. It uses setter callbacks so Phase A updates outer `gameScreen.ts` state immediately. Read this before changing load order. The full-load generator and `applyResidentRoomActivation` (hot-swap) share the room-activation helpers in this file (`applyRoomPresentationState`, `resetRoomScopedSimState`, `applyPlayerWeaveWorldFields`, `applyRoomEnvironmentAndScheduling`) — add new per-room renderer/effect/singleton wiring to the helpers, not to one caller.
 - `src/screens/roomRuntimeCache.ts`: prepared runtime entry cache and readiness checks.
 - `src/screens/preparedRoomRuntime.ts`: central cache/baked/fallback wall-template resolution and diagnostics.
 - `src/screens/gameRoomWalls.ts`: wall template building and incremental wall-template generator.

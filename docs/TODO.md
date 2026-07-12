@@ -11,6 +11,7 @@ Keep this file short and actionable. It is not a design document or changelog.
 
 ## High priority
 
+- [ ] Regenerate baked wall templates for the official campaign rooms whose baked hash is stale (dev console logs `[wallTemplate] roomId=… source=fallback reason=stale_hash` for at least: bend, seal_chamber, the_fall, lobby, tall_shaft, chasm, overgrown_shaft, underwater_lake, magma_corridor, a_big_ask, lava_tube, crimson_throne). Until regenerated, every load of these rooms skips the baked fast path and rebuilds wall templates via the incremental merge fallback. Re-export the rooms from the editor (or run the bake path) so `bakedWallTemplate` matches current wall data.
 - [ ] Capture live browser transition timings for representative rooms using `__dwBenchPingPong(roomA, roomB, iterations)` and inspect `__dwTransitionStats(n)`.
 - [ ] Based on measured transition phases, choose the next bottleneck to optimize rather than speculating.
 - [ ] Verify whether first-entry resident wall-template builds on very large rooms still cause visible frame spikes.

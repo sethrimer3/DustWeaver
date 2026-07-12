@@ -49,6 +49,37 @@ transition is **not** executed immediately.  Instead:
 
 Result: the player sees a brief cinematic black flash instead of a freeze.
 
+### Room Activation Helpers (BUILD 440)
+
+Two code paths make a room the *active* room:
+
+1. **Full load** — `makeLoadRoomPhases` (six-phase generator; fresh/reset WorldState).
+2. **Resident hot-swap** — `applyResidentRoomActivation` (prebuilt resident WorldState).
+
+Both route through shared helpers in `screens/gameLoadRoomPhases.ts`:
+
+- `applyRoomPresentationState` — room metadata setters, camera-transition cancel,
+  block theme, ambient blocker keys (cache → build), block lighting, seam
+  blending, prewarmed-chunk adoption (key from `render/walls/roomRenderState.ts`),
+  and room music.
+- `resetRoomScopedSimState` — module-level AI singleton resets (snake, Radiant
+  Tether, Radiant Web) + world grapple-flag reset.  Register any new
+  module-level sim singleton reset here.
+- `applyPlayerWeaveWorldFields` — equipped-weave world fields + characterId.
+- `applyRoomEnvironmentAndScheduling` — environment-effect inits, cloak/
+  decoration resets, wall-decoration cache, reusable-snapshot reset, skill-tomb
+  init, explored-room marking, camera snap/clamp, sprite decode preloads, and
+  the preload/chunk-prewarm schedulers.
+
+New per-room renderer, effect, or singleton wiring belongs in the helpers, not
+in one of the two callers — the paths must never diverge.
+
+`render/walls/roomRenderState.ts` is the single source of the RoomDef →
+render-state parameter mapping (all `?? default` fallbacks).  The render-state
+key derived from it must be identical at prewarm time and adoption time or
+prewarmed chunks are silently discarded (`staleRenderState`); this invariant is
+unit-tested in `tests/roomRenderState.test.ts`.
+
 ### Asset Preloading (`render/roomAssetPreloader.ts`)
 
 - `preloadRoomThemeSprites(room)` — fires `loadImg()` for every sprite URL in the room's
