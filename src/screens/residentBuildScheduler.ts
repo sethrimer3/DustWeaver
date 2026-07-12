@@ -457,6 +457,14 @@ export class ZoneTransitionState {
     this.pending = null;
     return taken;
   }
+
+  /**
+   * Discard any pending transition without activating it.  Used by the
+   * transition coordinator's reset/shutdown path; a no-op while inactive.
+   */
+  clear(): void {
+    this.pending = null;
+  }
 }
 
 // ── InitialZoneLoadProgress ───────────────────────────────────────────────────
