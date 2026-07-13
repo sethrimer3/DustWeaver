@@ -7,6 +7,7 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 | Task type | Start here | Then inspect |
 |---|---|---|
 | App flow, screen navigation, save-slot start behavior | `src/game.ts` | `src/ui/mainMenu.ts`, `src/ui/weaveLoadout.ts`, `src/progression/` |
+| Campaign starting-options normalization (health/containers/dust/weaves) | `src/progression/campaignStartingOptions.ts` | `src/levels/campaignSchema.ts`, `src/progression/unlocks.ts`, `src/progression/playerProgress.ts` |
 | Gameplay loop, fixed tick, input-to-sim orchestration | `src/screens/gameScreen.ts` | `src/screens/gameCommandProcessor.ts`, `src/sim/tick.ts`, `src/input/handler.ts` |
 | Room load / transition hitch | `src/screens/gameLoadRoomPhases.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/residentRoomManager.ts`, `src/screens/zoneResidentLoader.ts`, `src/screens/roomRuntimeCache.ts`, `src/debug/transitionProfiler.ts` |
 | Resident-room / hot-swap behavior | `src/screens/residentRoomManager.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/playerTransfer.ts`, `src/screens/gameLoadRoomPhases.ts` |

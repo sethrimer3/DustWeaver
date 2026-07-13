@@ -13,7 +13,7 @@ DustWeaver is a TypeScript/Vite/Electron-capable browser game. The current codeb
 - `src/levels/`: room definitions, room registry, compact room schema, lazy room-file loading, campaign metadata, and migration/audit helpers.
 - `src/editor/`: custom campaign and room editor.
 - `src/ui/`: menus, settings, debug panel controls, save/load UI, and non-gameplay HTML UI.
-- `src/progression/`: save-slot and player-progress state.
+- `src/progression/`: save-slot, player-progress state, and campaign starting-options application. `src/progression/campaignStartingOptions.ts` is the single shared helper for normalizing and applying `CampaignSpawnData` starting fields (health, containers, dust types, weaves) to a `PlayerProgress` in either `'merge'` mode (official campaign, never reduces existing count) or `'fresh'` mode (custom packed campaign, assigns exact configured count).
 - `src/tests/`: node test files run by `npm test`.
 
 ## Game loop / update / render flow

@@ -8,10 +8,7 @@ import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
 import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, clearRegistryAndApplyCampaignMetadata, ROOM_REGISTRY } from './levels/rooms';
 import { setActiveCampaignId } from './levels/campaigns';
-import { stringToParticleKind } from './editor/roomJsonSchema';
-import { unlockDustType, unlockActiveWeave } from './progression/unlocks';
-import { WEAVE_REGISTRY } from './sim/weaves/weaveDefinition';
-import { PLAYER_INITIAL_HEALTH } from './screens/gameSpawn';
+import { applyCampaignStartingOptions } from './progression/campaignStartingOptions';
 import {
   ensureCampaignRoomCache,
   loadRoomForGameplayAsync,
@@ -176,26 +173,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         // apply those values to progress now.  This mirrors the logic in the
         // customCampaignPlay branch so both paths start consistently.
         if (officialSpawn !== null && progress.exploredRoomIds.length === 0) {
-          if (officialSpawn.startingHealth !== undefined) {
-            progress.startingHealth = Math.max(1, Math.min(officialSpawn.startingHealth, PLAYER_INITIAL_HEALTH));
-          }
-          if (officialSpawn.startingDustContainerCount !== undefined) {
-            progress.dustContainerCount = Math.max(
-              progress.dustContainerCount,
-              Math.max(0, Math.floor(officialSpawn.startingDustContainerCount)),
-            );
-          }
-          if (Array.isArray(officialSpawn.startingDustTypes)) {
-            for (const name of officialSpawn.startingDustTypes) {
-              const kind = stringToParticleKind(name);
-              if (kind !== null) unlockDustType(progress, kind);
-            }
-          }
-          if (Array.isArray(officialSpawn.startingWeaves)) {
-            for (const weaveId of officialSpawn.startingWeaves) {
-              if (WEAVE_REGISTRY.has(weaveId)) unlockActiveWeave(progress, weaveId);
-            }
-          }
+          applyCampaignStartingOptions(progress, officialSpawn, 'merge');
         }
 
         // ── Dev diagnostics logged every time Play is pressed ─────────────────
@@ -383,29 +361,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           if (cSpawn !== undefined) {
             startRoomId = cSpawn.roomId;
             customSpawnOverride = [cSpawn.xBlock, cSpawn.yBlock];
-            // Apply campaign spawn starting options to a fresh progress.
             campaignStartProgress = createDefaultProgress();
-            if (cSpawn.startingHealth !== undefined) {
-              campaignStartProgress.startingHealth = Math.max(1, Math.min(cSpawn.startingHealth, PLAYER_INITIAL_HEALTH));
-            }
-            if (cSpawn.startingDustContainerCount !== undefined) {
-              campaignStartProgress.dustContainerCount = Math.max(0, Math.floor(cSpawn.startingDustContainerCount));
-            }
-            if (Array.isArray(cSpawn.startingDustTypes)) {
-              for (const name of cSpawn.startingDustTypes) {
-                const kind = stringToParticleKind(name);
-                if (kind !== null) {
-                  unlockDustType(campaignStartProgress, kind);
-                }
-              }
-            }
-            if (Array.isArray(cSpawn.startingWeaves)) {
-              for (const weaveId of cSpawn.startingWeaves) {
-                if (WEAVE_REGISTRY.has(weaveId)) {
-                  unlockActiveWeave(campaignStartProgress, weaveId);
-                }
-              }
-            }
+            applyCampaignStartingOptions(campaignStartProgress, cSpawn, 'fresh');
           } else {
             startRoomId = campaign.campaign.initialRoomId;
           }
