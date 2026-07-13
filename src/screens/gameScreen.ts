@@ -132,6 +132,10 @@ import {
 import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
 import { logWallTemplateDiagnosticsSummary } from './preparedRoomRuntime';
 import { ZoneResidentLoader } from './zoneResidentLoader';
+import {
+  applyRoomPreloadAnticipationPolicy,
+  type RoomPreloadAnticipationPorts,
+} from './roomPreloadAnticipationPolicy';
 
 const FIXED_DT_MS = 16.666;
 
@@ -144,12 +148,6 @@ const BASE = import.meta.env.BASE_URL;
 
 const IS_TOUCH_DEVICE = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-/**
- * Number of medium blocks from a room boundary at which the urgent preloader
- * kicks in for unprepared transition targets.  Chosen to give ~166ms lead time
- * at a brisk walk speed (~1 block/10ms) before the transition can fire.
- */
-const URGENT_PRELOAD_PROXIMITY_BLOCKS = 10;
 
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 
@@ -497,6 +495,30 @@ export function startGameScreen(
     onBuildPublished: () => { _updateRadiusReadyCounts(); },
     isDevMode: import.meta.env.DEV,
   });
+
+  // ── Preload anticipation policy ports (BUILD 443) ────────────────────────
+  // Created once here; passed by reference into applyRoomPreloadAnticipationPolicy
+  // each frame.  No per-frame allocation.
+  const preloadAnticipationPorts: RoomPreloadAnticipationPorts = {
+    getRuntimeEntry: (id) => {
+      const e = roomRuntimeCache.get(id);
+      return e === undefined ? undefined : { fullyPrepared: isEntryFullyPrepared(e) };
+    },
+    prioritizeRuntime: (id) => { _preloadScheduleHandle?.prioritize(id); },
+    decodeThemeSprites: (id) => {
+      const r = ROOM_REGISTRY.get(id);
+      if (r !== undefined) void decodeRoomThemeSprites(r);
+    },
+    decodeBackground: (id) => {
+      const r = ROOM_REGISTRY.get(id);
+      if (r !== undefined) decodeRoomBackground(r);
+    },
+    ensureChunkPrewarm: (id) => { ensureChunkPrewarmQueued(id, 'proximity'); },
+    getResident: (id) => residentRoomManager.getResident(id),
+    enqueueResidentBuild: (id, priority, reason) => {
+      residentBuildScheduler.enqueue({ roomId: id, priority, reason });
+    },
+  };
 
   // Handle for the current idle preload schedule so it can be cancelled when
   // the player switches rooms before the previous schedule completes.
@@ -1379,89 +1401,16 @@ export function startGameScreen(
       transitionDebugState,
     );
 
-    // ── Proximity-based priority preload ───────────────────────────────────
-    // When the player is within URGENT_PRELOAD_PROXIMITY_BLOCKS of a room
-    // boundary, boost the preload priority for that transition target.
-    //
-    // - Runtime-cache boost (`prioritize`): only needed while the runtime entry
-    //   is still being computed.
-    // - Chunk-prewarm boost (`ensureChunkPrewarmQueued`): ensures a prewarm task
-    //   exists and is at the front of the queue.  Unlike the old prioritize-only
-    //   call, this also creates a new task if the room was already completed,
-    //   evicted, or never scheduled — preventing a silent no-op near the boundary.
-    //
-    // We never block the gameplay frame here — if the player crosses before
-    // preparation finishes the async overlay path will handle it.
-    {
-      const _proxPlayer = world.clusters[0];
-      if (_proxPlayer !== undefined && _proxPlayer.isAliveFlag === 1) {
-        const _px = _proxPlayer.positionXWorld - currentRoomOriginXWorld;
-        const _py = _proxPlayer.positionYWorld - currentRoomOriginYWorld;
-        for (let _ti = 0; _ti < currentRoom.transitions.length; _ti++) {
-          const _t = currentRoom.transitions[_ti];
-          const _tId = _t.targetRoomId;
-
-          let _isNear = false;
-          switch (_t.direction) {
-            case 'right': _isNear = _px >= (currentRoom.widthBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
-            case 'left':  _isNear = _px <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
-            case 'down':  _isNear = _py >= (currentRoom.heightBlocks - URGENT_PRELOAD_PROXIMITY_BLOCKS) * BLOCK_SIZE_MEDIUM; break;
-            case 'up':    _isNear = _py <= URGENT_PRELOAD_PROXIMITY_BLOCKS * BLOCK_SIZE_MEDIUM; break;
-          }
-          if (_isNear) {
-            const _tEntry = roomRuntimeCache.get(_tId);
-            // Boost runtime-cache build if not yet fully prepared.
-            if (_tEntry === undefined || !isEntryFullyPrepared(_tEntry)) {
-              _preloadScheduleHandle?.prioritize(_tId);
-              // Also aggressively decode sprites for this exact target room so
-              // they are GPU-rasterized before the player crosses. Fire-and-forget.
-              const _tRoom = ROOM_REGISTRY.get(_tId);
-              if (_tRoom !== undefined) void decodeRoomThemeSprites(_tRoom);
-              if (_tRoom !== undefined) decodeRoomBackground(_tRoom);
-            }
-            // Always boost chunk prewarm when near — this ensures that rooms
-            // whose prewarm task completed, was never queued, or was evicted
-            // get a new task created rather than silently skipped.
-            ensureChunkPrewarmQueued(_tId, 'proximity');
-            // Boost resident build to priority 1 (hot-swap transition target)
-            // so it is built as soon as possible in the incremental scheduler.
-            {
-              const _tResident = residentRoomManager.getResident(_tId);
-              if (_tResident === undefined || !_tResident.runtimeReady) {
-                residentBuildScheduler.enqueue({ roomId: _tId, priority: 1, reason: 'proximity' });
-              }
-            }
-            break; // one priority boost per frame is sufficient
-          }
-        }
-
-        // ── Velocity-direction resident pre-build (priority 2) ──────────────
-        // If the player is moving fast enough in a direction that matches a
-        // room transition, enqueue the target at priority 2 so the incremental
-        // scheduler works on it before radius-1/2 background entries.
-        {
-          const _pvx = _proxPlayer.velocityXWorld;
-          const _pvy = _proxPlayer.velocityYWorld;
-          const _absVx = Math.abs(_pvx);
-          const _absVy = Math.abs(_pvy);
-          const MIN_VEL_DIRECTION_WORLD = 1.0; // world units/tick
-          if (_absVx > MIN_VEL_DIRECTION_WORLD || _absVy > MIN_VEL_DIRECTION_WORLD) {
-            const _velDir = _absVx >= _absVy
-              ? (_pvx > 0 ? 'right' : 'left')
-              : (_pvy > 0 ? 'down'  : 'up');
-            for (const _vt of currentRoom.transitions) {
-              if (_vt.direction === _velDir) {
-                const _vtResident = residentRoomManager.getResident(_vt.targetRoomId);
-                if (_vtResident === undefined || !_vtResident.runtimeReady) {
-                  residentBuildScheduler.enqueue({ roomId: _vt.targetRoomId, priority: 2, reason: 'velocityDirection' });
-                }
-                break;
-              }
-            }
-          }
-        }
-      }
-    }
+    // ── Room preload anticipation policy (BUILD 443) ──────────────────────
+    // Extracted to roomPreloadAnticipationPolicy.ts.  Handles proximity-based
+    // and velocity-direction-based preload boosting for transition targets.
+    applyRoomPreloadAnticipationPolicy(
+      world.clusters[0],
+      currentRoom,
+      currentRoomOriginXWorld,
+      currentRoomOriginYWorld,
+      preloadAnticipationPorts,
+    );
 
     // ── Dialogue trigger check ─────────────────────────────────────────────
     // Each trigger fires once per room visit (firedDialogueTriggerUids is

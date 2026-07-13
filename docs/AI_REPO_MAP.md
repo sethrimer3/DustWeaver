@@ -83,6 +83,7 @@ Common risks:
 - `src/screens/gameTransitions.ts`: trigger strip detection. Transitions are independent trigger strips, not holes.
 - `src/screens/gameRoomTransitionOrchestrator.ts`: transition boundary detection, cooldown, and activation callback dispatch.
 - `src/screens/roomTransitionLoadCoordinator.ts`: transition execution after the boundary fires — path selection (cross-zone → hot-swap → prepared instant → async), async load-generator state, pre-transition velocity, cross-zone pending activation, blocking-gameplay contract. Ports-injected and Node-testable (`tests/roomTransitionLoadCoordinator.test.ts`); never imports gameScreen.
+- `src/screens/roomPreloadAnticipationPolicy.ts`: stateless, Node-safe module for per-frame preload anticipation. Runs proximity policy (first authored transition within 10 medium blocks → priority 1 resident build + runtime/decode/prewarm boosts) and velocity-direction policy (dominant-axis direction → priority 2 resident build). All side effects delegated through `RoomPreloadAnticipationPorts`; ports object created once in `startGameScreen`. Pinned by `tests/roomPreloadAnticipationPolicy.test.ts`.
 
 Do not change boundary holes/trigger geometry casually. Planning notes explicitly warn this has caused regressions.
 

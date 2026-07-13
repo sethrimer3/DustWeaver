@@ -150,6 +150,32 @@ criteria, ordering invariants such as capture-before-detach and
 freeze-before-swap) are pinned by
 `tests/roomTransitionLoadCoordinator.test.ts`.
 
+### Room Preload Anticipation Policy (BUILD 443)
+
+`screens/roomPreloadAnticipationPolicy.ts` is a stateless, Node-safe module
+that runs two per-frame policies deciding which adjacent rooms should receive
+urgent preparation work:
+
+- **Proximity policy** — when the player's room-local position is within 10
+  medium blocks of a direction-matching boundary, the first authored transition
+  wins; its target receives: runtime-cache priority promotion (when not fully
+  prepared), theme-sprite and background decode requests (when not fully
+  prepared), unconditional render-chunk prewarm, and resident-build priority 1
+  (`'proximity'`).
+- **Velocity-direction policy** — when either velocity axis exceeds 1.0
+  world unit/tick, the dominant axis selects a direction (horizontal wins on
+  ties); the first authored transition in that direction has its resident-build
+  priority set to 2 (`'velocityDirection'`).
+
+The module exposes `RoomPreloadAnticipationPorts` — a narrow structural
+interface whose implementation is created once during `startGameScreen` and
+passed by reference every frame.  All queue ownership and state remain with the
+existing schedulers (`ResidentBuildScheduler`, `roomRenderChunkWarmScheduler`,
+`roomRuntimeCache`, `roomAssetPreloader`).  The policy module never imports
+`gameScreen.ts`.
+
+Behavior is pinned by `tests/roomPreloadAnticipationPolicy.test.ts`.
+
 ### Asset Preloading (`render/roomAssetPreloader.ts`)
 
 - `preloadRoomThemeSprites(room)` — fires `loadImg()` for every sprite URL in the room's
