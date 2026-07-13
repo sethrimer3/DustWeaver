@@ -1011,8 +1011,8 @@ Run a manual foreground cross-zone round trip in a normal browser to close the P
 ### Branch, commit hashes, push result, working-tree status
 
 - **Branch:** `main`
-- **Commit hash:** See commit message below after push.
-- **Push result:** Confirmed exit 0.
-- **Working-tree status:** Clean after commit and push.
+- **Commit hash:** `9b970d5b`
+- **Push result:** Exit 0 (up-to-date; auto-sync had already pushed the branch tip).
+- **Working-tree status:** Clean.
 
 Do not delete the planning sections above.
