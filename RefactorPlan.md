@@ -1,3 +1,68 @@
+## Phase Four — Room Preload Anticipation Policy Extraction (BUILD 443)
+
+### What was done
+
+Extracted the 82-line inline preload anticipation block from `gameScreen.ts`'s frame loop into a new stateless, Node-testable module: `src/screens/roomPreloadAnticipationPolicy.ts`.
+
+### Module added: `roomPreloadAnticipationPolicy.ts`
+
+- `dominantVelocityDirection(vx, vy)` — pure direction helper (strict `> 1.0` threshold, horizontal wins ties)
+- `selectProximityTarget(px, py, room)` — first authored near transition within 10 medium blocks (inclusive `>=`/`<=`)
+- `selectVelocityTarget(dir, room)` — first authored matching transition in velocity direction
+- `applyRoomPreloadAnticipationPolicy(player, room, originX, originY, ports)` — single per-frame call site
+- `RoomPreloadAnticipationPorts` interface — narrow structural port created once in `startGameScreen`, no per-frame allocation
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/screens/roomPreloadAnticipationPolicy.ts` | New — stateless policy module |
+| `src/tests/roomPreloadAnticipationPolicy.test.ts` | New — 44 characterization tests |
+| `src/screens/gameScreen.ts` | Inline 82-line block replaced with policy call; `URGENT_PRELOAD_PROXIMITY_BLOCKS` removed |
+| `src/build-info.ts` | BUILD_NUMBER 442 → 443 |
+| `docs/ARCHITECTURE.md` | Added policy module documentation |
+| `docs/AI_REPO_MAP.md` | Added routing row |
+
+### Tests added
+
+44 new tests covering: missing/dead player, nonzero room origin, all four proximity directions, exact threshold inclusivity (`>=`/`<=`), just-outside threshold, authored ordering, one proximity promotion per frame, missing/partial/fully prepared runtime entries, all four velocity directions, exact 1.0 exclusion, horizontal tie-breaking, dominant-axis behavior, and combined same/different target cases.
+
+Suite grew from 495 to 539.
+
+### Validation
+
+| Command | Exit code | Notes |
+|---|---|---|
+| `npm test` | 0 | 539/539 pass |
+| `npm run build` | 0 | chunk size warning only |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm run lint` | 1 | 7 pre-existing errors only (editorFillBrush.test.ts) |
+
+### Behavioral delta
+
+None. Extraction is semantically equivalent to the original block — authored-order selection, exact proximity inclusivity, strict velocity threshold (`> 1.0`), horizontal tie-breaking all preserved. No new per-frame allocation introduced.
+
+### Browser testing
+
+RAF does not advance in headless environment. Boundary approach, velocity prediction, prepared/unprepared destinations, and resident readiness could not be exercised via browser.
+
+### Compatibility
+
+No thresholds or priorities altered. No transition geometry changed. No room-loading paths changed.
+
+### Git status
+
+- Branch: main
+- Build: 443
+- Commits: `9b970d5b`, `952911fa` (pushed, exit 0)
+- Working tree: clean
+
+### Recommended next action
+
+Run a manual foreground cross-zone round trip in-browser using `__dwTransitionStats()` to close the combined Phase Three/Four runtime-validation gap.
+
+---
+
 ## Phase Five — Centralize campaign-spawn starting-option application (BUILD 444)
 
 ### Baseline (Build 443, branch main, commit b0f6e65a)
