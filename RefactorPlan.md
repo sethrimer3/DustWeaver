@@ -459,8 +459,8 @@ documentation-only and must commit and push only `RefactorPlan.md`.
 
 ### Completion record
 
-Completed by Codex on 2026-07-13. Implementation commit: pending creation at
-the time of this completion update; record it here immediately after commit.
+Completed by Codex on 2026-07-13. Implementation commit: `91a9482`
+(`Auto-sync 2026-07-13 18:58:03`, pushed to `origin/main`).
 
 Files changed:
 
