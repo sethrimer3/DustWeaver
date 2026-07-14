@@ -1679,3 +1679,44 @@ sequence as before.
 
 Phase Ten is closed. Do not begin Phase Eleven as part of this
 implementation run.
+
+---
+
+## Phase Eleven audit — no candidate found
+
+Planned from `main` at commit `3720a1ad`, tracking `origin/main`, clean
+working tree, `BUILD_NUMBER` 450. Phases One through Ten are closed.
+
+Searched `src/` for the series' four target patterns:
+
+- **Inline logic with ownership/testability problems**: `gameScreen.ts` and
+  `gameOverlayController.ts` — the sites of Phases Six through Nine — remain
+  thin coordinators; no new inline cross-system transaction was found.
+- **`as unknown as` casts in non-test source**: the same seven files
+  identified in Phase Ten still contain casts (`roomPreloadScheduler.ts`,
+  `roomRenderChunkWarmScheduler.ts` idle-callback handles;
+  `roomPreparationWorker.ts` worker `self`; `render/snapshot.ts` reusable-
+  buffer casts; `wallTilePassRenderers.ts` dev-only diagnostics;
+  `legacySkillBookMigration.ts`, the Phase Ten extraction itself). One
+  additional single-site cast was found in `residentRoomManager.ts:1202`
+  (`as unknown as readonly [number, number, number, number, number]` for a
+  debug-stats tuple) — not duplicated elsewhere, structurally necessary for
+  the fixed-length tuple shape, no isolated extraction seam.
+- **`Object.entries/values/keys` reflection over typed production objects**:
+  13 files use these; all inspected sample sites
+  (`backgroundCatalogue.ts:53`, `debugPanelManager.ts:67,96`) are ordinary
+  typed-key iteration over glob maps or lookup tables, not untyped
+  reflection masking a schema mismatch.
+- **Independently maintained parallel state with no shared source of
+  truth**: none found; the coordinators extracted in Phases Six through Nine
+  eliminated the prior instances of this pattern.
+- **Per-call allocation in hot paths**: `gameScreen.ts`'s frame loop retains
+  only 5 `.map`/`.filter`/allocation call sites, consistent with the
+  allocation-free extractions already completed; no new hot-path allocation
+  growth was found.
+
+No candidate in this audit is both genuinely bounded and rises to the
+series' bar (duplicated policy, missing characterization coverage, and a
+clean single-function extraction seam). Phase Eleven is not opened. This is
+a documentation-only entry: no source, test, or `BUILD_NUMBER` change
+accompanies it.
