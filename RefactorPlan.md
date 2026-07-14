@@ -512,3 +512,308 @@ Browser smoke test:
 
 Acceptance result: all code-level acceptance criteria are satisfied. No new
 deferred work was discovered, so `docs/TODO.md` was not changed.
+
+---
+
+## Phase Seven — Extract the editor playtest room activation transaction (PROPOSED; baseline BUILD 446)
+
+### Planning baseline and decision
+
+This phase was planned from a clean `main` worktree at `c91cd06`, synchronized
+with `origin/main`, with `BUILD_NUMBER` 446. Recent history confirms Phase Six
+is complete: `91a9482` contains its implementation and `c91cd06` records its
+completion. This proposal does not reopen or expand any completed phase.
+
+A further phase is justified, but not because `gameScreen.ts` is large. The
+editor playtest callback currently owns a single cross-system lifecycle
+transaction whose correctness depends on exact invalidation, rebuild, load,
+and re-registration ordering. That is a concrete ownership boundary with stale
+runtime risk and no direct characterization test.
+
+Planning-run baseline validation:
+
+| Command | Result |
+|---|---|
+| `npm test` | 587/587 tests pass |
+| `npx tsc --noEmit` | Pass |
+| `npm run build` | Pass; existing font-resolution, Vite CJS deprecation, and large-chunk warnings only |
+| `npm run lint` | Fails only on the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts` |
+
+### Current-code evidence
+
+The callback passed to `createEditorController` in `src/screens/gameScreen.ts`
+currently performs all of the following inline:
+
+1. resolves a collision-safe spawn for the edited room;
+2. bumps the edited room's resident-build version;
+3. invalidates the edited room's runtime cache and render-chunk prewarm;
+4. invalidates the edited room's resident world;
+5. discovers radius-one neighboring rooms and invalidates their resident worlds
+   and render-chunk prewarm state;
+6. invalidates the edited room's zone-ready state;
+7. queues rebuilds for the edited room and its radius-one neighbors;
+8. performs the destructive room load; and
+9. re-registers the newly loaded live world as the active resident world.
+
+This ordering is policy, not incidental plumbing:
+
+- `ResidentBuildScheduler.queueRebuildAfterEdit` explicitly leaves version
+  bumping and resident-world invalidation to its caller. The editor callback is
+  therefore the only owner of the complete edit-to-runtime transaction.
+- `ZoneLoader.invalidateZone` clears readiness and can invalidate the active
+  same-world loading session; moving it after the load would change lifecycle
+  semantics.
+- `ensureResident` must occur before `setActiveResidentId` and
+  `setResidentWorld`, and the world registered after loading must be the fresh
+  live `world`, not a pre-load reference.
+- `bfsNearbyRooms(..., 1)` supplies a unique, radius-one neighbor list in
+  authored transition order. That radius and order determine which dependent
+  resident/prewarm/rebuild state is refreshed.
+
+The block accumulated through separate correctness fixes rather than one
+designed owner: spawn resolution (`d76214f`), runtime-cache invalidation
+(`18ae1bc`), resident invalidation/rebuild (`5fce6f2`), neighboring-room
+coverage (`d985118`), zone invalidation (`4df9839`), active resident
+re-registration (`4115a99`), chunk-prewarm invalidation (`6f44b1e`), and stale
+build-version handling (`28e33bb`). Existing tests cover the individual
+scheduler, cache, zone, resident, and graph helpers, but no test characterizes
+their combined editor transaction or proves that the post-load world is the
+one re-registered.
+
+This is distinct from the completed resident-build scheduler and transition
+execution phases. Those owners remain unchanged and are dependencies/ports of
+this editor-to-runtime coordinator; Phase Seven must not absorb their policy.
+
+### Objective
+
+Create one Node-safe, port-injected coordinator for applying an edited room to
+the live playtest runtime, tentatively
+`src/screens/gameEditorRoomActivationCoordinator.ts`. Replace the inline
+callback body in `gameScreen.ts` with one coordinator call while preserving the
+transaction's current operations, arguments, ordering, synchronous failure
+behavior, and neighbor selection exactly.
+
+The coordinator owns only orchestration: which existing operations run and in
+what order. It must not own cache implementations, resident construction,
+build scheduling policy, zone loading, room graph traversal policy, spawn
+collision logic, or room loading internals.
+
+### Exact scope
+
+In scope:
+
+- Add `src/screens/gameEditorRoomActivationCoordinator.ts` with a small typed
+  port interface and one synchronous transaction entry point.
+- Add `src/tests/gameEditorRoomActivationCoordinator.test.ts` containing
+  characterization tests driven by recording fakes/sentinels.
+- Make the smallest integration edit in `src/screens/gameScreen.ts`: construct
+  or pass the existing operations and replace the inline editor callback body
+  with the coordinator call.
+- Use a getter/callback for the active `world` so it is read only after
+  `loadRoom` returns.
+- Update `docs/AI_REPO_MAP.md` and `docs/ARCHITECTURE.md` with the new ownership
+  boundary.
+- Increment the patch component of `BUILD_NUMBER` exactly once for the coherent
+  implementation, then record actual results and commits in this phase.
+
+Explicitly excluded:
+
+- No changes to editor tools, editing gestures, serialization/export, room
+  definitions, saved room data, or editor UI.
+- No changes to `ResidentBuildScheduler`, `ResidentRoomManager`,
+  `RoomRuntimeCache`, `ZoneLoader`, chunk-prewarm implementations, their
+  priorities, or their public behavior.
+- No change to `bfsNearbyRooms`, graph traversal radius/order, transition
+  definitions, transition execution, boundary walls, trigger geometry, room
+  load phases, or resident activation helpers.
+- Do not add runtime-cache invalidation or version bumps for neighbors; the
+  current callback does neither.
+- No asynchronous conversion, batching, retries, error recovery, swallowed
+  exceptions, performance redesign, or generalized lifecycle framework.
+- No save-schema, timer, overlay, campaign-option, skill-tomb, checkpoint,
+  respawn, camera, render, audio, or gameplay changes.
+- No cleanup based only on file length and no unrelated TODO or lint repair.
+
+### Behavioral contract to preserve
+
+For one callback invocation, the extracted transaction must preserve these
+observable rules:
+
+1. Resolve the safe spawn from the incoming room and requested coordinates
+   before any invalidation. Pass the resolved coordinates, original room, and
+   original `preserveCamera` flag to `loadRoom` unchanged.
+2. Bump the edited room's resident-build version exactly once, before cache or
+   resident invalidation. Do not bump any neighbor version.
+3. Invalidate runtime-cache state for the edited room exactly once. Do not
+   invalidate runtime-cache state for neighbors.
+4. Invalidate edited-room chunk-prewarm state and resident-world state before
+   processing neighbors.
+5. Derive a unique radius-one neighbor list with the existing
+   `bfsNearbyRooms` behavior and the existing room registry. Exclude the edited
+   room and preserve returned order; do not broaden the radius.
+6. For every returned neighbor, invalidate resident-world state and then
+   chunk-prewarm state, preserving current per-neighbor and neighbor-list order.
+7. Invalidate the edited room's zone after room/neighbor invalidation and
+   before any rebuild queueing. Use `roomDef.worldNumber ?? 1` exactly.
+8. Queue the edited room rebuild first, then one rebuild for each neighbor in
+   the same order. Complete all queueing before loading the room.
+9. Call `loadRoom` synchronously after all invalidation and queue operations.
+10. Only after `loadRoom` returns, read the current live world through the
+    injected getter. Then call `ensureResident(roomDef)`,
+    `setActiveResidentId(roomDef.id)`, and
+    `setResidentWorld(roomDef.id, freshWorld, true)` in that order.
+11. Do not catch or translate errors. If any operation throws, later operations
+    do not run; specifically, a throwing `loadRoom` must prevent all post-load
+    resident registration.
+12. Do not mutate the incoming room definition, registry, or neighbor list in
+    the coordinator. Existing port implementations retain responsibility for
+    their own state changes.
+
+### Characterization tests required before integration
+
+Use recording ports and distinct old/new world sentinels. Tests must cover:
+
+- a room with no neighbors, asserting the full exact call sequence;
+- one and multiple radius-one neighbors in authored graph order;
+- cycles/duplicate graph paths, proving each radius-one neighbor is handled
+  once and the edited room is not treated as its own neighbor;
+- the edited-room-only version bump and runtime-cache invalidation rules;
+- edited-room invalidation before neighbor invalidation, zone invalidation
+  before rebuild queueing, edited-room rebuild before neighbor rebuilds, and
+  all queueing before load;
+- explicit `worldNumber` and the missing-world-number fallback of `1`;
+- collision-adjusted spawn forwarding and both `preserveCamera` values;
+- a loader fake that swaps the live world sentinel, proving the coordinator
+  reads and registers the new world only after load;
+- exact `ensureResident` -> active-ID -> active-world registration ordering;
+- a throwing loader, proving no post-load world read or resident registration
+  occurs and the original error propagates;
+- no mutation of the supplied room definition and registry; and
+- the existing graph helper's direct missing-target behavior if a fixture
+  includes a transition to an absent registry entry, so extraction does not
+  silently introduce filtering that the current callback lacks.
+
+Tests should assert semantic call records and arguments, not source text,
+private fields, or incidental implementation structure. The new module must be
+importable by the Node test runner without DOM, canvas, Electron, renderer,
+asset, or browser initialization.
+
+### Implementation sequence
+
+1. Re-read the current callback and the immediately used APIs; confirm the
+   planning baseline has not drifted and keep Phase Six closed.
+2. Add the coordinator test with recording ports and establish the complete
+   current call-order contract before modifying `gameScreen.ts`.
+3. Add the narrow coordinator and its typed ports. Reuse
+   `bfsNearbyRooms(..., registry, 1)` rather than reimplementing graph policy.
+4. Run the new focused test and TypeScript check before integration.
+5. Wire existing `gameScreen.ts` collaborators into the coordinator. Ensure the
+   world port is a getter that observes the value assigned by `loadRoom`, not a
+   captured snapshot.
+6. Replace only the current inline editor playtest transaction. Remove imports
+   only if the extraction makes them genuinely unused; do not rearrange nearby
+   editor, transition, preload, or gameplay code.
+7. Run the focused test again, then the full automated validation and targeted
+   lint. Perform the editor smoke checks below.
+8. Update the architecture/map documentation, bump `BUILD_NUMBER` once, and
+   record the implementation files, results, limitations, and commit hashes in
+   this phase. Commit and push one coherent phase.
+
+### Acceptance criteria
+
+- The `createEditorController` playtest callback delegates the complete
+  edit-to-runtime transaction to one named coordinator; it no longer spells out
+  the multi-system sequence inline.
+- The coordinator is synchronous, Node-safe, port-injected, and contains no DOM,
+  render, asset, Electron, save, or wall-clock dependency.
+- Focused characterization tests prove every behavioral-contract item above,
+  including exact sequence, neighbor scope/order, edited-only policies,
+  post-load fresh-world registration, and failure short-circuiting.
+- Existing cache, scheduler, zone, resident, graph, room-loading, and transition
+  implementations are unchanged.
+- No intended runtime behavior, persistence format, room data, UI, geometry, or
+  performance policy changes.
+- `BUILD_NUMBER` advances from the then-current value by exactly one patch step.
+- Full tests, TypeScript, and production build pass. Targeted lint for touched
+  TypeScript files passes; full lint introduces no findings beyond a precisely
+  documented pre-existing baseline.
+- Documentation names the new ownership boundary and `git diff --check` is
+  clean.
+
+### Manual smoke checks
+
+In a local development build:
+
+1. Enter the editor for the active room, make a small reversible geometry edit,
+   and playtest it. Confirm the player uses a collision-safe spawn and the edit
+   is visible immediately.
+2. Repeat with camera preservation both enabled and disabled through existing
+   editor paths, confirming current camera behavior is unchanged.
+3. Edit a room with a connected neighbor, playtest, transition to the neighbor
+   and back, and confirm neither room displays stale geometry or resident state.
+4. Repeat an edit/playtest cycle twice to exercise build-version invalidation;
+   confirm an older pending build never replaces the latest edited world.
+5. Watch the browser console throughout and record any errors. Do not claim
+   lifecycle behavior as manually verified unless the relevant edit,
+   transition, and return path were actually observed.
+
+### Validation commands
+
+```bash
+node --import tsx --test src/tests/gameEditorRoomActivationCoordinator.test.ts
+npx tsc --noEmit
+npm test
+npm run build
+npm run lint
+npx eslint src/screens/gameEditorRoomActivationCoordinator.ts src/tests/gameEditorRoomActivationCoordinator.test.ts src/screens/gameScreen.ts
+git diff --check
+git status --short --branch
+```
+
+Full lint currently has seven baseline `no-explicit-any` errors in
+`src/tests/editorFillBrush.test.ts`. Phase Seven must not fix them incidentally;
+record the exact baseline and require zero new lint findings.
+
+### Risks and mitigations
+
+- **Stale world re-registration:** Passing `world` by value when constructing
+  ports would preserve the pre-load world. Require a post-load getter and prove
+  it with distinct sentinels.
+- **Ordering drift:** Grouping operations by subsystem can subtly move zone
+  invalidation or queueing. Assert one exact semantic call record.
+- **Neighbor policy expansion:** A seemingly safer implementation could add
+  neighbor version bumps/runtime invalidation, filtering, or a wider radius.
+  Encode the current edited-only policies and radius-one output in tests.
+- **Partial-failure redesign:** Transactions and rollback may sound desirable
+  but would change current synchronous exception behavior. Propagate errors and
+  stop at the throwing port.
+- **Node import contamination:** Importing browser-heavy screen modules into the
+  coordinator would undermine focused tests. Depend on types, the pure graph
+  helper, and injected operations only.
+- **Completed-phase creep:** Resident scheduling, transition execution, preload
+  anticipation, campaign options, and run timing already have owners. Treat
+  them strictly as unchanged dependencies or out-of-scope systems.
+
+### Model-neutral Codex/Claude instructions
+
+Implement only Phase Seven as a behavior-preserving extraction. Read
+`agents.md`, the required repository docs, all of `RefactorPlan.md`, and the
+named source/API files before editing. Treat every earlier phase as closed.
+Verify current code rather than trusting evidence line numbers. First add
+recording-port characterization tests for the complete editor playtest room
+activation sequence. Then extract that sequence into the narrow Node-safe,
+port-injected coordinator described here and replace only its inline callback
+in `gameScreen.ts`. Preserve exact spawn, invalidation, neighbor, zone, rebuild,
+load, fresh-world registration, and exception ordering; do not change any
+underlying subsystem or broaden neighbor policy. Keep the active world behind a
+getter evaluated after `loadRoom`. Make no unrelated cleanup. Bump the build
+patch exactly once, update only the required architecture/map and phase records,
+run every listed validation plus the practical smoke checks, document exact
+results and limitations, then commit and push the completed phase. Stop after
+Phase Seven.
+
+### Planning-run restriction
+
+Do not implement Phase Seven in the run that authored this section. This run is
+documentation-only: update, commit, and push only `RefactorPlan.md`; do not
+change source, tests, other documentation, room data, or `BUILD_NUMBER`.
