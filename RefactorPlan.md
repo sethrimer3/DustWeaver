@@ -515,7 +515,7 @@ deferred work was discovered, so `docs/TODO.md` was not changed.
 
 ---
 
-## Phase Seven — Extract the editor playtest room activation transaction (PROPOSED; baseline BUILD 446)
+## Phase Seven — Extract the editor playtest room activation transaction (COMPLETE; BUILD 447)
 
 ### Planning baseline and decision
 
@@ -817,3 +817,99 @@ Phase Seven.
 Do not implement Phase Seven in the run that authored this section. This run is
 documentation-only: update, commit, and push only `RefactorPlan.md`; do not
 change source, tests, other documentation, room data, or `BUILD_NUMBER`.
+
+### Completion record
+
+Completed by Codex on 2026-07-13. Planning commit: `d2793a3`
+(`Auto-sync 2026-07-13 19:18:03`). Implementation commits: `389a62a`
+(`Auto-sync 2026-07-13 19:58:03`) and `d137bc3`
+(`Auto-sync 2026-07-13 20:08:03`). All three commits were pushed to
+`origin/main` before this completion record was written.
+
+Files changed:
+
+| File | Change |
+|---|---|
+| `src/screens/gameEditorRoomActivationCoordinator.ts` | Added the synchronous, Node-safe, port-injected owner of the editor playtest activation transaction |
+| `src/tests/gameEditorRoomActivationCoordinator.test.ts` | Added 11 recording-port characterization tests for ordering, neighbor policy, spawn/camera forwarding, fresh-world registration, mutation safety, and failure propagation |
+| `src/screens/gameScreen.ts` | Replaced only the inline editor playtest transaction with one coordinator call and concrete runtime ports |
+| `src/build-info.ts` | Incremented `BUILD_NUMBER` 446 -> 447 exactly once |
+| `docs/AI_REPO_MAP.md` | Added routing guidance for editor playtest activation and invalidation work |
+| `docs/ARCHITECTURE.md` | Documented the editor-to-runtime ownership boundary |
+| `RefactorPlan.md` | Recorded the completed implementation, validation, and practical smoke-test results |
+
+Implementation decisions and behavioral contract:
+
+- No intended runtime behavioral delta.
+- Safe-spawn resolution, edited-room version/runtime/chunk/resident
+  invalidation, radius-one neighbor discovery and invalidation, zone
+  invalidation, edited-first rebuild queueing, room loading, and active
+  resident registration retain their original exact sequence.
+- The coordinator reuses `bfsNearbyRooms(..., registry, 1)` and does not add
+  filtering, sorting, version bumps, or runtime-cache invalidation for
+  neighbors.
+- The active world remains behind a getter evaluated only after `loadRoom`
+  returns, so the resident record receives the newly loaded world.
+- The production callback's `preserveCamera` argument is actually optional.
+  Its type is therefore `boolean | undefined`, and characterization covers
+  unchanged forwarding of `true`, `false`, and `undefined`.
+- Exceptions remain synchronous and unaltered. A throwing loader prevents the
+  fresh-world read and every post-load resident operation.
+- No cache, scheduler, zone, resident, graph, transition, preload, editor UI,
+  room-data, persistence, or geometry implementation changed.
+
+Characterization development:
+
+- The first pre-integration focused run passed 9/10 tests. The one failure was
+  an introduced fixture error: the helper's default world number converted an
+  intended missing `worldNumber` case into world 2. The fixture was corrected
+  without changing production behavior, after which 10/10 passed.
+- Integration exposed the callback's optional `preserveCamera` type during the
+  TypeScript check. The port was corrected from `boolean` to
+  `boolean | undefined`, and an eleventh test was added to pin undefined
+  passthrough. Final focused validation passes 11/11.
+
+Validation results:
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `node --import tsx --test src/tests/gameEditorRoomActivationCoordinator.test.ts` | 0 | 11/11 pass after integration |
+| `node --import tsx --test src/tests/gameEditorRoomActivationCoordinator.test.ts src/tests/residentBuildScheduler.test.ts src/tests/roomTransitionLoadCoordinator.test.ts src/tests/roomPreloadAnticipationPolicy.test.ts src/tests/entryWarmDecision.test.ts` | 0 | 119/119 related lifecycle tests pass |
+| `npm test` | 0 | 598/598 pass (11 new; baseline 587) |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm run build` | 0 | production Vite build passes; existing Vite CJS deprecation, unresolved-at-build-time Cinzel font, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; no new findings |
+| `npx eslint src/screens/gameEditorRoomActivationCoordinator.ts src/tests/gameEditorRoomActivationCoordinator.test.ts src/screens/gameScreen.ts` | 0 | all touched TypeScript files clean |
+| `git diff --check` | 0 | clean before the completion record |
+
+Browser smoke test:
+
+- The local Vite runtime returned HTTP 200 and visibly reported BUILD 447.
+- Main menu, empty save-slot creation, Normal Mode selection, initial zone
+  loading, gameplay startup, pause-menu editor entry, and return to gameplay
+  all completed.
+- In the active room, the top edge was extended so height changed from 58 to
+  59. Confirm/playtest returned to gameplay, and re-entering the editor showed
+  height 59, demonstrating immediate activation of the edited definition.
+- A second cycle reversed the same edit from height 59 to 58 and successfully
+  returned to gameplay again. This exercised repeated invalidation/rebuild/load
+  activation without an observed stale replacement.
+- Browser console errors: none. The console did contain existing
+  resident-build and freeze-profiler warnings during the exceptionally slow
+  instrumented initial zone load; these were performance diagnostics, not
+  activation exceptions.
+- Collision-safe spawn selection, all three camera-preservation argument forms,
+  radius-one ordering, fresh-world timing, and loader failure behavior are
+  directly covered by characterization tests. The browser pass did not visibly
+  inspect the resolved spawn coordinate, exercise a separate camera-preserving
+  editor path, or perform a connected-neighbor transition away and back, so
+  those manual observations are not claimed.
+- Electron validation was not run because neither the phase plan nor repository
+  instructions require Electron-specific behavior for this Node-safe/browser
+  extraction.
+
+Acceptance result: all code-level acceptance criteria are satisfied. The
+practical browser pass confirmed two reversible edit/playtest cycles with no
+console errors, subject to the explicit manual limitations above. No new
+deferred work was discovered, so `docs/TODO.md` was not changed. Phase Seven is
+closed; do not repeat or expand it.
