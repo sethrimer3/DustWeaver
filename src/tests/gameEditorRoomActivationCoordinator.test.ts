@@ -259,6 +259,23 @@ test('resolved spawn and false preserveCamera are forwarded unchanged', () => {
   assert.deepEqual(loadCall?.args, [room, 12.5, 6.25, false]);
 });
 
+test('an absent preserveCamera value remains absent at the room loader boundary', () => {
+  const room = makeRoom('edited');
+  const harness = createHarness();
+
+  applyGameEditorRoomActivation(
+    room,
+    1,
+    2,
+    undefined,
+    new Map([[room.id, room]]),
+    harness.ports,
+  );
+
+  const loadCall = harness.calls.find(call => call.name === 'loadRoom');
+  assert.deepEqual(loadCall?.args, [room, 1, 2, undefined]);
+});
+
 test('fresh active world is looked up after load and registered in exact order', () => {
   const room = makeRoom('edited');
   const harness = createHarness();

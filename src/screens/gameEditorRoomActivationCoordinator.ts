@@ -16,7 +16,12 @@ export interface GameEditorRoomActivationPorts {
   invalidateResidentWorld(roomId: string): void;
   invalidateZone(worldNumber: number): void;
   queueRebuildAfterEdit(roomId: string): void;
-  loadRoom(room: RoomDef, spawnX: number, spawnY: number, preserveCamera: boolean): void;
+  loadRoom(
+    room: RoomDef,
+    spawnX: number,
+    spawnY: number,
+    preserveCamera: boolean | undefined,
+  ): void;
   getActiveWorld(): WorldState;
   ensureResident(room: RoomDef): void;
   setActiveResidentId(roomId: string): void;
@@ -27,7 +32,7 @@ export function applyGameEditorRoomActivation(
   room: RoomDef,
   spawnX: number,
   spawnY: number,
-  preserveCamera: boolean,
+  preserveCamera: boolean | undefined,
   registry: ReadonlyMap<string, RoomDef>,
   ports: GameEditorRoomActivationPorts,
 ): void {
