@@ -934,7 +934,19 @@ neighbor manual limitation without reopening Phase Seven.
 
 ---
 
-## Phase Eight — Extract the skill-tomb activation transaction (PROPOSED; baseline BUILD 447)
+## Phase Eight — Extract the skill-tomb activation transaction (COMPLETE; BUILD 448)
+
+**Claimed:** Codex on 2026-07-13. Phases One through Seven remain closed.
+
+**Completed:** Codex on 2026-07-13. Added the Node-safe
+`gameSkillTombActivation.ts` transaction and 18 direct characterization tests
+before production integration. `gameOverlayController.ts` now delegates only
+the deterministic transaction through one stable structural port object; its
+guards, activation-time live-world getter, modal construction, and close
+lifecycle remain in place. `BUILD_NUMBER` advanced exactly once from 447 to
+448. Focused, related, TypeScript, touched-file lint, full test, and production
+build validation pass. Full lint has only the seven documented baseline
+`no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`.
 
 ### Planning baseline and current validation
 
@@ -1344,3 +1356,55 @@ Do not implement Phase Eight in the run that authored this section. This run is
 planning-only: update, commit, and push only `RefactorPlan.md`. Do not change
 source code, tests, `BUILD_NUMBER`, save version, room/campaign data, or any
 unrelated documentation.
+
+### Completion record
+
+Phase Eight was completed on 2026-07-13 at BUILD 448. Phases One through Seven
+remained closed, and no work outside the Phase Eight boundary was taken on.
+
+Implementation results:
+
+- Added `src/screens/gameSkillTombActivation.ts` as the Node-safe owner of the
+  deterministic save-point, checkpoint/save ordering, player-healing, and
+  owned-particle-healing transaction.
+- Added `src/tests/gameSkillTombActivation.test.ts` with all 18 planned
+  characterization cases, including failure short-circuiting, exact coordinate
+  frames, bounded particle access, and repeated live-world isolation.
+- Replaced only the inline transaction in `openSkillTombMenu` with one call to
+  `applySkillTombActivation`. The overlay controller retains its guard, map
+  close, activation-time `getWorld()`, modal creation, save-on-close, and
+  cleanup ownership.
+- Added stable structural ports once per overlay-controller instance. The new
+  module has no DOM, UI, canvas, renderer-class, storage, Electron, or timer-
+  implementation dependency and adds no per-frame work.
+- Updated `docs/AI_REPO_MAP.md` and `docs/ARCHITECTURE.md` only to identify the
+  new ownership boundary. No room/campaign data, save schema, progress shape,
+  timer policy, renderer behavior, gameplay balance, or unrelated source was
+  changed.
+- Advanced `BUILD_NUMBER` exactly once from 447 to 448.
+
+Final validation:
+
+| Command | Exit code | Result |
+|---|---:|---|
+| `node --import tsx --test src/tests/gameSkillTombActivation.test.ts` | 0 | 18/18 tests pass |
+| `node --import tsx --test src/tests/gameSkillTombActivation.test.ts src/tests/gameRunTimer.test.ts src/tests/campaignStartingOptions.test.ts` | 0 | 66/66 tests pass across 12 suites |
+| `npx tsc --noEmit` | 0 | clean |
+| `npx eslint src/screens/gameSkillTombActivation.ts src/tests/gameSkillTombActivation.test.ts src/screens/gameOverlayController.ts` | 0 | clean |
+| `npm test` | 0 | 616/616 tests pass across 12 suites; 0 failed/skipped/cancelled |
+| `npm run build` | 0 | 916 modules transformed; existing Vite CJS deprecation, unresolved-at-build-time Cinzel font, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the seven pre-existing `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; zero new findings |
+
+Practical browser smoke used a disposable local save. The app displayed Build
+448, entered a new Normal Mode game in the official campaign lobby, and an
+off-tomb interaction left the skill-tomb overlay closed without a new runtime
+error. The official campaign currently places its only save tomb in
+`seal_chamber`, far from the lobby, so the full heal, save-on-close,
+death/checkpoint, and transition-before-reactivation route was not practical in
+this disposable run. Those transaction paths are covered by the direct 18-case
+Node suite; particle-buffer healing remains test-verified rather than visually
+claimed.
+
+All Phase Eight acceptance criteria are satisfied within the documented full-
+lint and manual-smoke limitations. Phase Eight is closed; do not expand it or
+begin another phase as part of this implementation run.

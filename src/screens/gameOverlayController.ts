@@ -1,10 +1,13 @@
-import { BLOCK_SIZE_MEDIUM, type RoomDef } from '../levels/roomDef';
+import type { RoomDef } from '../levels/roomDef';
 import type { PlayerProgress } from '../progression/playerProgress';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
-import { getElementProfile } from '../sim/particles/elementProfiles';
 import type { WorldState } from '../sim/world';
 import { showDeathScreen } from '../ui/deathScreen';
 import { showMapOnlyModal, showSkillTombMenu } from '../ui/skillTombMenu';
+import {
+  applySkillTombActivation,
+  type SkillTombActivationPorts,
+} from './gameSkillTombActivation';
 
 export interface GameOverlayControllerState {
   isPlayerDead: boolean;
@@ -73,6 +76,17 @@ export function createGameOverlayController(
   let skillTombMenuCleanup: (() => void) | null = null;
   let mapOnlyCleanup: (() => void) | null = null;
 
+  const skillTombActivationPorts: SkillTombActivationPorts = {
+    getCurrentRoomOrigin,
+    getCurrentRoomId: () => getCurrentRoom().id,
+    getNearbyTombIndex: (localXWorld, localYWorld) => (
+      skillTombRenderer.getNearbyTombIndex(localXWorld, localYWorld)
+    ),
+    getTombPosition: (index) => skillTombRenderer.getTombPosition(index),
+    onCheckpointReached,
+    onSave,
+  };
+
   function closeMapOnlyIfOpen(): void {
     if (mapOnlyCleanup === null) return;
     mapOnlyCleanup();
@@ -116,57 +130,16 @@ export function createGameOverlayController(
     state.isSkillTombMenuOpen = true;
 
     const world = getWorld();
-    const player = world.clusters[0];
-    let playerXWorld = 0;
-    let playerYWorld = 0;
-    let playerHealthPoints = 0;
-    let playerMaxHealthPoints = 0;
-    if (player !== undefined) {
-      playerXWorld = player.positionXWorld;
-      playerYWorld = player.positionYWorld;
-
-      const [currentRoomOriginXWorld, currentRoomOriginYWorld] = getCurrentRoomOrigin();
-      const nearbyIndex = skillTombRenderer.getNearbyTombIndex(
-        player.positionXWorld - currentRoomOriginXWorld,
-        player.positionYWorld - currentRoomOriginYWorld,
-      );
-      if (nearbyIndex >= 0) {
-        const tombPos = skillTombRenderer.getTombPosition(nearbyIndex);
-        if (tombPos) {
-          progress.lastSaveRoomId = getCurrentRoom().id;
-          progress.lastSaveSpawnBlock = [
-            Math.round(tombPos.xWorld / BLOCK_SIZE_MEDIUM),
-            Math.round(tombPos.yWorld / BLOCK_SIZE_MEDIUM),
-          ];
-          // Snapshot the speedrun timer checkpoint at save-point activation.
-          if (onCheckpointReached) onCheckpointReached();
-          if (onSave) onSave();  // save AFTER checkpoint snapshot
-        }
-      }
-
-      player.healthPoints = player.maxHealthPoints;
-      playerMaxHealthPoints = player.maxHealthPoints;
-      playerHealthPoints = playerMaxHealthPoints;
-      for (let particleIndex = 0; particleIndex < world.particleCount; particleIndex++) {
-        if (world.ownerEntityId[particleIndex] !== player.entityId) continue;
-        if (world.isTransientFlag[particleIndex] === 1) continue;
-        if (world.isAliveFlag[particleIndex] === 0 && world.respawnDelayTicks[particleIndex] > 0) {
-          world.respawnDelayTicks[particleIndex] = 1;
-        }
-        if (world.isAliveFlag[particleIndex] === 1) {
-          world.particleDurability[particleIndex] = getElementProfile(world.kindBuffer[particleIndex]).toughness;
-        }
-      }
-    }
+    const activation = applySkillTombActivation(world, progress, skillTombActivationPorts);
 
     skillTombMenuCleanup = showSkillTombMenu(
       uiRoot,
       progress,
       getCurrentRoom().id,
-      playerXWorld,
-      playerYWorld,
-      playerHealthPoints,
-      playerMaxHealthPoints,
+      activation.playerXWorld,
+      activation.playerYWorld,
+      activation.playerHealthPoints,
+      activation.playerMaxHealthPoints,
       {
         onClose: (updatedLoadout, updatedWeaveLoadout) => {
           state.isSkillTombMenuOpen = false;
