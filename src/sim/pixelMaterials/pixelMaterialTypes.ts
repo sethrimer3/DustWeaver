@@ -17,12 +17,21 @@ export const MATERIAL_SAND = 1;
 export const MATERIAL_SAND_2X2 = 2;
 /** 1x1 water — `behavior: 'liquid'` (see MaterialBehavior), spreads laterally instead of piling. */
 export const MATERIAL_WATER = 3;
+/**
+ * 1x1 sandstone — `behavior: 'static'`.  Does not fall or flow.  Fractures
+ * into ordinary MATERIAL_SAND when:
+ *   (a) the player contacts it with inward velocity ≥ SANDSTONE_FRACTURE_IMPACT_SPEED, or
+ *   (b) accumulated wind erosion reaches SANDSTONE_EROSION_THRESHOLD.
+ * See pixelMaterialSystem.ts for the fracture logic.
+ */
+export const MATERIAL_SANDSTONE = 4;
 
 export type MaterialId =
   | typeof MATERIAL_EMPTY
   | typeof MATERIAL_SAND
   | typeof MATERIAL_SAND_2X2
-  | typeof MATERIAL_WATER;
+  | typeof MATERIAL_WATER
+  | typeof MATERIAL_SANDSTONE;
 
 /**
  * High-level movement behavior a material follows in `PixelMaterialSystem.stepParticle`.
@@ -31,11 +40,13 @@ export type MaterialId =
  * - `'liquid'` — falls straight down, then diagonally, then spreads horizontally
  *                instead of piling/sleeping immediately; does not displace sand.
  *
+ * - `'static'` — never moves on its own; accumulates wind for erosion only.
+ *
  * Dispatch lives in `stepParticle`'s `switch (getMaterialBehavior(p.material))`
  * — add a new case there (and a `stepXParticle` method) for a new behavior,
  * rather than branching on material id throughout the sim.
  */
-export type MaterialBehavior = 'sand' | 'liquid';
+export type MaterialBehavior = 'sand' | 'liquid' | 'static';
 
 /**
  * Per-material definition: visual + footprint size + wind response, so
