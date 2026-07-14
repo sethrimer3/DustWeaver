@@ -22,6 +22,7 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 | Editor palette / room authoring | `src/editor/editorController.ts` | `src/editor/editorDropdownData.ts`, `src/editor/editorPalettePreview.ts`, `src/editor/editorRoomBuilder.ts`, `src/editor/roomJsonSerializer.ts` |
 | Editor playtest room activation / edit invalidation | `src/screens/gameEditorRoomActivationCoordinator.ts` | `src/screens/gameScreen.ts`, `src/screens/residentBuildScheduler.ts`, `src/screens/residentRoomManager.ts`, `src/screens/roomRuntimeCache.ts`, `src/screens/zoneResidentLoader.ts` |
 | Room save format / migration / compression | `src/levels/roomSavedTypes.ts` | `src/levels/roomSchemaV2.ts`, `src/levels/roomSchemaHydrator.ts`, `src/levels/tileGridCompressor.ts`, `src/levels/roomFileAudit.ts`, `src/levels/roomRoundTripValidator.ts` |
+| Legacy skill-book-to-weave room JSON migration | `src/levels/legacySkillBookMigration.ts` | `src/editor/roomJson.ts`, `src/levels/roomJsonToRoomDef.ts` |
 | Asset loading / sprite decode | `src/render/roomAssetPreloader.ts` | `src/render/walls/imageCache.ts`, `src/screens/gameLoadRoomPhases.ts`, menu/loading UI files |
 | UI menus / settings / debug panels | `src/ui/` | `src/render/hud/renderProfiler.ts`, `src/screens/gameOverlayController.ts`, `src/screens/gamePauseController.ts` |
 | Build, lint, tests | `package.json` | `src/tests/**/*.test.ts` |

@@ -46,6 +46,7 @@ export {
   particleKindToString,
   stringToParticleKind,
 } from './roomJsonSchema';
+import { extractLegacySkillBookWeaves } from '../levels/legacySkillBookMigration';
 export type {
   ValidationError,
   RoomJsonDef,
@@ -293,12 +294,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       weaveId: s.weaveId,
     })),
     // Legacy: skill books are unified with skill tombs — load them in.
-    ...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
-      uid: uid++,
-      xBlock: s.xBlock,
-      yBlock: s.yBlock,
-      weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
-    })),
+    ...extractLegacySkillBookWeaves(json.skillBooks).map(s => ({ uid: uid++, ...s })),
   ];
 
   const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(container => ({

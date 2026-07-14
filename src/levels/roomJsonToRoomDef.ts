@@ -28,6 +28,7 @@ import {
 } from '../editor/roomJson';
 import type { RoomJsonDef } from '../editor/roomJson';
 import { savedToLightDef } from './lightingSchema';
+import { extractLegacySkillBookWeaves } from './legacySkillBookMigration';
 import { buildCompleteBoundaryWalls } from './roomBoundaryWalls';
 import { hydrateAndValidateBakedWallTemplate } from './roomWallTemplateHash';
 import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -191,11 +192,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     skillTombs: [
       ...(json.dustSkillTombs ?? []).map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
       // Legacy: skill books are unified with skill tombs — merge them in.
-      ...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
-        xBlock: s.xBlock,
-        yBlock: s.yBlock,
-        weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
-      })),
+      ...extractLegacySkillBookWeaves(json.skillBooks),
     ],
   };
 

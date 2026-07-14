@@ -1523,3 +1523,159 @@ unaffected.
 
 Phase Nine is closed. Do not begin Phase Ten as part of this implementation
 run.
+
+---
+
+## Phase Ten — Extract shared legacy skill-book-to-weave migration (BUILD 450)
+
+### Planning baseline
+
+Planned and implemented from `main` at commit `00c0ec6e`, tracking `origin/main`
+with a clean working tree, `BUILD_NUMBER` 449. Phases One through Nine are
+closed.
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `npx tsc --noEmit` | 0 | clean |
+| `npm test` | 0 | 633/633 pass across 15 suites |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts` |
+
+### Decision and evidence
+
+`gameOverlayController.ts` and `gameScreen.ts` — the sites of Phases Six
+through Nine — are now thin coordinators with no further inline
+cross-system transactions; `gameOverlayController.ts` is 202 lines and
+every activation path already delegates to a Node-safe module.
+
+Searching the rest of `src/` for the series' other stated pattern — unsafe
+casts reading data outside its declared type — found one genuine
+duplicate: both `src/editor/roomJson.ts` (lines 296–301) and
+`src/levels/roomJsonToRoomDef.ts` (lines 194–199) independently implement
+identical legacy-migration logic:
+
+```ts
+...(json.skillBooks ?? []).filter(s => !!(s as unknown as Record<string, unknown>)['weaveId']).map(s => ({
+  xBlock: s.xBlock,
+  yBlock: s.yBlock,
+  weaveId: (s as unknown as Record<string, unknown>)['weaveId'] as string,
+})),
+```
+
+`json.skillBooks` is typed `RoomJsonSkillTomb[]` (`xBlock`/`yBlock` only —
+see `src/editor/roomJsonSchema.ts:454`), but legacy room JSON files can
+carry a stray `weaveId` field on skill-book entries predating the
+`dustSkillTombs` migration. Both loaders read that untyped field through
+an identical unsafe double-cast, filtering out entries without it and
+promoting the rest into skill-tomb shape. This is a duplicated, untyped,
+untested policy — a bounded, isolated candidate matching the series'
+"remaining unsafe casts" criterion. It requires no architectural change:
+one pure function replaces both inline blocks.
+
+No other bounded candidate was found. The remaining `as unknown as` casts
+in production code (`roomPreloadScheduler.ts`/`roomRenderChunkWarmScheduler.ts`
+idle-callback handles, `roomPreparationWorker.ts` worker `self`,
+`render/snapshot.ts` internal reusable-buffer casts, `wallTilePassRenderers.ts`
+dev-only diagnostics) are single-site, structurally necessary casts with no
+duplication and no isolated extraction seam.
+
+### Objective
+
+Add `src/levels/legacySkillBookMigration.ts` exporting one pure,
+Node-safe function:
+
+```ts
+export function extractLegacySkillBookWeaves(
+  skillBooks: readonly { xBlock: number; yBlock: number }[] | undefined,
+): { xBlock: number; yBlock: number; weaveId: string }[]
+```
+
+It reads the legacy `weaveId` field via one internal, documented unsafe
+cast, filters entries lacking a truthy `weaveId`, and returns tomb-shaped
+objects in input order. Both `editor/roomJson.ts` and
+`levels/roomJsonToRoomDef.ts` call this function instead of repeating the
+cast/filter/map inline.
+
+### Behavioral contract to preserve
+
+- Absent/undefined `skillBooks` yields an empty array.
+- An entry is included only when its (untyped) `weaveId` property is
+  truthy; missing, `undefined`, `null`, `''`, and `0` are excluded exactly
+  as `!!` would exclude them today.
+- Included entries preserve `xBlock`/`yBlock` and copy `weaveId` as a
+  string, in original array order.
+- No mutation of the input array or its entries.
+- Both call sites' surrounding array spread/concat order with
+  `dustSkillTombs` is unchanged (`dustSkillTombs` entries first, legacy
+  skill-book entries appended after, exactly as today).
+
+### Scope
+
+In scope:
+- `src/levels/legacySkillBookMigration.ts` (new)
+- `src/tests/legacySkillBookMigration.test.ts` (new)
+- `src/editor/roomJson.ts` — replace inline block with the shared call
+- `src/levels/roomJsonToRoomDef.ts` — replace inline block with the shared call
+- `src/build-info.ts` BUILD_NUMBER patch bump
+- `docs/AI_REPO_MAP.md` / `docs/ARCHITECTURE.md` minimal routing note
+
+Out of scope: `RoomJsonSkillTomb`/`RoomJsonDustSkillTomb` schema changes,
+`roomSchemaV2.ts` save-side serialization, `roomSchemaHydrator.ts`
+save-slot hydration, any other unsafe cast listed above, any editor UI or
+skill-tomb runtime behavior, and any change to non-legacy `dustSkillTombs`
+handling.
+
+### Test plan
+
+`src/tests/legacySkillBookMigration.test.ts` covering: undefined input,
+empty array, all-excluded (missing/falsy weaveId), all-included, mixed
+inclusion preserving order, no mutation of input, and that unrelated
+fields are not carried through.
+
+### Implementation sequence
+
+1. Add characterization tests against the new pure function first.
+2. Implement `extractLegacySkillBookWeaves`.
+3. Replace both inline blocks with `...extractLegacySkillBookWeaves(json.skillBooks)`.
+4. Run targeted tests, `npx tsc --noEmit`, full `npm test`, `npm run build`, `npm run lint`.
+5. Bump `BUILD_NUMBER` by exactly one patch step.
+6. Update this record with commit hashes and results, commit, and push.
+
+### Completion record
+
+Implemented directly following this plan in the same session (Phase Ten was
+not split into a separate planning-only run, per the standing instruction
+to plan and execute Phase Ten together).
+
+Files changed:
+
+| File | Change |
+|---|---|
+| `src/levels/legacySkillBookMigration.ts` | New — shared pure legacy-migration helper |
+| `src/tests/legacySkillBookMigration.test.ts` | New — characterization tests |
+| `src/editor/roomJson.ts` | Replaced inline unsafe-cast block with the shared call |
+| `src/levels/roomJsonToRoomDef.ts` | Replaced inline unsafe-cast block with the shared call |
+| `src/build-info.ts` | BUILD_NUMBER 449 → 450 |
+
+Validation results:
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `node --import tsx --test src/tests/legacySkillBookMigration.test.ts` | 0 | 7/7 pass |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm test` | 0 | 640/640 pass across 15 suites (7 new; baseline 633) |
+| `npm run build` | 0 | production Vite build passes; existing Vite CJS deprecation, unresolved-at-build-time Cinzel font, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; zero new findings |
+| `npx eslint src/levels/legacySkillBookMigration.ts src/tests/legacySkillBookMigration.test.ts src/editor/roomJson.ts src/levels/roomJsonToRoomDef.ts` | 0 | clean |
+| `git diff --check` | 0 | clean |
+
+Behavioral delta: none intended. `extractLegacySkillBookWeaves` reproduces
+the original inline filter/map exactly (truthy-`weaveId` inclusion,
+`xBlock`/`yBlock`/`weaveId` shape, input order preserved); both call sites'
+surrounding `dustSkillTombs`-then-legacy-books array order is unchanged.
+`editor/roomJson.ts` still assigns `uid++` per resulting entry in the same
+sequence as before.
+
+`BUILD_NUMBER` advanced 449 → 450.
+
+Phase Ten is closed. Do not begin Phase Eleven as part of this
+implementation run.
