@@ -18,6 +18,7 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 | Player movement, jump, grapple, ice behavior | `src/sim/clusters/movementConstants.ts` | `src/sim/clusters/`, `src/screens/gameCommandProcessor.ts`, relevant tests if present |
 | Enemy AI or pathing | `src/sim/clusters/` | `src/screens/gameEnemySpawn.ts`, room enemy definitions |
 | Editor palette / room authoring | `src/editor/editorController.ts` | `src/editor/editorDropdownData.ts`, `src/editor/editorPalettePreview.ts`, `src/editor/editorRoomBuilder.ts`, `src/editor/roomJsonSerializer.ts` |
+| Editor playtest room activation / edit invalidation | `src/screens/gameEditorRoomActivationCoordinator.ts` | `src/screens/gameScreen.ts`, `src/screens/residentBuildScheduler.ts`, `src/screens/residentRoomManager.ts`, `src/screens/roomRuntimeCache.ts`, `src/screens/zoneResidentLoader.ts` |
 | Room save format / migration / compression | `src/levels/roomSavedTypes.ts` | `src/levels/roomSchemaV2.ts`, `src/levels/roomSchemaHydrator.ts`, `src/levels/tileGridCompressor.ts`, `src/levels/roomFileAudit.ts`, `src/levels/roomRoundTripValidator.ts` |
 | Asset loading / sprite decode | `src/render/roomAssetPreloader.ts` | `src/render/walls/imageCache.ts`, `src/screens/gameLoadRoomPhases.ts`, menu/loading UI files |
 | UI menus / settings / debug panels | `src/ui/` | `src/render/hud/renderProfiler.ts`, `src/screens/gameOverlayController.ts`, `src/screens/gamePauseController.ts` |
@@ -109,6 +110,7 @@ Risk: simulation is intended to be deterministic. Keep DOM, render objects, and 
 - `src/editor/editorRoomBuilder.ts`: converts editor room data to runtime/editor geometry.
 - `src/editor/roomJsonSerializer.ts`: export serialization, including baked wall template generation.
 - `src/editor/roomJsonSchema.ts`: room JSON schema types.
+- `src/screens/gameEditorRoomActivationCoordinator.ts`: Node-safe orchestration boundary for applying an edited room to the live playtest runtime. It preserves spawn resolution, cache/resident/zone invalidation, radius-one rebuild ordering, room loading, and fresh active-world registration through injected ports.
 
 Room schema and compression:
 

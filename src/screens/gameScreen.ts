@@ -100,6 +100,10 @@ import {
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
+import {
+  applyGameEditorRoomActivation,
+  type GameEditorRoomActivationPorts,
+} from './gameEditorRoomActivationCoordinator';
 import { createGamePauseController } from './gamePauseController';
 import { createGameLambdaAnchorState } from './gameLambdaAnchorState';
 import { renderEditorBackdrop } from './gameScreenEditorBackdrop';
@@ -892,49 +896,33 @@ export function startGameScreen(
 
   // ── World Editor ────────────────────────────────────────────────────────
   let editorDebugControls: ReturnType<typeof createGameEditorDebugControls> | null = null;
+  const editorRoomActivationPorts: GameEditorRoomActivationPorts = {
+    resolveSpawn: resolveSpawnBlock,
+    bumpRoomVersion: roomId => { residentBuildScheduler.bumpRoomVersion(roomId); },
+    invalidateRuntime: roomId => { roomRuntimeCache.invalidate(roomId); },
+    invalidateChunkPrewarm: invalidateRoomChunkPrewarm,
+    invalidateResidentWorld: roomId => { residentRoomManager.invalidateResidentWorld(roomId); },
+    invalidateZone: worldNumber => { _zoneLoader.invalidateZone(worldNumber); },
+    queueRebuildAfterEdit: roomId => { residentBuildScheduler.queueRebuildAfterEdit(roomId); },
+    loadRoom: (room, spawnX, spawnY, preserveCamera) => {
+      loadRoom(room, spawnX, spawnY, preserveCamera);
+    },
+    getActiveWorld: () => world,
+    ensureResident: room => { residentRoomManager.ensureResident(room); },
+    setActiveResidentId: roomId => { residentRoomManager.setActiveResidentId(roomId); },
+    setResidentWorld: (roomId, residentWorld, isActive) => {
+      residentRoomManager.setResidentWorld(roomId, residentWorld, isActive);
+    },
+  };
   const editorController: EditorController = createEditorController(canvas, uiRoot, (roomDef, spawnX, spawnY, preserveCamera) => {
-    // When playing from the editor the room's playerSpawnBlock may be inside a
-    // wall (e.g. in a newly-created room or after heavy edits).  Always resolve
-    // to an open position so the player isn't stuck on entry.
-    const [validX, validY] = resolveSpawnBlock(roomDef, spawnX, spawnY);
-    // Bump the room version so any in-flight incremental build for this room
-    // will be detected as stale and discarded (BUILD 418+ stale-build guard).
-    residentBuildScheduler.bumpRoomVersion(roomDef.id);
-    // Invalidate this room's cached runtime data so edits take effect immediately.
-    roomRuntimeCache.invalidate(roomDef.id);
-    // Also evict any pre-warmed render chunks so stale canvas data is not adopted.
-    invalidateRoomChunkPrewarm(roomDef.id);
-    // Invalidate the resident world for the edited room and queue a rebuild so
-    // stale frozen state is never hot-swapped after an edit (BUILD 418).
-    residentRoomManager.invalidateResidentWorld(roomDef.id);
-    // Also invalidate radius-1 neighbours — their transition data may reference
-    // this room's geometry, enemies, or walls.
-    const editedNeighbours = bfsNearbyRooms(roomDef.id, ROOM_REGISTRY, 1);
-    for (const [adjId] of editedNeighbours) {
-      residentRoomManager.invalidateResidentWorld(adjId);
-      // Also evict pre-warmed render chunks for neighbours whose geometry may
-      // depend on the edited room (e.g. shared boundary walls).
-      invalidateRoomChunkPrewarm(adjId);
-    }
-    // Also invalidate the zone so the zone loader re-prepares stale rooms.
-    _zoneLoader.invalidateZone(roomDef.worldNumber ?? 1);
-    // Queue rebuilds for the edited room and its radius-1 neighbours.
-    // queueRebuildAfterEdit bypasses roomId coalescing so the rebuild is
-    // recorded even for rooms already queued at another priority.
-    residentBuildScheduler.queueRebuildAfterEdit(roomDef.id);
-    for (const [adjId] of editedNeighbours) {
-      residentBuildScheduler.queueRebuildAfterEdit(adjId);
-    }
-    loadRoom(roomDef, validX, validY, preserveCamera);
-    // After loadRoom(), the module-level `world` holds the newly loaded room.
-    // Update the active resident record to point at this fresh world so that
-    // subsequent hot-swaps see the correct state.  Without this, the resident
-    // for the edited room would remain null/stale and the next hot-swap would
-    // fall back to a cold load or hot-swap an outdated world.
-    residentRoomManager.ensureResident(roomDef);
-    residentRoomManager.setActiveResidentId(roomDef.id);
-    residentRoomManager.setResidentWorld(roomDef.id, world, true);
-    // Editor loads are not transitions — transition reveal state is removed (legacy).
+    applyGameEditorRoomActivation(
+      roomDef,
+      spawnX,
+      spawnY,
+      preserveCamera,
+      ROOM_REGISTRY,
+      editorRoomActivationPorts,
+    );
   }, () => {
     // Called when editor closes (confirm or cancel)
     editorDebugControls?.handleEditorClosed();

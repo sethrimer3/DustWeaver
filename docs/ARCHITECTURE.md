@@ -78,6 +78,14 @@ Transition geometry should stay as complete boundary walls plus independent trig
 
 The editor is centered around `src/editor/editorController.ts`, with data and UI split into helper modules. The editor writes room/campaign data through schema/serializer layers and shares runtime room builders for playtest/export.
 
+The editor-to-runtime playtest boundary is owned by
+`src/screens/gameEditorRoomActivationCoordinator.ts`. It synchronously orders
+safe-spawn resolution, edited/neighbor invalidation, rebuild queueing, room
+loading, and post-load active resident registration through injected ports.
+`gameScreen.ts` supplies the concrete runtime collaborators and a getter for
+the freshly loaded active world; the coordinator does not own those subsystem
+policies or import browser-facing implementations.
+
 High-level areas:
 
 - Palette categories and items: `editorDropdownData.ts`.
