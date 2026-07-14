@@ -175,11 +175,15 @@ Run a browser smoke test: create a new save, press Play, verify configured start
 
 ---
 
-## Phase Six — Extract the speedrun timer state machine (IN PROGRESS; baseline BUILD 445)
+## Phase Six — Extract the speedrun timer state machine (COMPLETE; BUILD 446)
 
 **Claimed:** Codex on 2026-07-13. Scope is limited to the files and behavior
 listed in this phase; implementation results will be recorded here before the
 phase is marked complete.
+
+**Progress:** Added `src/screens/gameRunTimer.ts` and 21 direct characterization
+tests in `src/tests/gameRunTimer.test.ts`; the targeted suite passed 21/21
+before replacing the inline `gameScreen.ts` state.
 
 ### Planning baseline
 
@@ -452,3 +456,59 @@ and commit hashes, then commit and push the coherent implementation.
 
 Do not implement Phase Six in the run that authored this section. That run is
 documentation-only and must commit and push only `RefactorPlan.md`.
+
+### Completion record
+
+Completed by Codex on 2026-07-13. Implementation commit: pending creation at
+the time of this completion update; record it here immediately after commit.
+
+Files changed:
+
+| File | Change |
+|---|---|
+| `src/screens/gameRunTimer.ts` | Added the Node-safe, instance-local timer state owner |
+| `src/tests/gameRunTimer.test.ts` | Added 21 characterization tests across initialization, intent/accumulation, checkpoint/respawn, and ownership |
+| `src/screens/gameScreen.ts` | Replaced three inline mutable values with one timer instance; preserved checkpoint, respawn, tick, and render call-site order |
+| `src/build-info.ts` | Incremented BUILD_NUMBER 445 → 446 exactly once |
+| `docs/AI_REPO_MAP.md` | Added timer routing and ownership guidance |
+| `docs/ARCHITECTURE.md` | Documented the screen/timer responsibility boundary |
+| `RefactorPlan.md` | Recorded claim, progress, implementation, validation, and completion |
+
+Behavior and compatibility:
+
+- No intended behavioral delta.
+- Same-frame arming/accumulation, alive-player gating, zero lower bound,
+  checkpoint-before-save ordering, and respawn waiting semantics are preserved.
+- Pause, menu, editor, loading, transition, entry-warm, and decode gating remain
+  in their original `gameScreen.ts` positions.
+- No save schema, callback/options API, HUD formatting, assist-mode, or frame
+  clock behavior changed.
+- The timer has no DOM, render, persistence, `WorldState`, or wall-clock import.
+- `tick` receives scalar arguments and performs no per-frame allocation.
+
+Validation results:
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `node --import tsx --test src/tests/gameRunTimer.test.ts` | 0 | 21/21 pass before and after integration |
+| `npm test` | 0 | 587/587 pass (21 new; baseline 566) |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm run build` | 0 | 914 modules transformed; existing font-resolution, Vite CJS deprecation, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; no new findings |
+| `npx eslint src/screens/gameRunTimer.ts src/tests/gameRunTimer.test.ts src/screens/gameScreen.ts` | 0 | all touched TypeScript files clean |
+| `git diff --check` | 0 | clean |
+
+Browser smoke test:
+
+- Local Vite runtime returned HTTP 200 and visibly reported BUILD 446.
+- Main menu, empty save-slot creation, Normal Mode selection, the full 18-room
+  initial zone load, and gameplay startup completed.
+- Movement input was accepted in gameplay and no browser console errors were
+  recorded.
+- The timer text was not visually legible in the captured dark gameplay frame,
+  so display/pause/checkpoint/respawn persistence was not claimed as manually
+  verified. The extracted state transitions are covered directly by the 21
+  Node characterization tests.
+
+Acceptance result: all code-level acceptance criteria are satisfied. No new
+deferred work was discovered, so `docs/TODO.md` was not changed.

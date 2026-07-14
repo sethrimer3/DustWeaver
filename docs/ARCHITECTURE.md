@@ -7,7 +7,7 @@ This document is AI-facing and intentionally compact. Use it to choose files, th
 DustWeaver is a TypeScript/Vite/Electron-capable browser game. The current codebase has several major ownership layers:
 
 - `src/game.ts`: top-level app/navigation state machine. Owns transitions between menu, loadout, gameplay, custom campaign play, and custom campaign edit.
-- `src/screens/`: gameplay screen orchestration, room loading, transitions, resident rooms, camera, HUD/debug integration, and render orchestration.
+- `src/screens/`: gameplay screen orchestration, room loading, transitions, resident rooms, camera, HUD/debug integration, and render orchestration. `src/screens/gameRunTimer.ts` is the Node-safe, instance-local speedrun timer state owner; `gameScreen.ts` retains eligible-frame gating.
 - `src/sim/`: deterministic gameplay simulation. Owns `WorldState`, fixed tick systems, particle/cluster movement, combat, AI, hazards, and pathing.
 - `src/render/`: rendering systems. Reads snapshots and room/render state, draws particles, walls, backgrounds, UI overlays, bloom, lighting, effects, and debug panels.
 - `src/levels/`: room definitions, room registry, compact room schema, lazy room-file loading, campaign metadata, and migration/audit helpers.

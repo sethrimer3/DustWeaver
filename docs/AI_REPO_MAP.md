@@ -9,6 +9,7 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 | App flow, screen navigation, save-slot start behavior | `src/game.ts` | `src/ui/mainMenu.ts`, `src/ui/weaveLoadout.ts`, `src/progression/` |
 | Campaign starting-options normalization (health/containers/dust/weaves) | `src/progression/campaignStartingOptions.ts` | `src/levels/campaignSchema.ts`, `src/progression/unlocks.ts`, `src/progression/playerProgress.ts` |
 | Gameplay loop, fixed tick, input-to-sim orchestration | `src/screens/gameScreen.ts` | `src/screens/gameCommandProcessor.ts`, `src/sim/tick.ts`, `src/input/handler.ts` |
+| Speedrun timer arming, checkpoint, and respawn state | `src/screens/gameRunTimer.ts` | `src/screens/gameScreen.ts`, `src/screens/gameOverlayController.ts`, `src/progression/saveSlots.ts` |
 | Room load / transition hitch | `src/screens/gameLoadRoomPhases.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/residentRoomManager.ts`, `src/screens/zoneResidentLoader.ts`, `src/screens/roomRuntimeCache.ts`, `src/debug/transitionProfiler.ts` |
 | Resident-room / hot-swap behavior | `src/screens/residentRoomManager.ts` | `src/screens/residentWorldBuilder.ts`, `src/screens/playerTransfer.ts`, `src/screens/gameLoadRoomPhases.ts` |
 | Render chunk prewarming | `docs/render-chunk-prewarming.md` | `src/screens/roomRenderChunkWarmScheduler.ts`, `src/render/walls/blockSpriteRenderer.ts`, `src/render/walls/backgroundBlockRenderer.ts`, `src/render/walls/chunkRenderCache.ts` |
@@ -26,6 +27,7 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 
 - `src/main.ts` or equivalent Vite entry: browser bootstrapping. Verify exact file before editing because it was not inspected for this map.
 - `src/game.ts`: top-level app state machine. It wires main menu, loadout, gameplay, custom campaign play/edit, save persistence, lazy official/custom campaign room loading, and recovery when `ROOM_REGISTRY` is partial.
+- `src/screens/gameRunTimer.ts`: Node-safe, instance-local speedrun timer state machine. It owns normalization, waiting-for-intent arming, eligible-frame accumulation, checkpoint capture, and respawn restore; `gameScreen.ts` retains screen-level frame gating.
 - `src/screens/gameScreen.ts`: main gameplay orchestrator. It owns the fixed timestep loop, canvas size assumptions, input attachment, render orchestration, room loading, transition manager wiring, resident room manager, zone resident loader, debug/profiler hooks, and many renderer objects.
 
 ## Runtime flow

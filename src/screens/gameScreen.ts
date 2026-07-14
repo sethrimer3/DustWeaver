@@ -136,6 +136,7 @@ import {
   applyRoomPreloadAnticipationPolicy,
   type RoomPreloadAnticipationPorts,
 } from './roomPreloadAnticipationPolicy';
+import { createGameRunTimer } from './gameRunTimer';
 
 const FIXED_DT_MS = 16.666;
 
@@ -953,19 +954,12 @@ export function startGameScreen(
 
   const hudState: HudState = { fps: 0, frameTimeMs: 0, particleCount: 0 };
 
-  // ── Speedrun timer state ──────────────────────────────────────────────────
-  // runTimerMs:                 accumulated active gameplay time this run.
-  // checkpointRunTimerMs:       timer value at the last save point (used for
-  //                             death/respawn restoration).
-  // timerWaitingForMovement:    true after load/respawn until intentional player
-  //                             input is detected; prevents the timer from
-  //                             ticking during physics settling or room init.
-  /** Clamp a raw timer value from save data: treats NaN/Infinity/negative as 0. */
-  const _clampTimerMs = (ms: number | undefined): number => Math.max(0, isFinite(ms ?? 0) ? (ms ?? 0) : 0);
-  let runTimerMs: number = _clampTimerMs(runOptions?.initialRunTimerMs);
-  let checkpointRunTimerMs: number = _clampTimerMs(runOptions?.initialCheckpointRunTimerMs);
-  let timerWaitingForMovement = true; // start in "waiting" state so the timer doesn't
-  //                                    tick on first load before the player moves.
+  // Owns normalized current/checkpoint values and waiting-for-intent state.
+  // Screen-level early returns still decide which frames are eligible to tick.
+  const runTimer = createGameRunTimer(
+    runOptions?.initialRunTimerMs,
+    runOptions?.initialCheckpointRunTimerMs,
+  );
 
   // Set assist mode flag on the world so the grapple system can check it.
   world.isAssistModeFlag = (runOptions?.assistMode === true) ? 1 : 0;
@@ -1005,13 +999,12 @@ export function startGameScreen(
     onSave: callbacks.onSave,
     onCheckpointReached: () => {
       // Snapshot the current timer as the checkpoint value.
-      checkpointRunTimerMs = runTimerMs;
-      if (callbacks.onCheckpointReached) callbacks.onCheckpointReached(runTimerMs);
+      const checkpointMs = runTimer.captureCheckpoint();
+      if (callbacks.onCheckpointReached) callbacks.onCheckpointReached(checkpointMs);
     },
     onRespawn: () => {
       // Restore the timer to the checkpoint value and wait for player movement.
-      runTimerMs = checkpointRunTimerMs;
-      timerWaitingForMovement = true;
+      runTimer.restoreCheckpoint();
     },
   });
 
@@ -1360,22 +1353,14 @@ export function startGameScreen(
     // jump input counts.  Passive physics (gravity settling, camera, particles,
     // room init) do NOT count.  This matches the spirit of "the player has
     // not moved yet" for the waiting state.
-    {
-      const _player = world.clusters[0];
-      const _playerAlive = _player !== undefined && _player.isAliveFlag === 1;
-      if (timerWaitingForMovement) {
-        // Arm the timer once the player provides any deliberate input
-        // (horizontal movement or jump). Passive physics such as gravity
-        // settling, camera motion, and room init do not qualify.
-        const hasIntentionalInput = (moveDx !== 0) || jumpTriggered || inputState.isJumpHeldFlag;
-        if (hasIntentionalInput && _playerAlive) {
-          timerWaitingForMovement = false;
-        }
-      }
-      if (!timerWaitingForMovement && _playerAlive) {
-        runTimerMs = Math.max(0, runTimerMs + elapsedMs);
-      }
-    }
+    const _player = world.clusters[0];
+    runTimer.tick(
+      elapsedMs,
+      _player !== undefined && _player.isAliveFlag === 1,
+      moveDx,
+      jumpTriggered,
+      inputState.isJumpHeldFlag,
+    );
 
     // ── Room transition check ──────────────────────────────────────────────
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
@@ -1673,7 +1658,7 @@ export function startGameScreen(
       setTeleportFlashAlpha: lambdaAnchorState.setTeleportFlashAlpha,
       getPlayerDustCount,
       playerContainerCount: progress?.dustContainerCount ?? 0,
-      runTimerMs,
+      runTimerMs: runTimer.getCurrentMs(),
       graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,
       isDeepReductionActive: aqState.isDeepReductionActive,
