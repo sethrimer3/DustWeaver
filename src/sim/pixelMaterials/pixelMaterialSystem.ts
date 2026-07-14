@@ -51,9 +51,17 @@
 import type { SolidMask } from './pixelMaterialSolid';
 import {
   MATERIAL_SAND,
+  MATERIAL_SANDSTONE,
   SLEEP_DELAY_STEPS,
   WIND_MOMENTUM_DAMPING,
   WIND_MOMENTUM_EPSILON,
+  SANDSTONE_FRACTURE_IMPACT_SPEED,
+  SANDSTONE_MAX_FRACTURE_RADIUS,
+  SANDSTONE_SPEED_PER_RADIUS_PX,
+  SANDSTONE_IMPACT_COOLDOWN_TICKS,
+  SANDSTONE_MIN_EROSION_WIND_SPEED,
+  SANDSTONE_EROSION_THRESHOLD,
+  SANDSTONE_EROSION_RATE,
   getMaterialBehavior,
   getMaterialFootprintSize,
   getMaterialWindResponse,
@@ -204,7 +212,7 @@ export class PixelMaterialSystem {
     const size = getMaterialFootprintSize(material);
     if (!this.isRegionFree(x, y, size)) return false;
     const p: PixelMaterialParticle = {
-      x, y, material, active: true, unchangedSteps: 0, windVelX: 0, windVelY: 0,
+      x, y, material, active: true, unchangedSteps: 0, windVelX: 0, windVelY: 0, erosionDamage: 0,
     };
     this.setFootprintKeys(p, x, y, size);
     this.particles.add(p);
@@ -553,6 +561,9 @@ export class PixelMaterialSystem {
       case 'liquid':
         this.stepLiquidParticle(p);
         break;
+      case 'static':
+        this.stepStaticParticle(p);
+        break;
     }
   }
 
@@ -629,6 +640,154 @@ export class PixelMaterialSystem {
     // 5. No valid movement — remain stationary; count toward sleep.
     this.countUnchangedAndMaybeSleep(p);
   }
+
+  /**
+   * Static-material step (sandstone): never moves. Wind momentum is
+   * reinterpreted as erosion exposure — the accumulated windVelX/windVelY
+   * magnitude contributes to `erosionDamage` each step, and the particle
+   * fractures to sand when damage exceeds the threshold. Wind velocity is
+   * decayed normally so strong gusts taper off between impulses.
+   *
+   * The particle sleeps after SLEEP_DELAY_STEPS of no wind — it wakes again
+   * whenever `applyWindForce` is called on its cell (which calls `wake`).
+   */
+  private stepStaticParticle(p: PixelMaterialParticle): void {
+    this.decayWindMomentum(p);
+
+    const windSpeed = Math.sqrt(p.windVelX * p.windVelX + p.windVelY * p.windVelY);
+    if (windSpeed >= SANDSTONE_MIN_EROSION_WIND_SPEED) {
+      p.erosionDamage += windSpeed * SANDSTONE_EROSION_RATE;
+      if (p.erosionDamage >= SANDSTONE_EROSION_THRESHOLD) {
+        this.convertMaterialTo(p, MATERIAL_SAND);
+        return;
+      }
+      // Wind is still active — reset sleep counter so we keep running.
+      p.unchangedSteps = 0;
+    } else {
+      this.countUnchangedAndMaybeSleep(p);
+    }
+  }
+
+  /**
+   * Changes a particle's material in-place — updates the material field and
+   * resets material-specific state, but keeps position and occupancy keys
+   * (footprint must remain 1x1 for sandstone → sand; both are 1x1).
+   * The particle is woken so the new behavior runs from the next step.
+   */
+  private convertMaterialTo(p: PixelMaterialParticle, newMaterial: MaterialId): void {
+    p.material = newMaterial;
+    p.erosionDamage = 0;
+    p.windVelX = 0;
+    p.windVelY = 0;
+    p.unchangedSteps = 0;
+    this.wake(p);
+    this.wakeAround(p.x, p.y, 1);
+  }
+
+  /**
+   * Checks the player cluster's AABB against nearby sandstone pixels and
+   * fractures any that the player is moving INTO with enough speed.
+   *
+   * Algorithm:
+   *   1. Determine the player's AABB in native pixels.
+   *   2. Scan a 1-pixel-margin border around that AABB.
+   *   3. For each sandstone pixel found, determine which face of the AABB
+   *      it's adjacent to and compute the normal from the player into the sandstone.
+   *   4. Project the player velocity onto that direction — this is the inward
+   *      impact speed. Tangential motion (sliding along a wall) yields near-zero.
+   *   5. If the impact speed exceeds SANDSTONE_FRACTURE_IMPACT_SPEED, fracture
+   *      all sandstone within a radius that scales with excess speed.
+   *   6. A per-call cooldown (`lastImpactTick`) prevents re-fracture every
+   *      frame during sustained high-speed contact.
+   *
+   * `currentTick` should be `world.tick`.
+   */
+  applyPlayerImpactFracture(
+    playerX: number,
+    playerY: number,
+    playerHalfW: number,
+    playerHalfH: number,
+    playerVelX: number,
+    playerVelY: number,
+    currentTick: number,
+  ): void {
+    if (currentTick - this._lastImpactTick < SANDSTONE_IMPACT_COOLDOWN_TICKS) return;
+
+    // Player AABB in native pixels.
+    const left   = playerX - playerHalfW;
+    const right  = playerX + playerHalfW;
+    const top    = playerY - playerHalfH;
+    const bottom = playerY + playerHalfH;
+
+    let bestImpactSpeed = 0;
+    let bestCenterX = 0;
+    let bestCenterY = 0;
+
+    const scanX0 = Math.max(0, Math.floor(left)   - 1);
+    const scanX1 = Math.min(this.widthPx  - 1, Math.ceil(right)  + 1);
+    const scanY0 = Math.max(0, Math.floor(top)    - 1);
+    const scanY1 = Math.min(this.heightPx - 1, Math.ceil(bottom) + 1);
+
+    for (let sy = scanY0; sy <= scanY1; sy++) {
+      for (let sx = scanX0; sx <= scanX1; sx++) {
+        const p = this.occupancy.get(this.key(sx, sy));
+        if (p === undefined || p.material !== MATERIAL_SANDSTONE) continue;
+
+        // Skip cells fully interior to the AABB (only the border shell counts).
+        const inX = sx >= Math.floor(left) && sx < Math.ceil(right);
+        const inY = sy >= Math.floor(top)  && sy < Math.ceil(bottom);
+        if (inX && inY) continue;
+
+        // Contact normal: direction from player toward sandstone cell.
+        // The axis with the smallest absolute distance to the AABB edge gives the face.
+        const dL = Math.abs(sx - Math.floor(left));
+        const dR = Math.abs(sx - (Math.ceil(right) - 1));
+        const dT = Math.abs(sy - Math.floor(top));
+        const dB = Math.abs(sy - (Math.ceil(bottom) - 1));
+
+        let nx = 0, ny = 0;
+        const minD = Math.min(dL, dR, dT, dB);
+        if      (minD === dL) nx = -1; // sandstone is to the left — player moving left hits it
+        else if (minD === dR) nx =  1; // sandstone is to the right
+        else if (minD === dT) ny = -1; // sandstone is above
+        else                  ny =  1; // sandstone is below
+
+        // Impact speed = player velocity component in direction of the normal.
+        const impactSpeed = playerVelX * nx + playerVelY * ny;
+        if (impactSpeed > bestImpactSpeed) {
+          bestImpactSpeed = impactSpeed;
+          bestCenterX = sx;
+          bestCenterY = sy;
+        }
+      }
+    }
+
+    if (bestImpactSpeed < SANDSTONE_FRACTURE_IMPACT_SPEED) return;
+
+    const excess = bestImpactSpeed - SANDSTONE_FRACTURE_IMPACT_SPEED;
+    const radius = Math.min(SANDSTONE_MAX_FRACTURE_RADIUS, excess / SANDSTONE_SPEED_PER_RADIUS_PX);
+
+    const r0x = Math.max(0, Math.floor(bestCenterX - radius));
+    const r1x = Math.min(this.widthPx  - 1, Math.ceil(bestCenterX + radius));
+    const r0y = Math.max(0, Math.floor(bestCenterY - radius));
+    const r1y = Math.min(this.heightPx - 1, Math.ceil(bestCenterY + radius));
+
+    for (let fy = r0y; fy <= r1y; fy++) {
+      for (let fx = r0x; fx <= r1x; fx++) {
+        const dx = fx - bestCenterX;
+        const dy = fy - bestCenterY;
+        if (radius > 0 && dx * dx + dy * dy > (radius + 0.5) * (radius + 0.5)) continue;
+        const fp = this.occupancy.get(this.key(fx, fy));
+        if (fp === undefined || fp.material !== MATERIAL_SANDSTONE) continue;
+        this.convertMaterialTo(fp, MATERIAL_SAND);
+      }
+    }
+
+    this._lastImpactTick = currentTick;
+  }
+
+  /** Tick of the last player-impact fracture event (for cooldown). */
+  private _lastImpactTick = -Infinity;
 
   // ── Serialization ───────────────────────────────────────────────────────
 

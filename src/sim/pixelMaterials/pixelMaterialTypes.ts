@@ -89,6 +89,11 @@ export const MATERIAL_DEFS: Readonly<Record<number, MaterialDef>> = {
   // Distinct blue/cyan, clearly different from either sand tone. Higher
   // windResponse than sand — water is meant to feel lighter/more reactive.
   [MATERIAL_WATER]: { footprintSize: 1, color: '#4fa3d1', windResponse: 1.3, behavior: 'liquid' },
+  // Warm grey with a slight ochre tint — reads as compressed stone next to
+  // the loose golden hue of 1x1 sand, clearly different but tonally related.
+  // windResponse: 0.6 so wind accumulates on sandstone (used for erosion),
+  // but more slowly than loose sand, reflecting the material's greater mass.
+  [MATERIAL_SANDSTONE]: { footprintSize: 1, color: '#c4a97d', windResponse: 0.6, behavior: 'static' },
 };
 
 /** Returns the material's square footprint size in native pixels (defaults to 1 for unknown ids). */
@@ -156,6 +161,13 @@ export interface PixelMaterialParticle {
   windVelX: number;
   /** Vertical wind momentum, in px/s. Decays via damping each step; gravity dominates once it settles. */
   windVelY: number;
+  /**
+   * Accumulated wind-erosion damage for MATERIAL_SANDSTONE particles.
+   * Incremented each step by the wind speed hitting this particle
+   * (windSpeed × SANDSTONE_EROSION_RATE). Reset to 0 on fracture/conversion.
+   * Always 0 for non-sandstone particles.
+   */
+  erosionDamage: number;
 }
 
 /** A single authored (serialized) pixel-material placement. */
@@ -164,6 +176,49 @@ export interface RoomPixelMaterialDef {
   readonly yPixel: number;
   readonly material: number;
 }
+
+// ── Sandstone fracture configuration ────────────────────────────────────────
+//
+// Velocity scale reference (all in native px/s = world units/s):
+//   Walk/run:  ≤105  Sprint: ≤157.5  Momentum-combat activation: ≥175
+//   Grapple swings routinely reach 250–420+ px/s.
+//
+// Impact threshold (200 px/s) is above sprint but well within grapple range,
+// so only intentional high-speed impacts fracture sandstone.
+//
+// Fracture radius scales with excess speed above the threshold:
+//   At 200 px/s → radius 0 (exactly 1 pixel).
+//   At 420 px/s → excess 220 → radius ~2.2 px → about 3 pixels in total.
+//
+// Wind erosion: applyWindForce adds up to MAX_FORCE=130 px/s per tick.
+// WIND_MOMENTUM_DAMPING=0.85, so steady-state peak ≈ 130/(1-0.85)×0.6≈520 px/s.
+// Minimum erosion wind speed (40 px/s) is set well below typical gusts so
+// even light environmental wind counts; strong grapple-driven wind erodes fast.
+// At steady-state max wind the threshold (1800) is reached in ~23 ticks (<0.5s).
+// At minimum wind (40 px/s) it takes ~1800/40 = 45 ticks (~0.75s).
+
+/** Minimum inward player speed (px/s) needed to fracture sandstone on impact. */
+export const SANDSTONE_FRACTURE_IMPACT_SPEED = 200;
+
+/** Maximum sandstone fracture radius (px) at very high impact speed.
+ *  Actual radius = clamp(0, MAX) × (impactSpeed - threshold) / SPEED_PER_RADIUS_PX. */
+export const SANDSTONE_MAX_FRACTURE_RADIUS = 3;
+
+/** Impact speed (px/s) above threshold that yields one additional pixel of fracture radius. */
+export const SANDSTONE_SPEED_PER_RADIUS_PX = 100;
+
+/** Ticks before another player-impact fracture event can occur in the same region.
+ *  Prevents a single high-speed contact from fracturing the same block every frame. */
+export const SANDSTONE_IMPACT_COOLDOWN_TICKS = 12;
+
+/** Minimum wind speed (px/s, after windResponse scaling) for erosion to accumulate. */
+export const SANDSTONE_MIN_EROSION_WIND_SPEED = 40;
+
+/** Accumulated erosion damage at which a sandstone particle fractures into sand. */
+export const SANDSTONE_EROSION_THRESHOLD = 1800;
+
+/** Per-tick erosion rate: erosionDamage += windSpeed × this value each step. */
+export const SANDSTONE_EROSION_RATE = 1.0;
 
 /** Parameters for an external force ("wind") applied over an area. */
 export interface WindForceParams {

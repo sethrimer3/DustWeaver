@@ -199,6 +199,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'sand_2x2', label: 'Sand 2×2', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 2 },
   // pixelMaterialId: 3 === MATERIAL_WATER (sim/pixelMaterials/pixelMaterialTypes.ts).
   { id: 'water_1x1', label: 'Water 1×1', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 3 },
+  // pixelMaterialId: 4 === MATERIAL_SANDSTONE (sim/pixelMaterials/pixelMaterialTypes.ts).
+  // Static brittle material; fractures into sand under high-speed player impact or sustained wind.
+  { id: 'sandstone_1x1', label: 'Sandstone 1×1', category: 'dust', isPixelMaterialItem: 1, pixelMaterialId: 4 },
   // Environment (world atmosphere and critters)
   { id: 'grasshopper_area',     label: 'Grasshopper Area', category: 'environment' },
   { id: 'firefly_area',         label: 'Firefly Area',     category: 'environment' },
