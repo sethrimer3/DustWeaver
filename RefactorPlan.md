@@ -913,3 +913,434 @@ practical browser pass confirmed two reversible edit/playtest cycles with no
 console errors, subject to the explicit manual limitations above. No new
 deferred work was discovered, so `docs/TODO.md` was not changed. Phase Seven is
 closed; do not repeat or expand it.
+
+### Follow-up connected-neighbor validation
+
+Completed manually in the local browser on 2026-07-13 at BUILD 447. In the
+connected lobby room, Stone Hollow (`lobby`), the room height was reversibly
+changed from 58 to 59 and the edited room was playtested. The authored right
+transition was then traversed into Stone Crossing (`w1_room1`), followed by its
+authored left transition back to Stone Hollow. Re-entering the editor after the
+round trip still showed height 59, so neither the neighbor activation nor the
+return activation replaced the latest edit with stale geometry or an older
+resident build. The height was then restored to 58 and playtested again.
+
+The browser console contained no errors and no stale-build diagnostics during
+the round trip. Dev Mode was enabled only to make movement practical through
+browser-generated discrete keypresses; both normal authored room-transition
+triggers executed. No repository source, room data, build number, or save
+schema was changed by this validation. This closes the recorded connected-
+neighbor manual limitation without reopening Phase Seven.
+
+---
+
+## Phase Eight — Extract the skill-tomb activation transaction (PROPOSED; baseline BUILD 447)
+
+### Planning baseline and current validation
+
+This phase was planned from `main` at
+`b47e9bffa3d544eac4efc40c791c052f482f326d`, tracking `origin/main` with
+ahead/behind counts `0/0`, a clean working tree, and `BUILD_NUMBER` 447. There
+are no commits after the Phase Seven completion commit and no unrelated or
+auto-sync changes to preserve at this baseline. Phases One through Seven are
+closed and remain out of scope.
+
+Planning-run validation:
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `npm test` | 0 | 598/598 pass; 9 suites, 0 failed/skipped/cancelled |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm run build` | 0 | 915 modules transformed; existing Vite CJS deprecation, unresolved-at-build-time Cinzel font, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; no other findings |
+| `git diff --check` | 0 | planning-only diff is whitespace-clean |
+| `git status --short --branch` | 0 | only `RefactorPlan.md` is modified for this planning result |
+
+The first sandboxed build attempt exited 1 because esbuild could not read
+`../../..` or resolve `vite.config.ts` under the restricted environment. The
+identical build rerun with normal repository access exited 0, classifying the
+first result as environment-only rather than a source regression.
+
+### Decision and current-code evidence
+
+Phase Eight is justified by a concrete ownership and testability boundary, not
+by file length. `openSkillTombMenu` in
+`src/screens/gameOverlayController.ts` currently combines DOM/modal lifecycle
+with a deterministic gameplay/progression transaction:
+
+1. It obtains the live world through `getWorld()` and selects exactly
+   `world.clusters[0]` (`openSkillTombMenu`, lines approximately 113-124).
+2. It converts the player's absolute position to room-local coordinates using
+   `getCurrentRoomOrigin()` and asks `SkillTombRenderer.getNearbyTombIndex` for
+   the interactable save tomb (approximately lines 128-133).
+3. For a valid index and tomb position, it writes `lastSaveRoomId` and rounded
+   `lastSaveSpawnBlock`, then invokes `onCheckpointReached` before `onSave`
+   (approximately lines 134-144).
+4. Whether or not a valid tomb position was returned, an existing player is
+   healed to maximum health (approximately lines 147-149).
+5. It scans `world.particleCount` entries and restores only non-transient
+   particles owned by that player: dead particles with a positive respawn
+   delay are shortened to one tick, while alive particles regain their element
+   profile's toughness (approximately lines 150-159).
+6. It then passes the captured player position and healed health values into
+   the browser-only `showSkillTombMenu` UI (approximately lines 162-181).
+
+No direct test under `src/tests` imports or characterizes
+`gameOverlayController`, `openSkillTombMenu`, or this combined transaction.
+The controller imports `showDeathScreen`, `showMapOnlyModal`,
+`showSkillTombMenu`, and the canvas-oriented `SkillTombRenderer`, so direct
+Node characterization would unnecessarily require browser/UI collaborators.
+In contrast, `createWorldState`, `createClusterState`, `PlayerProgress`, and
+`getElementProfile` are already used by Node tests and are sufficient to test
+the deterministic mutation policy after renderer lookups are represented as
+narrow ports.
+
+History reinforces the lifecycle risk. Commit `d293b8e0` introduced the
+overlay extraction and the save/heal transaction, `708f628` added the timer
+checkpoint callback, `a5d875c` fixed checkpoint-before-save ordering, and
+`4227878` replaced a captured `WorldState` with `getWorld()` after resident
+activation exposed a stale-world bug. The transaction therefore contains
+correctness behavior accumulated through multiple fixes but still lacks a
+direct characterization boundary.
+
+This is architectural work because it separates deterministic progression and
+simulation mutation from DOM/modal orchestration. It does not add a feature,
+change a save point, alter healing, or redesign overlays. It is stronger than
+the other visible candidates: the current transition/performance TODOs require
+measurement or behavior optimization, the seven lint findings are isolated
+test typing debt, and completed game-screen/resident/transition/timer/editor
+coordinators already own their respective boundaries.
+
+### Objective and ownership boundary
+
+Create a small Node-safe module, tentatively
+`src/screens/gameSkillTombActivation.ts`, that owns exactly the synchronous
+skill-tomb activation transaction:
+
+- locate a tomb relative to the current room origin through injected lookup
+  ports;
+- update the last-save room and rounded block coordinates when a valid tomb
+  position exists;
+- preserve checkpoint-before-save callback ordering;
+- heal the selected player cluster;
+- restore the current player's eligible particle state; and
+- return the scalar values needed to open the existing menu.
+
+`gameOverlayController.ts` continues to own overlay guards, map/modal closing,
+open-state flags, cleanup functions, DOM menu construction, close callbacks,
+loadout writes, frame-clock reset, and save-on-close behavior. The new module
+must not import UI, DOM, canvas, renderer classes, Electron, storage, or the run
+timer implementation.
+
+### Behavioral contract to preserve
+
+- `openSkillTombMenu` still returns immediately when the menu is already open
+  or `progress` is absent, and still closes the map-only modal before marking
+  the skill-tomb menu open.
+- The live world is still obtained at activation time through `getWorld()`;
+  it must not be captured when the overlay controller is constructed.
+- The transaction selects exactly `world.clusters[0]`. It does not search by
+  `isPlayerFlag` or fall back to another cluster.
+- When cluster zero is absent, no room-origin or tomb lookup occurs, no save or
+  particle state changes, and the menu receives zero for player position,
+  health, and maximum health.
+- With a player, the nearby-tomb query receives
+  `player.positionXWorld - currentRoomOriginXWorld` and the corresponding Y
+  value exactly.
+- A negative nearby index skips tomb-position lookup and checkpoint/save
+  mutation, but does not skip player/particle healing.
+- A nonnegative index whose position lookup returns `null` also skips progress
+  writes and checkpoint/save callbacks while preserving healing.
+- A valid tomb position writes the current room ID, then assigns a new
+  `lastSaveSpawnBlock` tuple using `Math.round(tombCoordinate /
+  BLOCK_SIZE_MEDIUM)` independently for X and Y.
+- Progress writes complete before callbacks. `onCheckpointReached`, when
+  present, runs before `onSave`, when present. Missing callbacks are no-ops.
+- Exceptions are not caught or translated. A throwing checkpoint callback
+  prevents save, healing, and menu construction; a throwing save callback
+  prevents healing and menu construction, matching current synchronous
+  short-circuit behavior.
+- An existing player's `healthPoints` becomes exactly `maxHealthPoints`, and
+  both health values returned for the menu equal that maximum. The returned
+  player X/Y values are the original absolute world coordinates.
+- The particle loop visits only indices below `world.particleCount`.
+- Particles whose `ownerEntityId` differs from `player.entityId` are unchanged.
+- Owned transient particles are unchanged regardless of alive/dead state.
+- Owned non-transient dead particles change only when
+  `respawnDelayTicks > 0`, in which case the delay becomes exactly `1`.
+- Owned non-transient alive particles have `particleDurability` reset to
+  `getElementProfile(kindBuffer[index]).toughness`; their respawn delay is not
+  changed by this transaction.
+- No unrelated world buffers, cluster fields, progress fields, tomb lookup
+  data, room data, or loadout data are mutated.
+- `showSkillTombMenu` still receives the current room ID through the existing
+  controller getter after the deterministic transaction, and its close
+  callback behavior remains unchanged.
+
+### Proposed testable API boundary
+
+The exact names may follow nearby conventions, but keep the surface no broader
+than this structural shape:
+
+```ts
+export interface SkillTombActivationPorts {
+  getCurrentRoomOrigin(): readonly [number, number];
+  getCurrentRoomId(): string;
+  getNearbyTombIndex(localXWorld: number, localYWorld: number): number;
+  getTombPosition(index: number): { xWorld: number; yWorld: number } | null;
+  onCheckpointReached?: () => void;
+  onSave?: () => void;
+}
+
+export interface SkillTombActivationResult {
+  playerXWorld: number;
+  playerYWorld: number;
+  playerHealthPoints: number;
+  playerMaxHealthPoints: number;
+}
+
+export function applySkillTombActivation(
+  world: WorldState,
+  progress: PlayerProgress,
+  ports: SkillTombActivationPorts,
+): SkillTombActivationResult;
+```
+
+The port must be structural; do not import `SkillTombRenderer`. If preserving
+the current conditional getter call pattern requires splitting room-origin and
+room-ID getters exactly as shown, prefer that over eager scalar capture. The
+controller should create stable port wrappers once rather than rebuilding a
+dependency object inside every menu activation.
+
+### Required scope
+
+- Add `src/screens/gameSkillTombActivation.ts` (or an equivalently focused
+  name) with the Node-safe transaction and result type.
+- Add `src/tests/gameSkillTombActivation.test.ts` with direct characterization
+  against real `createWorldState`/`createClusterState` buffers and recording
+  lookup/callback ports.
+- Make the smallest integration edit in
+  `src/screens/gameOverlayController.ts`: delegate the deterministic block and
+  retain all UI/open/close lifecycle code in place.
+- Increment `BUILD_NUMBER` exactly once from the value current when Phase Eight
+  implementation begins.
+- Update `docs/AI_REPO_MAP.md`, `docs/ARCHITECTURE.md`, and this phase's
+  completion record only as needed to name the new owner and actual results.
+
+Optional only when mechanically necessary:
+
+- Remove `BLOCK_SIZE_MEDIUM` and `getElementProfile` imports from
+  `gameOverlayController.ts` after their sole uses move to the new module.
+- Export a narrow tomb-position structural type if it avoids duplication and
+  does not pull renderer/browser dependencies into the Node-safe module.
+
+### Explicit exclusions
+
+- No changes to death-screen respawn selection, campaign-spawn fallback,
+  map-only behavior, overlay mutual-exclusion rules, controller destroy logic,
+  or pause gating.
+- No changes to `showSkillTombMenu`, its UI, loadout/weave editing, menu-close
+  saving, input prompts, `SkillTombRenderer`, tomb dust animation, interaction
+  radius, or tomb placement.
+- No changes to `GameRunTimer`, checkpoint values, timer arming/accumulation,
+  save-slot schema/migration, `PlayerProgress` shape, or persistence format.
+- No changes to player/particle healing amounts, element toughness,
+  regeneration rates, lifetime processing, transient semantics, ownership
+  rules, particle capacity, or simulation tick order.
+- No changes to rooms, saved campaign data, room transitions, resident loading,
+  caches, preload policy, editor activation, rendering, audio, camera, gameplay
+  balance, or platform behavior.
+- Do not generalize this into an overlay state machine, interaction framework,
+  event bus, service locator, lifecycle manager, or generic transaction system.
+- Do not fix unrelated lint findings or perform cleanup based on file length.
+
+### Characterization-test matrix
+
+Before replacing the production block, add direct tests covering at minimum:
+
+1. missing cluster zero returns all-zero menu values and performs no port calls
+   or mutations;
+2. cluster zero is used even when a later cluster has `isPlayerFlag === 1`;
+3. absolute player position is returned while exact room-local coordinates are
+   passed to the nearby lookup;
+4. negative nearby index skips position lookup and save/checkpoint work but
+   still heals the player and eligible particles;
+5. nonnegative index plus `null` tomb position has the same no-save behavior;
+6. valid tomb position writes current room ID and independently rounded block
+   coordinates, including fractional values that distinguish `Math.round`;
+7. semantic call recording proves room/progress writes precede checkpoint,
+   checkpoint precedes save, and all save work precedes healing;
+8. absent optional callbacks still allow progress writes and healing;
+9. checkpoint callback failure propagates and prevents save/healing;
+10. save callback failure propagates and prevents healing;
+11. player health becomes max health and returned health values match it;
+12. owned alive non-transient particles reset durability from their exact kind
+    profiles without changing respawn delays;
+13. owned dead non-transient particles with positive delay become delay 1,
+    while delay-zero dead particles remain unchanged;
+14. owned transient particles and all particles owned by other entities remain
+    unchanged;
+15. indices at or above `particleCount` remain untouched even when backing
+    arrays contain sentinel data;
+16. unrelated cluster, world-buffer, and progress fields remain unchanged;
+17. lookup inputs/returned tomb-position objects are not mutated; and
+18. repeated calls use the supplied live world independently and do not retain
+    cross-session or prior-world state.
+
+Tests should assert semantic values and call records, not source text, private
+controller fields, or incidental implementation structure. Establish these
+tests against the extracted transaction before replacing the inline production
+block.
+
+### Implementation sequence
+
+1. Reconfirm the branch, build, worktree, current callback, and absence of
+   direct transaction tests. Keep Phases One through Seven closed.
+2. Add the recording-port characterization tests and the narrow Node-safe
+   transaction module without changing the production callback.
+3. Run the focused tests and `npx tsc --noEmit`; correct only test-fixture or
+   contract mismatches supported by current source.
+4. In `gameOverlayController.ts`, create stable wrappers for the current room
+   getters, renderer lookup methods, and optional callbacks. Keep `getWorld()`
+   at activation time.
+5. Replace only the deterministic local-variable/save/heal/particle block with
+   `applySkillTombActivation`, then pass its returned scalars to the existing
+   `showSkillTombMenu` call.
+6. Preserve the menu-open guard, map close, state flag, menu room-ID getter,
+   on-close loadout/save behavior, and cleanup code in their current order.
+7. Remove only imports made genuinely unused by the extraction. Do not move
+   death or map-only logic.
+8. Run focused tests again, relevant existing timer/progression/particle tests,
+   touched-file lint, then all standard validation and the practical browser
+   smoke checks.
+9. Bump `BUILD_NUMBER` once, update required architecture/map/phase records,
+   commit and push the coherent implementation, and stop after Phase Eight.
+
+### Acceptance criteria
+
+- `openSkillTombMenu` delegates exactly one deterministic activation operation
+  to a named Node-safe module and otherwise retains its overlay/UI ownership.
+- The new module imports no DOM, UI, canvas, renderer class, Electron, storage,
+  or timer implementation.
+- Characterization tests pin every contract item above, including conditional
+  port calls, coordinate frames, progress/callback/healing order, exception
+  short-circuiting, particle filters, buffer bounds, and live-world isolation.
+- The controller still obtains the current world at activation time and does
+  not capture a stale resident world.
+- Save-point coordinates, callback order, healing, menu arguments, menu guards,
+  close behavior, and persistence semantics are unchanged.
+- No public save schema, progress shape, room data, UI, renderer, simulation,
+  transition, resident, or gameplay behavior changes.
+- No per-frame work or allocation is added. At most one small result object is
+  allocated per explicit menu activation, with no world/buffer copying.
+- `BUILD_NUMBER` advances by exactly one patch step for the implementation.
+- Focused and full tests, TypeScript, and production build pass. Targeted lint
+  passes; full lint has no findings beyond the documented baseline unless that
+  baseline is independently repaired before implementation.
+- Documentation identifies the new boundary and `git diff --check` is clean.
+
+### Validation commands
+
+Run from the repository root:
+
+```powershell
+node --import tsx --test src/tests/gameSkillTombActivation.test.ts
+node --import tsx --test src/tests/gameSkillTombActivation.test.ts src/tests/gameRunTimer.test.ts src/tests/campaignStartingOptions.test.ts
+npx tsc --noEmit
+npx eslint src/screens/gameSkillTombActivation.ts src/tests/gameSkillTombActivation.test.ts src/screens/gameOverlayController.ts
+npm test
+npm run build
+npm run lint
+git diff --check
+git status --short --branch
+```
+
+Full lint currently has exactly seven baseline `no-explicit-any` errors in
+`src/tests/editorFillBrush.test.ts`. Do not fix them incidentally; require zero
+new findings. If the sandboxed Vite build repeats the access-denied
+`vite.config.ts` failure, rerun the identical command with normal repository
+access and record both results.
+
+### Practical browser smoke checks
+
+Use a disposable local browser save with a reachable save tomb:
+
+1. Damage the player, activate the tomb, and confirm the existing menu opens
+   with the player healed to maximum health.
+2. Close the menu and confirm loadout/weave selection and save-on-close behavior
+   remain unchanged.
+3. Move away and attempt interaction, confirming a missing nearby tomb does not
+   update the last-save location or checkpoint while the existing interaction
+   guard behavior remains unchanged.
+4. After a valid activation, advance the run timer, die, choose Return to Last
+   Save, and confirm the player returns to the same rounded tomb location and
+   the timer restores to its checkpoint value.
+5. Exercise a room transition before another activation so `getWorld()` is
+   proven to use the live resident world rather than a construction-time world.
+6. Record console errors and relevant warnings. Do not claim particle-buffer
+   healing as visually verified unless debug instrumentation exposes it; the
+   direct Node tests are authoritative for those buffer rules.
+
+Electron validation is not required unless implementation introduces an
+unexpected platform-specific dependency, which this phase explicitly forbids.
+
+### Risks and mitigations
+
+- **Stale world capture:** The overlay previously had a real stale-world bug.
+  Keep `getWorld()` in `openSkillTombMenu` and pass the returned live world to
+  each transaction call; test repeated calls with distinct worlds.
+- **Coordinate-frame drift:** Renderer tomb positions are room-local while the
+  player/menu coordinates are absolute. Record exact lookup inputs and returned
+  menu values in tests.
+- **Checkpoint/save reordering:** Saving before checkpoint capture persists the
+  wrong timer. Assert progress writes -> checkpoint -> save -> healing as one
+  semantic sequence.
+- **Healing on no-save paths:** The current code heals whenever a player exists,
+  even if tomb lookup fails. Pin negative-index and null-position cases.
+- **Particle overreach:** Reordering filters can revive transient or foreign
+  particles. Test ownership first, transient exclusion, alive/dead branches,
+  and `particleCount` bounds with distinct sentinels.
+- **Exception redesign:** Catching callback errors or moving healing earlier
+  would alter current partial-failure behavior. Propagate errors and preserve
+  short-circuiting.
+- **Renderer contamination:** Importing `SkillTombRenderer` would keep the new
+  module browser-bound. Use structural lookup ports only.
+- **Completed-phase creep:** Phase Six owns timer state and Phase Seven owns
+  editor room activation. Treat their callbacks/behavior as unchanged external
+  dependencies rather than reopening either phase.
+
+### Performance and allocation considerations
+
+This transaction runs only on explicit skill-tomb menu activation, not in the
+fixed tick or render loop. Preserve the single bounded scan through
+`world.particleCount`; do not replace it with array materialization, filtering,
+sorting, cloning, or an unbounded capacity scan. Construct port wrappers once
+per overlay-controller instance. A single small scalar result object per menu
+activation is acceptable and replaces four mutable locals; no per-frame
+allocation, world clone, TypedArray copy, or renderer-state copy is allowed.
+
+### Model-neutral Codex/Claude instructions
+
+Implement only Phase Eight as a behavior-preserving extraction. Read
+`agents.md`, all required repository docs, all of `RefactorPlan.md`, and the
+named overlay/world/progress/renderer sources before editing. Treat Phases One
+through Seven as closed. Verify current source rather than trusting planning
+line numbers. First add direct Node characterization for the full deterministic
+skill-tomb activation contract, including conditional lookups, coordinate
+conversion, progress writes, checkpoint-before-save ordering, healing,
+particle ownership/transient/alive rules, exception short-circuiting, and
+live-world isolation. Then extract only that transaction into a narrow
+Node-safe module with structural ports and integrate it into
+`openSkillTombMenu`; leave all overlay guards, UI construction, close behavior,
+death/map handling, timer internals, renderer behavior, save schema, and
+gameplay policy unchanged. Make no unrelated cleanup. Bump the current build
+patch exactly once, update only required architecture/map/phase records, run
+every listed validation plus practical browser checks, document exact results
+and limitations, commit and push, then stop after Phase Eight.
+
+### Planning-run restriction
+
+Do not implement Phase Eight in the run that authored this section. This run is
+planning-only: update, commit, and push only `RefactorPlan.md`. Do not change
+source code, tests, `BUILD_NUMBER`, save version, room/campaign data, or any
+unrelated documentation.
