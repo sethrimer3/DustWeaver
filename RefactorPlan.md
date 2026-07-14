@@ -175,7 +175,11 @@ Run a browser smoke test: create a new save, press Play, verify configured start
 
 ---
 
-## Phase Six — Extract the speedrun timer state machine (PROPOSED; baseline BUILD 445)
+## Phase Six — Extract the speedrun timer state machine (IN PROGRESS; baseline BUILD 445)
+
+**Claimed:** Codex on 2026-07-13. Scope is limited to the files and behavior
+listed in this phase; implementation results will be recorded here before the
+phase is marked complete.
 
 ### Planning baseline
 
