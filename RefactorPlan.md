@@ -1408,3 +1408,118 @@ claimed.
 All Phase Eight acceptance criteria are satisfied within the documented full-
 lint and manual-smoke limitations. Phase Eight is closed; do not expand it or
 begin another phase as part of this implementation run.
+
+---
+
+## Phase Nine — Extract the death-screen Return to Last Save respawn transaction (COMPLETE; BUILD 449)
+
+### Planning baseline and current-code evidence
+
+Planned and implemented from `main` at commit `8a04e83f`, tracking `origin/main`
+with a clean working tree and `BUILD_NUMBER` 448. Phases One through Eight are
+closed. The `onReturnToLastSave` callback inside `showPlayerDeathScreen()` in
+`src/screens/gameOverlayController.ts` (lines approximately 101-118 at
+baseline) still matched the behavior described in the phase brief exactly:
+resolve the saved-room/campaign-spawn target, call `loadRoom`, reset the
+transition reveal, reset the frame clock, and invoke the optional `onRespawn`
+callback restoring the speedrun timer checkpoint.
+
+Planning-run validation before implementation:
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `npm test` | 0 | 616/616 pass |
+| `npx tsc --noEmit` | 0 | clean |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts` |
+| `git status --short --branch` | 0 | clean, up to date with `origin/main` |
+
+### Implementation
+
+Added `src/screens/gameDeathRespawnCoordinator.ts` exporting
+`GameDeathRespawnPorts` and `executeGameDeathRespawn(progress,
+campaignSpawnRoom, campaignSpawnBlock, ports)`. The module resolves the saved
+room via `ports.getRoomById(progress.lastSaveRoomId)` only when
+`lastSaveRoomId` is truthy, falls back to the campaign spawn when the room is
+missing or `lastSaveSpawnBlock` is absent, then calls `loadRoom`,
+`resetTransitionReveal`, `resetFrameClock`, and the optional `onRespawn` in
+that exact order with no error handling — exceptions propagate synchronously
+and short-circuit later steps.
+
+`gameOverlayController.ts` now builds one `deathRespawnPorts` object per
+controller instance (`getRoomById` wraps `roomRegistry.get`, plus the existing
+`loadRoom`, `onResetTransitionReveal`, `onResetFrameClock`, `onRespawn`) and
+`onReturnToLastSave` delegates to `executeGameDeathRespawn` after the existing
+`state.isPlayerDead = false; deathScreenCleanup = null;` statements. No other
+death-screen, skill-tomb, map-overlay, or destroy behavior changed.
+
+### Tests added
+
+`src/tests/gameDeathRespawnCoordinator.test.ts` — 17 characterization tests
+covering: absent progress, null/empty `lastSaveRoomId` (no registry lookup),
+valid saved room/spawn, missing saved room fallback, saved room with null
+spawn fallback, exact saved-room-id forwarding, exact fractional/negative
+coordinate forwarding for both saved and campaign paths, the exact
+load → transition-reset → frame-reset → respawn-callback order, a missing
+optional callback, failure propagation/short-circuiting at each of the four
+steps, no mutation of progress/room/tuple inputs, and independence across
+repeated calls with different registries.
+
+### Files changed
+
+| File | Change |
+|---|---|
+| `src/screens/gameDeathRespawnCoordinator.ts` | New — Node-safe respawn transaction module |
+| `src/tests/gameDeathRespawnCoordinator.test.ts` | New — 17 characterization tests |
+| `src/screens/gameOverlayController.ts` | Replaced inline `onReturnToLastSave` transaction body with one `executeGameDeathRespawn` call and a stable ports object |
+| `src/build-info.ts` | `BUILD_NUMBER` 448 → 449 |
+| `docs/AI_REPO_MAP.md` | Added routing row and ownership bullet for the new coordinator |
+| `docs/ARCHITECTURE.md` | Documented the death-respawn ownership boundary |
+| `RefactorPlan.md` | This section |
+
+### Validation results
+
+| Command | Exit code | Notes |
+|---|---:|---|
+| `node --import tsx --test src/tests/gameDeathRespawnCoordinator.test.ts` | 0 | 17/17 pass |
+| `node --import tsx --test src/tests/gameDeathRespawnCoordinator.test.ts src/tests/gameRunTimer.test.ts src/tests/gameSkillTombActivation.test.ts` | 0 | 56/56 pass across 10 suites |
+| `npx tsc --noEmit` | 0 | clean |
+| `npx eslint src/screens/gameDeathRespawnCoordinator.ts src/tests/gameDeathRespawnCoordinator.test.ts src/screens/gameOverlayController.ts` | 0 | clean |
+| `npm test` | 0 | 633/633 pass across 15 suites (17 new; baseline 616) |
+| `npm run build` | 0 | production Vite build passes; existing Vite CJS deprecation, unresolved-at-build-time Cinzel font, and large-chunk warnings only |
+| `npm run lint` | 1 | exactly the 7 documented baseline `no-explicit-any` errors in `src/tests/editorFillBrush.test.ts`; zero new findings |
+| `git diff --check` | 0 | clean |
+
+### Behavioral delta
+
+None intended. Target-selection precedence, exact coordinate forwarding,
+call order, and synchronous exception short-circuiting are pinned by the
+17 characterization tests and match the original inline block exactly.
+`gameOverlayController.ts` retains the `isPlayerDead` guard, death-screen
+DOM/UI construction, `deathScreenCleanup`, the pre-transaction state-clear
+statements, the Return to Main Menu callback, and all skill-tomb/map overlay
+behavior unchanged.
+
+### Manual validation
+
+The local Vite dev server was started and the main menu confirmed to display
+"BUILD 449" with no console errors, verifying the build increment reached the
+running app. Full gameplay smoke testing (triggering the death screen before
+and after a save-tomb activation, verifying respawn location, transition
+reveal, frame timing, and run-timer checkpoint restoration, and confirming
+Return to Main Menu) was not performed in this run due to the time/effort
+budget available. The 17 direct Node characterization tests are authoritative
+for the respawn transaction's target-selection, ordering, and
+failure-propagation contract. Recommended follow-up: manually verify in-browser
+that (1) dying before any save activates a tomb still respawns at the campaign
+spawn, (2) dying after a tomb activation respawns at the saved room/position
+with the timer restored to its checkpoint, and (3) Return to Main Menu remains
+unaffected.
+
+### Git status
+
+- Branch: main
+- Build: 449
+- Working tree: clean after commit, synchronized with `origin/main`
+
+Phase Nine is closed. Do not begin Phase Ten as part of this implementation
+run.

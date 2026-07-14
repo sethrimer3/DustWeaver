@@ -5,6 +5,10 @@ import type { WorldState } from '../sim/world';
 import { showDeathScreen } from '../ui/deathScreen';
 import { showMapOnlyModal, showSkillTombMenu } from '../ui/skillTombMenu';
 import {
+  executeGameDeathRespawn,
+  type GameDeathRespawnPorts,
+} from './gameDeathRespawnCoordinator';
+import {
   applySkillTombActivation,
   type SkillTombActivationPorts,
 } from './gameSkillTombActivation';
@@ -87,6 +91,14 @@ export function createGameOverlayController(
     onSave,
   };
 
+  const deathRespawnPorts: GameDeathRespawnPorts = {
+    getRoomById: (roomId) => roomRegistry.get(roomId),
+    loadRoom,
+    resetTransitionReveal: onResetTransitionReveal,
+    resetFrameClock: onResetFrameClock,
+    onRespawn,
+  };
+
   function closeMapOnlyIfOpen(): void {
     if (mapOnlyCleanup === null) return;
     mapOnlyCleanup();
@@ -101,20 +113,7 @@ export function createGameOverlayController(
       onReturnToLastSave: () => {
         state.isPlayerDead = false;
         deathScreenCleanup = null;
-        if (progress && progress.lastSaveRoomId) {
-          const saveRoom = roomRegistry.get(progress.lastSaveRoomId);
-          if (saveRoom && progress.lastSaveSpawnBlock) {
-            loadRoom(saveRoom, progress.lastSaveSpawnBlock[0], progress.lastSaveSpawnBlock[1]);
-          } else {
-            loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-          }
-        } else {
-          loadRoom(campaignSpawnRoom, campaignSpawnBlock[0], campaignSpawnBlock[1]);
-        }
-        onResetTransitionReveal();
-        onResetFrameClock();
-        // Restore speedrun timer to the value it had when the player last saved.
-        if (onRespawn) onRespawn();
+        executeGameDeathRespawn(progress, campaignSpawnRoom, campaignSpawnBlock, deathRespawnPorts);
       },
       onReturnToMainMenu: () => {
         state.isPlayerDead = false;
