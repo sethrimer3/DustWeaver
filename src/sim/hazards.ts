@@ -17,7 +17,7 @@
  * All logic is deterministic — no Math.random, no DOM, no wall-clock time.
  */
 
-import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR } from './world';
+import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR, MAX_BREAK_EVENTS } from './world';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
@@ -109,6 +109,36 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
     world.wallWWorld[wi] = 0;
     world.wallHWorld[wi] = 0;
   }
+}
+
+/**
+ * Records one break event for the render layer to consume (Phase 2C).
+ *
+ * This is the ONLY place that pushes to the break-event queue — it is called
+ * exactly once per destroyed LOGICAL placement (once for a 1x1 cell, once for
+ * a complete 2x2 group), never once per cell. Bounded by MAX_BREAK_EVENTS;
+ * silently drops overflow events since they are purely cosmetic (sound +
+ * particles) and never affect collision, damage, or persistence.
+ */
+function emitBreakEvent(
+  world: WorldState,
+  centerXWorld: number,
+  centerYWorld: number,
+  widthWorld: number,
+  heightWorld: number,
+  material: number,
+  groupId: number,
+  isGrouped: boolean,
+): void {
+  if (world.breakEventCount >= MAX_BREAK_EVENTS) return;
+  const ei = world.breakEventCount++;
+  world.breakEventXWorld[ei] = centerXWorld;
+  world.breakEventYWorld[ei] = centerYWorld;
+  world.breakEventWWorld[ei] = widthWorld;
+  world.breakEventHWorld[ei] = heightWorld;
+  world.breakEventMaterial[ei] = material;
+  world.breakEventGroupId[ei] = groupId;
+  world.breakEventIsGroupedFlag[ei] = isGrouped ? 1 : 0;
 }
 
 /** Interaction radius for jars (world units). */
@@ -205,6 +235,11 @@ export function computePlayerWaterState(world: WorldState): void {
  * Main hazard update — called once per tick after cluster movement.
  */
 export function applyHazards(world: WorldState): void {
+  // Phase 2C: break events are a one-tick queue — always reset at the top so a
+  // stale event from a previous tick can never be double-processed by the
+  // render layer, even on the early-return path below.
+  world.breakEventCount = 0;
+
   const dtSec = world.dtMs / 1000.0;
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
@@ -430,9 +465,45 @@ export function applyHazards(world: WorldState): void {
         // for an already-broken cell is a no-op (guarded by the active-flag
         // check at the top of the loop), so duplicate destruction callbacks
         // within one frame are idempotent.
+        //
+        // Phase 2C: the cell that first initiates the destroy owns the ONE
+        // break event for the whole placement. For a grouped (2x2) placement
+        // the event's footprint/center covers the union of all member cells,
+        // computed BEFORE any cell is deactivated (every group member is
+        // still active at this point — the atomic-group invariant guarantees
+        // a group is either fully active or fully destroyed, and the
+        // active-flag check above already proved this cell was active).
+        const material = world.breakableBlockMaterial[i];
+        const groupId = world.breakableBlockGroupId[i];
+
+        if (groupId >= 0) {
+          let minXWorld = bx, maxXWorld = bx;
+          let minYWorld = by, maxYWorld = by;
+          for (let j = 0; j < world.breakableBlockCount; j++) {
+            if (world.breakableBlockGroupId[j] !== groupId) continue;
+            const jx = world.breakableBlockXWorld[j];
+            const jy = world.breakableBlockYWorld[j];
+            if (jx < minXWorld) minXWorld = jx;
+            if (jx > maxXWorld) maxXWorld = jx;
+            if (jy < minYWorld) minYWorld = jy;
+            if (jy > maxYWorld) maxYWorld = jy;
+          }
+          emitBreakEvent(
+            world,
+            (minXWorld + maxXWorld) * 0.5,
+            (minYWorld + maxYWorld) * 0.5,
+            (maxXWorld - minXWorld) + BLOCK_SIZE_MEDIUM,
+            (maxYWorld - minYWorld) + BLOCK_SIZE_MEDIUM,
+            material,
+            groupId,
+            true,
+          );
+        } else {
+          emitBreakEvent(world, bx, by, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_MEDIUM, material, -1, false);
+        }
+
         destroyBreakableBlockCell(world, i);
 
-        const groupId = world.breakableBlockGroupId[i];
         if (groupId >= 0) {
           for (let j = 0; j < world.breakableBlockCount; j++) {
             if (j === i) continue;

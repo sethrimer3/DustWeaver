@@ -27,6 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
+import { materialResponseToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -67,6 +68,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaZoneCount = 0;
   world.lavaInvulnTicks = 0;
   world.breakableBlockCount = 0;
+  world.breakEventCount = 0;
   world.crumbleBlockCount = 0;
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
@@ -174,6 +176,10 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.isBreakableBlockActiveFlag[bi] = 1;
     world.breakableBlockWallIndex[bi] = wallIdx;
     world.breakableBlockGroupId[bi] = b.groupId ?? -1;
+    // Phase 2C: pre-authored (non-custom-block) breakable blocks have no
+    // materialResponse field and default to 'stone' — a cosmetic-only choice
+    // that does not change their existing collision/destruction semantics.
+    world.breakableBlockMaterial[bi] = materialResponseToIndex(b.materialResponse ?? 'stone');
   }
 
   // ── Crumble blocks ────────────────────────────────────────────────────────

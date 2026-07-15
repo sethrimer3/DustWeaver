@@ -66,7 +66,9 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   for (const p of data.customBlockPlacements ?? []) {
     const rawId = rawIdFromNamespaced(p.blockId);
     const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
-    const behavior = resolveWallBehavior(properties ?? { collision: 'solid', friction: 'default', breakability: 'indestructible' });
+    const behavior = resolveWallBehavior(properties ?? {
+      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone',
+    });
 
     if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
 
@@ -83,8 +85,15 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       // "use the room's default theme") rather than forcing a concrete
       // blackRock index — a behavior change we don't want to introduce here.
       const breakableBlockTheme = behavior.blockTheme === 'ice' ? 'ice' as const : undefined;
+      // Phase 2C: thread the resolved material-response preset onto every
+      // cell of the placement so gameRoomHazards.ts can pack it into
+      // world.breakableBlockMaterial without re-reading the custom block
+      // registry at hazard-load time.
+      const materialResponse = properties.materialResponse;
       if (p.tileWidth === 1 && p.tileHeight === 1) {
-        customBlockBreakables.push({ xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme });
+        customBlockBreakables.push({
+          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse,
+        });
       } else {
         const groupId = nextBreakableGroupId++;
         for (let dy = 0; dy < p.tileHeight; dy++) {
@@ -94,6 +103,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
               yBlock: p.yBlock + dy,
               groupId,
               blockTheme: breakableBlockTheme,
+              materialResponse,
             });
           }
         }

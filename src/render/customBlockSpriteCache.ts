@@ -95,11 +95,29 @@ export function getCustomBlockProperties(rawId: string): CustomBlockProperties {
 
 /**
  * Invalidates and rebuilds the sprite for a single block ID.
- * Used after saving edits to that block.
+ * Used after saving edits that changed the block's pixels.
  */
 export function invalidateCustomBlockSprite(def: CustomBlockDef): CustomBlockSprite {
   _cache.delete(def.id);
   return registerCustomBlockSprite(def);
+}
+
+/**
+ * Updates only the cached property bundle for a raw block ID, leaving the
+ * existing canvas untouched. Used when a save changed ONLY `properties`
+ * (e.g. materialResponse) so a properties-only edit does not pay the cost of
+ * rebuilding the OffscreenCanvas/HTMLCanvasElement and re-uploading pixel
+ * data.
+ *
+ * Returns false (and updates nothing) if the block is not currently cached —
+ * callers should fall back to `registerCustomBlockSprite` in that case so the
+ * block still ends up registered.
+ */
+export function updateCustomBlockProperties(rawId: string, properties: CustomBlockProperties): boolean {
+  const cached = _cache.get(rawId);
+  if (cached === undefined) return false;
+  _cache.set(rawId, { ...cached, properties });
+  return true;
 }
 
 /** Clears all cached sprites (call when unloading a campaign). */

@@ -13,8 +13,11 @@
  *   - Friction:      default | slippery
  *   - Breakability:  indestructible | fragile
  *
+ * Presets implemented in Phase 2C:
+ *   - Material response: stone | wood | metal (break sound + particle feedback)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (hazards, wind, liquids, materials, triggers).
+ * deferred categories (hazards, wind, liquids, triggers, damage/resistance).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -24,10 +27,12 @@ import type { CustomBlockValidationError } from './customBlocks';
 export type CollisionPreset = 'solid' | 'oneWay' | 'nonSolid';
 export type FrictionPreset = 'default' | 'slippery';
 export type BreakabilityPreset = 'indestructible' | 'fragile';
+export type MaterialResponsePreset = 'stone' | 'wood' | 'metal';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
 export const BREAKABILITY_PRESET_IDS: readonly BreakabilityPreset[] = ['indestructible', 'fragile'];
+export const MATERIAL_RESPONSE_PRESET_IDS: readonly MaterialResponsePreset[] = ['stone', 'wood', 'metal'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -38,6 +43,9 @@ export function isFrictionPreset(v: unknown): v is FrictionPreset {
 export function isBreakabilityPreset(v: unknown): v is BreakabilityPreset {
   return typeof v === 'string' && (BREAKABILITY_PRESET_IDS as readonly string[]).includes(v);
 }
+export function isMaterialResponsePreset(v: unknown): v is MaterialResponsePreset {
+  return typeof v === 'string' && (MATERIAL_RESPONSE_PRESET_IDS as readonly string[]).includes(v);
+}
 
 // ── Validated property bundle ─────────────────────────────────────────────────
 
@@ -46,13 +54,26 @@ export interface CustomBlockProperties {
   readonly collision: CollisionPreset;
   readonly friction: FrictionPreset;
   readonly breakability: BreakabilityPreset;
+  /**
+   * Phase 2C: selects the engine-owned break sound + particle profile used
+   * when a fragile placement using this block is destroyed. Also selectable
+   * on indestructible blocks so it is already resolved for future impact
+   * feedback, but no break effect fires unless the placement is actually
+   * fragile and destroyed (see resolveMaterialResponseBreakProfile usage in
+   * src/sim/hazards.ts).
+   */
+  readonly materialResponse: MaterialResponsePreset;
 }
 
-/** Defaults equivalent to Phase-1 behavior (always solid, no friction/breakability). */
+/**
+ * Defaults equivalent to Phase-1 behavior (always solid, no friction/breakability),
+ * with 'stone' as the safe Phase 2C material-response default.
+ */
 export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   collision: 'solid',
   friction: 'default',
   breakability: 'indestructible',
+  materialResponse: 'stone',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -107,6 +128,44 @@ export const BREAKABILITY_PRESET_REGISTRY: Readonly<Record<BreakabilityPreset, P
     description: 'Uses the existing breakable-block behavior: breaks when the player hits it with enough momentum.',
   },
 };
+
+export const MATERIAL_RESPONSE_PRESET_REGISTRY: Readonly<Record<MaterialResponsePreset, PresetMeta<MaterialResponsePreset>>> = {
+  stone: {
+    id: 'stone',
+    label: 'Stone',
+    description: 'Heavy stone-like break sound and rocky debris.',
+  },
+  wood: {
+    id: 'wood',
+    label: 'Wood',
+    description: 'Lighter wooden crack and splinter-like debris.',
+  },
+  metal: {
+    id: 'metal',
+    label: 'Metal',
+    description: 'Metallic impact and spark-like debris.',
+  },
+};
+
+// ── Numeric packing (WorldState typed arrays never store strings) ───────────
+
+/** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
+export function materialResponseToIndex(material: MaterialResponsePreset): number {
+  switch (material) {
+    case 'stone': return 0;
+    case 'wood': return 1;
+    case 'metal': return 2;
+  }
+}
+
+/** Unpacks a Uint8Array index back into a MaterialResponsePreset. Unknown indices default to 'stone'. */
+export function indexToMaterialResponse(index: number): MaterialResponsePreset {
+  switch (index) {
+    case 1: return 'wood';
+    case 2: return 'metal';
+    default: return 'stone';
+  }
+}
 
 // ── Compatibility rules ───────────────────────────────────────────────────────
 
@@ -203,15 +262,17 @@ export function validateAndResolveCustomBlockProperties(
   let collision: CollisionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.collision;
   let friction: FrictionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.friction;
   let breakability: BreakabilityPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakability;
+  let materialResponse: MaterialResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.materialResponse;
 
   if (raw === undefined || raw === null) {
-    // No properties object at all (e.g. schemaVersion 1) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability }, errors, fallbackUsed: false };
+    // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
+    // block saved before Phase 2C) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -240,15 +301,26 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // materialResponse is optional even on schemaVersion-2 blocks saved before
+  // Phase 2C — absence is not an error, it just resolves to the 'stone' default
+  // already assigned above.
+  if ('materialResponse' in r) {
+    if (isMaterialResponsePreset(r['materialResponse'])) {
+      materialResponse = r['materialResponse'];
+    } else {
+      pushError('properties.materialResponse', MATERIAL_RESPONSE_PRESET_IDS.join(' | '), String(r['materialResponse']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.

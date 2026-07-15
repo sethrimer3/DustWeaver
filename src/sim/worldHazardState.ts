@@ -20,6 +20,14 @@ export const MAX_WATER_ZONES = 6000;
 export const MAX_LAVA_ZONES = 6000;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
+/**
+ * Maximum number of break events emitted in a single tick (Phase 2C). One
+ * event = one logical fragile placement destroyed (a 2x2 group counts as
+ * ONE event, not four). Bounded generously above what a single player-sized
+ * AABB could plausibly overlap in one tick; overflow events are silently
+ * dropped (cosmetic-only, never affects collision or destruction state).
+ */
+export const MAX_BREAK_EVENTS = 8;
 /** Maximum number of crumble blocks per room. */
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
@@ -240,6 +248,38 @@ export interface HazardWorldState {
    * single-cell breakable block — identical to pre-Phase-2B behavior).
    */
   breakableBlockGroupId: Int16Array;
+  /**
+   * Packed material-response preset index per breakable-block cell (Phase 2C).
+   * 0=stone, 1=wood, 2=metal — see materialResponseToIndex/indexToMaterialResponse
+   * in customBlockProperties.ts. Resolved once at hazard-load time
+   * (gameRoomHazards.ts) from the originating custom block's validated
+   * properties; never re-read from JSON during the simulation loop.
+   */
+  breakableBlockMaterial: Uint8Array;
+
+  // ── Break events (Phase 2C) ─────────────────────────────────────────────────
+  /**
+   * One-tick queue of break events, populated by applyHazards() when a
+   * fragile breakable-block placement is destroyed, and drained by the
+   * render/screen layer (see gameBreakEvents.ts) before the next tick.
+   * Reset to 0 at the top of every applyHazards() call. A 2x2 placement
+   * emits exactly ONE event (for the whole logical group), never one per cell.
+   */
+  breakEventCount: number;
+  /** World-space center X of each break event's full footprint. */
+  breakEventXWorld: Float32Array;
+  /** World-space center Y of each break event's full footprint. */
+  breakEventYWorld: Float32Array;
+  /** Full footprint width (world units) — one block for 1x1, union width for grouped placements. */
+  breakEventWWorld: Float32Array;
+  /** Full footprint height (world units). */
+  breakEventHWorld: Float32Array;
+  /** Packed material-response preset index (see breakableBlockMaterial). */
+  breakEventMaterial: Uint8Array;
+  /** Logical group id that produced this event, or -1 if an ungrouped 1x1 placement. */
+  breakEventGroupId: Int16Array;
+  /** 1 if this event represents a multi-cell grouped placement, 0 for a plain 1x1. */
+  breakEventIsGroupedFlag: Uint8Array;
 
   // ── Crumble blocks ─────────────────────────────────────────────────────────
   /** Number of crumble blocks (active + broken). */
@@ -708,6 +748,15 @@ export function createHazardWorldState(): HazardWorldState {
     isBreakableBlockActiveFlag:    new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockWallIndex:       new Int8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockGroupId:         new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
+    breakableBlockMaterial:        new Uint8Array(MAX_BREAKABLE_BLOCKS),
+    breakEventCount:               0,
+    breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventWWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventHWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventMaterial:            new Uint8Array(MAX_BREAK_EVENTS),
+    breakEventGroupId:             new Int16Array(MAX_BREAK_EVENTS).fill(-1),
+    breakEventIsGroupedFlag:       new Uint8Array(MAX_BREAK_EVENTS),
     crumbleBlockCount:             0,
     crumbleBlockXWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),

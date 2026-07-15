@@ -68,6 +68,15 @@ export interface RoomBreakableBlockDef {
    * default theme for every breakable-block wall.
    */
   blockTheme?: 'blackRock' | 'ice';
+  /**
+   * Phase 2C: the resolved material-response preset for this breakable cell,
+   * threaded from the originating custom block's `properties.materialResponse`
+   * (see resolveMaterialResponse in customBlockProperties.ts). Omitted (defaults
+   * to 'stone' at hazard-load time) for pre-Phase-2C data. Purely a break-sound
+   * and break-particle selector — it never adds executable content or asset
+   * paths to room JSON.
+   */
+  materialResponse?: 'stone' | 'wood' | 'metal';
 }
 
 /**

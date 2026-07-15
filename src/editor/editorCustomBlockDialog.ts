@@ -25,12 +25,14 @@ import type {
   CollisionPreset,
   FrictionPreset,
   BreakabilityPreset,
+  MaterialResponsePreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
   COLLISION_PRESET_REGISTRY,
   FRICTION_PRESET_REGISTRY,
   BREAKABILITY_PRESET_REGISTRY,
+  MATERIAL_RESPONSE_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -73,7 +75,8 @@ export function openCustomBlockDialog(
   let savedProperties: CustomBlockProperties = properties;
 
   function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
-    return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability;
+    return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
+      a.materialResponse === b.materialResponse;
   }
 
   function isDirty(): boolean {
@@ -243,9 +246,15 @@ export function openCustomBlockDialog(
     () => properties.breakability,
     (v) => { properties = { ...properties, breakability: v }; },
   );
+  const materialResponseCtl = makePropertyRow<MaterialResponsePreset>(
+    'Material response', MATERIAL_RESPONSE_PRESET_REGISTRY,
+    () => properties.materialResponse,
+    (v) => { properties = { ...properties, materialResponse: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
+  propsSection.appendChild(materialResponseCtl.row);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
@@ -263,6 +272,8 @@ export function openCustomBlockDialog(
     frictionCtl.desc.textContent = FRICTION_PRESET_REGISTRY[properties.friction].description;
     breakabilityCtl.select.value = properties.breakability;
     breakabilityCtl.desc.textContent = BREAKABILITY_PRESET_REGISTRY[properties.breakability].description;
+    materialResponseCtl.select.value = properties.materialResponse;
+    materialResponseCtl.desc.textContent = MATERIAL_RESPONSE_PRESET_REGISTRY[properties.materialResponse].description;
     refreshCompatibilityMessage();
   }
 

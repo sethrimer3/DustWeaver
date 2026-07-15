@@ -492,16 +492,345 @@ New file `src/tests/customBlocksPhase2B.test.ts` (24 tests, grouped into 5 `desc
 3. **No dedicated break particle/sound effect exists yet for breakable blocks of any kind** (built-in or custom) — Phase 2B preserves whatever the engine already does (nothing beyond the visual disappearance) rather than inventing one.
 4. **Renderer broken-detection is still a position match** (limitation #3 above, inherited from Phase 2A) — now also relied upon for 2×2 anchor-cell lookup; still safe because anchor-cell coordinates are unique per placement.
 
-### Proposed Phase 2C: Additional Engine-Defined Properties (Not Implemented)
+## Phase 2C: Material-Response Presets and Break Feedback
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `damageOnContact` (hazard/damage preset) | enum tier, not a raw number | Reuses existing damage constants at a small number of tiers. |
-| `windResponse` | enum tier | Scale factor for wind-particle interaction near this block, from a fixed set of presets. |
-| `liquidInteraction` | `'seal' \| 'drain' \| 'none'` | How liquids behave when adjacent to this block. |
-| `materialResponse` | `'stone' \| 'wood' \| 'metal'` | Sound and particle effect category on impact — this is also where a first real per-break effect (see "Remaining Limitations" #3) would naturally land. |
-| Trigger behavior | — | Firing an event/transition when the player touches or breaks the block. |
-| More breakability profiles | `'dust' \| 'projectile'` | Weakness to specific damage sources, mirroring `CrumbleVariant`. |
-| Break resistance tiers | enum tier | Multiple momentum thresholds instead of the single existing constant, still validated against a fixed enum, not an arbitrary number. |
+Phase 2C adds the first real break sound and break particle effect for the
+breakable-block system (built-in and custom alike), gated by a new
+engine-defined `materialResponse` property. Resolves "Remaining Limitations"
+#3 from Phase 2B ("No dedicated break particle/sound effect exists yet").
 
-None of these would be executable code; all would be validated against a strict enum (never an arbitrary numeric range) and interpreted by the engine, following the same registry pattern as Phase 2A/2B.
+### Final Property Shape and Default
+
+```json
+{
+  "properties": {
+    "collision": "solid",
+    "friction": "default",
+    "breakability": "fragile",
+    "materialResponse": "stone"
+  }
+}
+```
+
+`materialResponse` is a strict enum — `'stone' | 'wood' | 'metal'` — added to
+`CustomBlockProperties` (`src/levels/customBlockProperties.ts`) alongside
+`collision`/`friction`/`breakability`. No schema version bump:
+`CUSTOM_BLOCK_SCHEMA_VERSION` stays `2`. Defaults to `'stone'`:
+
+- Schema-v1 blocks (no `properties` object at all).
+- Schema-v2 blocks saved before Phase 2C (`properties` present, `materialResponse` absent).
+- Unregistered/missing custom block definitions (`DEFAULT_CUSTOM_BLOCK_PROPERTIES`).
+- Built-in (non-custom-block) breakable blocks authored directly in a room, which have no `materialResponse` field on `RoomBreakableBlockDef` at all.
+
+Unknown values (e.g. `"materialResponse": "diamond"`) never crash — they
+produce a structured `CustomBlockValidationError` (`field:
+'properties.materialResponse'`) via `validateAndResolveCustomBlockProperties`
+and fall back to `'stone'`, exactly mirroring how an unknown `collision` or
+`breakability` value is handled. Saving through the editor always writes the
+resolved value explicitly (via `serializeCustomBlock`), never omits it.
+
+Room placements are unaffected: a room only ever references a custom block by
+its stable ID (`"custom:<id>"`); `materialResponse` lives entirely in the
+block **definition**, resolved once and cached, never duplicated per
+placement in room JSON.
+
+### Material Registry Design
+
+`MATERIAL_RESPONSE_PRESET_REGISTRY` (`src/levels/customBlockProperties.ts`) is
+the single authoritative source of labels/descriptions, following the exact
+`PresetMeta<T>` shape already used by `COLLISION_PRESET_REGISTRY` /
+`FRICTION_PRESET_REGISTRY` / `BREAKABILITY_PRESET_REGISTRY`:
+
+| Preset | Label | Description |
+|---|---|---|
+| `stone` | Stone | Heavy stone-like break sound and rocky debris. |
+| `wood` | Wood | Lighter wooden crack and splinter-like debris. |
+| `metal` | Metal | Metallic impact and spark-like debris. |
+
+Two small numeric-packing helpers, `materialResponseToIndex` /
+`indexToMaterialResponse`, map the enum to/from a `0|1|2` index for
+`Uint8Array` storage in `WorldState` (`world.breakableBlockMaterial`,
+`world.breakEventMaterial`) — the same pattern `blockThemeToIndex` already
+uses for wall themes. Unknown indices decode back to `'stone'`.
+
+`materialResponse` is selectable on **indestructible** blocks too (no
+compatibility rule blocks it) so it is already resolved and cached for a
+future impact-feedback phase — but in Phase 2C no break event is ever emitted
+for a block that never enters the breakable pathway in the first place
+(`isEligibleForBreakablePathway` still requires `breakability === 'fragile'`
++ solid collision + a 1×1/2×2 footprint, unchanged from Phase 2B).
+
+### Editor Integration
+
+- A **Material response** dropdown was added to the custom-block dialog's
+  existing Properties section (`editorCustomBlockDialog.ts`), built with the
+  same generic `makePropertyRow` helper the other three properties use — no
+  new UI plumbing.
+- `propertiesEqual` (drives dirty-state detection) now also compares
+  `materialResponse`, so a materialResponse-only change is correctly flagged
+  dirty and triggers the existing Save/Discard/Keep-Editing prompt on cancel.
+- Undo/redo is unaffected structurally: each undo/redo stack entry is already
+  `{ pixelData, properties }` — since `materialResponse` lives inside
+  `properties`, it is captured and restored for free.
+- Rename (`onRenameCustomBlock`) and Duplicate (`onDuplicateCustomBlock`) in
+  `editorController.ts` both pass `def.properties` straight through
+  `serializeCustomBlock`, so `materialResponse` is preserved by rename and
+  copied (with a newly generated stable ID) by duplicate with zero
+  materialResponse-specific code.
+- The palette card badge (`editorUI.ts`) now appends ` · Stone` / ` · Wood` /
+  ` · Metal` alongside the existing collision/friction/breakability badges.
+
+### Runtime Profile and the Sprite-Rebuild Optimization
+
+`materialResponse` is resolved and validated exactly once, in the same place
+as the other three properties — inside `validateAndResolveCustomBlockProperties`,
+called from `parseCustomBlockSource` at block-registration time
+(campaign load, block create, block edit). The simulation loop never parses
+or re-validates properties; `src/sim/hazards.ts` only ever reads a packed
+`Uint8Array` index that was resolved ahead of time by `gameRoomHazards.ts` at
+room-load time.
+
+A materialResponse-only edit does not rebuild the pixel sprite: previously
+*any* saved edit (pixel or property) called `invalidateCustomBlockSprite`,
+which deletes and rebuilds the cached `OffscreenCanvas`/`HTMLCanvasElement`
+and re-uploads pixel data, even if only a dropdown changed. Phase 2C adds
+`updateCustomBlockProperties(rawId, properties)` to
+`customBlockSpriteCache.ts`, which replaces only the cached `properties`
+field on the existing sprite entry, leaving the canvas object untouched.
+`editorController.ts`'s `onEditCustomBlock` now byte-compares the saved
+pixel data against the previous definition's pixel data; if unchanged, it
+calls `updateCustomBlockProperties` instead of
+`invalidateCustomBlockSprite`/`registerCustomBlockSprite` (falling back to a
+full rebuild if the block was not already cached, so a properties-only save
+of an uncached block still ends up registered). Renaming already skipped
+sprite invalidation entirely before Phase 2C (unchanged) — it still does.
+
+Campaign switching clears material profiles exactly as it already cleared
+collision/friction/breakability: `clearCustomBlockSpriteCache()` empties the
+whole property cache, and every hazard array (including the new
+`world.breakableBlockMaterial`) is fully repopulated by `loadRoomHazards` on
+the next room load — no cross-campaign leakage is possible.
+
+### Break-Event Architecture
+
+Rather than triggering sound and particles directly from every destroyed
+breakable-block cell (which would fan out ×4 for a 2×2 group), Phase 2C adds
+one small, engine-owned, one-tick break-event queue to `WorldState`
+(`src/sim/worldHazardState.ts`):
+
+```
+breakEventCount:         number         // reset to 0 at the top of every applyHazards() call
+breakEventXWorld/YWorld: Float32Array   // full-footprint center (world units)
+breakEventWWorld/HWorld: Float32Array   // full-footprint size (world units)
+breakEventMaterial:      Uint8Array     // packed materialResponse index
+breakEventGroupId:       Int16Array     // -1 if ungrouped
+breakEventIsGroupedFlag: Uint8Array     // 1 if a multi-cell (2x2) placement
+```
+
+Bounded by `MAX_BREAK_EVENTS = 8` — generous for anything a single
+player-sized AABB could plausibly overlap in one tick; overflow events are
+silently dropped since they are purely cosmetic and never affect collision or
+destruction state.
+
+`applyHazards` (`src/sim/hazards.ts`) is the **only** writer, via a small
+`emitBreakEvent(...)` helper called at exactly the point where a cell's
+destruction transaction begins — reusing the already-established atomic
+group-destroy transaction from Phase 2B, not a new one:
+
+- **1×1 (ungrouped)**: one event, centered on the cell, footprint =
+  `BLOCK_SIZE_MEDIUM × BLOCK_SIZE_MEDIUM`.
+- **2×2 (grouped)**: the struck cell scans every cell sharing its `groupId`
+  (all of which are guaranteed still active — the group is atomic, so it is
+  either fully intact or fully destroyed) to compute the union AABB *before*
+  any cell is deactivated, emits **one** event covering the complete
+  placement, and only then proceeds to destroy all 4 cells. The struck cell
+  is the one that "owns" the emission — matching the requirement that the
+  cell which first initiates group destruction owns the one effect.
+
+The consuming side (`src/screens/gameBreakEvents.ts`, called once per
+physics tick from the same fixed-step accumulator loop that already drives
+`tickCrumbleDebrisEvents`) drains the queue: for each event it converts the
+packed material index back to `'stone'|'wood'|'metal'`, spawns particles via
+`BreakEffectRenderer.notifyBreak`, and plays the mapped sound via
+`PlayerSfxManager.play`. This pathway is not exposed to campaign-authored
+code in any way — it is pure `WorldState` → render-layer plumbing.
+
+**Duplicate/re-entrant safety**: the outer per-cell
+`isBreakableBlockActiveFlag[i] === 0` guard (unchanged from Phase 2B) means a
+cell already destroyed this tick or a previous tick can never re-enter the
+branch that calls `emitBreakEvent`, so repeated `applyHazards` calls on an
+already-broken placement emit zero additional events. **Adjacent-placement
+independence**: events are scoped to one `groupId` at a time, so breaking one
+2×2 placement never touches — and never emits an event for — an adjacent
+placement, grouped or not.
+
+### Sound Mapping
+
+`src/audio/breakSfx.ts` is a pure, DOM-free, audio-hardware-free selection
+boundary — the "testable sound-event selection boundary" alternative to
+mocking browser audio globals. It maps each material to an **existing**
+`PlayerSfxManager` sound name (no new sound assets were added):
+
+| Material | Reused sound | Rationale |
+|---|---|---|
+| `stone` | `jump_impact_hard` | Heaviest existing impact — reads as a rock/masonry thud. |
+| `wood` | `jump_impact_medium` | A lighter impact than stone — reads as a duller wooden crack. |
+| `metal` | `grapple_impact` | The grapple hook's metal-on-surface clink is the closest existing metallic sound in the project. |
+
+All three presets resolve to **distinct** existing assets (no two materials
+collapse onto the same sound). `resolveBreakVolumeScale(isGrouped,
+concurrentEventCount)` gives grouped (2×2) breaks a modestly higher base
+volume than a lone 1×1 cell, and attenuates by `1/√n` (floored at 0.5×) when
+multiple break events fire in the same tick, so a pile-up of simultaneous
+breaks does not clip or sum into an overloud burst. Sound is played through
+the existing `PlayerSfxManager`, so it automatically honors the existing SFX
+volume/mute setting (`getSfxVolume()`) and requires no `AudioContext` in
+tests — `materialBreakSoundName`/`resolveBreakVolumeScale` are pure functions
+tested directly.
+
+### Particle Mapping
+
+`src/render/breakEffectRenderer.ts`'s `BreakEffectRenderer` mirrors the
+existing `CrumbleDebrisRenderer` pattern exactly: bounded typed-array pools
+(`MAX_DEBRIS = 100`), its own module-local deterministic LCG (never
+`Math.random`, never serialized, never read by the simulation), gravity +
+gentle gray/tan/spark-colored fade-out. Each material gets a distinct,
+bounded, engine-owned profile (`getMaterialParticleProfile`):
+
+| Material | Colors | Feel | Base count (1×1) | Grouped count (2×2) |
+|---|---|---|---|---|
+| `stone` | gray/brown | compact rocky debris, moderate speed/gravity | 10 | 16 |
+| `wood` | tan/brown | small splinter-like debris, slightly lighter gravity | 9 | 14 |
+| `metal` | yellow/white/gray | brief fast sparks, low gravity, short lifetime | 8 | 13 |
+
+Grouped (2×2) placements scale up modestly (≈1.6×), never 4× — a pile of 4
+cells' worth of destruction reads as "one bigger event," not four
+independent bursts layered on top of each other. `resolveBreakParticleCount`
+is a pure function (material, isGrouped, quality) → count, directly
+unit-tested without a canvas or renderer instance.
+
+Effects are purely cosmetic: `notifyBreak`/`update`/`render` never touch
+`WorldState`, collision, damage, movement, or room persistence.
+
+### Low-Graphics Behavior
+
+`resolveBreakParticleCount` scales the base/grouped count by the active
+`GraphicsQuality` tier (`getGraphicsQuality()`, `'low'|'med'|'high'`):
+`low` → ×0.4, `med` → ×1.0 (baseline), `high` → ×1.3. This visibly reduces
+(never increases beyond a modest bump) cosmetic particle output on `low`
+while leaving sound behavior unaffected (sound is not part of "reduced
+particles"). Sound already respects the game's existing volume/mute
+settings via `PlayerSfxManager`.
+
+### 1×1 and 2×2 Effect Behavior Summary
+
+| | 1×1 fragile | 2×2 fragile |
+|---|---|---|
+| Break events emitted | 1 | 1 (never 4) |
+| Event center | cell center | union-footprint center of all 4 cells |
+| Event footprint | 1 block × 1 block | 2 blocks × 2 blocks |
+| Sound plays | once | once |
+| Particle burst | `baseCount` | `groupedCount` (≈1.6×, not 4×) |
+| Adjacent placements | independent | independent (scoped by `groupId`) |
+
+### Backward Compatibility
+
+- Schema-v1 blocks, and schema-v2 blocks saved before Phase 2C, load exactly
+  as before and resolve `materialResponse` to `'stone'` with zero validation
+  errors (absence is not an error — only an explicit unknown value is).
+- All existing stable IDs, room references, 1×1/2×2 fragile behavior,
+  indestructible/non-solid/one-way/slippery behavior, and built-in breakable
+  blocks are unchanged in every respect except that breaking now produces
+  sound + particles where previously nothing happened.
+- The break momentum threshold (`BREAKABLE_MOMENTUM_THRESHOLD_WORLD`) and the
+  absence of resistance tiers are both unchanged, per this phase's scope.
+- Room reload semantics are unchanged: broken blocks (and their break-event
+  cosmetic history, which is transient and per-tick anyway) respawn on
+  reload, exactly matching Phase 2B.
+- Export and campaign relocation preserve `materialResponse` through the
+  ordinary `serializeCustomBlock` → `parseCustomBlockSource` round trip — no
+  special-cased persistence was added.
+
+### Tests (Phase 2C)
+
+New file `src/tests/customBlocksPhase2C.test.ts` (27 tests) exercises the
+real pipeline (`editorRoomDataToRoomDef` → `loadRoomHazards` → `applyHazards`)
+wherever practical, not just registry helpers — schema-v1/v2 defaults, all
+three presets round-tripping through `serializeCustomBlock`/
+`parseCustomBlockSource`, unknown-value fallback with a structured
+diagnostic, dirty-tracking/undo-redo/rename/duplicate at the data-model level
+(the pixel-art dialog itself is DOM-driven and, consistent with the rest of
+this suite, is not exercised via a browser DOM stub), the real break-event
+queue for 1×1 and all four struck-cell offsets of a 2×2 group, exact
+union-footprint center/size assertions, duplicate-destruction and
+adjacent-placement independence, distinct sound/particle profile selection,
+bounded and quality-scaled particle counts, indestructible blocks emitting no
+event, missing-definition fallback, export/relocation round trip, and
+campaign-switch isolation. Two pre-existing Phase 2A round-trip-equality
+assertions in `customBlockProperties.test.ts` (tests 2 and 17) were updated
+to include `materialResponse: 'stone'` in their expected literal, since the
+resolved property bundle now legitimately has one more field — no other
+Phase 2A/2B test was touched, and all 848 tests in the suite pass.
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (848/848
+  passing), and `npm run build` were all actually run for this phase.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session — no live browser/editor click-through of creating
+  stone/wood/metal 1×1 and 2×2 fragile blocks, breaking them and listening
+  for distinct sounds, confirming one burst per logical placement, confirming
+  adjacent-block independence, or confirming low-graphics behavior visually.
+  All verification was done through the automated test suite exercising the
+  real `editorRoomDataToRoomDef`, `loadRoomHazards`, and `applyHazards` code
+  paths (not mocks), plus direct unit tests of the pure sound/particle
+  selection functions — but no actual audio was heard and no actual frame was
+  rendered by a human or automated UI driver.
+- Anyone relying on this phase for a real campaign should manually create a
+  stone, wood, and metal fragile block (both 1×1 and 2×2), place and break
+  each in-game, and confirm the sound/particle feel before shipping.
+
+### Remaining Limitations
+
+1. **No dedicated new sound or particle assets** — all three materials reuse
+   existing `PlayerSfxManager` sounds and a generic colored-rectangle debris
+   particle; a future phase could commission material-specific assets.
+2. **Metal's sound is a reasonable existing-asset proxy, not a purpose-built
+   metallic clang** — `grapple_impact` was the closest fit available.
+3. **`materialResponse` on indestructible blocks is inert in Phase 2C** — it
+   is resolved and cached for a future impact-feedback phase but no event
+   fires for a block that is never destroyed.
+4. **Break events are transient, one-tick state** — like all Phase 2B
+   destruction state, nothing about a break event persists across a room
+   reload (matches existing behavior; not a regression).
+5. **`MAX_BREAK_EVENTS = 8`** is a hard per-tick ceiling; astronomically
+   unlikely to be hit by a single player-sized AABB, but overflow events are
+   silently dropped rather than queued.
+
+## Proposed Phase 2D: Contact-Damage Presets (Not Implemented)
+
+Recommendation: **contact-damage presets** should be the next phase, ahead of
+break resistance tiers, wind response, or liquid interaction. Rationale:
+
+- It reuses the same registry/enum pattern established across Phases 2A–2C
+  (`CustomBlockCompatibilityIssue`-style validation, `PresetMeta<T>` registry,
+  packed `Uint8Array` runtime resolution) with no new engine machinery — the
+  existing `applyPlayerDamageWithKnockback` pathway (already used by
+  spikes/lava) is the natural reuse target, exactly as `materialResponse`
+  reused `PlayerSfxManager` and a `CrumbleDebrisRenderer`-shaped particle
+  pool.
+- It is the most bounded of the four remaining candidates: a small enum of
+  damage tiers (e.g. `none | light | heavy`) mapped to the existing damage
+  constants, with no new physics.
+- It composes naturally with `materialResponse` (a metal spike-like custom
+  block could plausibly want both a material-response break effect *and* a
+  contact-damage tier) without either property depending on the other.
+- By contrast, **break resistance tiers** would require touching the single
+  existing momentum-threshold constant this phase deliberately left alone
+  (risk of destabilizing already-tuned gameplay feel); **wind response** and
+  **liquid interaction** both require reaching into larger, more
+  interconnected systems (`environmentalDust`/wind-particle forces, and the
+  water-zone buoyancy system respectively) that are more architecturally
+  entangled than a straightforward damage-on-contact check.
+
+Not implemented in this phase — no code changes were made toward it.

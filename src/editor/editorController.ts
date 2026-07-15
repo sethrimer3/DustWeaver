@@ -8,7 +8,7 @@
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
 import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, makeUniqueId, countCustomBlockUsage } from '../levels/customBlocks';
-import { registerCustomBlockSprite, invalidateCustomBlockSprite, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
+import { registerCustomBlockSprite, invalidateCustomBlockSprite, updateCustomBlockProperties, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
 import { openCustomBlockDialog } from './editorCustomBlockDialog';
 import type { CameraState } from '../render/camera';
 import { CAMERA_DEFAULT_ZOOM, getCameraOffset } from '../render/camera';
@@ -682,8 +682,15 @@ export function createEditorController(
               return;
             }
             state.customBlockRegistry.set(parsed.def.id, parsed.def);
-            invalidateCustomBlockSprite(parsed.def);
-            registerCustomBlockSprite(parsed.def);
+            // Only rebuild the cached canvas when pixel data actually changed —
+            // a properties-only edit (e.g. materialResponse) updates the
+            // cached property bundle in place instead (Phase 2C).
+            const pixelsUnchanged = def.pixelData.length === parsed.def.pixelData.length &&
+              def.pixelData.every((byte, i) => byte === parsed.def.pixelData[i]);
+            if (!pixelsUnchanged || !updateCustomBlockProperties(parsed.def.id, parsed.def.properties)) {
+              invalidateCustomBlockSprite(parsed.def);
+              registerCustomBlockSprite(parsed.def);
+            }
             ui?.update(state);
           });
         },
