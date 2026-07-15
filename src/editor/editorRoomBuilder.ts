@@ -47,7 +47,17 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 
-  const allWalls: RoomWallDef[] = [...boundaryWalls, ...interiorWalls];
+  // Convert custom block placements to solid walls for collision.
+  const customBlockWalls: RoomWallDef[] = (data.customBlockPlacements ?? []).map(p => ({
+    xBlock: p.xBlock,
+    yBlock: p.yBlock,
+    wBlock: p.tileWidth,
+    hBlock: p.tileHeight,
+    isPlatformFlag: 0,
+    blockTheme: 'blackRock',
+  }));
+
+  const allWalls: RoomWallDef[] = [...boundaryWalls, ...interiorWalls, ...customBlockWalls];
 
   const enemies: RoomEnemyDef[] = data.enemies.map(e => {
     const kinds: ParticleKind[] = [];

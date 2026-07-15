@@ -771,7 +771,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const pCtx = previewCanvas.getContext('2d');
               if (pCtx) {
                 pCtx.imageSmoothingEnabled = false;
-                const img = new ImageData(def.pixelData, def.pixelWidth, def.pixelHeight);
+                const img = new ImageData(new Uint8ClampedArray(def.pixelData.buffer as ArrayBuffer), def.pixelWidth, def.pixelHeight);
                 const tmpC = document.createElement('canvas');
                 tmpC.width = def.pixelWidth;
                 tmpC.height = def.pixelHeight;

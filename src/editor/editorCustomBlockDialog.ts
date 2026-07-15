@@ -19,7 +19,6 @@ import {
   parseRgbaHex,
   isValidRgbaHex,
   TRANSPARENT_PIXEL,
-  normalizeColor,
 } from '../levels/customBlocks';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -185,7 +184,7 @@ export function openCustomBlockDialog(
 
     // Pixels
     editorCtx.imageSmoothingEnabled = false;
-    const img = new ImageData(pixelData, pw, ph);
+    const img = new ImageData(new Uint8ClampedArray(pixelData.buffer as ArrayBuffer), pw, ph);
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = pw;
     tmpCanvas.height = ph;
@@ -228,7 +227,7 @@ export function openCustomBlockDialog(
       }
     }
 
-    const img = new ImageData(pixelData, pw, ph);
+    const img = new ImageData(new Uint8ClampedArray(pixelData.buffer as ArrayBuffer), pw, ph);
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = pw;
     tmpCanvas.height = ph;

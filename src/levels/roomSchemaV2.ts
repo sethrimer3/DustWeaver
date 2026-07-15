@@ -606,6 +606,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     });
   }
 
+  if (json.customBlockPlacements && json.customBlockPlacements.length > 0) {
+    out.customBlockPlacements = json.customBlockPlacements.slice() as [number, number, string][];
+  }
+
   if (json.bakedWallTemplate !== undefined) {
     // Deep-copy the baked template arrays so we never share mutable state
     // between the in-memory JSON and the saved-room output.

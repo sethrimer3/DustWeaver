@@ -46,6 +46,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     sceneLight:       'scene_light',
     backgroundBlock:  'background_block',
     guideDustPath:    'guide_dust_path',
+    customBlock:      'custom_block',
   };
   const base = prefix[type] ?? type;
   return `${base}_${uid}`;
@@ -111,6 +112,7 @@ export function buildElementTypeName(
     phantasmalTile:     'Phantasmal Block',
     pixelMaterial:      'Sand Pixel',
     rope:               'Rope',
+    customBlock:        'Custom Block',
   };
   if (type === 'dustBoostJar') {
     const j = (room.dustBoostJars ?? []).find(x => x.uid === uid);

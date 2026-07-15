@@ -7,8 +7,7 @@
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
-import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, nameToSlugId, makeUniqueId } from '../levels/customBlocks';
-import type { CustomBlockSourceDef } from '../levels/customBlocks';
+import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId } from '../levels/customBlocks';
 import { registerCustomBlockSprite, invalidateCustomBlockSprite, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
 import { openCustomBlockDialog } from './editorCustomBlockDialog';
 import type { CameraState } from '../render/camera';
@@ -606,7 +605,11 @@ export function createEditorController(
         onExportCampaignJson: () => {
           commitActiveRoomToCampaign('export');
           if (campaignSession) {
-            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot);
+            const customBlockDefs = state.customBlockRegistry.size > 0
+              ? [...state.customBlockRegistry.values()].map(def =>
+                  serializeCustomBlock(def.id, def.name, def.tileWidth, def.tileHeight, def.pixelData))
+              : undefined;
+            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot, customBlockDefs);
           } else {
             exportMainCampaignJson(
               pendingRoomEdits,
@@ -651,7 +654,7 @@ export function createEditorController(
             }
             state.customBlockRegistry.set(parsed.def.id, parsed.def);
             registerCustomBlockSprite(parsed.def);
-            ui?.render(state);
+            ui?.update(state);
           });
         },
         onEditCustomBlock: (blockId: string) => {
@@ -668,7 +671,7 @@ export function createEditorController(
             state.customBlockRegistry.set(parsed.def.id, parsed.def);
             invalidateCustomBlockSprite(parsed.def);
             registerCustomBlockSprite(parsed.def);
-            ui?.render(state);
+            ui?.update(state);
           });
         },
         onDeleteCustomBlock: (blockId: string) => {
@@ -692,7 +695,7 @@ export function createEditorController(
           }
           state.customBlockRegistry.delete(blockId);
           invalidateCustomBlockSprite({ id: blockId } as import('../levels/customBlocks').CustomBlockDef);
-          ui?.render(state);
+          ui?.update(state);
         },
         onSelectCustomBlockForPlacement: (blockId: string) => {
           const def = state.customBlockRegistry.get(blockId);
@@ -708,7 +711,7 @@ export function createEditorController(
           };
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
-          ui?.render(state);
+          ui?.update(state);
         },
       });
     } else {
@@ -844,6 +847,14 @@ export function createEditorController(
       state.roomData = loaded.roomData;
       state.nextUid = loaded.nextUid;
       campaignSession.campaignStore.setActiveRoomId(room.id);
+      // Patch tileWidth/tileHeight on custom block placements from the registry.
+      if (state.roomData.customBlockPlacements) {
+        for (const p of state.roomData.customBlockPlacements) {
+          const rawId = p.blockId.startsWith('custom:') ? p.blockId.slice(7) : p.blockId;
+          const def = state.customBlockRegistry.get(rawId);
+          if (def) { p.tileWidth = def.tileWidth; p.tileHeight = def.tileHeight; }
+        }
+      }
       state.selectedElements = [];
       state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
       isCurrentRoomDirty = false;

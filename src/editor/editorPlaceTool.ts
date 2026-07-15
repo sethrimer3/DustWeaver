@@ -14,7 +14,7 @@ import {
   EditorGrappleCarryBlock, EditorPhantasmalTile,
   EditorDialogueTrigger, EditorGuideDustPath,
 } from './editorState';
-import { rawIdFromNamespaced } from '../levels/customBlocks';
+import { toNamespacedId } from '../levels/customBlocks';
 import { createDefaultLight } from '../render/lighting/lightingTypes';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
@@ -708,7 +708,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
           by < ep.yBlock + eth && by + th > ep.yBlock) return;
     }
 
-    const newPlacement = { uid: allocateUid(state), xBlock: bx, yBlock: by, blockId, tileWidth: tw, tileHeight: th };
+    const newPlacement = { uid: allocateUid(state), xBlock: bx, yBlock: by, blockId: toNamespacedId(blockId), tileWidth: tw, tileHeight: th };
     if (!room.customBlockPlacements) room.customBlockPlacements = [];
     room.customBlockPlacements.push(newPlacement);
     state.selectedElements = [{ type: 'customBlock', uid: newPlacement.uid }];

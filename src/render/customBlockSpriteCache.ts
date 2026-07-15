@@ -47,7 +47,7 @@ function buildCanvas(
 
   if (ctx === null) return canvas;
 
-  const imageData = new ImageData(pixelData, pixelWidth, pixelHeight);
+  const imageData = new ImageData(new Uint8ClampedArray(pixelData.buffer as ArrayBuffer), pixelWidth, pixelHeight);
   ctx.putImageData(imageData, 0, 0);
   return canvas;
 }

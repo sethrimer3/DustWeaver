@@ -336,6 +336,7 @@ export function exportCampaignJson(
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   activeRoomData?: EditorRoomData | null,
   progressRoot?: HTMLElement | null,
+  customBlockDefs?: import('../levels/campaignSchema').SavedCampaignV1['customBlockDefs'],
 ): void {
   let exported: ReturnType<typeof assembleExportCampaign>;
   if (session.campaignStore !== undefined) {
@@ -352,7 +353,7 @@ export function exportCampaignJson(
         }
       }
     }
-    exported = session.campaignStore.buildExportCampaign(session.campaign);
+    exported = session.campaignStore.buildExportCampaign(session.campaign, customBlockDefs);
   } else {
     if (import.meta.env.DEV) {
       // Validate round-trip for each pending room.
