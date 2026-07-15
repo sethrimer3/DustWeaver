@@ -193,35 +193,127 @@ No explicit file-count or per-block file-size limits are enforced in Phase 1B. T
 
 ---
 
+## Phase 1C: Gameplay Rendering, Unsaved-Change Protection, Symlink Containment
+
+### Gameplay Rendering Path
+
+Custom block sprites are now drawn during gameplay and editor-backdrop rendering.
+
+**Flow:**
+1. Campaign load → `game.ts` calls `registerCustomBlockSprite(def)` for every `customBlockDef`.
+2. `roomJsonToRoomDef.ts` copies `json.customBlockPlacements` into `RoomDef.customBlockPlacements`.
+3. Every `gameRender.ts` frame: after `renderWalls(...)`, `renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom)` is called.
+4. For each placement: `getOrFallbackSprite(rawId, 1, 1)` looks up the cached canvas; the returned sprite's own `tileWidth`/`tileHeight` fields drive the destination rectangle.
+5. `drawCustomBlockSprite` calls `ctx.drawImage` with `imageSmoothingEnabled = false` for nearest-neighbor scaling.
+6. The editor-backdrop renderer (`gameScreenEditorBackdrop.ts`) follows the same call after `renderWalls`.
+
+**Why after walls:** the standard wall renderer draws blackRock tiles for every solid tile including custom block footprints. Custom sprites paint over those tiles without needing to suppress the underlying wall draw, keeping the wall renderer untouched.
+
+### Cached Sprite Integration
+
+- One `OffscreenCanvas` (or `HTMLCanvasElement`) per block ID — created once at campaign load, or after a sprite edit.
+- `invalidateCustomBlockSprite(def)` + `registerCustomBlockSprite(def)` replaces the cached canvas on save. All future frame draws see the new sprite automatically.
+- `clearCustomBlockSpriteCache()` is called on campaign unload, preventing stale sprites from leaking to the next campaign.
+- Multiple placements of one block always retrieve the same object via `getOrFallbackSprite`.
+
+### Transparency and Layering Behavior
+
+- `imageSmoothingEnabled = false` ensures exact RGBA sampling; no color blending across pixel boundaries.
+- Fully transparent and semitransparent pixels are preserved exactly as painted (alpha channel passed through `putImageData`).
+- No background is drawn beneath transparent pixels from this renderer — the underlying wall tile (blackRock) appears through them. If the designer wants an opaque block, they should paint all pixels with `alpha = 255`.
+- Z-order: custom sprites render above walls and below clusters, hazards, and particles (same as decorations).
+
+### Cache Invalidation Behavior
+
+| Trigger | Action |
+|---------|--------|
+| Edit + save a block | `invalidateCustomBlockSprite(def)` deletes the old entry; `registerCustomBlockSprite(def)` builds a new canvas |
+| Campaign unload | `clearCustomBlockSpriteCache()` clears all entries |
+| Campaign switch | Cache is cleared before loading the new campaign — no ID collisions possible |
+| Missing block ID at render time | `getOrFallbackSprite` returns a cached magenta/black checkerboard; caches it to avoid per-frame rebuild |
+
+### Unsaved-Change Handling
+
+`editorCustomBlockDialog.ts` tracks dirty state:
+
+- `savedPixelData` — snapshot of the pixel data at dialog open time.
+- `isDirty()` — byte-wise comparison of `pixelData` vs `savedPixelData`.
+- **Cancel** and **Escape**: if `isDirty()`, a confirmation sub-dialog appears with three choices:
+  - **Save & Close**: validates → serializes → calls `onResult({ action: 'save', … })` → clears dirty state.
+  - **Discard Changes**: closes dialog without saving → `onResult({ action: 'cancel' })`.
+  - **Keep Editing**: dismisses the confirmation and returns to the pixel editor.
+- If nothing was changed, Cancel/Escape closes immediately without prompting.
+- A failed save (validation error) keeps the dialog open and leaves `pixelData` intact.
+- `savedPixelData.set(pixelData)` is called after a successful save to clear dirty status.
+
+### Symlink Containment Strategy
+
+`electron/campaignExport.cjs` now includes `checkPathInsideCampaignDir(targetPath, allowedDir, label)`:
+
+1. Resolves `allowedDir` with `fs.realpathSync` (symlink-aware).
+2. Resolves `targetPath` with `fs.realpathSync`; if the path does not yet exist, walks up to the nearest existing ancestor.
+3. Checks that the resolved target path starts with the resolved allowed dir.
+4. Returns `{ ok: false, error, realTarget, realAllowed }` on violation.
+
+This check is applied at the campaign write path, packed campaign file, individual room writes, and stale room file deletion. `isSafeCampaignRelativePath` (lexical) remains unchanged and is the first layer; `checkPathInsideCampaignDir` is the second, symlink-aware layer.
+
+**Platform limitation (Windows):** Windows requires elevated privileges or Developer Mode to create symlinks unprivileged. The symlink-escape test detects this and logs a diagnostic instead of failing. The lexical checks (`isSafeCampaignRelativePath`, `SAFE_ROOM_ID_RE`) remain effective on all platforms.
+
+---
+
 ## Test Results
 
-Phase 1B adds 59 deterministic unit tests in `src/tests/customBlocks.test.ts` covering:
+Phase 1C adds **23 additional tests** in `src/tests/customBlocksPhase1C.test.ts` covering:
 
-- Path safety (URL, UNC, null byte, control chars, traversal)
-- Stable ID semantics (rename preserves ID, duplicate creates new ID)
-- RGBA round-trip fidelity (all 256 alpha values, transparent pixels, 2×2)
-- Validation error cases (bad id, bad name, wrong schema, invalid colors, wrong dimensions)
-- 2×2 validation and parsing
-- Reconciliation (unused blocks, missing references, room lists)
-- Usage scanning (scanCustomBlockUsage, countCustomBlockUsage)
-- Blank and missing-texture pixel data
-- Older campaigns without custom blocks
+- Sprite registered and retrievable after `registerCustomBlockSprite` (gameplay not blackRock)
+- Exact RGBA bytes (including semitransparent and fully transparent) preserved
+- 1×1 sprite has 1×1 tileWidth/tileHeight; 2×2 has 2×2
+- Multiple placements → same cached object reference
+- Missing definition → fallback checkerboard sprite (not null)
+- Campaign switch clears cache → no cross-campaign sprite leak
+- `invalidateCustomBlockSprite` + re-register updates all future lookups
+- Dirty-state: unchanged buffer not dirty; edited pixel marks dirty
+- Discard restores persisted state; save clears dirty state; failed save preserves edits
+- Symlink escape rejected for paths outside allowed dir; legitimate subpaths accepted
+- Built-in rooms without `customBlockPlacements` are skipped by renderer (field = undefined)
+- RGBA round-trip fidelity for semitransparent and fully transparent pixels
+- Existing lexical path checks unchanged
 
-Total test suite: **737 tests, 0 failures**.
+Phase 1B tests: 59 in `src/tests/customBlocks.test.ts`.
+
+**Total test suite after Phase 1C: 760 tests, 0 failures.**
+
+---
+
+## Manual Smoke Test
+
+The Electron dev server was not available in this environment (Windows Home, requires PowerShell elevation for symlinks; browser dev mode was not started). The following checks were performed by code inspection:
+
+| Check | Method | Result |
+|-------|--------|--------|
+| Custom sprites render in gameplay | Code: `renderCustomBlockSprites` called in `gameRender.ts` after `renderWalls` | ✅ Wired |
+| Editor backdrop also draws sprites | Code: same call in `gameScreenEditorBackdrop.ts` | ✅ Wired |
+| `customBlockPlacements` flows from JSON to RoomDef | Code: `roomJsonToRoomDef.ts` now copies the field | ✅ Confirmed |
+| Cancel with unsaved changes shows prompt | Code: `attemptCancel()` checks `isDirty()` before acting | ✅ Wired |
+| Discard restores saved state | Code: `discardBtn` calls `onResult({ action: 'cancel' })` without save | ✅ Wired |
+| Symlink escape rejected | Tests: `checkPathInsideCampaignDir` tested with temp dir | ✅ Tested |
+| Type checking | `npx tsc --noEmit` | ✅ 0 errors |
+| Production build | `npm run build` | ✅ Success |
+| Full test suite | `npm test` | ✅ 760 pass, 0 fail |
+
+**Manual browser/Electron run was not performed.** Blocking factor: Electron requires a running desktop session and the test environment does not have one active during this session.
 
 ---
 
 ## Known Limitations
 
-1. **Gameplay sprite overlay not yet implemented.** Custom blocks register their sprites at gameplay start, but the gameplay room renderer (snapshot/cluster pipeline) does not yet draw the custom sprites over the wall tiles. Custom blocks appear as solid `blackRock` walls during gameplay. The sprite cache is populated and ready; a future phase can add a post-wall-render overlay pass.
+1. **Undo history is bounded at 50 but not per-block isolated.** The undo stack is local to one open dialog session; it is always empty when the dialog opens. Undoing back to the persisted state does not clear dirty status (the undo stack does not track which state corresponds to the last save).
 
-2. **Unsaved-change dialog not integrated.** The pixel editor does not hook into the project's save/discard/cancel dialog when the user closes the editor with unsaved changes (clicking Cancel simply discards edits). A formal unsaved-change flow requires the editor modal to participate in the global history system.
+2. **No cross-campaign ID namespace collision detection.** If two campaigns define the same block ID, importing them together would be ambiguous.
 
-3. **Undo history is bounded at 50 but not per-block isolated.** The undo stack is local to one open dialog session; it is always empty when the dialog opens.
+3. **Windows symlink limitation.** `checkPathInsideCampaignDir` fully protects against symlink escape on Linux and macOS. On Windows, unprivileged symlinks require Developer Mode or elevation; if those are unavailable, the symlink check still runs but cannot be triggered by an attacker who also cannot create symlinks. The lexical checks remain fully effective on all platforms.
 
-4. **No cross-campaign ID namespace collision detection.** If two campaigns define the same block ID, exporting them together (not currently possible) would be ambiguous.
-
-5. **Symlink escape is not checked.** `isSafeCampaignRelativePath` does not check for symlinks; this requires OS-level path canonicalization that is not available in the browser context.
+4. **Transparent pixels reveal the underlying wall tile.** Since `renderCustomBlockSprites` draws over blackRock tiles without erasing them first, transparent pixels in a custom block will show the blackRock tile through them. This is intentional (saves a clear pass) but means designers must use alpha = 255 for fully opaque blocks if they don't want the blackRock edge visible.
 
 ---
 

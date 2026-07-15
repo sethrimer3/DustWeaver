@@ -603,4 +603,6 @@ module.exports = {
   buildManifestAdjacency,
   validateRoomCacheOnDisk,
   exportCampaignToDisk,
+  checkPathInsideCampaignDir,
+  resolveNearestExistingAncestor,
 };
