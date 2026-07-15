@@ -433,7 +433,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom);
+  renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom, world);
   renderPhantasmalTiles(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);

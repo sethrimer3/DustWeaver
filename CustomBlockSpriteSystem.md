@@ -32,6 +32,8 @@ The following gaps or defects were found in the Phase 1A implementation and addr
 
 Custom block definitions are stored **inline** in the packed campaign JSON (`*.dwcampaign.json`) under the top-level `customBlockDefs` array. No separate folder or file-per-block layout is used; the entire custom-block library travels with the campaign.
 
+> **Note:** the shape below is the legacy schemaVersion-1 format, kept for compatibility. See "Phase 2A: Safe Predefined Properties" further down for the current schemaVersion-2 format (`properties` object replaces `behavior`), which is what the editor now writes on every save.
+
 ### Per-block JSON shape
 
 ```jsonc
@@ -317,19 +319,189 @@ The Electron dev server was not available in this environment (Windows Home, req
 
 ---
 
-## Future Predefined Properties
+## Phase 2A: Safe Predefined Properties
 
-A later version could add engine-defined preset properties to custom blocks without changing the core sprite system. These would be additional optional fields in `CustomBlockSourceDef` validated at parse time.
+Custom blocks can now carry an engine-defined `properties` object selecting **collision**, **friction**, and **breakability** presets. No scripts, callbacks, shaders, or arbitrary physics numbers are involved — every preset id maps to an existing, already-shipped engine behavior.
 
-Candidate properties (document only — not implemented):
+### Schema Version 2
+
+```jsonc
+{
+  "schemaVersion": 2,
+  "id": "weathered-stone",
+  "name": "Weathered Stone",
+  "tileWidth": 1,
+  "tileHeight": 1,
+  "pixelWidth": 8,
+  "pixelHeight": 8,
+  "properties": {
+    "collision": "solid",       // "solid" | "oneWay" | "nonSolid"
+    "friction": "default",      // "default" | "slippery"
+    "breakability": "indestructible" // "indestructible" | "fragile"
+  },
+  "pixels": []
+}
+```
+
+`behavior: "solid"` (schemaVersion 1) is replaced by the `properties` object in schemaVersion 2. `CUSTOM_BLOCK_SCHEMA_VERSION` is now `2`; the parser still accepts `1` (`CUSTOM_BLOCK_MIN_SCHEMA_VERSION`).
+
+### Version-1 Compatibility
+
+- `validateCustomBlockSource` accepts `schemaVersion` `1` or `2`. Version-1 blocks are validated exactly as before (`behavior === "solid"` required); version-2 blocks validate the `properties` object instead and ignore `behavior`.
+- `parseCustomBlockSource` always resolves a full `CustomBlockProperties` bundle. For a version-1 block with no `properties` field, `validateAndResolveCustomBlockProperties(undefined, …)` returns the defaults `{ collision: "solid", friction: "default", breakability: "indestructible" }` with **zero** diagnostics — this is exactly the old Phase-1 behavior, not a fallback-from-error path.
+- Editing and saving a version-1 block through the editor always writes it back out as schemaVersion 2 (`serializeCustomBlock` only emits v2). Room references (`custom:<id>`) are untouched by this upgrade.
+
+### Property Registry (`src/levels/customBlockProperties.ts`)
+
+The registry is the single authoritative source for both validation and editor UI. For each preset it defines:
+
+- **Serialized id** (`'solid' | 'oneWay' | 'nonSolid'`, etc.)
+- **Display label** and **editor description** (`COLLISION_PRESET_REGISTRY`, `FRICTION_PRESET_REGISTRY`, `BREAKABILITY_PRESET_REGISTRY`)
+- **Validation**: `isCollisionPreset` / `isFrictionPreset` / `isBreakabilityPreset` type guards; `validateAndResolveCustomBlockProperties` never throws — unknown values fall back to the default and are reported as a `CustomBlockValidationError` (`field`, `expected`, `received`, `blockId`).
+- **Compatibility rules**: `checkCustomBlockPropertyCompatibility(properties, tileWidth, tileHeight)` returns a list of violated rules; never silently rewrites anything itself.
+- **Runtime behavior mapping**: `resolveWallBehavior(properties)` returns `{ generateWall, isPlatformFlag, platformEdge, blockTheme }` built entirely from existing `RoomWallDef` fields. `isEligibleForBreakablePathway(properties, tileWidth, tileHeight)` decides whether a placement should be routed to the existing breakable-block system.
+- **Default value**: `DEFAULT_CUSTOM_BLOCK_PROPERTIES = { collision: 'solid', friction: 'default', breakability: 'indestructible' }`.
+
+JSON never names an internal class or module — only a preset id string, which this registry maps to behavior.
+
+### Implemented Presets and the Existing Pathways They Reuse
+
+| Property | Preset | Existing engine pathway reused |
+|---|---|---|
+| Collision | `solid` (default) | Ordinary `RoomWallDef` wall, `isPlatformFlag: 0` — unchanged from Phase 1. |
+| Collision | `oneWay` | `RoomWallDef.isPlatformFlag = 1`, `platformEdge = 0` (top) — the same one-way platform resolution already used by `resolveWallsY`/`resolveWallsX` in `src/sim/clusters/movementAxisResolvers.ts`. |
+| Collision | `nonSolid` | No wall is generated for the placement at all (parallel to `RoomBackgroundBlockDef`'s "visual only, no collision" behavior) — collision resolvers never see it, but the sprite still renders via `customBlockPlacements`. |
+| Friction | `default` | `RoomWallDef.blockTheme = 'blackRock'` — unchanged. |
+| Friction | `slippery` | `RoomWallDef.blockTheme = 'ice'` — the same ice-surface low-friction acceleration/deceleration constants in `src/sim/clusters/movementConstants.ts` (`ICE_GROUND_ACCELERATION_PER_SEC2`, `ICE_GROUND_DECELERATION_PER_SEC2`), applied via the existing `wallIsIceFlag` derivation. No new friction number is introduced. |
+| Breakability | `indestructible` (default) | No special handling — an ordinary solid/one-way/non-solid wall. |
+| Breakability | `fragile` | The block's placement is **not** added to the normal wall array. Instead its `(xBlock, yBlock)` is pushed into `RoomDef.breakableBlocks`, which `gameRoomHazards.ts` already turns into its own wall plus a `world.breakableBlockXWorld/…/isBreakableBlockActiveFlag` entry using the existing momentum-threshold destruction logic (`BREAKABLE_MOMENTUM_THRESHOLD_WORLD` in `src/sim/hazards.ts`). No new damage or destruction system was written. |
+
+### Compatibility Rules
+
+- `nonSolid` + `friction !== 'default'` → **incompatible** (`nonSolidNoFriction`): non-solid blocks never collide, so friction has no effect.
+- `fragile` + `collision !== 'solid'` → **incompatible** (`fragileRequiresSolid`): the breakable pathway replaces a solid wall; one-way/non-solid fragile blocks are not defined.
+- `fragile` + footprint not 1×1 or 2×2 → **incompatible** (`fragileRequiresSupportedFootprint`): as of Phase 2B both 1×1 and 2×2 fragile footprints are supported (see "Phase 2B" below); any other footprint (not possible today — `tileWidth`/`tileHeight` are only ever 1 or 2 — kept for future-proofing) is rejected.
+- At **load time** (untrusted/legacy JSON), an incompatible combination never crashes the campaign: `validateAndResolveCustomBlockProperties` forces the incompatible field back to its default (e.g. fragile + an unsupported footprint → `breakability: 'indestructible'`) and reports the fallback as a diagnostic.
+- In the **editor**, incompatible combinations are never silently rewritten — Save is blocked and the exact rule violated is shown in the dialog's error line.
+
+### Runtime Resolution and Caching
+
+- `src/render/customBlockSpriteCache.ts`'s existing per-block cache (`registerCustomBlockSprite` / `invalidateCustomBlockSprite` / `getOrFallbackSprite`) now also stores the resolved `CustomBlockProperties` alongside each cached sprite canvas. One definition → one validated property profile, shared by every placement — no re-parsing or re-validation happens during rendering or collision building.
+- `editorRoomBuilder.ts`'s `editorRoomDataToRoomDef` reads each custom block's properties from this cache (`getCustomBlockProperties`) when converting placements into `RoomWallDef`/`RoomBreakableBlockDef` entries. Saving an edited definition re-registers the cache entry; the next `editorRoomDataToRoomDef` call (and the next campaign export) picks up the new behavior for every existing placement automatically — no room JSON is rewritten.
+- Renaming a block only changes its `name` field and does not call `invalidateCustomBlockSprite`, so neither its sprite canvas nor its cached properties are rebuilt (matches the existing rename/rebuild-avoidance behavior documented above).
+- `clearCustomBlockSpriteCache()` (called on every campaign load/switch) clears cached properties along with cached sprites — two campaigns that happen to reuse the same local block ID can never see each other's property profile.
+- Gameplay rendering (`customBlockGameplayRenderer.ts`) reads `sprite.properties.breakability` from the same cache entry (not JSON) to decide whether a placement is a fragile block; if so, it checks the sim's `world.isBreakableBlockActiveFlag` (matched by world position against `world.breakableBlockXWorld/YWorld`) and skips drawing the sprite once broken — the complete placement disappears, never a partial fragment.
+
+### Editor Controls
+
+`editorCustomBlockDialog.ts` gained a **Properties** section between the footprint selector and the pixel canvas:
+
+- Three dropdowns (Collision, Friction, Breakability), each backed directly by the registry (`COLLISION_PRESET_REGISTRY`, etc.) so labels/descriptions can never drift from validation.
+- A one-line description under each dropdown, e.g. "Can be passed from below and stood on from above." for One-way.
+- A live compatibility line: if the current combination violates a rule, it is shown in orange and **Save is blocked** with the same message — never silently corrected.
+- Property changes call `pushUndo()` before applying, so Undo/Redo restores both pixel data and properties together (the existing 50-entry bounded undo stack now snapshots `{ pixelData, properties }`).
+- Property changes are included in the existing dirty-check (`isDirty()` now also compares `properties` against the saved snapshot), so Cancel/Escape with only a property change (no pixel edits) still triggers the Save & Close / Discard / Keep Editing prompt.
+- Save always serializes via `serializeCustomBlock(..., properties)`, which always emits schemaVersion 2.
+- The custom-block palette card (`editorUI.ts`) now shows a small text indicator per block, e.g. `One-way · Slippery · Fragile`, with a tooltip explaining it.
+
+### Known Limitations (Phase 2A, superseded by Phase 2B below)
+
+1. ~~2×2 fragile blocks are not supported.~~ **Resolved in Phase 2B** — see below.
+2. **One-way platform edges 2/3 (left/right) are not exposed.** The underlying engine only fully implements top/bottom edges today (edges 2/3 are "reserved for future" in `movementAxisResolvers.ts`); the custom-block `oneWay` preset always uses the top edge, matching every other authored one-way wall in the game.
+3. **Broken-fragile-block detection in the renderer is a position match, not an index handle.** `customBlockGameplayRenderer.ts` looks up `world.isBreakableBlockActiveFlag` by comparing world coordinates each frame. This avoids new per-placement bookkeeping but means two breakable entries that happen to share the exact same world position (not possible today) would be ambiguous — documented so no future system reuses this shortcut unchanged.
+4. **No persistence of broken-fragile state across a full room reload.** This matches the existing built-in breakable-block behavior (`gameRoomHazards.ts` resets `isBreakableBlockActiveFlag` to 1 on room (re)load); custom fragile blocks (1×1 and 2×2 alike) intentionally behave identically rather than adding new persistence.
+
+---
+
+## Phase 2B: Multi-Cell Fragile Custom Blocks (2×2)
+
+### Why 2×2 Fragile Was Previously Unsupported
+
+`RoomDef.breakableBlocks` (`RoomBreakableBlockDef`) is inherently a **single-cell** mechanism: one entry = one `(xBlock, yBlock)` = one wall = one `world.isBreakableBlockActiveFlag` slot, destroyed independently by `src/sim/hazards.ts`. A naive 2×2 fragile block would need either (a) four independent single-cell entries — which could be struck and destroyed one quarter at a time, leaving 1–3 orphaned solid quarters and fragments — or (b) a brand-new multi-cell physics/destruction system, which Phase 2A explicitly declined to build. Phase 2A's `fragileRequires1x1` compatibility rule blocked 2×2+fragile at both the editor and the loader for exactly this reason.
+
+### The Fix: Logical Placement Grouping, Not a New Engine
+
+Phase 2B does **not** add a new destruction system. It adds one small, backward-compatible field — `groupId?: number` — to the existing `RoomBreakableBlockDef` (`src/levels/roomElementDefs.ts`) and threads it through the existing pipeline:
+
+1. **Editor → RoomDef** (`editorRoomDataToRoomDef` in `src/editor/editorRoomBuilder.ts`): a 2×2 fragile custom block placement is expanded into **four** ordinary `RoomBreakableBlockDef` cells (one per occupied tile, exactly as if four separate 1×1 fragile blocks had been authored at those coordinates), and all four are tagged with the same `groupId` (a counter unique within the room). A 1×1 fragile placement still produces exactly one cell with `groupId` omitted (`undefined`), byte-identical to pre-Phase-2B behavior.
+2. **Room load** (`loadRoomHazards` in `src/screens/gameRoomHazards.ts`): copies `b.groupId ?? -1` into a new parallel array, `world.breakableBlockGroupId: Int16Array` (`src/sim/worldHazardState.ts`). `-1` means "ungrouped" (every pre-Phase-2B breakable block, and every 1×1 custom fragile block).
+3. **Destruction** (`applyHazards` in `src/sim/hazards.ts`): when the momentum-threshold check breaks cell `i` (via the new shared `destroyBreakableBlockCell(world, index)` helper, which deactivates the flag and zeroes the matching wall's `wWorld`/`hWorld` — the single place that mutates breakable/wall state), it then checks `world.breakableBlockGroupId[i]`. If it is `>= 0`, the loop scans every **other** cell sharing that group id and destroys any that are still active, in the same pass. This is the atomic transaction: whichever of the 4 cells is struck, all 4 become inactive and lose their collision within the same tick, with no intermediate partial state observable between them.
+
+### The 9-Step Transaction, Mapped to Code
+
+| Spec step | Implementation |
+|---|---|
+| 1. Resolve struck cell → placement | The struck cell's `world.breakableBlockGroupId[i]` *is* the placement identity — no separate lookup table needed. |
+| 2. Verify not already processed | The per-cell `isBreakableBlockActiveFlag[i] === 0` guard at the top of the hazard loop and inside the group-destroy inner loop — re-striking an already-broken cell (or its already-broken groupmates) is a no-op. |
+| 3. Gather the exact 4 occupied tiles | Done once, at room-build time, in `editorRoomDataToRoomDef` — the 4 cells pushed for one placement are exactly its footprint, from authoritative `EditorCustomBlockPlacement` data (`xBlock/yBlock/tileWidth/tileHeight`), never inferred by scanning neighboring tiles for a matching block ID. |
+| 4. Remove collision for all 4 | `destroyBreakableBlockCell` zeroes `wallWWorld`/`wallHWorld` for each cell's own wall index. |
+| 5. Remove render/placement state for all 4 | `customBlockGameplayRenderer.ts` checks the **anchor** cell's breakable entry (one of the 4, since the anchor tile is always cell `(dx=0, dy=0)` of the group) via `isFragilePlacementBroken`; because the group destroys atomically, the anchor's flag flips to inactive in the same tick as the other 3, so the whole sprite disappears in one frame — never a partial quarter. |
+| 6. Update runtime room state | All mutation is on the sim `WorldState` (`isBreakableBlockActiveFlag`, `wallWWorld/HWorld`) — no authored room JSON or custom block definition is ever touched. |
+| 7. Trigger break effects in a controlled way | The engine has no per-cell particle/sound effect for breakable blocks today (only the cracked-brick fill in `src/render/hazards.ts`, gated by the same active-flag, so it already stops drawing all 4 cells together — no fan-out to suppress). |
+| 8. Mark dirty | The sim's existing per-tick wall/flag mutation is what the renderer already reads every frame — no additional dirty flag needed (matches how single-cell fragile blocks already work). |
+| 9. Prevent duplicate destruction same frame | The active-flag guard makes every step idempotent: calling `applyHazards` (or hitting the same/groupmate cell) again in the same tick is a safe no-op. Covered by an automated test (see below). |
+
+### Backward Compatibility
+
+- `groupId` is optional on `RoomBreakableBlockDef` and defaults to `-1` in `world.breakableBlockGroupId` when absent — pre-Phase-2B room JSON (with no `groupId` field on any breakable-block entry) loads and behaves identically to before.
+- No schema version bump: `CUSTOM_BLOCK_SCHEMA_VERSION` stays `2`. Nothing changed in the on-disk custom block **definition** format (`CustomBlockSourceDefV2`) — 2×2 fragile is purely a property-compatibility and room-building change, not a serialization change.
+- 1×1 fragile custom blocks are completely unaffected: `isEligibleForBreakablePathway` still routes them to a single ungrouped cell, and `editorRoomDataToRoomDef` still pushes exactly one `RoomBreakableBlockDef` with no `groupId`.
+
+### Editor Changes
+
+- `checkCustomBlockPropertyCompatibility`'s `fragileRequiresSupportedFootprint` rule now accepts both 1×1 and 2×2 (previously `fragileRequires1x1` rejected anything but 1×1). `nonSolid + fragile` and `fragile` with `oneWay` collision remain blocked via the unchanged `fragileRequiresSolid` rule.
+- The editor's live compatibility line (`editorCustomBlockDialog.ts`) and Save-blocking behavior are unchanged in mechanism — they simply now report zero issues for a 2×2 solid+fragile combination instead of one.
+- Property changes (including flipping a definition between fragile and indestructible) continue to participate in dirty tracking, undo/redo (`{ pixelData, properties }` snapshots), Save/Discard/Cancel, duplicate, rename, and export exactly as in Phase 2A — none of that machinery is footprint-aware, so it needed no changes for 2×2.
+
+### Runtime Property Hardening Findings (Audit)
+
+- **Collision**: `resolveWallBehavior` is unchanged and correctly covers the complete `wBlock × hBlock` footprint for `solid`/`oneWay`; `nonSolid` generates no wall. Switching a placement's definition from `solid` to `nonSolid` (or vice versa) takes effect the next time `editorRoomDataToRoomDef` runs (e.g. next export or resident-room rebuild) with no room-data rewrite, since the wall array is rebuilt from the cache-resolved properties every time.
+- **Friction**: a 2×2 placement produces one `RoomWallDef` (for solid/oneWay, non-fragile) or four grouped breakable cells (fragile) — in both cases there is exactly one property profile per placement (read once from the sprite cache), so there is no way for "multiple occupancy cells" to disagree; there is only ever one wall (or one group) per placement. `nonSolid` blocks never generate a wall, so friction can never apply to them (enforced by `nonSolidNoFriction`).
+- **Friction hardening bug found and fixed**: prior to Phase 2B, `gameRoomHazards.ts` built the breakable-pathway wall for *every* breakable block (built-in or fragile custom, 1×1 or would-be 2×2) with a hardcoded default wall theme and never set `wallIsIceFlag`, so a `fragile` + `slippery` custom block silently lost its ice friction the moment it was routed to the breakable pathway — the `resolveWallBehavior().blockTheme === 'ice'` result was computed but discarded. Fixed by adding an optional `blockTheme?: 'blackRock' | 'ice'` field to `RoomBreakableBlockDef` (`src/levels/roomElementDefs.ts`), populated by `editorRoomBuilder.ts` only when the resolved theme is `'ice'` (left `undefined` for the default case, preserving the exact pre-existing `WALL_THEME_DEFAULT_INDEX` sentinel rather than forcing a concrete "blackRock" index), and consumed by `loadRoomHazards` in `gameRoomHazards.ts` to set both `wallThemeIndex` and `wallIsIceFlag` correctly on the breakable cell's wall. This applies to both 1×1 and 2×2 fragile+slippery blocks alike.
+- **Breakability**: `indestructible` blocks are never passed to `isEligibleForBreakablePathway` (it requires `breakability === 'fragile'`), so they can never enter the breakable/group-destroy path. Missing/unregistered block IDs fall back to `DEFAULT_CUSTOM_BLOCK_PROPERTIES` (`collision: solid, breakability: indestructible`) via `getCustomBlockProperties`, so an unresolvable placement still renders its full solid footprint rather than silently vanishing or half-colliding.
+- **Campaign switching**: `clearCustomBlockSpriteCache()` clears the property cache; `world.breakableBlockGroupId` (like all hazard arrays) is fully repopulated by `loadRoomHazards` on every room (re)load, so no group id or destruction state can leak between rooms or campaigns.
+
+### Effect Emission Policy
+
+One logical placement → at most one visible disappearance event, never four. Concretely: the engine's only current "effect" for a breaking block is that the cracked-brick overlay (`src/render/hazards.ts`) and the custom sprite (`customBlockGameplayRenderer.ts`) stop being drawn once `isBreakableBlockActiveFlag` is 0; since the group-destroy loop flips all 4 flags in the same tick, all 4 quarters (and the whole custom sprite) disappear in the same frame. There is no per-cell particle/sound system to fan out ×4 in the first place — if a future phase adds one (see below), it must gate on "is this the group's first cell processed this pass" (the outer loop index `i`) to preserve this one-emission-per-placement policy.
+
+### Persistence / Reset Semantics
+
+Identical to built-in single-cell breakable blocks: `isBreakableBlockActiveFlag` (and now `breakableBlockGroupId`) live only in the transient sim `WorldState`, rebuilt from `RoomDef.breakableBlocks` every time `loadRoomHazards` runs. Leaving and re-entering a room, or reloading the campaign, respawns every fragile custom block (1×1 and 2×2 alike) — there is no persistent "broken" flag written back into room JSON or campaign save state. This matches the explicit constraint against inventing new persistent campaign mutation for custom blocks.
+
+### Tests (Phase 2B)
+
+New file `src/tests/customBlocksPhase2B.test.ts` (24 tests, grouped into 5 `describe` blocks), plus 2 updated assertions in `src/tests/customBlockProperties.test.ts` (the `fragileRequires1x1`/"2x2 fragile is flagged incompatible" test and the `isEligibleForBreakablePathway` 2×2 test, both flipped from "rejected" to "accepted" since that is the exact limitation this phase removes — no other Phase 2A test was touched):
+
+1. **Compatibility rule relaxation** (tests 1–8): solid 2×2 fragile now has zero compatibility issues; solid 1×1 fragile unchanged; `nonSolid`/`oneWay` + fragile still blocked by `fragileRequiresSolid` regardless of footprint; `nonSolidNoFriction` still fires independent of footprint; `isEligibleForBreakablePathway` returns `true` for 2×2 solid+fragile; `validateAndResolveCustomBlockProperties` no longer falls back 2×2 solid+fragile to indestructible, but still does for non-solid 2×2 fragile.
+2. **`editorRoomBuilder` grouping** (tests 9–14, real `editorRoomDataToRoomDef` calls, not mocks): 1×1 fragile still yields exactly one ungrouped cell; 2×2 fragile yields exactly 4 cells at the correct 4 coordinates sharing one group id with no plain wall generated; two touching 2×2 placements of the *same* definition get two distinct group ids; fragile+slippery threads `blockTheme: 'ice'` onto the breakable cell while fragile+default leaves it `undefined`; a placement referencing an unregistered/missing block ID falls back to one full-footprint solid wall, not a breakable entry.
+3. **Atomic destruction transaction** (tests 15–20, real `createWorldState` + `loadRoomHazards` + `applyHazards`): 1×1 fragile destruction is unchanged; striking **any** of the 4 cells (parametrized over all 4 offsets) destroys all 4 atomically; destruction zeroes collision (`wallWWorld`/`wallHWorld`) for all 4 corresponding walls; two adjacent same-definition 2×2 placements remain independently destructible (striking one leaves the other's 4 cells untouched); calling `applyHazards` multiple times in the same tick after destruction is idempotent (`assert.doesNotThrow`, flags stay at 0); a player below the momentum threshold does not break any cell.
+4. **Renderer suppression** (test 21): a broken 2×2 placement (anchor cell inactive) is not drawn at all, exercising the real `renderCustomBlockSprites`.
+5. **Backward compatibility** (tests 22–24): a hand-built `RoomBreakableBlockDef` with no `groupId`/`blockTheme` fields at all loads via `loadRoomHazards` without throwing, resolves to group `-1`, and still breaks correctly under `applyHazards`; clearing the sprite cache (simulated campaign switch) and re-registering the same block ID under different properties fully replaces the old entry with no leakage; a spot-check that base Phase 2A compatibility rules (solid/oneWay/nonSolid, `nonSolidNoFriction`) still hold.
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (821/821 passing, 0 pre-existing failures, 2 Phase 2A tests updated to reflect the now-intended 2×2-fragile-is-compatible behavior), and `npm run build` were all actually run for this phase, and all passed.
+- **Not performed**: no manual verification was done in an actual running game or editor session (no live browser/editor click-through of creating a 2×2 fragile block, placing it, running into it from each of the 4 sides in the real renderer, saving/reloading a real campaign file, or exercising undo/redo/copy-paste/duplicate/delete through the actual editor UI). All verification of gameplay behavior (atomic destruction, collision removal, renderer suppression, friction theming, backward compatibility) was done through the automated test suite described above (`src/tests/customBlocksPhase2B.test.ts`), which exercises the real `editorRoomDataToRoomDef`, `loadRoomHazards`, `applyHazards`, and `renderCustomBlockSprites` code paths (not mocks of them) but does not drive an actual UI or rendered frame.
+- Anyone relying on this phase for a real campaign should manually place a 2×2 fragile block in the editor, save, reload, and break it in-game from each side before shipping, since that end-to-end path has not been clicked through by a human or an automated UI driver.
+
+### Remaining Limitations
+
+1. **No true persistence of broken state across room reload** (by design — matches built-in behavior; see above).
+2. **Group ids are per-room and stored in an `Int16Array`** — in practice bounded by `MAX_BREAKABLE_BLOCKS` (32 total breakable-block cells per room today, in `src/sim/worldHazardState.ts`), which is the real ceiling on how many 2×2 fragile blocks (8 cells each including a same-room neighbor) plus 1×1 fragile/built-in breakable blocks can coexist in one room, not the much larger Int16 range.
+3. **No dedicated break particle/sound effect exists yet for breakable blocks of any kind** (built-in or custom) — Phase 2B preserves whatever the engine already does (nothing beyond the visual disappearance) rather than inventing one.
+4. **Renderer broken-detection is still a position match** (limitation #3 above, inherited from Phase 2A) — now also relied upon for 2×2 anchor-cell lookup; still safe because anchor-cell coordinates are unique per placement.
+
+### Proposed Phase 2C: Additional Engine-Defined Properties (Not Implemented)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `friction` | `number` | Surface friction coefficient (0–1). Affects sliding. |
-| `breakability` | `'none' \| 'dust' \| 'projectile'` | Whether dust or projectiles can chip the block. |
-| `damageOnContact` | `number` | Damage dealt to the player each frame of contact. |
-| `materialResponse` | `'stone' \| 'wood' \| 'metal'` | Sound and particle effect category on impact. |
-| `windResponse` | `number` | Scale factor for wind-particle interaction near this block. |
+| `damageOnContact` (hazard/damage preset) | enum tier, not a raw number | Reuses existing damage constants at a small number of tiers. |
+| `windResponse` | enum tier | Scale factor for wind-particle interaction near this block, from a fixed set of presets. |
 | `liquidInteraction` | `'seal' \| 'drain' \| 'none'` | How liquids behave when adjacent to this block. |
+| `materialResponse` | `'stone' \| 'wood' \| 'metal'` | Sound and particle effect category on impact — this is also where a first real per-break effect (see "Remaining Limitations" #3) would naturally land. |
+| Trigger behavior | — | Firing an event/transition when the player touches or breaks the block. |
+| More breakability profiles | `'dust' \| 'projectile'` | Weakness to specific damage sources, mirroring `CrumbleVariant`. |
+| Break resistance tiers | enum tier | Multiple momentum thresholds instead of the single existing constant, still validated against a fixed enum, not an arbitrary number. |
 
-None of these properties would be executable code; all would be validated against a strict enum or numeric range and interpreted by the engine.
+None of these would be executable code; all would be validated against a strict enum (never an arbitrary numeric range) and interpreted by the engine, following the same registry pattern as Phase 2A/2B.

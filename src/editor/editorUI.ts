@@ -799,9 +799,20 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const usageEl = document.createElement('div');
               usageEl.textContent = usageCount === 0 ? 'unused' : `used in ${usageCount} room${usageCount !== 1 ? 's' : ''}`;
               usageEl.style.cssText = `font-size:9px;color:${usageCount === 0 ? '#664444' : '#448844'};margin-top:1px;`;
+
+              // Property indicators (collision / friction / breakability), one-letter badges with a tooltip.
+              const propsEl = document.createElement('div');
+              propsEl.style.cssText = 'font-size:9px;color:#8ab;margin-top:1px;';
+              const collisionBadge = { solid: 'Solid', oneWay: '1-Way', nonSolid: 'Non-solid' }[def.properties.collision];
+              const frictionBadge = def.properties.friction === 'slippery' ? ' · Slippery' : '';
+              const breakBadge = def.properties.breakability === 'fragile' ? ' · Fragile' : '';
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}`;
+              propsEl.title = 'Collision/friction/breakability properties for this block.';
+
               info.appendChild(nameEl);
               info.appendChild(sizeEl);
               info.appendChild(usageEl);
+              info.appendChild(propsEl);
               topRow.appendChild(info);
               blockCard.appendChild(topRow);
 

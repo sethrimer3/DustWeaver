@@ -69,12 +69,9 @@ import {
   serializeCustomBlock,
   makeBlankPixelData,
   makeMissingTextureData,
-  toNamespacedId,
-  rawIdFromNamespaced,
   isSafeCampaignRelativePath,
   CUSTOM_BLOCK_PIXELS_PER_TILE,
   toRgbaHex,
-  parseRgbaHex,
 } from '../levels/customBlocks';
 
 // ── Sprite cache (pure — builds OffscreenCanvas or HTMLCanvasElement) ─────────
@@ -387,8 +384,6 @@ describe('Symlink-safe path containment', () => {
 describe('RGBA serialization round-trip', () => {
   test('2b. semitransparent pixels survive serialize → parse round-trip', () => {
     const tw: 1 | 2 = 1, th: 1 | 2 = 1;
-    const pw = tw * CUSTOM_BLOCK_PIXELS_PER_TILE;
-    const ph = th * CUSTOM_BLOCK_PIXELS_PER_TILE;
     const pixelData = makeBlankPixelData(tw, th);
 
     // Set a semitransparent teal pixel at index 0

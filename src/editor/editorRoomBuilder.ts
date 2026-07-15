@@ -15,10 +15,13 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef } from '../levels/roomDef';
 import type { EditorRoomData } from './editorState';
 import { stringToParticleKind } from './roomJsonSchema';
 import { buildCompleteBoundaryWalls } from '../levels/roomBoundaryWalls';
+import { rawIdFromNamespaced } from '../levels/customBlocks';
+import { getCustomBlockProperties } from '../render/customBlockSpriteCache';
+import { resolveWallBehavior, isEligibleForBreakablePathway } from '../levels/customBlockProperties';
 
 // Re-export the reverse direction (RoomDef → EditorRoomData) from its own module
 // so existing callers that import from editorRoomBuilder are unaffected.
@@ -47,15 +50,67 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
   }));
 
-  // Convert custom block placements to solid walls for collision.
-  const customBlockWalls: RoomWallDef[] = (data.customBlockPlacements ?? []).map(p => ({
-    xBlock: p.xBlock,
-    yBlock: p.yBlock,
-    wBlock: p.tileWidth,
-    hBlock: p.tileHeight,
-    isPlatformFlag: 0,
-    blockTheme: 'blackRock',
-  }));
+  // Convert custom block placements to walls, resolving each placement's
+  // engine-defined collision/friction/breakability preset from the runtime
+  // sprite cache (populated at campaign load / block create / block edit —
+  // see customBlockSpriteCache.ts). Unregistered blocks fall back to the
+  // solid/default/indestructible defaults, matching Phase 1 behavior.
+  const customBlockWalls: RoomWallDef[] = [];
+  const customBlockBreakables: RoomBreakableBlockDef[] = [];
+  // Phase 2B: monotonically increasing group id, unique per room, assigned
+  // only to multi-cell (2x2) fragile placements so their cells can be broken
+  // atomically as one logical unit (see src/sim/hazards.ts). 1x1 fragile
+  // placements are pushed with no groupId — byte-identical to pre-Phase-2B
+  // behavior.
+  let nextBreakableGroupId = 0;
+  for (const p of data.customBlockPlacements ?? []) {
+    const rawId = rawIdFromNamespaced(p.blockId);
+    const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
+    const behavior = resolveWallBehavior(properties ?? { collision: 'solid', friction: 'default', breakability: 'indestructible' });
+
+    if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
+
+    if (properties !== undefined && isEligibleForBreakablePathway(properties, p.tileWidth, p.tileHeight)) {
+      // Reuse the existing breakable-block pathway wholesale: it creates its
+      // own wall and tracks momentum-based destruction (see gameRoomHazards.ts).
+      // For a multi-cell (2x2) placement, register EVERY occupied cell as its
+      // own breakable-block entry (exactly like 4 independent 1x1 breakable
+      // blocks would be authored) but tag them all with the same groupId so
+      // the sim can destroy all 4 atomically when any one is struck.
+      // Only pass an explicit blockTheme for 'ice' (slippery). Leaving it
+      // undefined for the 'blackRock' (default friction) case preserves the
+      // exact pre-Phase-2B wall theme sentinel (WALL_THEME_DEFAULT_INDEX,
+      // "use the room's default theme") rather than forcing a concrete
+      // blackRock index — a behavior change we don't want to introduce here.
+      const breakableBlockTheme = behavior.blockTheme === 'ice' ? 'ice' as const : undefined;
+      if (p.tileWidth === 1 && p.tileHeight === 1) {
+        customBlockBreakables.push({ xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme });
+      } else {
+        const groupId = nextBreakableGroupId++;
+        for (let dy = 0; dy < p.tileHeight; dy++) {
+          for (let dx = 0; dx < p.tileWidth; dx++) {
+            customBlockBreakables.push({
+              xBlock: p.xBlock + dx,
+              yBlock: p.yBlock + dy,
+              groupId,
+              blockTheme: breakableBlockTheme,
+            });
+          }
+        }
+      }
+      continue;
+    }
+
+    customBlockWalls.push({
+      xBlock: p.xBlock,
+      yBlock: p.yBlock,
+      wBlock: p.tileWidth,
+      hBlock: p.tileHeight,
+      isPlatformFlag: behavior.isPlatformFlag,
+      platformEdge: behavior.isPlatformFlag === 1 ? behavior.platformEdge : undefined,
+      blockTheme: behavior.blockTheme,
+    });
+  }
 
   const allWalls: RoomWallDef[] = [...boundaryWalls, ...interiorWalls, ...customBlockWalls];
 
@@ -133,6 +188,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
+    breakableBlocks: customBlockBreakables.length > 0 ? customBlockBreakables : undefined,
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,

@@ -13,14 +13,23 @@ import {
   makeMissingTextureData,
   CUSTOM_BLOCK_PIXELS_PER_TILE,
 } from '../levels/customBlocks';
+import type { CustomBlockProperties } from '../levels/customBlockProperties';
+import { DEFAULT_CUSTOM_BLOCK_PROPERTIES } from '../levels/customBlockProperties';
 
-/** A cached sprite ready to draw. */
+/**
+ * A cached sprite ready to draw, plus the validated property profile for
+ * this block. Caching both together means all instances of the same block
+ * share one resolved property bundle — no JSON re-parsing or re-validation
+ * happens during rendering or collision loops. Rebuilt only when the block
+ * is (re)registered (see `registerCustomBlockSprite` / `invalidateCustomBlockSprite`).
+ */
 export interface CustomBlockSprite {
   canvas: HTMLCanvasElement | OffscreenCanvas;
   pixelWidth: number;
   pixelHeight: number;
   tileWidth: 1 | 2;
   tileHeight: 1 | 2;
+  properties: CustomBlockProperties;
 }
 
 /** Module-level sprite cache keyed by raw block ID (not namespaced). */
@@ -64,6 +73,7 @@ export function registerCustomBlockSprite(def: CustomBlockDef): CustomBlockSprit
     pixelHeight: def.pixelHeight,
     tileWidth: def.tileWidth,
     tileHeight: def.tileHeight,
+    properties: def.properties ?? DEFAULT_CUSTOM_BLOCK_PROPERTIES,
   };
   _cache.set(def.id, sprite);
   return sprite;
@@ -72,6 +82,15 @@ export function registerCustomBlockSprite(def: CustomBlockDef): CustomBlockSprit
 /** Returns the cached sprite for a raw block ID, or null if not registered. */
 export function getCustomBlockSprite(rawId: string): CustomBlockSprite | null {
   return _cache.get(rawId) ?? null;
+}
+
+/**
+ * Returns the cached, validated property profile for a raw block ID, or the
+ * engine defaults (solid / default friction / indestructible) if the block
+ * is not registered — never null, never a crash.
+ */
+export function getCustomBlockProperties(rawId: string): CustomBlockProperties {
+  return _cache.get(rawId)?.properties ?? DEFAULT_CUSTOM_BLOCK_PROPERTIES;
 }
 
 /**
@@ -115,6 +134,7 @@ export function getOrFallbackSprite(
     pixelHeight: ph,
     tileWidth,
     tileHeight,
+    properties: DEFAULT_CUSTOM_BLOCK_PROPERTIES,
   };
   // Cache the fallback so we don't rebuild it every frame.
   _cache.set(rawId, fallback);

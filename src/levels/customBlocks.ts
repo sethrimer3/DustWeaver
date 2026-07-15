@@ -13,10 +13,18 @@
  */
 
 import { BLOCK_SIZE_SMALL } from './roomDef';
+import type { CustomBlockProperties } from './customBlockProperties';
+import {
+  DEFAULT_CUSTOM_BLOCK_PROPERTIES,
+  validateAndResolveCustomBlockProperties,
+} from './customBlockProperties';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-export const CUSTOM_BLOCK_SCHEMA_VERSION = 1 as const;
+/** Current on-disk schema version written by the editor. */
+export const CUSTOM_BLOCK_SCHEMA_VERSION = 2 as const;
+/** Oldest schema version this build still loads (with defaults applied). */
+export const CUSTOM_BLOCK_MIN_SCHEMA_VERSION = 1 as const;
 export const CUSTOM_BLOCK_NAMESPACE = 'custom' as const;
 export const CUSTOM_BLOCK_ID_PREFIX = 'custom:' as const;
 
@@ -31,9 +39,28 @@ export const RGBA_HEX_RE = /^#[0-9A-F]{8}$/;
 
 // ── Source format (on disk / in SavedCampaignV1) ─────────────────────────────
 
-/** A single custom block definition as stored in the campaign JSON. */
-export interface CustomBlockSourceDef {
+/**
+ * A single custom block definition as stored in the campaign JSON.
+ *
+ * schemaVersion 1 (legacy): `behavior: "solid"`, no `properties` field.
+ * schemaVersion 2 (current): `properties` replaces `behavior`; the block
+ * always collides/renders using the resolved property preset mapping in
+ * `customBlockProperties.ts`.
+ */
+export interface CustomBlockSourceDefV1 {
   schemaVersion: 1;
+  id: string;
+  name: string;
+  tileWidth: 1 | 2;
+  tileHeight: 1 | 2;
+  pixelWidth: number;
+  pixelHeight: number;
+  behavior: 'solid';
+  pixels: string[][];
+}
+
+export interface CustomBlockSourceDefV2 {
+  schemaVersion: 2;
   id: string;
   name: string;
   /** Tile width: 1 or 2. */
@@ -44,10 +71,14 @@ export interface CustomBlockSourceDef {
   pixelWidth: number;
   /** Pixel height = tileHeight × CUSTOM_BLOCK_PIXELS_PER_TILE. */
   pixelHeight: number;
-  behavior: 'solid';
+  /** Engine-defined preset properties. See customBlockProperties.ts. */
+  properties: CustomBlockProperties;
   /** Exactly pixelHeight rows, each with exactly pixelWidth "#RRGGBBAA" entries. */
   pixels: string[][];
 }
+
+/** Union of all on-disk schema versions this build can parse. */
+export type CustomBlockSourceDef = CustomBlockSourceDefV1 | CustomBlockSourceDefV2;
 
 // ── Runtime validated definition ─────────────────────────────────────────────
 
@@ -62,6 +93,8 @@ export interface CustomBlockDef {
   readonly pixelHeight: number;
   /** RGBA bytes packed as Uint8ClampedArray row-major (y * w + x) * 4 */
   readonly pixelData: Uint8ClampedArray;
+  /** Fully-resolved, validated property bundle (never undefined at runtime). */
+  readonly properties: CustomBlockProperties;
 }
 
 // ── Editor placement (in EditorRoomData) ─────────────────────────────────────
@@ -197,8 +230,9 @@ export function validateCustomBlockSource(
   const d = data as Record<string, unknown>;
 
   // schemaVersion
-  if (d['schemaVersion'] !== 1) {
-    err('schemaVersion', '1', String(d['schemaVersion']));
+  const schemaVersion = d['schemaVersion'];
+  if (schemaVersion !== 1 && schemaVersion !== 2) {
+    err('schemaVersion', '1 or 2', String(schemaVersion));
     return errors; // Can't continue without known version.
   }
 
@@ -243,8 +277,9 @@ export function validateCustomBlockSource(
     err('pixelHeight', String(expectedPH), String(ph));
   }
 
-  // behavior
-  if (d['behavior'] !== 'solid') {
+  // behavior (schemaVersion 1 only — v2 uses `properties` instead, validated
+  // separately and never fatally since it always has a safe fallback).
+  if (schemaVersion === 1 && d['behavior'] !== 'solid') {
     err('behavior', '"solid"', String(d['behavior']));
   }
 
@@ -290,7 +325,7 @@ export function validateCustomBlockSource(
 export function parseCustomBlockSource(
   data: unknown,
   context?: { blockId?: string; filePath?: string },
-): { ok: true; def: CustomBlockDef } | { ok: false; errors: CustomBlockValidationError[] } {
+): { ok: true; def: CustomBlockDef; propertyWarnings: CustomBlockValidationError[] } | { ok: false; errors: CustomBlockValidationError[] } {
   const errors = validateCustomBlockSource(data, context);
   if (errors.length > 0) return { ok: false, errors };
 
@@ -310,6 +345,16 @@ export function parseCustomBlockSource(
     }
   }
 
+  // Property resolution never fails the parse — unknown/incompatible values
+  // fall back to safe defaults and are reported as diagnostics only.
+  const rawProperties = d.schemaVersion === 2 ? d.properties : undefined;
+  const { properties, errors: propertyWarnings } = validateAndResolveCustomBlockProperties(
+    rawProperties,
+    d.tileWidth,
+    d.tileHeight,
+    context,
+  );
+
   return {
     ok: true,
     def: {
@@ -321,7 +366,9 @@ export function parseCustomBlockSource(
       pixelWidth:  pw,
       pixelHeight: ph,
       pixelData,
+      properties,
     },
+    propertyWarnings,
   };
 }
 
@@ -335,7 +382,8 @@ export function serializeCustomBlock(
   tileWidth: 1 | 2,
   tileHeight: 1 | 2,
   pixelData: Uint8ClampedArray,
-): CustomBlockSourceDef {
+  properties: CustomBlockProperties = DEFAULT_CUSTOM_BLOCK_PROPERTIES,
+): CustomBlockSourceDefV2 {
   const pw = tileWidth * CUSTOM_BLOCK_PIXELS_PER_TILE;
   const ph = tileHeight * CUSTOM_BLOCK_PIXELS_PER_TILE;
   const pixels: string[][] = [];
@@ -353,14 +401,14 @@ export function serializeCustomBlock(
     pixels.push(rowArr);
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
     name,
     tileWidth,
     tileHeight,
     pixelWidth: pw,
     pixelHeight: ph,
-    behavior: 'solid',
+    properties,
     pixels,
   };
 }

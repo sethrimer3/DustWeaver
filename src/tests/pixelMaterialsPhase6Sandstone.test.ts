@@ -37,7 +37,6 @@ import {
   getMaterialBehavior,
   getMaterialFootprintSize,
   SANDSTONE_FRACTURE_IMPACT_SPEED,
-  SANDSTONE_EROSION_THRESHOLD,
   SANDSTONE_MIN_EROSION_WIND_SPEED,
   SANDSTONE_IMPACT_COOLDOWN_TICKS,
 } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -155,7 +154,7 @@ test('sandstone: high-speed head-on impact converts sandstone to sand', () => {
   // Player at (5, 10), sandstone at (9, 10) — just to the right of the player AABB (halfW=3.5).
   sys.place(9, 10, MATERIAL_SANDSTONE);
   // Impact moving right at well above threshold.
-  sys.applyPlayerImpactFracture(5, 10, 3.5, 10, SANDSTONE_FRACTURE_IMPACT_SPEED + 50, 0, 0);
+  impactFromLeft(sys, 5, 10, SANDSTONE_FRACTURE_IMPACT_SPEED + 50);
   assert.equal(sys.getMaterialAt(9, 10), MATERIAL_SAND, 'impacted sandstone must become sand');
 });
 
@@ -310,7 +309,7 @@ test('sandstone: converted sandstone falls as normal sand', () => {
   sys.place(5, 5, MATERIAL_SANDSTONE);
 
   // Fracture it via high-speed impact from above.
-  sys.applyPlayerImpactFracture(5, 5 - 11, 3.5, 10, 0, SANDSTONE_FRACTURE_IMPACT_SPEED + 50, 0);
+  impactFromAbove(sys, 5, 5 - 11, SANDSTONE_FRACTURE_IMPACT_SPEED + 50);
   assert.equal(sys.getMaterialAt(5, 5), MATERIAL_SAND, 'should have converted to sand');
 
   // After conversion it should fall toward the floor.

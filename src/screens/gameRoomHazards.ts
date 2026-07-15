@@ -150,8 +150,13 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
       world.wallWWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = BLOCK_SIZE_MEDIUM;
-      world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
-      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
+      // Phase 2B: honor the breakable cell's own blockTheme (e.g. 'ice' for a
+      // fragile+slippery custom block) instead of always using the default
+      // theme — see the RoomBreakableBlockDef.blockTheme doc comment.
+      world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
+        ? blockThemeToIndex(b.blockTheme)
+        : WALL_THEME_DEFAULT_INDEX;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
       world.wallPlatformEdge[wallIdx] = 0;
@@ -159,6 +164,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
       world.wallIsBouncePadFlag[wallIdx] = 0;
       world.wallBouncePadSpeedFactorIndex[wallIdx] = 0;
+      world.wallIsIceFlag[wallIdx] = b.blockTheme === 'ice' ? 1 : 0;
+      world.wallIsUltraIceFlag[wallIdx] = 0;
     }
 
     const bi = world.breakableBlockCount++;
@@ -166,6 +173,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.breakableBlockYWorld[bi] = by;
     world.isBreakableBlockActiveFlag[bi] = 1;
     world.breakableBlockWallIndex[bi] = wallIdx;
+    world.breakableBlockGroupId[bi] = b.groupId ?? -1;
   }
 
   // ── Crumble blocks ────────────────────────────────────────────────────────

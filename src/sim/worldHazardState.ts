@@ -232,6 +232,14 @@ export interface HazardWorldState {
    * -1 if no corresponding wall (should not happen in practice).
    */
   breakableBlockWallIndex: Int8Array;
+  /**
+   * Logical placement group id (Phase 2B). Cells sharing the same non-negative
+   * group id belong to the same multi-cell custom block placement (e.g. one
+   * 2x2 fragile block = 4 cells, all with the same group id) and are
+   * destroyed atomically as one unit. -1 means the cell is NOT grouped (plain
+   * single-cell breakable block — identical to pre-Phase-2B behavior).
+   */
+  breakableBlockGroupId: Int16Array;
 
   // ── Crumble blocks ─────────────────────────────────────────────────────────
   /** Number of crumble blocks (active + broken). */
@@ -699,6 +707,7 @@ export function createHazardWorldState(): HazardWorldState {
     breakableBlockYWorld:          new Float32Array(MAX_BREAKABLE_BLOCKS),
     isBreakableBlockActiveFlag:    new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockWallIndex:       new Int8Array(MAX_BREAKABLE_BLOCKS),
+    breakableBlockGroupId:         new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
     crumbleBlockCount:             0,
     crumbleBlockXWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),

@@ -93,6 +93,24 @@ const LAVA_ZONE_INVULN_TICKS = 30;
  */
 const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
 
+/**
+ * Destroys one breakable-block cell: deactivates its flag and zeroes its
+ * corresponding wall's dimensions (removing collision). Idempotent — calling
+ * this on an already-inactive cell would double-clear an already-cleared
+ * wall, which is harmless, but callers should guard with the active-flag
+ * check to avoid redundant work (see the Phase 2B group-destroy loop above).
+ * Shared by both the single-cell path and the Phase 2B multi-cell group path
+ * so there is exactly one place that mutates breakable-block/wall state.
+ */
+function destroyBreakableBlockCell(world: WorldState, index: number): void {
+  world.isBreakableBlockActiveFlag[index] = 0;
+  const wi = world.breakableBlockWallIndex[index];
+  if (wi >= 0 && wi < world.wallCount) {
+    world.wallWWorld[wi] = 0;
+    world.wallHWorld[wi] = 0;
+  }
+}
+
 /** Interaction radius for jars (world units). */
 const JAR_INTERACT_RADIUS_WORLD = 10.0;
 
@@ -405,14 +423,23 @@ export function applyHazards(world: WorldState): void {
         overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom) &&
         playerSpeed >= BREAKABLE_MOMENTUM_THRESHOLD_WORLD
       ) {
-        // Break the block
-        world.isBreakableBlockActiveFlag[i] = 0;
+        // Break the struck cell, and — for Phase 2B multi-cell placements —
+        // atomically break every other cell sharing its logical group id in
+        // the SAME pass. This is the "one logical placement" destroy: no
+        // partial state persists even mid-frame, and re-entering this branch
+        // for an already-broken cell is a no-op (guarded by the active-flag
+        // check at the top of the loop), so duplicate destruction callbacks
+        // within one frame are idempotent.
+        destroyBreakableBlockCell(world, i);
 
-        // Deactivate corresponding wall by zeroing its dimensions
-        const wi = world.breakableBlockWallIndex[i];
-        if (wi >= 0 && wi < world.wallCount) {
-          world.wallWWorld[wi] = 0;
-          world.wallHWorld[wi] = 0;
+        const groupId = world.breakableBlockGroupId[i];
+        if (groupId >= 0) {
+          for (let j = 0; j < world.breakableBlockCount; j++) {
+            if (j === i) continue;
+            if (world.breakableBlockGroupId[j] !== groupId) continue;
+            if (world.isBreakableBlockActiveFlag[j] === 0) continue;
+            destroyBreakableBlockCell(world, j);
+          }
         }
       }
     }

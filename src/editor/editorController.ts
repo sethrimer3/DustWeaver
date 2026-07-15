@@ -692,8 +692,8 @@ export function createEditorController(
           if (!def) return;
           const trimmed = newName.trim();
           if (trimmed.length === 0) return;
-          // Rebuild def with the new name — ID stays unchanged.
-          const sourceDef = serializeCustomBlock(def.id, trimmed, def.tileWidth, def.tileHeight, def.pixelData);
+          // Rebuild def with the new name — ID and properties stay unchanged.
+          const sourceDef = serializeCustomBlock(def.id, trimmed, def.tileWidth, def.tileHeight, def.pixelData, def.properties);
           const parsed = parseCustomBlockSource(sourceDef, { blockId: def.id });
           if (!parsed.ok) return;
           state.customBlockRegistry.set(blockId, parsed.def);
@@ -707,7 +707,7 @@ export function createEditorController(
           const newId = makeUniqueId(def.id, existingIds);
           const newName = `${def.name} Copy`;
           const newPixelData = new Uint8ClampedArray(def.pixelData); // independent copy
-          const sourceDef = serializeCustomBlock(newId, newName, def.tileWidth, def.tileHeight, newPixelData);
+          const sourceDef = serializeCustomBlock(newId, newName, def.tileWidth, def.tileHeight, newPixelData, def.properties);
           const parsed = parseCustomBlockSource(sourceDef, { blockId: newId });
           if (!parsed.ok) {
             console.error('[editor] Duplicate custom block failed validation:', parsed.errors);

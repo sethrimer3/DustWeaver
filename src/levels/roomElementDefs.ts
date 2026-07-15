@@ -49,6 +49,25 @@ export interface RoomZoneDef {
 export interface RoomBreakableBlockDef {
   xBlock: number;
   yBlock: number;
+  /**
+   * Phase 2B: logical placement group id. Cells sharing the same
+   * `groupId` (and the same room) belong to one multi-cell breakable
+   * placement (e.g. all 4 cells of a 2x2 fragile custom block) and are
+   * destroyed atomically as a unit when any one cell is struck. Omitted
+   * (undefined) for ordinary single-cell breakable blocks — identical to
+   * pre-Phase-2B behavior. Group ids only need to be unique within a room.
+   */
+  groupId?: number;
+  /**
+   * Phase 2B hardening: the wall theme this breakable cell's wall should use
+   * (defaults to the standard 'blackRock' wall when omitted, matching every
+   * pre-Phase-2B breakable block). Lets a fragile custom block that also
+   * selects the `slippery` friction preset actually get the ice-surface wall
+   * on its breakable-pathway wall — previously this combination silently
+   * lost its friction preset because gameRoomHazards.ts hardcoded the
+   * default theme for every breakable-block wall.
+   */
+  blockTheme?: 'blackRock' | 'ice';
 }
 
 /**

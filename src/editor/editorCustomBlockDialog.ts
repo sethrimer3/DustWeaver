@@ -20,6 +20,19 @@ import {
   isValidRgbaHex,
   TRANSPARENT_PIXEL,
 } from '../levels/customBlocks';
+import type {
+  CustomBlockProperties,
+  CollisionPreset,
+  FrictionPreset,
+  BreakabilityPreset,
+} from '../levels/customBlockProperties';
+import {
+  DEFAULT_CUSTOM_BLOCK_PROPERTIES,
+  COLLISION_PRESET_REGISTRY,
+  FRICTION_PRESET_REGISTRY,
+  BREAKABILITY_PRESET_REGISTRY,
+  checkCustomBlockPropertyCompatibility,
+} from '../levels/customBlockProperties';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -53,14 +66,22 @@ export function openCustomBlockDialog(
     ? new Uint8ClampedArray(existingDef.pixelData)
     : makeBlankPixelData(tileWidth, tileHeight);
 
-  // Snapshot of persisted pixel data used to detect unsaved changes.
+  let properties: CustomBlockProperties = existingDef?.properties ?? DEFAULT_CUSTOM_BLOCK_PROPERTIES;
+
+  // Snapshot of persisted pixel data / properties used to detect unsaved changes.
   const savedPixelData = new Uint8ClampedArray(pixelData);
+  let savedProperties: CustomBlockProperties = properties;
+
+  function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
+    return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability;
+  }
 
   function isDirty(): boolean {
     if (pixelData.length !== savedPixelData.length) return true;
     for (let i = 0; i < pixelData.length; i++) {
       if (pixelData[i] !== savedPixelData[i]) return true;
     }
+    if (!propertiesEqual(properties, savedProperties)) return true;
     return false;
   }
 
@@ -73,9 +94,10 @@ export function openCustomBlockDialog(
   let lastDrawnPx = -1; // for Bresenham interpolation between mousemove events
   let lastDrawnPy = -1;
 
-  // Undo/redo stacks (each entry = full pixel data snapshot)
-  const undoStack: Uint8ClampedArray[] = [];
-  const redoStack: Uint8ClampedArray[] = [];
+  // Undo/redo stacks (each entry = full pixel data + properties snapshot)
+  interface EditorSnapshot { pixelData: Uint8ClampedArray; properties: CustomBlockProperties }
+  const undoStack: EditorSnapshot[] = [];
+  const redoStack: EditorSnapshot[] = [];
 
   // ── DOM setup ──────────────────────────────────────────────────────────────
   const overlay = document.createElement('div');
@@ -150,6 +172,7 @@ export function openCustomBlockDialog(
     rebuildCanvas();
     drawCanvas();
     updatePreview();
+    refreshCompatibilityMessage();
   }
 
   btn1x1.addEventListener('click', () => applyFootprint(1, 1));
@@ -157,6 +180,94 @@ export function openCustomBlockDialog(
   footprintRow.appendChild(btn1x1);
   footprintRow.appendChild(btn2x2);
   modal.appendChild(footprintRow);
+
+  // ── Properties section ────────────────────────────────────────────────────
+  const propsSection = document.createElement('div');
+  propsSection.style.cssText = 'display:flex;flex-direction:column;gap:6px;border:1px solid #333;border-radius:4px;padding:8px;margin-top:2px;';
+  const propsTitle = document.createElement('div');
+  propsTitle.textContent = 'Properties';
+  propsTitle.style.cssText = 'font-size:12px;font-weight:bold;color:#aac;';
+  propsSection.appendChild(propsTitle);
+
+  function makePropertyRow<T extends string>(
+    label: string,
+    registry: Readonly<Record<T, { id: T; label: string; description: string }>>,
+    getValue: () => T,
+    setValue: (v: T) => void,
+  ): { row: HTMLElement; select: HTMLSelectElement; desc: HTMLElement } {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;gap:8px;align-items:center;';
+    const lbl = document.createElement('span');
+    lbl.textContent = `${label}:`;
+    lbl.style.cssText = 'font-size:11px;width:80px;color:#ccc;';
+    const select = document.createElement('select');
+    select.style.cssText = 'background:#0d0d1a;border:1px solid #555;color:#eee;padding:3px 6px;border-radius:3px;font-family:monospace;font-size:11px;flex:1;';
+    for (const key of Object.keys(registry) as T[]) {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = registry[key].label;
+      select.appendChild(opt);
+    }
+    select.value = getValue();
+    const desc = document.createElement('div');
+    desc.style.cssText = 'font-size:10px;color:#888;margin-left:88px;';
+    desc.textContent = registry[getValue()].description;
+    select.addEventListener('change', () => {
+      pushUndo();
+      const v = select.value as T;
+      setValue(v);
+      desc.textContent = registry[v].description;
+      refreshCompatibilityMessage();
+    });
+    topRow.appendChild(lbl);
+    topRow.appendChild(select);
+    row.appendChild(topRow);
+    row.appendChild(desc);
+    return { row, select, desc };
+  }
+
+  const collisionCtl = makePropertyRow<CollisionPreset>(
+    'Collision', COLLISION_PRESET_REGISTRY,
+    () => properties.collision,
+    (v) => { properties = { ...properties, collision: v }; },
+  );
+  const frictionCtl = makePropertyRow<FrictionPreset>(
+    'Friction', FRICTION_PRESET_REGISTRY,
+    () => properties.friction,
+    (v) => { properties = { ...properties, friction: v }; },
+  );
+  const breakabilityCtl = makePropertyRow<BreakabilityPreset>(
+    'Breakability', BREAKABILITY_PRESET_REGISTRY,
+    () => properties.breakability,
+    (v) => { properties = { ...properties, breakability: v }; },
+  );
+  propsSection.appendChild(collisionCtl.row);
+  propsSection.appendChild(frictionCtl.row);
+  propsSection.appendChild(breakabilityCtl.row);
+
+  const compatMsg = document.createElement('div');
+  compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
+  propsSection.appendChild(compatMsg);
+
+  function refreshCompatibilityMessage(): void {
+    const issues = checkCustomBlockPropertyCompatibility(properties, tileWidth, tileHeight);
+    compatMsg.textContent = issues.length > 0 ? `⚠ ${issues.map(i => i.message).join(' ')}` : '';
+  }
+
+  function refreshPropertyControls(): void {
+    collisionCtl.select.value = properties.collision;
+    collisionCtl.desc.textContent = COLLISION_PRESET_REGISTRY[properties.collision].description;
+    frictionCtl.select.value = properties.friction;
+    frictionCtl.desc.textContent = FRICTION_PRESET_REGISTRY[properties.friction].description;
+    breakabilityCtl.select.value = properties.breakability;
+    breakabilityCtl.desc.textContent = BREAKABILITY_PRESET_REGISTRY[properties.breakability].description;
+    refreshCompatibilityMessage();
+  }
+
+  refreshCompatibilityMessage();
+  modal.appendChild(propsSection);
 
   // ── Canvas area ────────────────────────────────────────────────────────────
   const canvasWrap = document.createElement('div');
@@ -391,7 +502,7 @@ export function openCustomBlockDialog(
   }
 
   function pushUndo(): void {
-    undoStack.push(new Uint8ClampedArray(pixelData));
+    undoStack.push({ pixelData: new Uint8ClampedArray(pixelData), properties });
     redoStack.length = 0;
     if (undoStack.length > 50) undoStack.shift();
   }
@@ -399,19 +510,23 @@ export function openCustomBlockDialog(
   function doUndo(): void {
     const snap = undoStack.pop();
     if (!snap) return;
-    redoStack.push(new Uint8ClampedArray(pixelData));
-    pixelData = snap;
+    redoStack.push({ pixelData: new Uint8ClampedArray(pixelData), properties });
+    pixelData = snap.pixelData;
+    properties = snap.properties;
     drawCanvas();
     updatePreview();
+    refreshPropertyControls();
   }
 
   function doRedo(): void {
     const snap = redoStack.pop();
     if (!snap) return;
-    undoStack.push(new Uint8ClampedArray(pixelData));
-    pixelData = snap;
+    undoStack.push({ pixelData: new Uint8ClampedArray(pixelData), properties });
+    pixelData = snap.pixelData;
+    properties = snap.properties;
     drawCanvas();
     updatePreview();
+    refreshPropertyControls();
   }
 
   function doClear(): void {
@@ -588,6 +703,12 @@ export function openCustomBlockDialog(
       return;
     }
 
+    const compatIssues = checkCustomBlockPropertyCompatibility(properties, tileWidth, tileHeight);
+    if (compatIssues.length > 0) {
+      errorMsg.textContent = `Cannot save: ${compatIssues.map(i => i.message).join(' ')}`;
+      return;
+    }
+
     let id = blockId;
     if (!id) {
       // Generate ID from name
@@ -601,11 +722,12 @@ export function openCustomBlockDialog(
       }
     }
 
-    const sourceDef = serializeCustomBlock(id, name, tileWidth, tileHeight, pixelData);
+    const sourceDef = serializeCustomBlock(id, name, tileWidth, tileHeight, pixelData, properties);
     overlay.remove();
     onResult({ action: 'save', sourceDef });
     // Clear dirty state after successful save (for external callers tracking this).
     savedPixelData.set(pixelData);
+    savedProperties = properties;
   });
 
   /**

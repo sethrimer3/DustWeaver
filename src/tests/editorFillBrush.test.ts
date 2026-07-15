@@ -5,6 +5,13 @@ import type { EditorRoomData } from '../editor/editorElementTypes';
 import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
 import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
 
+/**
+ * Narrow test-only wall shape — the fill brush / hit-test helpers only ever
+ * read the block-rect fields (xBlock/yBlock/wBlock/hBlock), not the full
+ * EditorWall shape (uid, isPlatformFlag, platformEdge, etc.).
+ */
+type TestWallRect = { xBlock: number; yBlock: number; wBlock: number; hBlock: number };
+
 /** Minimal room stub — only the fields the fill brush / hit-test helpers read. */
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
   return {
@@ -30,10 +37,10 @@ test('water fill: air pocket beneath water stays bounded by the water', () => {
     widthBlocks: 6,
     heightBlocks: 8,
     interiorWalls: [
-      { xBlock: 0, yBlock: 0, wBlock: 6, hBlock: 1 } as any, // ceiling
-      { xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 8 } as any, // left wall
-      { xBlock: 5, yBlock: 0, wBlock: 1, hBlock: 8 } as any, // right wall
-      { xBlock: 0, yBlock: 7, wBlock: 6, hBlock: 1 } as any, // floor
+      { xBlock: 0, yBlock: 0, wBlock: 6, hBlock: 1 } as TestWallRect, // ceiling
+      { xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 8 } as TestWallRect, // left wall
+      { xBlock: 5, yBlock: 0, wBlock: 1, hBlock: 8 } as TestWallRect, // right wall
+      { xBlock: 0, yBlock: 7, wBlock: 6, hBlock: 1 } as TestWallRect, // floor
     ],
     waterZones: [
       { uid: 1, xBlock: 1, yBlock: 4, wBlock: 4, hBlock: 1 },
@@ -119,8 +126,8 @@ test('four-directional connectivity: diagonally adjacent empty regions stay sepa
     widthBlocks: 4,
     heightBlocks: 4,
     interiorWalls: [
-      { xBlock: 1, yBlock: 0, wBlock: 1, hBlock: 1 } as any,
-      { xBlock: 0, yBlock: 1, wBlock: 1, hBlock: 1 } as any,
+      { xBlock: 1, yBlock: 0, wBlock: 1, hBlock: 1 } as TestWallRect,
+      { xBlock: 0, yBlock: 1, wBlock: 1, hBlock: 1 } as TestWallRect,
     ],
   });
   // (0,0) and (1,1) touch only diagonally; walls at (1,0) and (0,1) separate them.
@@ -164,7 +171,7 @@ test('block fill (tile kind): preserves original occupied/empty flood-fill behav
     widthBlocks: 5,
     heightBlocks: 3,
     interiorWalls: [
-      { xBlock: 0, yBlock: 0, wBlock: 5, hBlock: 1 } as any,
+      { xBlock: 0, yBlock: 0, wBlock: 5, hBlock: 1 } as TestWallRect,
     ],
   });
   // Default fillKind ('tile') should flood the solid wall row when clicked on it.
