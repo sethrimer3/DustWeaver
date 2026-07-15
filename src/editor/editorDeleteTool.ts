@@ -415,4 +415,17 @@ export function deleteAtCursor(state: EditorState): void {
       }
     }
   }
+
+  // Custom block placements
+  const placements = room.customBlockPlacements ?? [];
+  for (let i = 0; i < placements.length; i++) {
+    const p = placements[i];
+    if (bx >= p.xBlock && bx < p.xBlock + p.tileWidth &&
+        by >= p.yBlock && by < p.yBlock + p.tileHeight) {
+      placements.splice(i, 1);
+      room.customBlockPlacements = placements;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== p.uid);
+      return;
+    }
+  }
 }

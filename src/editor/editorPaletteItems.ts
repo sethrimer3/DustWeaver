@@ -26,6 +26,7 @@ export const PALETTE_CATEGORIES = [
   'lighting',
   'ropes',
   'guidePaths',
+  'customBlocks',
 ] as const;
 
 export type PaletteCategory = typeof PALETTE_CATEGORIES[number];
@@ -43,6 +44,7 @@ export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> 
   lighting: 'Lighting',
   ropes: 'Ropes',
   guidePaths: 'Guide Paths',
+  customBlocks: 'Custom Blocks',
 };
 
 export interface PaletteItem {
@@ -121,6 +123,14 @@ export interface PaletteItem {
   isPixelMaterialItem?: 1;
   /** Which material id this pixel-material item places. Only meaningful when isPixelMaterialItem === 1. */
   pixelMaterialId?: number;
+  /** 1 if this palette item places a custom block. */
+  isCustomBlockItem?: 1;
+  /** Namespaced custom block ID ("custom:<id>") placed by this item. */
+  customBlockId?: string;
+  /** Tile width of the custom block footprint (1 or 2). */
+  customBlockTileWidth?: 1 | 2;
+  /** Tile height of the custom block footprint (1 or 2). */
+  customBlockTileHeight?: 1 | 2;
 }
 
 

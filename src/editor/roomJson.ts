@@ -531,6 +531,16 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     opacityPct: p.opacityPct ?? 100,
   }));
 
+  const customBlockPlacements: import('../levels/customBlocks').EditorCustomBlockPlacement[] =
+    (json.customBlockPlacements ?? []).map(([x, y, blockId]) => ({
+      uid: uid++,
+      xBlock: x,
+      yBlock: y,
+      blockId,
+      tileWidth:  1 as 1 | 2,
+      tileHeight: 1 as 1 | 2,
+    }));
+
   return {
     data: {
       id: json.id,
@@ -584,6 +594,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       dialogueTriggers,
       backgroundBlocks,
       guideDustPaths,
+      customBlockPlacements,
     },
     nextUid: uid,
   };

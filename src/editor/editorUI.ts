@@ -732,6 +732,97 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         }
         const items = PALETTE_ITEMS.filter(i => i.category === state.activeCategory);
 
+        // Custom blocks panel — generated dynamically from registry
+        if (state.activeCategory === 'customBlocks') {
+          const newBlocksRow = document.createElement('div');
+          newBlocksRow.style.cssText = 'display:flex;gap:6px;margin-bottom:8px;';
+
+          const new1x1Btn = document.createElement('button');
+          new1x1Btn.textContent = '+ 1×1';
+          new1x1Btn.style.cssText = 'flex:1;padding:5px;font-size:11px;cursor:pointer;border-radius:3px;background:#1a2a1a;border:1px solid #7fda7f;color:#7fda7f;font-family:monospace;';
+          new1x1Btn.addEventListener('click', () => callbacks?.onCreateCustomBlock?.(1));
+
+          const new2x2Btn = document.createElement('button');
+          new2x2Btn.textContent = '+ 2×2';
+          new2x2Btn.style.cssText = 'flex:1;padding:5px;font-size:11px;cursor:pointer;border-radius:3px;background:#1a2a1a;border:1px solid #7fda7f;color:#7fda7f;font-family:monospace;';
+          new2x2Btn.addEventListener('click', () => callbacks?.onCreateCustomBlock?.(2));
+
+          newBlocksRow.appendChild(new1x1Btn);
+          newBlocksRow.appendChild(new2x2Btn);
+          paletteDiv.appendChild(newBlocksRow);
+
+          const registry = state.customBlockRegistry;
+          if (registry.size === 0) {
+            const empty = document.createElement('div');
+            empty.textContent = 'No custom blocks yet. Click + to create one.';
+            empty.style.cssText = 'font-size:10px;color:#888;padding:8px 0;';
+            paletteDiv.appendChild(empty);
+          } else {
+            for (const [rawId, def] of registry) {
+              const blockCard = document.createElement('div');
+              blockCard.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px;margin-bottom:4px;
+                border-radius:3px;background:#151525;border:1px solid #444;cursor:pointer;`;
+
+              // Tiny sprite preview
+              const previewCanvas = document.createElement('canvas');
+              const previewSize = 24;
+              previewCanvas.width = previewCanvas.height = previewSize;
+              previewCanvas.style.cssText = 'border:1px solid #555;image-rendering:pixelated;flex-shrink:0;';
+              const pCtx = previewCanvas.getContext('2d');
+              if (pCtx) {
+                pCtx.imageSmoothingEnabled = false;
+                const img = new ImageData(def.pixelData, def.pixelWidth, def.pixelHeight);
+                const tmpC = document.createElement('canvas');
+                tmpC.width = def.pixelWidth;
+                tmpC.height = def.pixelHeight;
+                const tmpX = tmpC.getContext('2d')!;
+                tmpX.putImageData(img, 0, 0);
+                pCtx.drawImage(tmpC, 0, 0, previewSize, previewSize);
+              }
+              blockCard.appendChild(previewCanvas);
+
+              // Name + info
+              const info = document.createElement('div');
+              info.style.cssText = 'flex:1;overflow:hidden;';
+              const nameEl = document.createElement('div');
+              nameEl.textContent = def.name;
+              nameEl.style.cssText = 'font-size:11px;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+              const sizeEl = document.createElement('div');
+              sizeEl.textContent = `${def.tileWidth}×${def.tileHeight} tile  |  id: ${def.id}`;
+              sizeEl.style.cssText = 'font-size:9px;color:#888;margin-top:1px;';
+              info.appendChild(nameEl);
+              info.appendChild(sizeEl);
+              blockCard.appendChild(info);
+
+              // Edit/Delete buttons
+              const editBtn = document.createElement('button');
+              editBtn.textContent = '✏';
+              editBtn.title = 'Edit sprite';
+              editBtn.style.cssText = 'padding:2px 6px;font-size:11px;cursor:pointer;border-radius:2px;background:#1a1a2e;border:1px solid #555;color:#aaa;';
+              editBtn.addEventListener('click', (e) => { e.stopPropagation(); callbacks?.onEditCustomBlock?.(rawId); });
+
+              const delBtn = document.createElement('button');
+              delBtn.textContent = '🗑';
+              delBtn.title = 'Delete block';
+              delBtn.style.cssText = 'padding:2px 6px;font-size:11px;cursor:pointer;border-radius:2px;background:#1a0a0a;border:1px solid #884444;color:#cc6666;';
+              delBtn.addEventListener('click', (e) => { e.stopPropagation(); callbacks?.onDeleteCustomBlock?.(rawId); });
+
+              blockCard.appendChild(editBtn);
+              blockCard.appendChild(delBtn);
+
+              // Click card = select for placement
+              const namespacedId = `custom:${rawId}`;
+              const isActive = state.selectedPaletteItem?.customBlockId === namespacedId;
+              if (isActive) {
+                blockCard.style.borderColor = '#7fda7f';
+                blockCard.style.background = '#1a2a1a';
+              }
+              blockCard.addEventListener('click', () => callbacks?.onSelectCustomBlockForPlacement?.(rawId));
+              paletteDiv.appendChild(blockCard);
+            }
+          }
+        }
+
         // Categories that get a visual 2-column preview grid
         const usePreviewGrid = (
           state.activeCategory === 'specialBlocks' ||

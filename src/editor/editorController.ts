@@ -7,6 +7,10 @@
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
+import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, nameToSlugId, makeUniqueId } from '../levels/customBlocks';
+import type { CustomBlockSourceDef } from '../levels/customBlocks';
+import { registerCustomBlockSprite, invalidateCustomBlockSprite, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
+import { openCustomBlockDialog } from './editorCustomBlockDialog';
 import type { CameraState } from '../render/camera';
 import { CAMERA_DEFAULT_ZOOM, getCameraOffset } from '../render/camera';
 import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
@@ -394,6 +398,20 @@ export function createEditorController(
       isCurrentRoomDirty = false;
       pendingRoomEdits.clear();
 
+      // Load custom block definitions from the campaign into the registry.
+      state.customBlockRegistry.clear();
+      clearCustomBlockSpriteCache();
+      const incomingDefs = campaignSession?.campaign?.customBlockDefs ?? [];
+      for (const src of incomingDefs) {
+        const result = parseCustomBlockSource(src, { blockId: src.id });
+        if (result.ok) {
+          state.customBlockRegistry.set(result.def.id, result.def);
+          registerCustomBlockSprite(result.def);
+        } else {
+          console.warn(`[editor] Skipping malformed custom block "${src.id}":`, result.errors);
+        }
+      }
+
       // Save original room for cancel/revert
       originalRoomDef = currentRoom;
 
@@ -622,6 +640,76 @@ export function createEditorController(
             state.brushRectStartBlockY = null;
           }
         },
+        onCreateCustomBlock: (tileWidth: 1 | 2) => {
+          const existingIds = new Set(state.customBlockRegistry.keys());
+          openCustomBlockDialog({ defaultTileWidth: tileWidth, existingIds }, (result) => {
+            if (result.action !== 'save' || !result.sourceDef) return;
+            const parsed = parseCustomBlockSource(result.sourceDef, { blockId: result.sourceDef.id });
+            if (!parsed.ok) {
+              console.error('[editor] Created custom block failed validation:', parsed.errors);
+              return;
+            }
+            state.customBlockRegistry.set(parsed.def.id, parsed.def);
+            registerCustomBlockSprite(parsed.def);
+            ui?.render(state);
+          });
+        },
+        onEditCustomBlock: (blockId: string) => {
+          const def = state.customBlockRegistry.get(blockId);
+          if (!def) return;
+          const existingIds = new Set(state.customBlockRegistry.keys());
+          openCustomBlockDialog({ existingDef: def, existingIds }, (result) => {
+            if (result.action !== 'save' || !result.sourceDef) return;
+            const parsed = parseCustomBlockSource(result.sourceDef, { blockId: result.sourceDef.id });
+            if (!parsed.ok) {
+              console.error('[editor] Edited custom block failed validation:', parsed.errors);
+              return;
+            }
+            state.customBlockRegistry.set(parsed.def.id, parsed.def);
+            invalidateCustomBlockSprite(parsed.def);
+            registerCustomBlockSprite(parsed.def);
+            ui?.render(state);
+          });
+        },
+        onDeleteCustomBlock: (blockId: string) => {
+          // Check if any room uses this block before deleting.
+          const namespacedId = toNamespacedId(blockId);
+          const allRooms = campaignSession?.campaignStore?.rawRoomsById;
+          if (allRooms !== undefined) {
+            for (const [roomId, room] of allRooms) {
+              const placements = room.customBlockPlacements ?? [];
+              if (placements.some(([, , id]) => id === namespacedId)) {
+                window.alert(`Cannot delete "${blockId}" — it is used in room "${roomId}". Remove all placements first.`);
+                return;
+              }
+            }
+          }
+          // Also check the current room's in-editor placements.
+          const currentPlacements = state.roomData?.customBlockPlacements ?? [];
+          if (currentPlacements.some(p => p.blockId === namespacedId)) {
+            window.alert(`Cannot delete "${blockId}" — it is placed in the current room. Remove all placements first.`);
+            return;
+          }
+          state.customBlockRegistry.delete(blockId);
+          invalidateCustomBlockSprite({ id: blockId } as import('../levels/customBlocks').CustomBlockDef);
+          ui?.render(state);
+        },
+        onSelectCustomBlockForPlacement: (blockId: string) => {
+          const def = state.customBlockRegistry.get(blockId);
+          if (!def) return;
+          const item: import('./editorDropdownData').PaletteItem = {
+            id: `custom:${blockId}`,
+            label: def.name,
+            category: 'customBlocks',
+            isCustomBlockItem: 1,
+            customBlockId: blockId,
+            customBlockTileWidth: def.tileWidth,
+            customBlockTileHeight: def.tileHeight,
+          };
+          state.selectedPaletteItem = item;
+          state.activeTool = EditorTool.Place;
+          ui?.render(state);
+        },
       });
     } else {
       closeEditor();
@@ -649,6 +737,8 @@ export function createEditorController(
     isWorldMapDirty = false;
     isCurrentRoomDirty = false;
     clearHistory(history);
+    state.customBlockRegistry.clear();
+    clearCustomBlockSpriteCache();
     onEditorClose?.();
   }
 

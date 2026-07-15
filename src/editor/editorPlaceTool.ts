@@ -14,6 +14,7 @@ import {
   EditorGrappleCarryBlock, EditorPhantasmalTile,
   EditorDialogueTrigger, EditorGuideDustPath,
 } from './editorState';
+import { rawIdFromNamespaced } from '../levels/customBlocks';
 import { createDefaultLight } from '../render/lighting/lightingTypes';
 import { placeEnemyAtCursor } from './editorEnemyPlacer';
 import { MAX_ROPE_SEGMENTS } from '../sim/world';
@@ -68,6 +69,12 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
   }
   if (item.id === 'dialogue_trigger') {
     return { wBlock: 4, hBlock: 4 };
+  }
+  if (item.isCustomBlockItem === 1) {
+    return {
+      wBlock: item.customBlockTileWidth ?? 1,
+      hBlock: item.customBlockTileHeight ?? 1,
+    };
   }
   if (item.category !== 'blocks' && item.category !== 'specialBlocks') {
     return { wBlock: 1, hBlock: 1 };
@@ -677,5 +684,33 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       room.guideDustPaths.push(newPath);
       state.selectedElements = [{ type: 'guideDustPath', uid: newPath.uid }];
     }
+  } else if (item.isCustomBlockItem === 1 && item.customBlockId !== undefined) {
+    // ── Custom block placement ────────────────────────────────────────────────
+    const blockId = item.customBlockId;
+    const tw = item.customBlockTileWidth ?? 1;
+    const th = item.customBlockTileHeight ?? 1;
+    const bx = state.cursorBlockX;
+    const by = state.cursorBlockY;
+
+    // Check room bounds
+    if (!rectFitsInsideRoom(room, bx, by, tw, th)) return;
+
+    // Check overlap with existing walls / custom blocks
+    for (const w of room.interiorWalls) {
+      if (bx < w.xBlock + w.wBlock && bx + tw > w.xBlock &&
+          by < w.yBlock + w.hBlock && by + th > w.yBlock) return;
+    }
+    const existingPlacements = room.customBlockPlacements ?? [];
+    for (const ep of existingPlacements) {
+      const etw = ep.tileWidth;
+      const eth = ep.tileHeight;
+      if (bx < ep.xBlock + etw && bx + tw > ep.xBlock &&
+          by < ep.yBlock + eth && by + th > ep.yBlock) return;
+    }
+
+    const newPlacement = { uid: allocateUid(state), xBlock: bx, yBlock: by, blockId, tileWidth: tw, tileHeight: th };
+    if (!room.customBlockPlacements) room.customBlockPlacements = [];
+    room.customBlockPlacements.push(newPlacement);
+    state.selectedElements = [{ type: 'customBlock', uid: newPlacement.uid }];
   }
 }

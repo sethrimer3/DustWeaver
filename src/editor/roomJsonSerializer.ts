@@ -443,6 +443,13 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     });
   }
 
+  // ── Custom block placements ──────────────────────────────────────────────
+  if ((data.customBlockPlacements ?? []).length > 0) {
+    json.customBlockPlacements = (data.customBlockPlacements ?? []).map(
+      p => [p.xBlock, p.yBlock, p.blockId] as [number, number, string],
+    );
+  }
+
   // ── Bake runtime wall template ───────────────────────────────────────────
   // Build the RoomDef (with complete boundary walls) and run the merge pass
   // once at export time.  The result is stored in the JSON so the runtime can

@@ -239,6 +239,14 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     return { type: 'playerSpawn', uid: 0 };
   }
 
+  // Check custom block placements
+  for (const p of (room.customBlockPlacements ?? [])) {
+    if (bx >= p.xBlock && bx < p.xBlock + p.tileWidth &&
+        by >= p.yBlock && by < p.yBlock + p.tileHeight) {
+      return { type: 'customBlock', uid: p.uid };
+    }
+  }
+
   // Check interior walls
   for (const w of room.interiorWalls) {
     if (hitTestWall(w, bx, by)) {

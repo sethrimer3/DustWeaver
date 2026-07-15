@@ -29,6 +29,7 @@ export type {
   EditorBackgroundBlock, EditorDialogueEntry, EditorDialogueTrigger,
   EditorGuideDustPath, EditorGuideDustPathPoint,
   EditorRoomData, SelectedElementType, SelectedElement,
+  EditorCustomBlockPlacement,
 } from './editorElementTypes';
 
 // Re-export for convenience in editor modules
@@ -187,6 +188,12 @@ export interface EditorState {
    * Reset to 'normal' whenever a room is (re)loaded into the editor.
    */
   lastWarnedComplexitySeverity: RoomComplexitySeverity;
+  /**
+   * Campaign-local custom block registry (raw id → def).
+   * Populated when a custom campaign is loaded or when blocks are created.
+   * Empty for the main campaign (no custom blocks).
+   */
+  customBlockRegistry: Map<string, import('../levels/customBlocks').CustomBlockDef>;
 }
 
 export function createEditorState(): EditorState {
@@ -236,6 +243,7 @@ export function createEditorState(): EditorState {
     guideDustPathSelectedPointIndex: null,
     pendingComplexityCheck: false,
     lastWarnedComplexitySeverity: 'normal',
+    customBlockRegistry: new Map(),
   };
 }
 
@@ -304,6 +312,14 @@ export interface EditorUICallbacks {
   onRunRoomAudit?: () => void;
   /** DEV-only: validate active campaign rooms through dehydrate -> hydrate. */
   onRunRoomRoundTripValidation?: () => void;
+  /** Called when user requests to create a new custom block (1×1 or 2×2). */
+  onCreateCustomBlock?: (tileWidth: 1 | 2) => void;
+  /** Called when user requests to edit an existing custom block. */
+  onEditCustomBlock?: (blockId: string) => void;
+  /** Called when user requests to delete an existing custom block. */
+  onDeleteCustomBlock?: (blockId: string) => void;
+  /** Called when user selects a custom block in the palette to place it. */
+  onSelectCustomBlockForPlacement?: (blockId: string) => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

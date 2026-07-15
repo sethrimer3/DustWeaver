@@ -459,6 +459,10 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     }));
   }
 
+  if (saved.customBlockPlacements && saved.customBlockPlacements.length > 0) {
+    json.customBlockPlacements = saved.customBlockPlacements.slice();
+  }
+
   if (saved.bakedWallTemplate !== undefined) {
     // Deep-copy so the hydrated JSON does not share arrays with the saved object.
     const b = saved.bakedWallTemplate;

@@ -23,7 +23,7 @@ export interface CampaignStore {
   commitRoom: (roomId: string, roomData: EditorRoomData) => void;
   commitActiveRoom: (activeRoomData: EditorRoomData | null) => void;
   commitAllDirtyRooms: () => void;
-  buildExportCampaign: (baseCampaign: SavedCampaignV1) => SavedCampaignV1;
+  buildExportCampaign: (baseCampaign: SavedCampaignV1, customBlockDefs?: SavedCampaignV1['customBlockDefs']) => SavedCampaignV1;
 }
 
 function isDev(): boolean {
@@ -79,6 +79,7 @@ function computeMaxUidPlusOne(roomData: EditorRoomData, startUid: number): numbe
   for (const d of (roomData.backgroundBlocks ?? [])) track(d.uid);
   for (const d of (roomData.grappleCarryBlocks ?? [])) track(d.uid);
   for (const d of (roomData.phantasmalTiles ?? [])) track(d.uid);
+  for (const d of (roomData.customBlockPlacements ?? [])) track(d.uid);
   return nextUid;
 }
 
@@ -204,13 +205,13 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
     }
   }
 
-  function buildExportCampaign(baseCampaign: SavedCampaignV1): SavedCampaignV1 {
+  function buildExportCampaign(baseCampaign: SavedCampaignV1, customBlockDefs?: import('../levels/campaignSchema').SavedCampaignV1['customBlockDefs']): SavedCampaignV1 {
     commitAllDirtyRooms();
     const outputRooms: SavedRoomV2[] = [];
     for (const [roomId, rawRoom] of rawRoomsById) {
       outputRooms.push(applyWorldMapRoomMetadata(rawRoom, worldMapRoomById.get(roomId)));
     }
-    return {
+    const exported: SavedCampaignV1 = {
       v: 1,
       kind: 'DustWeaverCampaign',
       metadata: {
@@ -230,6 +231,10 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
         lastEditedIso: new Date().toISOString(),
       },
     };
+    if (customBlockDefs && customBlockDefs.length > 0) {
+      exported.customBlockDefs = customBlockDefs;
+    }
+    return exported;
   }
 
   return {

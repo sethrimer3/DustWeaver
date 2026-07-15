@@ -496,6 +496,11 @@ export interface RoomJsonDef {
    * Missing in older room files — runtime falls back safely.
    */
   bakedWallTemplate?: RoomJsonBakedWallTemplate;
+  /**
+   * Custom block placements as [xBlock, yBlock, namespacedId].
+   * namespacedId is "custom:<id>". Absent when no custom blocks are placed.
+   */
+  customBlockPlacements?: [number, number, string][];
 }
 
 // ── Background blocks ────────────────────────────────────────────────────────

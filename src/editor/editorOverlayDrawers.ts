@@ -12,6 +12,8 @@
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
+import { rawIdFromNamespaced } from '../levels/customBlocks';
+import { getOrFallbackSprite, drawCustomBlockSprite } from '../render/customBlockSpriteCache';
 import {
   WALL_HIGHLIGHT, WALL_SELECTED,
   PLATFORM_HIGHLIGHT, PLATFORM_SELECTED,
@@ -439,4 +441,44 @@ export function drawEditorLightingOverlays(
 // (Liquid zones, crumble blocks, bounce pads, decorations/falling blocks,
 //  ropes, dialogue triggers, and background blocks are in editorZoneDrawers.ts
 //  and re-exported above.)
+
+// ============================================================================
+// Custom blocks
+// ============================================================================
+
+export function drawEditorCustomBlocks(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const placements = room.customBlockPlacements ?? [];
+  if (placements.length === 0) return;
+
+  const tileSize = BLOCK_SIZE_SMALL * zoom;
+
+  for (const p of placements) {
+    const rawId = rawIdFromNamespaced(p.blockId);
+    if (rawId === null) continue;
+    const sprite = getOrFallbackSprite(rawId, p.tileWidth, p.tileHeight);
+    const destX = Math.round(p.xBlock * tileSize + offsetXPx);
+    const destY = Math.round(p.yBlock * tileSize + offsetYPx);
+    const destW = Math.round(p.tileWidth * tileSize);
+    const destH = Math.round(p.tileHeight * tileSize);
+    drawCustomBlockSprite(ctx, sprite, destX, destY, destW, destH);
+
+    // Selection / hover outline
+    if (isSelected('customBlock', p.uid)) {
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(destX + 1, destY + 1, destW - 2, destH - 2);
+    } else {
+      ctx.strokeStyle = 'rgba(100,200,255,0.6)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(destX, destY, destW, destH);
+    }
+  }
+}
 
