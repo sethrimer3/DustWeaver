@@ -784,6 +784,13 @@ export interface RoomDef {
    */
   bakedWallTemplate?: RoomWallTemplate;
   /**
+   * Custom block placements as [xBlock, yBlock, namespacedId ("custom:<id>")].
+   * Stored on RoomDef so the gameplay renderer can draw the correct sprites
+   * instead of the default blackRock wall tiles.
+   * Absent when no custom blocks are placed in the room.
+   */
+  customBlockPlacements?: readonly [number, number, string][];
+  /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).
    * '_silence'  = stop music when entering this room.

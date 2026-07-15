@@ -10,6 +10,77 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 
+// ── Symlink-safe path containment ─────────────────────────────────────────────
+
+/**
+ * Resolves the real path of an existing path component, walking up parent
+ * directories until a component that exists is found.
+ *
+ * @param {string} targetPath - Absolute path to check (may not exist yet).
+ * @returns {string} The real (symlink-resolved) path of the nearest existing ancestor.
+ * @throws {Error} If no existing ancestor can be found.
+ */
+function resolveNearestExistingAncestor(targetPath) {
+  let current = path.resolve(targetPath);
+  for (let depth = 0; depth < 64; depth++) {
+    try {
+      return fs.realpathSync(current);
+    } catch {
+      const parent = path.dirname(current);
+      if (parent === current) throw new Error(`Could not resolve any ancestor of "${targetPath}"`);
+      current = parent;
+    }
+  }
+  throw new Error(`Could not resolve ancestor of "${targetPath}" within depth limit`);
+}
+
+/**
+ * Asserts that `targetPath` (resolved through any symlinks) resides inside
+ * `allowedDir` (also symlink-resolved).
+ *
+ * For paths that do not yet exist, the nearest existing ancestor is resolved.
+ * This prevents symlinks from redirecting reads or writes outside the campaign.
+ *
+ * @param {string} targetPath  - Absolute path of the file or directory to check.
+ * @param {string} allowedDir  - Absolute path of the allowed root directory.
+ * @param {string} [label]     - Human-readable label for error messages.
+ * @returns {{ ok: true } | { ok: false, error: string, realTarget: string, realAllowed: string }}
+ */
+function checkPathInsideCampaignDir(targetPath, allowedDir, label) {
+  let realAllowed;
+  try {
+    realAllowed = fs.realpathSync(allowedDir);
+  } catch {
+    // If the allowed dir doesn't exist yet, resolve what we can.
+    try { realAllowed = resolveNearestExistingAncestor(allowedDir); } catch {
+      realAllowed = path.resolve(allowedDir);
+    }
+  }
+
+  let realTarget;
+  try {
+    realTarget = fs.realpathSync(targetPath);
+  } catch {
+    realTarget = resolveNearestExistingAncestor(targetPath);
+  }
+
+  const sep = path.sep;
+  const insideDir = realTarget === realAllowed ||
+    realTarget.startsWith(realAllowed + sep) ||
+    realTarget.startsWith(realAllowed + "/");
+
+  if (!insideDir) {
+    const tag = label ? ` (${label})` : "";
+    return {
+      ok: false,
+      error: `Path containment violation${tag}: resolved path "${realTarget}" is outside campaign directory "${realAllowed}"`,
+      realTarget,
+      realAllowed,
+    };
+  }
+  return { ok: true };
+}
+
 /** Regex for safe room IDs — letters, digits, underscores, hyphens only. */
 const SAFE_ROOM_ID_RE = /^[a-zA-Z0-9_-]+$/;
 /** Regex for a safe campaign ID used in filesystem paths. */
@@ -340,6 +411,14 @@ function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomI
     return { ok: false, error };
   }
 
+  // ── Symlink containment: verify campaign directory resolves to itself ──────
+  // This catches symlinks that redirect campaign files outside the allowed root.
+  const campaignDirCheck = checkPathInsideCampaignDir(campaignDir, campaignDir, "campaignDir");
+  if (!campaignDirCheck.ok) {
+    notify({ step: "error", message: campaignDirCheck.error });
+    return { ok: false, error: campaignDirCheck.error };
+  }
+
   const campaignHash = computeCampaignHash(campaign);
 
   // ── Rolling backup of the existing packed campaign file ───────────────────
@@ -348,6 +427,14 @@ function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomI
     : `${campaignId}.dwcampaign.json`;
   const packedPath = path.join(campaignDir, packedFilename);
   const backupBaseName = isOfficialCampaign ? OFFICIAL_BACKUP_BASE_NAME : campaignId;
+
+  // Symlink check for packed campaign path before backup and write.
+  const packedCheck = checkPathInsideCampaignDir(packedPath, campaignDir, "packed campaign file");
+  if (!packedCheck.ok) {
+    notify({ step: "error", message: packedCheck.error });
+    return { ok: false, error: packedCheck.error };
+  }
+
   ensureRollingBackup(packedPath, backupsDir, backupBaseName, MAX_BACKUPS);
 
   // ── Write packed campaign file (atomic) ───────────────────────────────────
@@ -404,6 +491,12 @@ function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomI
     if (isUnchanged) {
       skippedRooms += 1;
     } else {
+      // Symlink containment: verify room file path resolves inside the ROOMS directory.
+      const roomCheck = checkPathInsideCampaignDir(roomPath, roomsDir, `room "${roomId}"`);
+      if (!roomCheck.ok) {
+        notify({ step: "error", message: roomCheck.error });
+        return { ok: false, error: roomCheck.error };
+      }
       try {
         writeJsonAtomic(roomPath, room);
       } catch (roomErr) {
@@ -460,7 +553,14 @@ function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomI
       if (!SAFE_ROOM_ID_RE.test(candidateId)) continue;
       if (roomIdFirstIndex.has(candidateId)) continue;
       try {
-        fs.unlinkSync(path.join(roomsDir, filename));
+        const stalePath = path.join(roomsDir, filename);
+        // Symlink containment: skip deletion if the stale file resolves outside ROOMS.
+        const staleCheck = checkPathInsideCampaignDir(stalePath, roomsDir, `stale file "${filename}"`);
+        if (!staleCheck.ok) {
+          console.warn(`[campaignExport] Skipping stale cleanup: ${staleCheck.error}`);
+          continue;
+        }
+        fs.unlinkSync(stalePath);
         removedCount += 1;
         console.log(`[campaignExport] Removed stale room file: ${filename}`);
       } catch (unlinkErr) {

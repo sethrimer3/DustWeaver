@@ -4,6 +4,7 @@ import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { renderWalls, renderClusters } from '../render/clusters/renderer';
+import { renderCustomBlockSprites } from '../render/customBlockGameplayRenderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
@@ -90,6 +91,7 @@ export function renderEditorBackdrop(
     renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
   }
   renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+  renderCustomBlockSprites(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
   renderHazards(ctx, world, offsetXPx, offsetYPx, zoom, world.tick);
   renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
   renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);

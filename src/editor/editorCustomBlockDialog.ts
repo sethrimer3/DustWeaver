@@ -53,6 +53,17 @@ export function openCustomBlockDialog(
     ? new Uint8ClampedArray(existingDef.pixelData)
     : makeBlankPixelData(tileWidth, tileHeight);
 
+  // Snapshot of persisted pixel data used to detect unsaved changes.
+  const savedPixelData = new Uint8ClampedArray(pixelData);
+
+  function isDirty(): boolean {
+    if (pixelData.length !== savedPixelData.length) return true;
+    for (let i = 0; i < pixelData.length; i++) {
+      if (pixelData[i] !== savedPixelData[i]) return true;
+    }
+    return false;
+  }
+
   const blockId = existingDef?.id ?? '';
   const blockName = existingDef?.name ?? '';
   let activeTool: PixelTool = 'pencil';
@@ -559,8 +570,7 @@ export function openCustomBlockDialog(
   cancelBtn.textContent = '✕ Cancel';
   cancelBtn.style.cssText = 'padding:6px 14px;font-size:12px;cursor:pointer;border-radius:3px;background:#2a0d0d;border:1px solid #aa4444;color:#ff8888;font-family:monospace;';
   cancelBtn.addEventListener('click', () => {
-    overlay.remove();
-    onResult({ action: 'cancel' });
+    attemptCancel();
   });
 
   const saveBtn = document.createElement('button');
@@ -594,7 +604,81 @@ export function openCustomBlockDialog(
     const sourceDef = serializeCustomBlock(id, name, tileWidth, tileHeight, pixelData);
     overlay.remove();
     onResult({ action: 'save', sourceDef });
+    // Clear dirty state after successful save (for external callers tracking this).
+    savedPixelData.set(pixelData);
   });
+
+  /**
+   * Shows a Save/Discard/Keep Editing confirmation dialog when the user
+   * tries to cancel with unsaved changes.
+   */
+  function attemptCancel(): void {
+    if (!isDirty()) {
+      overlay.remove();
+      onResult({ action: 'cancel' });
+      return;
+    }
+
+    // Build the confirmation sub-dialog
+    const confirmOverlay = document.createElement('div');
+    confirmOverlay.style.cssText = `
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+      font-family: monospace; color: #eee;
+    `;
+
+    const confirmBox = document.createElement('div');
+    confirmBox.style.cssText = `
+      background: #1a1a2e; border: 1px solid #666; border-radius: 6px;
+      padding: 20px; display: flex; flex-direction: column; gap: 12px;
+      min-width: 280px; max-width: 360px;
+    `;
+
+    const msg = document.createElement('div');
+    msg.style.cssText = 'font-size:13px;line-height:1.5;color:#ddd;';
+    msg.textContent = 'You have unsaved pixel edits. What would you like to do?';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;';
+
+    const keepBtn = document.createElement('button');
+    keepBtn.textContent = '↩ Keep Editing';
+    keepBtn.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;border-radius:3px;background:#2a2a3e;border:1px solid #666;color:#ccc;font-family:monospace;';
+    keepBtn.addEventListener('click', () => {
+      confirmOverlay.remove();
+      overlay.focus();
+    });
+
+    const discardBtn = document.createElement('button');
+    discardBtn.textContent = '🗑 Discard Changes';
+    discardBtn.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;border-radius:3px;background:#2a0d0d;border:1px solid #aa4444;color:#ff8888;font-family:monospace;';
+    discardBtn.addEventListener('click', () => {
+      confirmOverlay.remove();
+      overlay.remove();
+      onResult({ action: 'cancel' });
+    });
+
+    const saveAndCloseBtn = document.createElement('button');
+    saveAndCloseBtn.textContent = '💾 Save & Close';
+    saveAndCloseBtn.style.cssText = 'padding:6px 12px;font-size:12px;cursor:pointer;border-radius:3px;background:#0d2a0d;border:1px solid #44aa44;color:#7fda7f;font-family:monospace;';
+    saveAndCloseBtn.addEventListener('click', () => {
+      confirmOverlay.remove();
+      saveBtn.click(); // Trigger the existing save logic (validates, serializes, removes overlay)
+    });
+
+    btnRow.appendChild(keepBtn);
+    btnRow.appendChild(discardBtn);
+    btnRow.appendChild(saveAndCloseBtn);
+    confirmBox.appendChild(msg);
+    confirmBox.appendChild(btnRow);
+    confirmOverlay.appendChild(confirmBox);
+    document.body.appendChild(confirmOverlay);
+    keepBtn.focus();
+
+    confirmOverlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { confirmOverlay.remove(); overlay.focus(); e.stopPropagation(); }
+    });
+  }
 
   btnRow.appendChild(cancelBtn);
   btnRow.appendChild(saveBtn);
@@ -602,7 +686,7 @@ export function openCustomBlockDialog(
 
   // Keyboard shortcuts
   overlay.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { overlay.remove(); onResult({ action: 'cancel' }); }
+    if (e.key === 'Escape') { attemptCancel(); e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { doUndo(); e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { doRedo(); e.preventDefault(); }
     if (e.key === 'p' || e.key === 'P') activeTool = 'pencil';

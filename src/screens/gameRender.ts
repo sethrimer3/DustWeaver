@@ -13,6 +13,7 @@ import type { WorldSnapshot } from '../render/snapshot';
 import type { WorldState } from '../sim/world';
 import { BLOCK_SIZE_SMALL, type RoomDef } from '../levels/roomDef';
 import { renderWalls, renderClusters } from '../render/clusters/renderer';
+import { renderCustomBlockSprites } from '../render/customBlockGameplayRenderer';
 import { renderGrapple } from '../render/clusters/grappleRenderer';
 import { renderRadiantTether } from '../render/clusters/radiantTetherRenderer';
 import { renderRadiantWeb } from '../render/clusters/radiantWebRenderer';
@@ -432,6 +433,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom);
   renderPhantasmalTiles(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
