@@ -410,4 +410,10 @@ export interface SavedRoomV2 {
    * runtime skips `buildRoomWallTemplate()` and uses the baked fast path.
    */
   bakedWallTemplate?: RoomJsonBakedWallTemplate;
+  /**
+   * Custom block placements as [xBlock, yBlock, namespacedId].
+   * namespacedId is "custom:<id>". Absent when no custom blocks are placed.
+   * Absent in rooms without custom blocks — older rooms load unchanged.
+   */
+  customBlockPlacements?: [number, number, string][];
 }

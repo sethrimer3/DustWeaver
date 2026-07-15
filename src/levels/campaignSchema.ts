@@ -28,6 +28,7 @@ import type { SavedRoomV2 } from './roomSchemaV2';
 import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { roomJsonDefToRoomDef } from './roomJsonLoader';
 import type { RoomDef } from './roomDef';
+import type { CustomBlockSourceDef } from './customBlocks';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA VERSION
@@ -126,6 +127,12 @@ export interface SavedCampaignV1 {
   worldMap: WorldMapJsonDef;
   rooms: SavedRoomV2[];
   editor: SavedCampaignEditorInfo;
+  /**
+   * Optional inline custom block definitions for this campaign.
+   * Absent in campaigns without custom blocks — older campaigns load unchanged.
+   * Each entry is a fully self-contained CustomBlockSourceDef.
+   */
+  customBlockDefs?: CustomBlockSourceDef[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
