@@ -759,9 +759,15 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
             paletteDiv.appendChild(empty);
           } else {
             for (const [rawId, def] of registry) {
+              const usageCount = state.customBlockUsage.get(rawId) ?? 0;
+
               const blockCard = document.createElement('div');
-              blockCard.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px;margin-bottom:4px;
+              blockCard.style.cssText = `display:flex;flex-direction:column;gap:4px;padding:6px;margin-bottom:4px;
                 border-radius:3px;background:#151525;border:1px solid #444;cursor:pointer;`;
+
+              // Top row: preview + name/info
+              const topRow = document.createElement('div');
+              topRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
 
               // Tiny sprite preview
               const previewCanvas = document.createElement('canvas');
@@ -779,38 +785,50 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
                 tmpX.putImageData(img, 0, 0);
                 pCtx.drawImage(tmpC, 0, 0, previewSize, previewSize);
               }
-              blockCard.appendChild(previewCanvas);
+              topRow.appendChild(previewCanvas);
 
-              // Name + info
+              // Name + footprint/id + usage
               const info = document.createElement('div');
               info.style.cssText = 'flex:1;overflow:hidden;';
               const nameEl = document.createElement('div');
               nameEl.textContent = def.name;
               nameEl.style.cssText = 'font-size:11px;color:#eee;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
               const sizeEl = document.createElement('div');
-              sizeEl.textContent = `${def.tileWidth}×${def.tileHeight} tile  |  id: ${def.id}`;
+              sizeEl.textContent = `${def.tileWidth}×${def.tileHeight}  id:${def.id}`;
               sizeEl.style.cssText = 'font-size:9px;color:#888;margin-top:1px;';
+              const usageEl = document.createElement('div');
+              usageEl.textContent = usageCount === 0 ? 'unused' : `used in ${usageCount} room${usageCount !== 1 ? 's' : ''}`;
+              usageEl.style.cssText = `font-size:9px;color:${usageCount === 0 ? '#664444' : '#448844'};margin-top:1px;`;
               info.appendChild(nameEl);
               info.appendChild(sizeEl);
-              blockCard.appendChild(info);
+              info.appendChild(usageEl);
+              topRow.appendChild(info);
+              blockCard.appendChild(topRow);
 
-              // Edit/Delete buttons
-              const editBtn = document.createElement('button');
-              editBtn.textContent = '✏';
-              editBtn.title = 'Edit sprite';
-              editBtn.style.cssText = 'padding:2px 6px;font-size:11px;cursor:pointer;border-radius:2px;background:#1a1a2e;border:1px solid #555;color:#aaa;';
-              editBtn.addEventListener('click', (e) => { e.stopPropagation(); callbacks?.onEditCustomBlock?.(rawId); });
+              // Bottom row: action buttons
+              const btnRow2 = document.createElement('div');
+              btnRow2.style.cssText = 'display:flex;gap:4px;';
 
-              const delBtn = document.createElement('button');
-              delBtn.textContent = '🗑';
-              delBtn.title = 'Delete block';
-              delBtn.style.cssText = 'padding:2px 6px;font-size:11px;cursor:pointer;border-radius:2px;background:#1a0a0a;border:1px solid #884444;color:#cc6666;';
-              delBtn.addEventListener('click', (e) => { e.stopPropagation(); callbacks?.onDeleteCustomBlock?.(rawId); });
+              const mkBtn = (label: string, title: string, css: string, cb: () => void): HTMLButtonElement => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.title = title;
+                b.style.cssText = `padding:2px 5px;font-size:10px;cursor:pointer;border-radius:2px;font-family:monospace;${css}`;
+                b.addEventListener('click', (e) => { e.stopPropagation(); cb(); });
+                return b;
+              };
 
-              blockCard.appendChild(editBtn);
-              blockCard.appendChild(delBtn);
+              btnRow2.appendChild(mkBtn('✏ Edit', 'Edit sprite pixels', 'background:#1a1a2e;border:1px solid #555;color:#aaa;', () => callbacks?.onEditCustomBlock?.(rawId)));
+              btnRow2.appendChild(mkBtn('✎ Rename', 'Rename display name', 'background:#1a1a2e;border:1px solid #556;color:#aac;', () => {
+                const newName = window.prompt('New display name:', def.name)?.trim();
+                if (newName && newName.length > 0) callbacks?.onRenameCustomBlock?.(rawId, newName);
+              }));
+              btnRow2.appendChild(mkBtn('⧉ Dup', 'Duplicate block', 'background:#1a1a2e;border:1px solid #565;color:#aca;', () => callbacks?.onDuplicateCustomBlock?.(rawId)));
+              btnRow2.appendChild(mkBtn('🗑', 'Delete block', 'background:#1a0a0a;border:1px solid #884444;color:#cc6666;', () => callbacks?.onDeleteCustomBlock?.(rawId)));
 
-              // Click card = select for placement
+              blockCard.appendChild(btnRow2);
+
+              // Click card body = select for placement
               const namespacedId = `custom:${rawId}`;
               const isActive = state.selectedPaletteItem?.customBlockId === namespacedId;
               if (isActive) {

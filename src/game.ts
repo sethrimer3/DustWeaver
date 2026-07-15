@@ -19,6 +19,8 @@ import {
   getActiveCampaignId,
 } from './levels/roomFileLoader';
 import { getCampaignStartRoomId, hydrateSavedCampaignToRoomDefs } from './levels/campaignSchema';
+import { parseCustomBlockSource } from './levels/customBlocks';
+import { registerCustomBlockSprite, clearCustomBlockSpriteCache } from './render/customBlockSpriteCache';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
 import type { GameScreenRunOptions } from './screens/gameScreen';
@@ -355,6 +357,17 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           // This eagerly loads all rooms but is always safe.
           if (!usedFileCache) {
             registerRoomsFromPackedCampaign(campaign);
+          }
+
+          // Register custom block sprites for gameplay rendering.
+          clearCustomBlockSpriteCache();
+          for (const src of campaign.customBlockDefs ?? []) {
+            const result = parseCustomBlockSource(src, { blockId: src.id });
+            if (result.ok) {
+              registerCustomBlockSprite(result.def);
+            } else {
+              console.warn(`[game] Skipping malformed custom block "${src.id}" during campaign load.`);
+            }
           }
 
           const cSpawn = campaign.campaign.campaignSpawn;

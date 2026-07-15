@@ -7,7 +7,7 @@
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RoomDef } from '../levels/roomDef';
-import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId } from '../levels/customBlocks';
+import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, makeUniqueId, countCustomBlockUsage } from '../levels/customBlocks';
 import { registerCustomBlockSprite, invalidateCustomBlockSprite, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
 import { openCustomBlockDialog } from './editorCustomBlockDialog';
 import type { CameraState } from '../render/camera';
@@ -387,6 +387,16 @@ export function createEditorController(
     return liveEditorRoomDef;
   }
 
+  function rebuildCustomBlockUsage(): void {
+    state.customBlockUsage.clear();
+    const allRooms = campaignSession?.campaignStore?.rawRoomsById;
+    if (allRooms === undefined) return;
+    for (const rawId of state.customBlockRegistry.keys()) {
+      const { count } = countCustomBlockUsage(rawId, allRooms as ReadonlyMap<string, { customBlockPlacements?: ReadonlyArray<readonly [number, number, string]> }>);
+      if (count > 0) state.customBlockUsage.set(rawId, count);
+    }
+  }
+
   function toggle(currentRoom: RoomDef): void {
     state.isActive = !state.isActive;
 
@@ -399,6 +409,7 @@ export function createEditorController(
 
       // Load custom block definitions from the campaign into the registry.
       state.customBlockRegistry.clear();
+      state.customBlockUsage.clear();
       clearCustomBlockSpriteCache();
       const incomingDefs = campaignSession?.campaign?.customBlockDefs ?? [];
       for (const src of incomingDefs) {
@@ -410,6 +421,7 @@ export function createEditorController(
           console.warn(`[editor] Skipping malformed custom block "${src.id}":`, result.errors);
         }
       }
+      rebuildCustomBlockUsage();
 
       // Save original room for cancel/revert
       originalRoomDef = currentRoom;
@@ -654,6 +666,7 @@ export function createEditorController(
             }
             state.customBlockRegistry.set(parsed.def.id, parsed.def);
             registerCustomBlockSprite(parsed.def);
+            rebuildCustomBlockUsage();
             ui?.update(state);
           });
         },
@@ -674,26 +687,61 @@ export function createEditorController(
             ui?.update(state);
           });
         },
+        onRenameCustomBlock: (blockId: string, newName: string) => {
+          const def = state.customBlockRegistry.get(blockId);
+          if (!def) return;
+          const trimmed = newName.trim();
+          if (trimmed.length === 0) return;
+          // Rebuild def with the new name — ID stays unchanged.
+          const sourceDef = serializeCustomBlock(def.id, trimmed, def.tileWidth, def.tileHeight, def.pixelData);
+          const parsed = parseCustomBlockSource(sourceDef, { blockId: def.id });
+          if (!parsed.ok) return;
+          state.customBlockRegistry.set(blockId, parsed.def);
+          // Sprite pixels didn't change — no need to invalidate the cached canvas.
+          ui?.update(state);
+        },
+        onDuplicateCustomBlock: (blockId: string) => {
+          const def = state.customBlockRegistry.get(blockId);
+          if (!def) return;
+          const existingIds = new Set(state.customBlockRegistry.keys());
+          const newId = makeUniqueId(def.id, existingIds);
+          const newName = `${def.name} Copy`;
+          const newPixelData = new Uint8ClampedArray(def.pixelData); // independent copy
+          const sourceDef = serializeCustomBlock(newId, newName, def.tileWidth, def.tileHeight, newPixelData);
+          const parsed = parseCustomBlockSource(sourceDef, { blockId: newId });
+          if (!parsed.ok) {
+            console.error('[editor] Duplicate custom block failed validation:', parsed.errors);
+            return;
+          }
+          state.customBlockRegistry.set(parsed.def.id, parsed.def);
+          registerCustomBlockSprite(parsed.def);
+          rebuildCustomBlockUsage();
+          ui?.update(state);
+        },
         onDeleteCustomBlock: (blockId: string) => {
           // Check if any room uses this block before deleting.
           const namespacedId = toNamespacedId(blockId);
           const allRooms = campaignSession?.campaignStore?.rawRoomsById;
+          const usedInRooms: string[] = [];
           if (allRooms !== undefined) {
             for (const [roomId, room] of allRooms) {
               const placements = room.customBlockPlacements ?? [];
               if (placements.some(([, , id]) => id === namespacedId)) {
-                window.alert(`Cannot delete "${blockId}" — it is used in room "${roomId}". Remove all placements first.`);
-                return;
+                usedInRooms.push(roomId);
               }
             }
           }
           // Also check the current room's in-editor placements.
           const currentPlacements = state.roomData?.customBlockPlacements ?? [];
           if (currentPlacements.some(p => p.blockId === namespacedId)) {
-            window.alert(`Cannot delete "${blockId}" — it is placed in the current room. Remove all placements first.`);
+            if (state.roomData) usedInRooms.push(state.roomData.id + ' (unsaved)');
+          }
+          if (usedInRooms.length > 0) {
+            window.alert(`Cannot delete "${blockId}" — it is used in ${usedInRooms.length} room(s):\n${usedInRooms.join('\n')}\nRemove all placements first.`);
             return;
           }
           state.customBlockRegistry.delete(blockId);
+          state.customBlockUsage.delete(blockId);
           invalidateCustomBlockSprite({ id: blockId } as import('../levels/customBlocks').CustomBlockDef);
           ui?.update(state);
         },
@@ -741,6 +789,7 @@ export function createEditorController(
     isCurrentRoomDirty = false;
     clearHistory(history);
     state.customBlockRegistry.clear();
+    state.customBlockUsage.clear();
     clearCustomBlockSpriteCache();
     onEditorClose?.();
   }

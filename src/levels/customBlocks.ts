@@ -395,10 +395,17 @@ export function getBlockTileHeight(blockId: string, registry: Map<string, Custom
 /** Returns true if the path is safe (relative, no escaping). */
 export function isSafeCampaignRelativePath(path: string): boolean {
   if (path.length === 0) return false;
-  if (/^[a-zA-Z]:/.test(path)) return false; // Windows absolute path
-  if (path.startsWith('/') || path.startsWith('\\')) return false;
-  if (path.includes('..')) return false;
-  if (/[<>"|?*\x00-\x1f]/.test(path)) return false;
+  if (/^[a-zA-Z]:/.test(path)) return false; // Windows absolute path (C:\…)
+  if (path.startsWith('/') || path.startsWith('\\')) return false; // Unix/UNC absolute
+  if (path.startsWith('//') || path.startsWith('\\\\')) return false; // UNC \\server or //server
+  if (path.includes('..')) return false; // Parent traversal
+  if (/[<>"|?*]/.test(path)) return false; // Reserved path characters
+  // Reject null bytes and control characters (U+0000-U+001F) without a regex literal
+  for (let ci = 0; ci < path.length; ci++) {
+    if (path.charCodeAt(ci) <= 0x1f) return false;
+  }
+  // Reject URI-like paths: anything with a scheme (letters followed by ://)
+  if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(path)) return false;
   return true;
 }
 
@@ -418,4 +425,107 @@ export function makeMissingTextureData(pixelWidth: number, pixelHeight: number):
     }
   }
   return data;
+}
+
+// ── Reconciliation ────────────────────────────────────────────────────────────
+
+/** A single issue found during reconciliation. */
+export interface CustomBlockReconciliationIssue {
+  kind:
+    | 'registry_missing_from_room_usage'   // Block in registry but never placed
+    | 'room_reference_not_in_registry'     // Room references a block not in registry
+    | 'duplicate_id_in_registry';          // Duplicate key (shouldn't happen with Map, for future manifest checks)
+  blockId: string;
+  roomIds?: string[];
+  detail?: string;
+}
+
+/**
+ * Reconciles registry definitions against room references.
+ *
+ * @param registryIds  - Set of raw block IDs in the current registry.
+ * @param roomsById    - Map of roomId → list of namespaced block IDs referenced in that room.
+ * @returns Array of issues; empty means consistent.
+ */
+export function reconcileCustomBlocks(
+  registryIds: ReadonlySet<string>,
+  roomsById: ReadonlyMap<string, readonly string[]>,
+): CustomBlockReconciliationIssue[] {
+  const issues: CustomBlockReconciliationIssue[] = [];
+
+  // Build reverse map: rawId → rooms that reference it
+  const usageMap = new Map<string, string[]>();
+  for (const [roomId, blockIds] of roomsById) {
+    for (const namespacedId of blockIds) {
+      const rawId = namespacedId.startsWith(CUSTOM_BLOCK_ID_PREFIX)
+        ? namespacedId.slice(CUSTOM_BLOCK_ID_PREFIX.length)
+        : namespacedId;
+      if (!usageMap.has(rawId)) usageMap.set(rawId, []);
+      usageMap.get(rawId)!.push(roomId);
+    }
+  }
+
+  // Find room references to blocks not in registry
+  for (const [rawId, rooms] of usageMap) {
+    if (!registryIds.has(rawId)) {
+      issues.push({
+        kind: 'room_reference_not_in_registry',
+        blockId: rawId,
+        roomIds: rooms,
+        detail: `Block "${rawId}" is referenced in ${rooms.length} room(s) but missing from registry`,
+      });
+    }
+  }
+
+  // Find registry entries never placed in any room
+  for (const rawId of registryIds) {
+    if (!usageMap.has(rawId)) {
+      issues.push({
+        kind: 'registry_missing_from_room_usage',
+        blockId: rawId,
+        detail: `Block "${rawId}" is registered but not placed in any room`,
+      });
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * Scans all rooms for custom block placements.
+ * Returns a map of rawId → array of roomIds that contain it.
+ */
+export function scanCustomBlockUsage(
+  roomsById: ReadonlyMap<string, { customBlockPlacements?: ReadonlyArray<readonly [number, number, string]> }>,
+): Map<string, string[]> {
+  const usageMap = new Map<string, string[]>();
+  for (const [roomId, room] of roomsById) {
+    for (const [, , namespacedId] of (room.customBlockPlacements ?? [])) {
+      const rawId = namespacedId.startsWith(CUSTOM_BLOCK_ID_PREFIX)
+        ? namespacedId.slice(CUSTOM_BLOCK_ID_PREFIX.length)
+        : namespacedId;
+      if (!usageMap.has(rawId)) usageMap.set(rawId, []);
+      usageMap.get(rawId)!.push(roomId);
+    }
+  }
+  return usageMap;
+}
+
+/**
+ * Returns the count of rooms where a block is placed, by scanning rawRoomsById.
+ * Each room is counted once regardless of how many times the block appears there.
+ */
+export function countCustomBlockUsage(
+  rawId: string,
+  roomsById: ReadonlyMap<string, { customBlockPlacements?: ReadonlyArray<readonly [number, number, string]> }>,
+): { count: number; roomIds: string[] } {
+  const namespacedId = toNamespacedId(rawId);
+  const roomIds: string[] = [];
+  for (const [roomId, room] of roomsById) {
+    const placements = room.customBlockPlacements ?? [];
+    if (placements.some(([, , id]) => id === namespacedId)) {
+      roomIds.push(roomId);
+    }
+  }
+  return { count: roomIds.length, roomIds };
 }

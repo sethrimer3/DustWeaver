@@ -53,12 +53,14 @@ export function openCustomBlockDialog(
     ? new Uint8ClampedArray(existingDef.pixelData)
     : makeBlankPixelData(tileWidth, tileHeight);
 
-  let blockId = existingDef?.id ?? '';
-  let blockName = existingDef?.name ?? '';
+  const blockId = existingDef?.id ?? '';
+  const blockName = existingDef?.name ?? '';
   let activeTool: PixelTool = 'pencil';
   let activeColor = '#FF0000FF';
   let isDrawing = false;
-  let drawPixelsThisStroke = new Set<number>(); // pixel indices touched this stroke
+  const drawPixelsThisStroke = new Set<number>(); // pixel indices touched this stroke
+  let lastDrawnPx = -1; // for Bresenham interpolation between mousemove events
+  let lastDrawnPy = -1;
 
   // Undo/redo stacks (each entry = full pixel data snapshot)
   const undoStack: Uint8ClampedArray[] = [];
@@ -458,14 +460,44 @@ export function openCustomBlockDialog(
     }
   }
 
-  function applyToolAt(px: number, py: number, isFirstInStroke: boolean): void {
+  // Bresenham's line: visit all pixels from (x0,y0) to (x1,y1) inclusive.
+  function* bresenhamLine(x0: number, y0: number, x1: number, y1: number): Generator<[number, number]> {
+    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    let cx = x0, cy = y0;
+    while (true) {
+      yield [cx, cy];
+      if (cx === x1 && cy === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; cx += sx; }
+      if (e2 < dx)  { err += dx; cy += sy; }
+    }
+  }
+
+  function paintPixel(px: number, py: number): boolean {
+    if (px < 0 || py < 0 || px >= pw || py >= ph) return false;
     const idx = py * pw + px;
+    if (drawPixelsThisStroke.has(idx)) return false;
+    drawPixelsThisStroke.add(idx);
+    setPixel(px, py, activeTool === 'eraser' ? TRANSPARENT_PIXEL : activeColor);
+    return true;
+  }
+
+  function applyToolAt(px: number, py: number, isFirstInStroke: boolean): void {
     if (activeTool === 'pencil' || activeTool === 'eraser') {
-      if (!isFirstInStroke && drawPixelsThisStroke.has(idx)) return;
-      drawPixelsThisStroke.add(idx);
-      setPixel(px, py, activeTool === 'eraser' ? TRANSPARENT_PIXEL : activeColor);
-      drawCanvas();
-      updatePreview();
+      let changed = false;
+      if (isFirstInStroke || lastDrawnPx < 0) {
+        changed = paintPixel(px, py);
+      } else {
+        // Interpolate from last position to current to prevent gaps on fast moves.
+        for (const [lx, ly] of bresenhamLine(lastDrawnPx, lastDrawnPy, px, py)) {
+          if (paintPixel(lx, ly)) changed = true;
+        }
+      }
+      lastDrawnPx = px;
+      lastDrawnPy = py;
+      if (changed) { drawCanvas(); updatePreview(); }
     } else if (activeTool === 'fill' && isFirstInStroke) {
       pushUndo();
       floodFill(px, py, activeColor);
@@ -481,6 +513,8 @@ export function openCustomBlockDialog(
     editorCanvas.addEventListener('mousedown', (e) => {
       isDrawing = true;
       drawPixelsThisStroke.clear();
+      lastDrawnPx = -1;
+      lastDrawnPy = -1;
       const [px, py] = canvasPixelAt(e);
       if (activeTool === 'pencil' || activeTool === 'eraser') {
         pushUndo(); // One undo step per stroke
@@ -496,9 +530,25 @@ export function openCustomBlockDialog(
       applyToolAt(px, py, false);
     });
 
-    const stopDraw = (): void => { isDrawing = false; drawPixelsThisStroke.clear(); };
-    editorCanvas.addEventListener('mouseup', stopDraw);
-    editorCanvas.addEventListener('mouseleave', stopDraw);
+    // End stroke on mouseup anywhere in the document — so releasing the button
+    // outside the canvas correctly finishes the stroke (not leaves it hanging).
+    const stopDraw = (): void => {
+      if (!isDrawing) return;
+      isDrawing = false;
+      drawPixelsThisStroke.clear();
+      lastDrawnPx = -1;
+      lastDrawnPy = -1;
+    };
+    window.addEventListener('mouseup', stopDraw);
+
+    // Cleanup the global listener when the dialog is removed.
+    const observer = new MutationObserver(() => {
+      if (!document.contains(overlay)) {
+        window.removeEventListener('mouseup', stopDraw);
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: false });
   }
 
   // ── Save/Cancel ────────────────────────────────────────────────────────────

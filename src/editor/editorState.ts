@@ -194,6 +194,11 @@ export interface EditorState {
    * Empty for the main campaign (no custom blocks).
    */
   customBlockRegistry: Map<string, import('../levels/customBlocks').CustomBlockDef>;
+  /**
+   * Usage count map (raw id → room count). Rebuilt by the controller whenever
+   * blocks are created, deleted, or rooms are modified.
+   */
+  customBlockUsage: Map<string, number>;
 }
 
 export function createEditorState(): EditorState {
@@ -244,6 +249,7 @@ export function createEditorState(): EditorState {
     pendingComplexityCheck: false,
     lastWarnedComplexitySeverity: 'normal',
     customBlockRegistry: new Map(),
+    customBlockUsage: new Map(),
   };
 }
 
@@ -316,6 +322,10 @@ export interface EditorUICallbacks {
   onCreateCustomBlock?: (tileWidth: 1 | 2) => void;
   /** Called when user requests to edit an existing custom block. */
   onEditCustomBlock?: (blockId: string) => void;
+  /** Called when user requests to rename a custom block's display name. */
+  onRenameCustomBlock?: (blockId: string, newName: string) => void;
+  /** Called when user requests to duplicate a custom block. */
+  onDuplicateCustomBlock?: (blockId: string) => void;
   /** Called when user requests to delete an existing custom block. */
   onDeleteCustomBlock?: (blockId: string) => void;
   /** Called when user selects a custom block in the palette to place it. */
