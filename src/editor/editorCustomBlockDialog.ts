@@ -30,6 +30,7 @@ import type {
   BreakResistancePreset,
   CustomBlockWindResponsePreset,
   CustomBlockLiquidInteractionPreset,
+  CustomBlockWindEmissionPreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
@@ -41,6 +42,7 @@ import {
   BREAK_RESISTANCE_PRESET_REGISTRY,
   CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
   CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY,
+  CUSTOM_BLOCK_WIND_EMISSION_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -86,7 +88,7 @@ export function openCustomBlockDialog(
     return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
       a.materialResponse === b.materialResponse && a.contactDamage === b.contactDamage &&
       a.breakResistance === b.breakResistance && a.windResponse === b.windResponse &&
-      a.liquidInteraction === b.liquidInteraction;
+      a.liquidInteraction === b.liquidInteraction && a.windEmission === b.windEmission;
   }
 
   function isDirty(): boolean {
@@ -281,6 +283,11 @@ export function openCustomBlockDialog(
     () => properties.liquidInteraction,
     (v) => { properties = { ...properties, liquidInteraction: v }; },
   );
+  const windEmissionCtl = makePropertyRow<CustomBlockWindEmissionPreset>(
+    'Wind emission', CUSTOM_BLOCK_WIND_EMISSION_PRESET_REGISTRY,
+    () => properties.windEmission,
+    (v) => { properties = { ...properties, windEmission: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
@@ -293,6 +300,11 @@ export function openCustomBlockDialog(
   liquidInteractionNote.textContent = 'Affects pixel-material water (falling/flowing water particles) only — not authored water-zone buoyancy.';
   liquidInteractionNote.style.cssText = 'font-size:9px;color:#778;margin-left:88px;margin-top:-4px;';
   propsSection.appendChild(liquidInteractionNote);
+  propsSection.appendChild(windEmissionCtl.row);
+  const windEmissionNote = document.createElement('div');
+  windEmissionNote.textContent = 'Continuously emits pixel-material wind (distinct from "Wind response" above, which only attenuates wind passing through).';
+  windEmissionNote.style.cssText = 'font-size:9px;color:#778;margin-left:88px;margin-top:-4px;';
+  propsSection.appendChild(windEmissionNote);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
@@ -333,6 +345,8 @@ export function openCustomBlockDialog(
     windResponseCtl.desc.textContent = CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY[properties.windResponse].description;
     liquidInteractionCtl.select.value = properties.liquidInteraction;
     liquidInteractionCtl.desc.textContent = CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY[properties.liquidInteraction].description;
+    windEmissionCtl.select.value = properties.windEmission;
+    windEmissionCtl.desc.textContent = CUSTOM_BLOCK_WIND_EMISSION_PRESET_REGISTRY[properties.windEmission].description;
     refreshCompatibilityMessage();
   }
 

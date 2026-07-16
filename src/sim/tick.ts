@@ -76,6 +76,7 @@ import { tickIceMoteAura } from './iceMoteAura';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
+import { applyCustomBlockWindVents } from './pixelMaterials/customBlockWindVents';
 
 export function tick(world: WorldState): void {
   // Sync world.combatMode from the module singleton (which is updated by the pause menu toggle).
@@ -131,6 +132,11 @@ export function tick(world: WorldState): void {
   //         settling happen in the same visual frame.
   world.pixelMaterialSystem.resetWindDiagnostics();
   applyMovementWindToPixelMaterials(world);
+
+  // 0.066b. Custom-block wind vents (Phase 2H) — continuous directional
+  //          emitters, same fixed-step wind phase as movement wind, before
+  //          sand/water/sandstone step this tick.
+  applyCustomBlockWindVents(world);
 
   // 0.07. Pixel-material simulation (falling sand) — fixed-step, deterministic.
   tickPixelMaterials(world);

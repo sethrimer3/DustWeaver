@@ -170,7 +170,7 @@ describe('Schema version-1 compatibility', () => {
 
 describe('Schema version-2 properties', () => {
   test('2. version-2 property definitions save and reload with exact values', () => {
-    const props: CustomBlockProperties = { collision: 'oneWay', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none' };
+    const props: CustomBlockProperties = { collision: 'oneWay', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none', windEmission: 'none' };
     const source = makeV2Source(props);
     const result = parseCustomBlockSource(source);
     assert.equal(result.ok, true);
@@ -202,7 +202,7 @@ describe('Schema version-2 properties', () => {
   });
 
   test('17. export and relocated reload preserve properties exactly (serialize -> parse round trip)', () => {
-    const props: CustomBlockProperties = { collision: 'oneWay', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none' };
+    const props: CustomBlockProperties = { collision: 'oneWay', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none', windEmission: 'none' };
     const pixelData = makeBlankPixelData(1, 1);
     const sourceDef = serializeCustomBlock('roundtrip', 'Round Trip', 1, 1, pixelData, props);
     assert.equal(sourceDef.schemaVersion, 2);
