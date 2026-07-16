@@ -1161,41 +1161,327 @@ property bundle now legitimately has one more field — no other Phase
    water, or lava zones interact with each other or with breakable blocks,
    preserving all pre-existing hazard-ordering behavior.
 
-## Proposed Phase 2E: Wind-Response Presets (Not Implemented)
+## Phase 2E: Break-Resistance Presets
 
-Recommendation: **wind-response presets**, ahead of break-resistance tiers
-and liquid-interaction presets, should be the next phase — with a caveat
-(see below).
+Phase 2E adds an engine-defined `breakResistance` property so a fragile
+custom block can select how much player momentum is required to break it,
+extending the existing single-threshold breakable-block system rather than
+introducing block health, accumulated damage, or repair.
 
-- **Break-resistance tiers** were the natural next step after Phase 2C but
-  are now largely covered in spirit by this phase's damage tiers; a true
-  resistance-tier phase would mean multiple momentum thresholds instead of
-  the single existing constant. This is well-defined and low-risk (still a
-  fixed enum, no raw numbers), but is the least visually interesting of the
-  three remaining candidates and would mostly matter for advanced level
-  design (blocks that need a running start vs. a sprint-dash to break) —
-  reasonable, but not obviously more valuable than wind response.
+### The New Property and Defaults
+
+```json
+{
+  "properties": {
+    "collision": "solid",
+    "friction": "default",
+    "breakability": "fragile",
+    "breakResistance": "reinforced",
+    "materialResponse": "metal",
+    "contactDamage": "none"
+  }
+}
+```
+
+`breakResistance` is a strict enum — `'weak' | 'standard' | 'reinforced'` —
+added to `CustomBlockProperties` (`src/levels/customBlockProperties.ts`)
+alongside the properties from Phases 2A/2C/2D. No schema version bump:
+`CUSTOM_BLOCK_SCHEMA_VERSION` stays `2`. Defaults to `'standard'`:
+
+- Schema-v1 blocks (no `properties` object at all).
+- Schema-v2 blocks saved before Phase 2E (`properties` present,
+  `breakResistance` absent).
+- Unregistered/missing custom block definitions (`DEFAULT_CUSTOM_BLOCK_PROPERTIES`).
+- Built-in (non-custom-block) breakable blocks authored directly in a room,
+  which have no `breakResistance` field on `RoomBreakableBlockDef` at all —
+  `'standard'` is byte-identical to the original global threshold, so every
+  existing built-in breakable block is completely unaffected.
+
+Unknown values (e.g. `"breakResistance": "adamantine"`) never crash — they
+produce a structured `CustomBlockValidationError`
+(`field: 'properties.breakResistance'`) via `validateAndResolveCustomBlockProperties`
+and fall back to `'standard'`. Saving through the editor always writes the
+resolved value explicitly. Only the enum ID is ever serialized — never a raw
+momentum number, threshold, or physics value.
+
+### Registry and Centralized Threshold Mappings
+
+`BREAK_RESISTANCE_PRESET_REGISTRY` follows the exact `PresetMeta<T>` shape
+every other preset registry uses:
+
+| Preset | Label | Description |
+|---|---|---|
+| `weak` | Weak | Breaks from lighter impacts. |
+| `standard` | Standard | Uses the existing break threshold. |
+| `reinforced` | Reinforced | Requires a substantially stronger impact. |
+
+`breakResistanceToIndex` / `indexToBreakResistance` pack the enum into a
+`0|1|2` index for `Uint8Array` storage, the same pattern
+`materialResponseToIndex`/`contactDamageTierToIndex` established.
+
+**The single authoritative threshold-selection function** is
+`resolveBreakThresholdWorld(resistanceIndex)` in `src/sim/hazards.ts` — the
+only place in the codebase that maps a resistance tier to a momentum number.
+No other code path (collision, editor, hazard loading) compares resistance
+tiers directly.
+
+| Tier | Threshold (world units/s) | Rationale |
+|---|---|---|
+| `weak` | 150 | Just above sprint speed (`MAX_RUN_SPEED_WORLD_PER_SEC × SPRINT_SPEED_MULTIPLIER` ≈ 157.5) — normal running/walking (105) and any resting/low-speed contact never break it, but a bare sprint reliably does. |
+| `standard` | 250 (`BREAKABLE_MOMENTUM_THRESHOLD_WORLD`, unchanged) | The original single global threshold, preserved byte-for-byte. |
+| `reinforced` | 350 | Above a fast dive alone (`FAST_MAX_FALL_APPROACH_PER_SEC` = 300) but reachable by combining a fast dive with horizontal sprint/grapple-zip momentum, or chaining a grapple-zip release into a dash — deliberately achievable through normal high-speed play, never impossible. |
+
+These values were chosen after surveying `src/sim/clusters/movementConstants.ts`
+and `grappleZip.ts` for DustWeaver's real movement speed scale (`MAX_RUN_SPEED_WORLD_PER_SEC`
+= 105, sprint ≈ 157.5, `GRAPPLE_ZIP_SPEED_WORLD_PER_SEC` = 210,
+`FAST_MAX_FALL_APPROACH_PER_SEC` = 300) rather than picked arbitrarily.
+
+### Compatibility
+
+`breakResistance` is meaningful only when `breakability: 'fragile'` **and**
+`collision: 'solid'` — unlike `contactDamageRequiresSolid`, there is **no
+rejection rule** for other combinations. An indestructible or non-solid
+block may still have a `breakResistance` value; it is simply retained and
+inert (never read by any runtime code path, since
+`isEligibleForBreakablePathway` already gates the entire breakable pathway
+on fragile+solid). This means switching a block from indestructible back to
+fragile restores the creator's previously chosen tier with zero extra
+plumbing — the property was never touched or reset in the first place.
+Fragile combined with `oneWay` or `nonSolid` collision is still rejected by
+the existing (Phase 2A) `fragileRequiresSolid` rule, unchanged.
+
+### Editor Integration
+
+- A **Break resistance** dropdown was added to the custom-block dialog's
+  Properties section (`editorCustomBlockDialog.ts`), built with the same
+  generic `makePropertyRow` helper every other property uses.
+- The control is visually and functionally disabled (dimmed, `select.disabled`)
+  whenever `breakability !== 'fragile'`, via a new `refreshBreakResistanceEnabled()`
+  helper called from the existing `refreshCompatibilityMessage()` (itself
+  already invoked after every property change and by `refreshPropertyControls()`
+  during undo/redo) — no new call sites were needed. Disabling the control
+  never resets its underlying value.
+- `propertiesEqual` (drives dirty-state detection) now also compares
+  `breakResistance`, so a resistance-only change is correctly flagged dirty.
+- Undo/redo needed no new plumbing — each snapshot is already the full
+  `{ pixelData, properties }` object.
+- Rename and Duplicate both pass `def.properties` straight through
+  `serializeCustomBlock`, preserving/copying `breakResistance` with zero
+  resistance-specific code.
+- The palette card badge (`editorUI.ts`) now appends ` · Weak` /
+  ` · Reinforced` (nothing for `standard`, and nothing at all for
+  indestructible blocks, where the value is inert) alongside the existing
+  badges.
+- No raw momentum threshold, numeric tuning, or physics value is ever
+  exposed in the UI — only the three-value enum dropdown.
+
+### Runtime Data Flow
+
+`breakResistance` is resolved and validated exactly once, in the same place
+as every other property — inside `validateAndResolveCustomBlockProperties`,
+called from `parseCustomBlockSource` at block-registration time. The
+simulation loop never parses JSON or compares untrusted strings; `src/sim/hazards.ts`
+only ever reads a packed `Uint8Array` tier index
+(`world.breakableBlockResistance`) resolved ahead of time by
+`gameRoomHazards.ts` at room-load time, and passes it through
+`resolveBreakThresholdWorld` for the momentum comparison.
+
+A breakResistance-only edit does not rebuild the pixel sprite — it reuses
+the exact `updateCustomBlockProperties` fast path Phase 2C introduced.
+Campaign switching clears resistance profiles exactly as it already cleared
+the other four properties: `clearCustomBlockSpriteCache()` empties the whole
+property cache, and `world.breakableBlockResistance` is fully repopulated by
+`loadRoomHazards` on the next room load. Missing/unregistered definitions
+fall back to `DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakResistance = 'standard'`.
+
+Because `editorRoomDataToRoomDef` re-resolves each placement's properties
+fresh from the sprite cache every time it runs, changing a block
+definition's `breakResistance` tier and re-running that conversion
+automatically updates every placement of that block — no placement
+coordinates are rewritten.
+
+### 1×1 and 2×2 Semantics
+
+For a 1×1 fragile placement, `editorRoomBuilder.ts` writes the resolved
+`breakResistance` onto its single `RoomBreakableBlockDef` entry. For a 2×2
+placement, the SAME resolved value is written onto all four cells sharing
+the placement's `groupId` — resolved once, not per cell, so there is no way
+for the four cells of one placement to disagree. At contact time
+(`src/sim/hazards.ts`), the struck cell's own `breakableBlockResistance`
+value is read and passed through `resolveBreakThresholdWorld` — because
+every cell in the group already carries the identical value by construction,
+this is equivalent to (and cheaper than) re-deriving a "group resistance" by
+scanning every member cell.
+
+- **Sub-threshold impact**: leaves all four cells of the group fully intact
+  (the existing atomic all-or-nothing group-destroy transaction from Phase
+  2B never begins).
+- **Qualifying impact**: destroys all four cells atomically in the same
+  tick, exactly as Phase 2B's group-destroy transaction already does —
+  Phase 2E only changes what counts as "qualifying," not the destruction
+  transaction itself.
+- **Adjacent groups** (even of different resistance tiers, or the same
+  definition) remain fully independent, since each group's cells are only
+  ever compared against cells sharing the exact same `groupId`.
+- **Duplicate/re-entrant calls**: the pre-existing per-cell active-flag guard
+  means an already-broken group's cells are skipped entirely on subsequent
+  `applyHazards()` calls — no additional break event and no additional
+  destruction attempt.
+- **One break event per placement**: unchanged from Phase 2C — resistance
+  only gates whether `emitBreakEvent` is ever reached, not how many times it
+  fires once a qualifying hit occurs.
+
+### Interaction with Contact Damage (Phase 2D)
+
+Break resistance and contact damage are independent, uncorrelated checks —
+resistance only affects the breakable-block section (which now reads
+`resolveBreakThresholdWorld(world.breakableBlockResistance[i])` instead of
+the old flat constant); contact damage's own section is completely
+unaffected and still runs first, unconditional on player momentum. This
+means:
+
+- A `reinforced` + damaging block still applies its contact damage even
+  when the player's momentum is well below the reinforced threshold — the
+  block just doesn't break from that particular hit.
+- A `weak` fragile+damaging 2×2 block that both damages the player and
+  breaks in the same tick still applies contact damage **exactly once**
+  (unaffected by resistance — deduplication comes from Phase 2D's own
+  `contactDamageBlockGroupId` grouping and `applyPlayerDamageWithKnockback`'s
+  invulnerability gate, neither of which this phase touches).
+- Player invulnerability, knockback formula, and contact-damage tier values
+  (low=1/high=2) are entirely unchanged by this phase.
+
+### Interaction with Material Response (Phase 2C)
+
+Resistance controls only *whether* destruction occurs, never the break
+feedback once it does:
+
+- `materialResponse` still selects the break sound and particle profile
+  exactly as before — resistance is never read by `emitBreakEvent`,
+  `BreakEffectRenderer`, or `breakSfx.ts`.
+- One logical placement still emits exactly one break event, regardless of
+  its resistance tier.
+- Particle counts (`resolveBreakParticleCount`) are a function of material +
+  grouped-or-not + graphics quality only — resistance was not added as a
+  new input, per this phase's explicit constraint against varying cosmetic
+  intensity by resistance.
+- Resistance never touches or derives from authored sprite/pixel data.
+
+### Backward Compatibility
+
+- Schema-v1 blocks, and schema-v2 blocks saved before Phase 2E, load exactly
+  as before and resolve `breakResistance` to `'standard'` with zero
+  validation errors.
+- Built-in breakable blocks (hand-authored `breakableBlocks` room entries,
+  not custom-block-driven) have no `breakResistance` field and default to
+  `'standard'` at hazard-load time — byte-identical momentum threshold (250)
+  to every pre-Phase-2E room.
+- All existing stable IDs, room references, collision/friction presets,
+  fragile 1×1/2×2 atomic destruction, material-response sounds/particles,
+  contact-damage behavior, and export/campaign relocation are unchanged
+  except that a NON-standard resistance tier now changes the momentum
+  required to break a block that explicitly opts into one.
+- Room reload semantics are unchanged: resistance is resolved fresh from
+  `RoomDef.breakableBlocks` on every room load — nothing persists across a
+  reload beyond what already didn't persist before this phase.
+
+### Tests (Phase 2E)
+
+New file `src/tests/customBlocksPhase2E.test.ts` (32 tests) exercises the
+real pipeline (`editorRoomDataToRoomDef` → `loadRoomHazards` → `applyHazards`)
+for every threshold scenario rather than only asserting registry mappings —
+schema-v1/v2 defaults, all three presets round-tripping, unknown-value
+fallback with a structured diagnostic, `standard` matching the pre-existing
+threshold exactly (240 wu/s does not break, 260 wu/s does), real per-tier
+momentum application at velocities chosen between/above each of the three
+thresholds (200, 300, 400 wu/s) and at resting/low speed, grouped 2×2
+shared-resistance destruction (all four cells carry the same tier,
+sub-threshold leaves the group intact, qualifying impact destroys all four
+atomically with exactly one break event, adjacent differently-tiered groups
+remain independent, duplicate calls emit no additional events), indestructible
+blocks ignoring resistance at runtime while still retaining it through an
+indestructible→fragile round trip, dirty-tracking/undo-redo/rename/duplicate
+at the data-model level, the sprite-cache properties-only update (asserting
+canvas-object identity is unchanged), the Phase 2D contact-damage ordering
+interaction (reinforced+damaging applies damage without breaking; weak
+fragile+damaging 2×2 damages exactly once while also breaking), the Phase 2C
+material-response interaction (one break event, correct material index),
+export/relocation and campaign-switch isolation, and a built-in
+(non-custom-block) breakable block confirmed to behave at exactly the
+pre-Phase-2E 250 threshold. Two pre-existing round-trip-equality assertions
+(`customBlockProperties.test.ts` tests 2 and 17) were updated to include
+`breakResistance: 'standard'` in their expected literal, since the resolved
+property bundle now legitimately has one more field — no other Phase
+2A/2B/2C/2D test was touched, and all 913 tests in the suite pass.
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (913/913
+  passing), and `npm run build` were all actually run for this phase.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session, for the same reason documented in the Phase 2C/2D
+  sections above — this environment's headless Chromium reproducibly
+  stalls/crashes on this project's editor/campaign-loading flows (confirmed
+  base-branch-reproducible, not something this or any prior phase
+  introduced). All verification here was done through the automated test
+  suite exercising the real `editorRoomDataToRoomDef`, `loadRoomHazards`,
+  and `applyHazards` code paths (not mocks) — but no actual frame was
+  rendered, no actual grapple-assisted high-speed impact was performed, and
+  no actual break sound/particle was observed by a human or an automated UI
+  driver.
+- Anyone relying on this phase for a real campaign should manually create
+  weak, standard, and reinforced fragile blocks (both 1×1 and 2×2), approach
+  each at low/medium/grapple-assisted-high speed, confirm the three tiers
+  feel distinct but all achievable, test adjacent grouped blocks and
+  contact-damaging fragile blocks, confirm one sound/particle event per
+  placement, and confirm older campaigns behave exactly as before, prior to
+  shipping.
+
+### Remaining Limitations
+
+1. **No block health or accumulated damage** — a block either meets its
+   threshold on a single hit and breaks atomically, or it doesn't; there is
+   no partial-damage or multi-hit-to-break model.
+2. **No per-block numeric tuning** — only the three fixed tiers exist; a
+   future phase could add more granularity, but that would require revisiting
+   the enum-only JSON constraint deliberately kept in this phase.
+3. **Resistance is retained-but-inert on indestructible/non-solid blocks**
+   with no visible-in-JSON indication of that inertness beyond the editor's
+   disabled control — a campaign JSON reader has to know the
+   `contactDamageRequiresSolid`-style rule doesn't apply here, but there is
+   also no `breakResistanceRequiresFragile`-style rejection to make the
+   inertness self-documenting in the compatibility-issue list.
+4. **The three threshold constants are fixed engine values**, not derived
+   per-room or per-campaign — tuning them requires an engine code change,
+   not a JSON change (by design, per this phase's constraints).
+
+## Proposed Phase 2F: Wind-Response Presets (Not Implemented)
+
+Recommendation: **wind-response presets**, ahead of liquid-interaction
+presets, should be the next phase.
+
 - **Wind response** reuses the existing wind-particle force system
   (`pixelMaterialMovementWind.ts`, `environmentalDust`) the same way
-  `materialResponse` reused `PlayerSfxManager`/`CrumbleDebrisRenderer` and
-  `contactDamage` reused `applyPlayerDamageWithKnockback` — a bounded enum of
-  wind-interaction presets (e.g. `none | blocksWind | deflects`) mapped to
-  existing force/occlusion behavior, with no new physics engine. It is
-  purely cosmetic/environmental (does not touch player health or collision),
-  making it a lower-risk phase than a damage-adjacent one.
+  `materialResponse` reused `PlayerSfxManager`/`CrumbleDebrisRenderer`,
+  `contactDamage` reused `applyPlayerDamageWithKnockback`, and
+  `breakResistance` reused the existing momentum-threshold comparison — a
+  bounded enum of wind-interaction presets (e.g. `none | blocksWind |
+  deflects`) mapped to existing force/occlusion behavior, with no new
+  physics engine. It is purely cosmetic/environmental (does not touch player
+  health, collision, or destruction), making it a lower-risk phase than any
+  of the four already completed.
 - **Liquid interaction** (`'seal' | 'drain' | 'none'`) reaches into the
   water-zone buoyancy system, which is more architecturally entangled (it
   drives player movement physics directly, not just a cosmetic layer or a
-  contact-damage check), and is more likely to interact unexpectedly with
+  contact/momentum check), and is more likely to interact unexpectedly with
   the existing water-zone/frozen-zone mechanics than wind response would.
 
-Caveat: unlike Phase 2A→2D, none of these three remaining candidates has as
-clean and obvious a reuse target as `applyPlayerDamageWithKnockback` was for
-this phase — whichever is chosen next should start with the same
-investigation-first approach (locate the existing wind/liquid system,
-document its constants and integration points) before committing to a
-property shape, since the "right" existing pathway to reuse is less
-obvious for wind/liquid than it was for damage.
+Caveat: unlike Phases 2A→2E, neither remaining candidate has as clean and
+obvious a reuse target as `applyPlayerDamageWithKnockback` was for Phase 2D
+or the existing momentum comparison was for Phase 2E — whichever is chosen
+next should start with the same investigation-first approach (locate the
+existing wind/liquid system, document its constants and integration points)
+before committing to a property shape.
 
 Not implemented in this phase — no code changes were made toward it.
 

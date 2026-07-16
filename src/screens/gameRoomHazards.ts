@@ -27,7 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
-import { materialResponseToIndex, contactDamageTierToIndex } from '../levels/customBlockProperties';
+import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -181,6 +181,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     // materialResponse field and default to 'stone' — a cosmetic-only choice
     // that does not change their existing collision/destruction semantics.
     world.breakableBlockMaterial[bi] = materialResponseToIndex(b.materialResponse ?? 'stone');
+    // Phase 2E: pre-authored (non-custom-block) breakable blocks have no
+    // breakResistance field and default to 'standard' — byte-identical to
+    // the pre-Phase-2E global momentum threshold, so built-in breakable
+    // blocks are completely unaffected by this phase.
+    world.breakableBlockResistance[bi] = breakResistanceToIndex(b.breakResistance ?? 'standard');
   }
 
   // ── Custom block contact damage (Phase 2D) ───────────────────────────────

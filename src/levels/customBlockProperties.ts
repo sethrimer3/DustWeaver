@@ -19,8 +19,11 @@
  * Presets implemented in Phase 2D:
  *   - Contact damage: none | low | high (player-damage feedback on solid contact)
  *
+ * Presets implemented in Phase 2E:
+ *   - Break resistance: weak | standard | reinforced (fragile-block momentum threshold)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (break resistance, wind, liquids, triggers).
+ * deferred categories (wind, liquids, triggers).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -32,12 +35,14 @@ export type FrictionPreset = 'default' | 'slippery';
 export type BreakabilityPreset = 'indestructible' | 'fragile';
 export type MaterialResponsePreset = 'stone' | 'wood' | 'metal';
 export type ContactDamagePreset = 'none' | 'low' | 'high';
+export type BreakResistancePreset = 'weak' | 'standard' | 'reinforced';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
 export const BREAKABILITY_PRESET_IDS: readonly BreakabilityPreset[] = ['indestructible', 'fragile'];
 export const MATERIAL_RESPONSE_PRESET_IDS: readonly MaterialResponsePreset[] = ['stone', 'wood', 'metal'];
 export const CONTACT_DAMAGE_PRESET_IDS: readonly ContactDamagePreset[] = ['none', 'low', 'high'];
+export const BREAK_RESISTANCE_PRESET_IDS: readonly BreakResistancePreset[] = ['weak', 'standard', 'reinforced'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -53,6 +58,9 @@ export function isMaterialResponsePreset(v: unknown): v is MaterialResponsePrese
 }
 export function isContactDamagePreset(v: unknown): v is ContactDamagePreset {
   return typeof v === 'string' && (CONTACT_DAMAGE_PRESET_IDS as readonly string[]).includes(v);
+}
+export function isBreakResistancePreset(v: unknown): v is BreakResistancePreset {
+  return typeof v === 'string' && (BREAK_RESISTANCE_PRESET_IDS as readonly string[]).includes(v);
 }
 
 // ── Validated property bundle ─────────────────────────────────────────────────
@@ -78,12 +86,22 @@ export interface CustomBlockProperties {
    * Requires `collision: 'solid'` — see `contactDamageRequiresSolid` below.
    */
   readonly contactDamage: ContactDamagePreset;
+  /**
+   * Phase 2E: selects the engine-owned momentum threshold a fragile
+   * placement using this block requires to break. Meaningful only when
+   * `breakability: 'fragile'` and `collision: 'solid'` — retained (but
+   * inert at runtime) on indestructible/non-solid blocks so switching a
+   * block back to fragile restores the creator's chosen tier. 'standard'
+   * is byte-identical to the pre-Phase-2E global threshold.
+   */
+  readonly breakResistance: BreakResistancePreset;
 }
 
 /**
  * Defaults equivalent to Phase-1 behavior (always solid, no friction/breakability),
- * with 'stone' as the safe Phase 2C material-response default and 'none' as
- * the safe Phase 2D contact-damage default.
+ * with 'stone' as the safe Phase 2C material-response default, 'none' as the
+ * safe Phase 2D contact-damage default, and 'standard' as the safe Phase 2E
+ * break-resistance default (preserves the original global threshold exactly).
  */
 export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   collision: 'solid',
@@ -91,6 +109,7 @@ export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   breakability: 'indestructible',
   materialResponse: 'stone',
   contactDamage: 'none',
+  breakResistance: 'standard',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -182,6 +201,24 @@ export const CONTACT_DAMAGE_PRESET_REGISTRY: Readonly<Record<ContactDamagePreset
   },
 };
 
+export const BREAK_RESISTANCE_PRESET_REGISTRY: Readonly<Record<BreakResistancePreset, PresetMeta<BreakResistancePreset>>> = {
+  weak: {
+    id: 'weak',
+    label: 'Weak',
+    description: 'Breaks from lighter impacts.',
+  },
+  standard: {
+    id: 'standard',
+    label: 'Standard',
+    description: 'Uses the existing break threshold.',
+  },
+  reinforced: {
+    id: 'reinforced',
+    label: 'Reinforced',
+    description: 'Requires a substantially stronger impact.',
+  },
+};
+
 // ── Numeric packing (WorldState typed arrays never store strings) ───────────
 
 /** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
@@ -215,6 +252,24 @@ export function contactDamageTierToIndex(tier: 'low' | 'high'): number {
 /** Unpacks a Uint8Array index back into the damaging tier. Unknown indices default to 'low'. */
 export function indexToContactDamageTier(index: number): 'low' | 'high' {
   return index === 1 ? 'high' : 'low';
+}
+
+/** Packs a BreakResistancePreset into a compact index for Uint8Array storage. */
+export function breakResistanceToIndex(resistance: BreakResistancePreset): number {
+  switch (resistance) {
+    case 'weak': return 0;
+    case 'standard': return 1;
+    case 'reinforced': return 2;
+  }
+}
+
+/** Unpacks a Uint8Array index back into a BreakResistancePreset. Unknown indices default to 'standard'. */
+export function indexToBreakResistance(index: number): BreakResistancePreset {
+  switch (index) {
+    case 0: return 'weak';
+    case 2: return 'reinforced';
+    default: return 'standard';
+  }
 }
 
 // ── Compatibility rules ───────────────────────────────────────────────────────
@@ -326,16 +381,17 @@ export function validateAndResolveCustomBlockProperties(
   let breakability: BreakabilityPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakability;
   let materialResponse: MaterialResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.materialResponse;
   let contactDamage: ContactDamagePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.contactDamage;
+  let breakResistance: BreakResistancePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakResistance;
 
   if (raw === undefined || raw === null) {
     // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
-    // block saved before Phase 2C/2D) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage }, errors, fallbackUsed: false };
+    // block saved before Phase 2C/2D/2E) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -386,15 +442,27 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // breakResistance is optional even on schemaVersion-2 blocks saved before
+  // Phase 2E — absence is not an error, it just resolves to the 'standard'
+  // default already assigned above (byte-identical to the pre-Phase-2E
+  // global threshold).
+  if ('breakResistance' in r) {
+    if (isBreakResistancePreset(r['breakResistance'])) {
+      breakResistance = r['breakResistance'];
+    } else {
+      pushError('properties.breakResistance', BREAK_RESISTANCE_PRESET_IDS.join(' | '), String(r['breakResistance']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.

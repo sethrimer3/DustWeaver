@@ -77,6 +77,16 @@ export interface RoomBreakableBlockDef {
    * paths to room JSON.
    */
   materialResponse?: 'stone' | 'wood' | 'metal';
+  /**
+   * Phase 2E: the resolved break-resistance tier for this breakable cell,
+   * threaded from the originating custom block's `properties.breakResistance`.
+   * Omitted (defaults to 'standard' — byte-identical to the pre-Phase-2E
+   * global momentum threshold — at hazard-load time) for pre-Phase-2E data
+   * and for built-in (non-custom-block) breakable blocks. All cells sharing
+   * one `groupId` always carry the same tier — it is resolved once per
+   * placement, not per cell.
+   */
+  breakResistance?: 'weak' | 'standard' | 'reinforced';
 }
 
 /**

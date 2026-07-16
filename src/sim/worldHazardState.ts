@@ -262,6 +262,16 @@ export interface HazardWorldState {
    * properties; never re-read from JSON during the simulation loop.
    */
   breakableBlockMaterial: Uint8Array;
+  /**
+   * Packed break-resistance tier index per breakable-block cell (Phase 2E).
+   * 0=weak, 1=standard, 2=reinforced — see breakResistanceToIndex/
+   * indexToBreakResistance in customBlockProperties.ts. Resolved once at
+   * hazard-load time (gameRoomHazards.ts); the simulation loop only ever
+   * reads this packed index to select a momentum threshold (see
+   * resolveBreakThresholdWorld in src/sim/hazards.ts), never a raw string.
+   * All cells sharing one breakableBlockGroupId always carry the same value.
+   */
+  breakableBlockResistance: Uint8Array;
 
   // ── Break events (Phase 2C) ─────────────────────────────────────────────────
   /**
@@ -786,6 +796,7 @@ export function createHazardWorldState(): HazardWorldState {
     breakableBlockWallIndex:       new Int8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockGroupId:         new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
     breakableBlockMaterial:        new Uint8Array(MAX_BREAKABLE_BLOCKS),
+    breakableBlockResistance:      new Uint8Array(MAX_BREAKABLE_BLOCKS).fill(1), // 1 = standard default
     breakEventCount:               0,
     breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
     breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),

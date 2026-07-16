@@ -808,8 +808,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const breakBadge = def.properties.breakability === 'fragile' ? ' · Fragile' : '';
               const materialBadge = { stone: ' · Stone', wood: ' · Wood', metal: ' · Metal' }[def.properties.materialResponse];
               const damageBadge = { none: '', low: ' · Dmg:Low', high: ' · Dmg:High' }[def.properties.contactDamage];
-              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}`;
-              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage properties for this block.';
+              // Resistance is only meaningful for fragile blocks, and 'standard' is the
+              // silent default (matches pre-Phase-2E behavior) so it gets no badge.
+              const resistanceBadge = def.properties.breakability === 'fragile'
+                ? { weak: ' · Weak', standard: '', reinforced: ' · Reinforced' }[def.properties.breakResistance]
+                : '';
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}`;
+              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance properties for this block.';
 
               info.appendChild(nameEl);
               info.appendChild(sizeEl);

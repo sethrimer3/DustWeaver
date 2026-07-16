@@ -74,7 +74,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     const rawId = rawIdFromNamespaced(p.blockId);
     const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
     const behavior = resolveWallBehavior(properties ?? {
-      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none',
+      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard',
     });
 
     if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
@@ -115,9 +115,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       // world.breakableBlockMaterial without re-reading the custom block
       // registry at hazard-load time.
       const materialResponse = properties.materialResponse;
+      // Phase 2E: same idea for the resolved break-resistance tier — every
+      // cell of the placement carries the SAME tier, resolved once here.
+      const breakResistance = properties.breakResistance;
       if (p.tileWidth === 1 && p.tileHeight === 1) {
         customBlockBreakables.push({
-          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse,
+          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance,
         });
       } else {
         const groupId = nextBreakableGroupId++;
@@ -129,6 +132,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
               groupId,
               blockTheme: breakableBlockTheme,
               materialResponse,
+              breakResistance,
             });
           }
         }

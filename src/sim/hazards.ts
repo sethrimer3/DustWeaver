@@ -90,8 +90,50 @@ const LAVA_ZONE_INVULN_TICKS = 30;
  * Minimum momentum (speed × mass approximation) to break a breakable block.
  * Player mass is implicitly 1.0, so this is effectively a speed threshold.
  * Sprint+dash (~373 px/s) should break blocks; normal running (~105 px/s) should not.
+ * This is the 'standard' break-resistance tier (Phase 2E) — the name and
+ * value are UNCHANGED from pre-Phase-2E so every existing built-in breakable
+ * block and every custom fragile block that doesn't set breakResistance
+ * keeps byte-identical behavior.
  */
 const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
+
+/**
+ * Phase 2E break-resistance tiers, chosen from DustWeaver's real movement
+ * speed scale (see src/sim/clusters/movementConstants.ts):
+ *   - MAX_RUN_SPEED_WORLD_PER_SEC = 105 (normal running/walking top speed)
+ *   - sprint speed = MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER ≈ 157.5
+ *   - GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210
+ *   - FAST_MAX_FALL_APPROACH_PER_SEC = 300 (fast-dive vertical speed alone;
+ *     combined with any horizontal movement the total magnitude comfortably
+ *     exceeds 300)
+ *
+ * 'weak' (150) sits just above sprint speed (~157.5 clears it) so a bare
+ * sprint — not just normal running/walking — reliably breaks a weak block,
+ * while ordinary running (105) and any resting/low-speed contact never do.
+ *
+ * 'standard' (250, BREAKABLE_MOMENTUM_THRESHOLD_WORLD) is unchanged.
+ *
+ * 'reinforced' (350) sits above a fast dive alone (300) but is reachable by
+ * combining a fast dive with horizontal sprint/grapple-zip momentum, or a
+ * grapple-zip release chained into a dash — i.e. deliberately achievable
+ * through normal high-speed DustWeaver mechanics, never impossible.
+ */
+const BREAKABLE_RESISTANCE_WEAK_THRESHOLD_WORLD = 150.0;
+const BREAKABLE_RESISTANCE_REINFORCED_THRESHOLD_WORLD = 350.0;
+
+/**
+ * The ONE authoritative place that maps a packed break-resistance tier index
+ * (0=weak, 1=standard, 2=reinforced — see breakResistanceToIndex in
+ * customBlockProperties.ts) to the momentum threshold a fragile placement
+ * must meet to break. No other code path compares resistance tiers directly.
+ */
+function resolveBreakThresholdWorld(resistanceIndex: number): number {
+  switch (resistanceIndex) {
+    case 0: return BREAKABLE_RESISTANCE_WEAK_THRESHOLD_WORLD;
+    case 2: return BREAKABLE_RESISTANCE_REINFORCED_THRESHOLD_WORLD;
+    default: return BREAKABLE_MOMENTUM_THRESHOLD_WORLD; // 1 = standard, and any invalid index falls back safely.
+  }
+}
 
 /**
  * Phase 2D custom-block contact-damage tiers, matched to the existing
@@ -567,9 +609,12 @@ export function applyHazards(world: WorldState): void {
       const bTop = by - bHalf;
       const bBottom = by + bHalf;
 
+      // Phase 2E: every cell of a grouped placement carries the same
+      // resistance tier (resolved once in editorRoomBuilder.ts), so reading
+      // it from the struck cell alone already reflects the whole placement.
       if (
         overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom) &&
-        playerSpeed >= BREAKABLE_MOMENTUM_THRESHOLD_WORLD
+        playerSpeed >= resolveBreakThresholdWorld(world.breakableBlockResistance[i])
       ) {
         // Break the struck cell, and — for Phase 2B multi-cell placements —
         // atomically break every other cell sharing its logical group id in
