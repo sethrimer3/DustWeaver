@@ -89,7 +89,6 @@ import { PixelMaterialSystem } from '../sim/pixelMaterials/pixelMaterialSystem';
 import { SolidMask } from '../sim/pixelMaterials/pixelMaterialSolid';
 import {
   MATERIAL_SAND,
-  MATERIAL_SAND_2X2,
   MATERIAL_WATER,
   MATERIAL_SANDSTONE,
 } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -357,30 +356,38 @@ describe('Phase 2G: seal prevents liquid movement into its footprint', () => {
   test('8a. seal prevents downward liquid movement into its footprint', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    sys.liquidMask.markRect(29, 21, 31, 22, 1); // seal cell directly below the particle
+    // Seal the entire row below (down + both diagonal destinations) so the
+    // test isolates "does seal block downward/diagonal entry" from the
+    // separate horizontal-spread rule (covered by 8c).
+    sys.liquidMask.markRect(29, 21, 32, 22, 1);
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
-    assert.equal(sys.getMaterialAt(30, 20), MATERIAL_WATER, 'water must remain in place, blocked from falling into the sealed cell');
-    assert.equal(sys.getMaterialAt(30, 21), 0, 'the sealed cell itself must remain empty');
+    assert.equal(sys.particleCount, 1, 'the particle must not have been removed');
+    for (let x = 29; x <= 31; x++) {
+      assert.equal(sys.getMaterialAt(x, 21), 0, `sealed cell (${x},21) must remain empty`);
+    }
   });
 
   test('8b. seal prevents diagonal movement into its footprint', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    // Block straight-down with solid, seal both diagonals, forcing an all-blocked step.
-    sys.solid!.markSolid(30, 21);
+    // Block straight-down with solid, seal both diagonals, forcing an all-blocked step
+    // (isolated from horizontal spread, which is covered separately by 8c).
+    sys.solid!.markRect(30, 21, 31, 22);
     sys.liquidMask.markRect(29, 21, 30, 22, 1); // seal diagonal-left destination
     sys.liquidMask.markRect(31, 21, 32, 22, 1); // seal diagonal-right destination
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
-    assert.equal(sys.getMaterialAt(30, 20), MATERIAL_WATER, 'both diagonal destinations are sealed — water cannot move');
+    assert.equal(sys.getMaterialAt(29, 21), 0, 'sealed diagonal-left cell must remain empty');
+    assert.equal(sys.getMaterialAt(31, 21), 0, 'sealed diagonal-right cell must remain empty');
+    assert.equal(sys.particleCount, 1, 'the particle must not have been removed');
   });
 
   test('8c. seal prevents horizontal spreading into its footprint', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
     // Solid floor everywhere in range so only horizontal spread remains as an option.
-    for (let x = 25; x <= 35; x++) sys.solid!.markSolid(x, 21);
+    sys.solid!.markRect(25, 21, 36, 22);
     sys.liquidMask.markRect(29, 20, 30, 21, 1); // seal left neighbor
     sys.liquidMask.markRect(31, 20, 32, 21, 1); // seal right neighbor
     sys.place(30, 20, MATERIAL_WATER);
@@ -401,14 +408,15 @@ describe('Phase 2G: seal prevents liquid movement into its footprint', () => {
   test('10. a solid custom block with seal blocks the player normally AND explicitly seals liquid (no conflicting collision)', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    sys.solid!.markSolid(30, 21);
-    sys.liquidMask.markRect(30, 21, 31, 22, 1);
+    // Solid+seal across the whole row under/around the particle so diagonal escape is impossible.
+    sys.solid!.markRect(29, 21, 32, 22);
+    sys.liquidMask.markRect(29, 21, 32, 22, 1);
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
     // Solid alone would already block the fall — seal is redundant but explicit, and must not
     // introduce any double-blocking artifact (still exactly one particle, still not fallen through).
     assert.equal(sys.particleCount, 1);
-    assert.equal(sys.getMaterialAt(30, 20), MATERIAL_WATER);
+    for (let x = 29; x <= 31; x++) assert.equal(sys.getMaterialAt(x, 21), 0, `row 21 cell ${x} must stay empty`);
   });
 
   test('11. a non-solid seal block blocks liquid but has no player-collision meaning at the pixel-material layer', () => {
@@ -417,11 +425,12 @@ describe('Phase 2G: seal prevents liquid movement into its footprint', () => {
     // completely untouched; only stepLiquidParticle's dedicated liquid gate consults it.
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    sys.liquidMask.markRect(29, 21, 31, 22, 1); // seal, NOT solid
+    sys.liquidMask.markRect(29, 21, 32, 22, 1); // seal the whole row, NOT solid
     assert.equal(sys.canOccupy(30, 21), true, 'non-solid seal cell is still free for non-liquid occupancy checks');
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
-    assert.equal(sys.getMaterialAt(30, 20), MATERIAL_WATER, 'liquid is still blocked by seal despite the cell being non-solid');
+    assert.equal(sys.particleCount, 1, 'liquid is still blocked by seal despite the cell being non-solid');
+    for (let x = 29; x <= 31; x++) assert.equal(sys.getMaterialAt(x, 21), 0, `row 21 cell ${x} must stay empty`);
   });
 });
 
@@ -443,8 +452,11 @@ describe('Phase 2G: drain removes liquid attempting to enter its footprint', () 
   test('12b. drain removes liquid attempting diagonal movement into it', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    sys.solid!.markSolid(30, 21); // block straight-down so the particle tries diagonal
-    sys.liquidMask.markRect(29, 21, 30, 22, 2); // drain the diagonal-left destination
+    sys.solid!.markRect(30, 21, 31, 22); // block straight-down so the particle tries diagonal
+    // Drain BOTH diagonal destinations so the outcome doesn't depend on the
+    // deterministic left/right preference alternation.
+    sys.liquidMask.markRect(29, 21, 30, 22, 2);
+    sys.liquidMask.markRect(31, 21, 32, 22, 2);
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
     assert.equal(sys.particleCount, 0, 'diagonal entry into a drain cell removes the particle');
@@ -453,7 +465,7 @@ describe('Phase 2G: drain removes liquid attempting to enter its footprint', () 
   test('12c. drain removes liquid attempting horizontal spreading into it', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    for (let x = 25; x <= 35; x++) sys.solid!.markSolid(x, 21); // solid floor forces horizontal spread
+    sys.solid!.markRect(25, 21, 36, 22); // solid floor forces horizontal spread
     sys.liquidMask.markRect(29, 20, 30, 21, 2); // drain to the left
     sys.liquidMask.markRect(31, 20, 32, 21, 1); // seal to the right (so the spread direction is deterministic)
     sys.place(30, 20, MATERIAL_WATER);
@@ -506,12 +518,15 @@ describe('Phase 2G: drain removes liquid attempting to enter its footprint', () 
   test('16. a solid + drain block never drains anything — the particle can never reach the cell in the first place', () => {
     const sys = makeSystem();
     sys.liquidMask = new CustomBlockLiquidMask(60, 60);
-    sys.solid!.markSolid(30, 21);
-    sys.liquidMask.markRect(30, 21, 31, 22, 2);
+    // Solid+drain across the whole row so the particle truly cannot reach ANY
+    // destination this step (down, both diagonals) — isolates "does solid+drain
+    // ever drain" from "did it merely move elsewhere". Horizontal spread at its
+    // own row is still open, so only assert it was never REMOVED (drained).
+    sys.solid!.markRect(29, 21, 32, 22);
+    sys.liquidMask.markRect(29, 21, 32, 22, 2);
     sys.place(30, 20, MATERIAL_WATER);
     sys.step();
     assert.equal(sys.particleCount, 1, 'solid blocks entry before drain can ever trigger — particle remains');
-    assert.equal(sys.getMaterialAt(30, 20), MATERIAL_WATER);
   });
 });
 
@@ -786,7 +801,7 @@ describe('Phase 2G: wind, sandstone, contact-damage, and break-resistance are un
 
   test('29a. contact damage and break resistance remain unchanged on a fragile, damaging, sealing block', () => {
     clearCustomBlockSpriteCache();
-    registerTestBlock('seal-dmg', liquidProps('seal', 'solid', { contactDamage: 'high', breakResistance: 'reinforced' }));
+    registerTestBlock('seal-dmg', liquidProps('seal', 'solid', { breakability: 'fragile', contactDamage: 'high', breakResistance: 'reinforced' }));
     const room = makeEditorRoomData([{ xBlock: 5, yBlock: 5, blockId: 'custom:seal-dmg', tileWidth: 1, tileHeight: 1 }]);
     const roomDef = editorRoomDataToRoomDef(room);
     const world = worldWithPlayerAt(roomDef, 5, 5, 200); // below reinforced(350) — does not break
@@ -802,7 +817,7 @@ describe('Phase 2G: wind, sandstone, contact-damage, and break-resistance are un
 
   test('29b. a metal sealing block still emits exactly one material-specific break event when destroyed', () => {
     clearCustomBlockSpriteCache();
-    registerTestBlock('seal-metal', liquidProps('seal', 'solid', { materialResponse: 'metal', breakResistance: 'weak' }));
+    registerTestBlock('seal-metal', liquidProps('seal', 'solid', { breakability: 'fragile', materialResponse: 'metal', breakResistance: 'weak' }));
     const room = makeEditorRoomData([{ xBlock: 5, yBlock: 5, blockId: 'custom:seal-metal', tileWidth: 1, tileHeight: 1 }]);
     const roomDef = editorRoomDataToRoomDef(room);
     const world = worldWithPlayerAt(roomDef, 5, 5, 200); // breaks weak(150)
@@ -815,7 +830,7 @@ describe('Phase 2G: wind, sandstone, contact-damage, and break-resistance are un
   test('a fragile, reinforced, damaging metal drain uses each prior system independently', () => {
     clearCustomBlockSpriteCache();
     registerTestBlock('kitchen-sink', liquidProps('drain', 'solid', {
-      contactDamage: 'high', breakResistance: 'reinforced', materialResponse: 'metal', windResponse: 'block',
+      breakability: 'fragile', contactDamage: 'high', breakResistance: 'reinforced', materialResponse: 'metal', windResponse: 'block',
     }));
     const room = makeEditorRoomData([{ xBlock: 5, yBlock: 5, blockId: 'custom:kitchen-sink', tileWidth: 1, tileHeight: 1 }]);
     const roomDef = editorRoomDataToRoomDef(room);

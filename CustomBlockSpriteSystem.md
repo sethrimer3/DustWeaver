@@ -1854,49 +1854,402 @@ Phase 2A-2E test file was touched, and all 968 tests in the full suite pass.
    only lets a block ATTENUATE wind passing through; it cannot yet emit,
    redirect, or amplify wind itself.
 4. **No liquid-specific interaction** — a windbreak affects water's wind
-   momentum exactly like sand's, but does not yet seal, drain, or otherwise
-   interact with the water-zone buoyancy system.
+   momentum exactly like sand's, but did not (as of Phase 2F) seal, drain, or
+   otherwise interact with pixel-material liquid or water-zone buoyancy.
+   **Addressed in Phase 2G below** for pixel-material liquid specifically —
+   water-zone buoyancy remains a separate, still-unaddressed system (see
+   Phase 2G's own Remaining Limitations).
 
-## Proposed Phase 2G: Liquid-Interaction Presets, Trigger Behavior, or Directional Wind Vents (Not Implemented)
+## Phase 2G: Liquid-Interaction Presets
 
-Recommendation: **liquid-interaction presets** (`'none' | 'seal' | 'drain'`)
-are the most natural next phase, ahead of generic trigger behavior or
-directional wind vents — but with a real architectural caveat noted below.
+### The New Property and Defaults
 
-- **Liquid interaction** would reuse the existing water-zone buoyancy system
+A fourth engine-owned property, `liquidInteraction`, selects how a custom
+block interacts with **pixel-material liquids** — currently only water,
+identified structurally via `getMaterialBehavior(material) === 'liquid'`
+rather than a hardcoded material id, so a future second liquid material
+would need no changes to this phase's mask/movement code:
+
+```ts
+type CustomBlockLiquidInteractionPreset = 'none' | 'seal' | 'drain';
+```
+
+- **`'none'`** (the default) — no additional liquid behavior. A solid block
+  still blocks pixel-material occupancy via the pre-existing solid mask, as
+  it always has; this preset adds nothing on top of that.
+- **`'seal'`** — pixel-material liquid cannot fall, diagonal-fall, or spread
+  horizontally into this block's footprint, independently of player
+  collision.
+- **`'drain'`** — pixel-material liquid attempting to enter this block's
+  footprint is deterministically removed (not merely stopped).
+
+Schema version stays **2** — no bump was needed, matching Phase 2C-2F.
+Schema-v1 blocks and schema-v2 blocks saved before Phase 2G both resolve
+`liquidInteraction` to `'none'` via the same "field absent → default, not an
+error" path already used for `materialResponse`/`contactDamage`/
+`breakResistance`/`windResponse`. An unrecognized string value produces a
+structured `CustomBlockValidationError` (`field:
+'properties.liquidInteraction'`) and falls back to `'none'`, never throwing.
+
+### No Collision Requirement (Deliberately Unlike Wind/Contact Damage)
+
+Every property added in Phases 2D-2F (`contactDamage`, `windResponse`)
+required `collision: 'solid'`, because both rode on the solid custom-block's
+wall footprint. `liquidInteraction` is **the first property with no such
+requirement** — `isEligibleForLiquidInteraction` checks only
+`liquidInteraction !== 'none'`:
+
+- A **solid** block already blocks all pixel-material occupancy via the
+  existing solid mask; `'seal'` there is redundant but explicit (and
+  harmless — the two independent checks don't double-block or conflict).
+- A **one-way** block can seal/drain liquid while its one-way player
+  collision is completely untouched — the player still passes through from
+  below and stands on top exactly as before.
+- A **non-solid** block can be a pure liquid-only barrier or drain that the
+  player walks through freely — there is no other way to place an
+  invisible-to-the-player liquid gate in this engine today.
+
+`checkCustomBlockPropertyCompatibility` therefore has **no new rule** for
+this property — all nine `(collision × liquidInteraction)` combinations are
+valid.
+
+### Registry and Numeric Packing
+
+`CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY` provides the editor
+label/description for each preset. Numeric packing
+(`liquidInteractionTierToIndex`/`indexToLiquidInteractionTier`) follows the
+same "the inert default is never stored" convention as
+`windResponseTierToIndex`: `'none'` has no packed index at all (blocks with
+no liquid interaction simply have no entry in the runtime arrays), and
+`'seal'`/`'drain'` pack to `0`/`1`.
+
+### Runtime Architecture: CustomBlockLiquidMask
+
+`src/sim/pixelMaterials/customBlockLiquidMask.ts` defines `CustomBlockLiquidMask`,
+architecturally a sibling of `CustomBlockWindMask` (Phase 2F) — a native-pixel
+resolution `Uint8Array`, one byte per cell, storing a tier (`0 = none`,
+`1 = seal`, `2 = drain`) with an `isEmpty` fast-path flag maintained via a
+`nonZeroCells` counter. It is a **completely separate object** from
+`SolidMask` and `CustomBlockWindMask` — no repurposing of either — reachable
+as `PixelMaterialSystem.liquidMask` (default `null`, treated identically to
+an empty mask).
+
+Unlike the wind mask, there is **no ray-tracing**: liquid movement only ever
+needs to test the immediate destination cell(s) of one candidate move, never
+a line between two distant points, so `tierAt(x, y)` is the only query
+primitive needed — a plain O(1) array read.
+
+`markRect` resolves overlapping writes to the **higher tier**
+(`drain(2) > seal(1) > none(0)`), order-independent — a defensive measure for
+malformed/legacy data, even though the room builder (below) already rejects
+overlapping liquid-modifier placements at registration time, so in practice
+no two placements ever contest the same cell.
+
+### Room-Load Registration and Overlap Rejection
+
+`editorRoomDataToRoomDef` (editorRoomBuilder.ts) registers one
+`RoomLiquidInteractionBlockDef` entry **per eligible placement** (never per
+cell, 1×1 and 2×2 alike) into `RoomDef.liquidInteractionBlocks` — mirroring
+`RoomWindTransmissionBlockDef`'s one-entry-per-placement shape. Because
+liquid interaction has no collision requirement, this registration runs
+**before** the `!behavior.generateWall` early-`continue` that skips
+non-solid placements for wall generation, so a non-solid seal/drain block is
+still registered.
+
+The task's documented "drain > seal > none" **overlap policy** is enforced
+at the strongest possible point — registration time, not runtime. A small
+`claimedLiquidCells` set (keyed by block-grid cell, scoped to one
+`editorRoomDataToRoomDef` call) tracks every cell already claimed by a
+registered liquid-interaction placement; a new placement whose footprint
+overlaps an already-claimed cell is **not registered for liquid
+interaction** at all (its other properties — collision, friction, etc. — are
+completely unaffected). This keeps the runtime mask's single-byte-per-cell
+representation always unambiguous: every non-zero mask cell belongs to
+exactly one placement, so a fragile placement's destruction can always
+safely clear its own footprint without any risk of erasing an overlapping
+neighbor's still-active effect — no reference-counting or ownership array
+was needed. Custom block placements should not normally overlap in the
+first place; this is a defensive guarantee for malformed or hand-edited
+room data, not an expected authoring scenario.
+
+`loadRoomPixelMaterials` (gameRoomPixelMaterials.ts) builds
+`PixelMaterialSystem.liquidMask` from `RoomDef.liquidInteractionBlocks` at
+room-load time, exactly mirroring `buildCustomBlockWindMaskFromRoom`.
+
+### Integration into Liquid Movement (the Single Authoritative Pathway)
+
+`PixelMaterialSystem.stepLiquidParticle` previously called `tryMoveParticle`
+directly for each of its five candidate destinations (gravity, both
+diagonals, wind-driven upward, both horizontal-spread directions). Phase 2G
+replaces every one of those five call sites with a new private
+`tryLiquidMove(p, nx, ny)` — **the single authoritative liquid-movement-
+eligibility gate**, so seal/drain enforcement lives in exactly one place
+rather than being duplicated five times:
+
+```
+final velocity/position outcome for a candidate destination:
+  liquidMask null/empty  → tryMoveParticle(p, nx, ny)         (fast path, zero overhead)
+  destination tier SEAL  → false (move rejected outright)
+  destination tier DRAIN → drainParticle(p) if the destination is otherwise
+                            reachable by the EXISTING rules (in bounds, not
+                            solid, not occupied by anything but p itself);
+                            returns true (move "consumed")
+  destination tier NONE  → tryMoveParticle(p, nx, ny)          (unchanged)
+```
+
+**Seal** rejects the candidate destination unconditionally — the caller's
+`||` cascade in `stepLiquidParticle` simply tries the next candidate (or
+falls through to sleep bookkeeping if every candidate is sealed/blocked),
+exactly as if that destination were solid. This is what makes a sealed cell
+unavailable to liquid regardless of *which* movement rule tried to enter it
+(gravity/diagonal/horizontal), and independent of whether the cell is
+otherwise empty and non-solid.
+
+**Drain** only ever triggers if the destination is otherwise reachable by
+`isRegionFree` — i.e. the particle genuinely "attempts to enter" the drain
+cell, matching the existing rules exactly (not a separate proximity/contact
+check). This has a clean consequence documented as **the** solid+drain
+semantics: a solid AND drain block never actually drains anything, because
+the solid mask already prevents the particle from reaching the cell in the
+first place — drain is simply moot there, not a special case requiring its
+own branch.
+
+`drainParticle` removes the particle **atomically** — clears all of its
+footprint occupancy keys, deletes it from both `particles` and `activeSet`,
+and wakes neighboring cells via the existing `wakeAround` — mirroring
+`erase()`'s bookkeeping exactly. Because the caller's cascade returns `true`
+immediately after draining, the particle is never processed again during
+that same step (no double-drain, no stale references).
+
+### Initial Authored-Liquid/Drain Overlap Policy
+
+If a room's authored `pixelMaterials` places a liquid particle directly on a
+drain cell, `loadRoomPixelMaterials` calls
+`PixelMaterialSystem.dropLiquidsOverlappingDrainMask()` **once, immediately
+after `loadFromDefs`**, before the room's first simulation step ever runs.
+This was chosen over "let it disappear on the first `step()`" so a freshly
+loaded room never renders even one frame of liquid sitting inside a drain
+it's about to vanish from — the removal is invisible to the player rather
+than a visible pop. Only particles whose material behavior is `'liquid'`
+are affected; sand/sandstone sitting on a drain cell (which has no runtime
+meaning for them) are left untouched.
+
+### Fragile Invalidation and Tick Ordering
+
+A fragile seal/drain block's liquid-mask footprint is cleared the moment it
+breaks, via the same targeted-region/one-tick-lag precedent Phase 2F
+established for the wind mask: `RoomBreakableBlockDef.liquidInteraction`
+(optional, mirroring `windResponse`) is resolved once at hazard-load time
+into a new packed `WorldState.breakableBlockLiquidTier` array (`0 = none`,
+`1 = seal`, `2 = drain`), and `destroyBreakableBlockCell` (sim/hazards.ts)
+calls `liquidMask.clearRect(...)` over exactly that cell's
+`BLOCK_SIZE_MEDIUM` square when the tier is non-zero. A 1×1 fragile
+placement clears one tile; a grouped 2×2 fragile placement clears all four
+cells, one per `destroyBreakableBlockCell` call within the existing atomic
+group-destroy loop — never a full mask rebuild. Because this runs inside
+`applyHazards`, which the tick pipeline calls after that tick's liquid
+`step()`, the mask is cleared **starting the next tick's liquid movement**
+— the same one-tick lag already accepted for the wind mask and solid-mask
+sync. Adjacent placements are matched by exact world-position and remain
+completely independent (breaking one never touches a neighbor's mask
+region, whether that neighbor is fragile-but-unbroken or indestructible).
+An indestructible seal/drain block never enters the breakable pathway at
+all and so can never be cleared by any destruction event.
+
+### 1×1 and 2×2 Semantics
+
+Both `RoomLiquidInteractionBlockDef` (initial mask) and
+`RoomBreakableBlockDef.liquidInteraction` (invalidation) cover a 2×2
+placement's complete four-cell footprint — the initial mask via one
+`markRect` call spanning the whole placement, and invalidation via the
+existing per-cell breakable-block decomposition (4 entries sharing one
+`groupId`, already how 2×2 fragile blocks work since Phase 2B) triggering 4
+independent `clearRect` calls, one per destroyed cell, when the group breaks
+atomically.
+
+### Interaction with Other Custom-Block Properties
+
+`liquidInteraction` is fully independent of collision, friction,
+breakability, material response, contact damage, break resistance, and wind
+response — a fragile, reinforced, high-contact-damage, metal-sounding,
+windbreak, drain block exercises every one of those systems on its own
+existing pathway, untouched by this phase. Verified directly: contact
+damage still applies on solid contact regardless of liquid interaction,
+break-resistance thresholds are unaffected, sandstone impact
+fracture/erosion is unaffected, and a metal block's break event still fires
+exactly once with the correct material index when destroyed.
+
+### Editor Integration
+
+A "Liquid interaction" dropdown (None / Seal / Drain) was added to
+`editorCustomBlockDialog.ts` following the exact `makePropertyRow` pattern
+used for every prior preset — property changes mark the dialog dirty,
+participate in the existing undo/redo snapshot stack, and are included in
+Save/Discard/Keep-Editing. A small note under the dropdown clarifies that
+this affects pixel-material water specifically, not authored water-zone
+buoyancy. The palette summary in `editorUI.ts` gains a `Seals liquid`/`Drain`
+badge (silent for the `'none'` default, matching every other preset's
+badge convention). Rename and duplicate preserve the property automatically
+because it is part of the same `properties` object as every other preset
+(verified directly via `serializeCustomBlock`/`parseCustomBlockSource` round
+trips). `updateCustomBlockProperties` changing only `liquidInteraction`
+does not rebuild the cached sprite canvas (same object identity before and
+after), matching the existing properties-only-update optimization.
+
+### Backward Compatibility
+
+- Schema-v1 blocks, and schema-v2 blocks saved before Phase 2G, load exactly
+  as before — `liquidInteraction` resolves to `'none'`, which has zero
+  runtime effect (no mask entry, no movement-pathway change).
+- Rooms/campaigns with no custom blocks at all build a `null`-then-populated
+  `liquidMask` that is always empty — `stepLiquidParticle`'s fast path makes
+  this byte-identical to pre-Phase-2G liquid movement.
+- Sand, sandstone, player collision, water-zone buoyancy/submersion, wind
+  transmission, and every other Phase 2A-2F behavior are completely
+  unaffected — verified directly by tests that place a liquid mask alongside
+  each of those systems and confirm no change.
+- A hand-authored `RoomBreakableBlockDef` with no `liquidInteraction` field
+  (pre-Phase-2G shape) resolves to tier `0` and is never treated as a
+  seal/drain cell.
+
+### Performance Considerations
+
+- `CustomBlockLiquidMask.tierAt` is a single `Uint8Array` read — O(1),
+  no allocation.
+- `tryLiquidMove`'s fast path (`liquidMask === null || liquidMask.isEmpty`)
+  is a direct passthrough to the pre-existing `tryMoveParticle` call with
+  zero extra work for the overwhelming majority of rooms (any room with no
+  seal/drain blocks) — verified by a test placing 200 liquid particles and
+  stepping 50 times with an empty mask, completing well under the test's
+  time budget.
+- No custom-block placement list is scanned during any particle movement —
+  the mask is built once at room-load time; the hot path only ever reads
+  the mask, never the placement list.
+- `drainParticle` and `dropLiquidsOverlappingDrainMask` allocate nothing new
+  per particle beyond the pre-existing `Array.from(this.particles)`
+  snapshot the latter already needs to safely mutate `particles` during
+  iteration (a one-time, room-load-only cost, not a per-tick one).
+
+### Tests (Phase 2G)
+
+New file `src/tests/customBlocksPhase2G.test.ts` (65 tests) exercises the
+real pipeline end to end: schema-v1/v2 defaults, all three presets
+round-tripping, unknown-value fallback with a structured diagnostic, numeric
+packing round trip, the (deliberate lack of a) collision-compatibility rule
+for all nine `(collision × liquidInteraction)` combinations,
+`CustomBlockLiquidMask` unit behavior (empty/non-empty, markRect/clearRect,
+deterministic order-independent overlap resolution), fast-path equivalence
+(null mask vs. empty mask vs. no mask at all produce byte-identical liquid
+movement), direct seal enforcement (blocks downward/diagonal/horizontal
+entry, an unrelated sealed cell has no effect, solid+seal and
+non-solid+seal both work as documented), direct drain enforcement (removes
+liquid attempting downward/diagonal/horizontal entry, never removes
+sand/sandstone, leaves no occupancy/active-set remnants, never
+double-drains, solid+drain never drains because the particle can never
+reach the cell), the room-init drain-overlap policy, 2×2 footprint coverage
+for both seal and drain, adjacent-placement independence, real
+room-builder wiring (one `liquidInteractionBlocks` entry per placement,
+none for `'none'`, non-solid placements still register,
+`loadRoomPixelMaterials` building a correctly-populated mask),
+overlap-rejection at room-build time, fragile invalidation through the real
+`applyHazards` destruction pathway (1×1 seal/drain and grouped 2×2 all
+clear correctly, adjacent placements stay independent, indestructible
+modifiers can never be cleared), interaction preservation with wind/
+sandstone/contact-damage/break-resistance (including a fragile, reinforced,
+damaging, metal, drain block exercising every system at once), editor
+dirty-tracking/undo-redo/rename/duplicate at the data-model level, the
+sprite-cache properties-only update, export/relocation and campaign-switch
+isolation (including that two independently loaded rooms never share
+mask state), built-in/no-custom-block backward compatibility, and two
+performance checks (large-particle-count empty-mask stepping, high-volume
+`tierAt` lookups). No other Phase 2A-2F test file needed a behavioral
+change; one pre-existing fixture in `customBlockProperties.test.ts` that
+hardcoded a full property-object literal was extended with
+`liquidInteraction: 'none'` to match the new required field, and all 1033
+tests in the full suite pass (968 pre-Phase-2G + 65 new).
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (1033/1033
+  passing), and `npm run build` were all actually run for this phase.
+  `customBlocksPhase2G.test.ts`, the pixel-material test files
+  (`pixelMaterials*.test.ts`), and the full custom-block test suite were
+  additionally run directly and pass.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session, for the same reason documented in every prior
+  phase's section — this environment does not have an interactive
+  browser/editor session available for this task. All verification here was
+  done through the automated test suite exercising the real
+  `PixelMaterialSystem.stepLiquidParticle`, `editorRoomDataToRoomDef`,
+  `loadRoomHazards`/`loadRoomPixelMaterials`, and `applyHazards` code paths
+  (not mocks) — but no actual frame was rendered, no seal/drain visual was
+  observed by a human or automated UI driver, and no actual player-driven
+  liquid placement or block destruction was triggered through real input.
+- Anyone relying on this phase for a real campaign should manually create
+  seal and drain blocks (1×1 and 2×2, at least one non-solid) near placed
+  water, confirm water is blocked/removed as expected, confirm the player
+  still passes through non-solid/one-way liquid modifiers normally, break a
+  fragile seal/drain block and confirm water behaves normally starting the
+  very next visible frame, and confirm older campaigns (with no
+  `liquidInteraction` field at all) are visually and behaviorally unchanged,
+  prior to shipping.
+
+### Remaining Limitations
+
+1. **Pixel-material liquid only** — this phase does not touch authored
+   water-zone buoyancy/submersion (`RoomZoneDef` `waterZones`,
+   `playerWaterSubmersionRatio`/`playerBuoyancyDepthFactor`) at all; a
+   custom block's seal/drain has zero effect on a player standing in an
+   authored water zone.
+2. **No partial/leaky seal** — `'seal'` is a hard boundary (0% transmission),
+   with no dampen-style intermediate tier the way wind response has one.
+3. **No drain rate or capacity control** — drain removes a liquid particle
+   the instant it attempts entry; there is no throttling, no maximum
+   drained-per-tick count, and no numeric rate exposed to campaign JSON
+   (deliberately, to keep the property a bounded enum rather than an
+   arbitrary physics number).
+4. **Overlap rejection, not merging** — two liquid-modifier placements whose
+   footprints overlap do not "combine" into some blended effect; the later
+   one (in placement-array order) is simply not registered at all. This
+   is intentional (see the Overlap Rejection section above) but means an
+   author who genuinely wants two different tiers to coexist across a
+   shared cell cannot express that.
+
+## Proposed Phase 2H: Water-Zone Liquid Interaction, Directional Wind Vents, or Trigger Behavior (Not Implemented)
+
+Recommendation: **directional custom-block wind vents** are the best next
+phase, ahead of a water-zone interaction phase or generic trigger behavior.
+
+- **Directional wind vents** (a custom block that EMITS wind, rather than
+  merely attenuating it) is the most natural extension of Phase 2F — it
+  would reuse `CustomBlockWindMask`'s footprint data and `applyWindForce`'s
+  existing force-application primitive, needing only a new emitter call
+  site (analogous to `pixelMaterialMovementWind.ts`) rather than new sim
+  architecture. It is a small, tightly-scoped phase with a clear precedent
+  (Phase 2C-2G's "map a bounded enum onto an existing subsystem" pattern)
+  and no new physics engine.
+- **A later water-zone interaction phase** (extending `'seal'`/`'drain'`, or
+  a parallel property, to authored water zones and player buoyancy/
+  submersion) is a reasonable second choice, but carries a real
+  architectural caveat this phase's own Remaining Limitations flags:
+  unlike the pixel-material liquid system (a pure per-cell simulation layer
+  Phase 2G could integrate into at one gate function), the water-zone
+  system directly drives player movement physics
   (`playerWaterSubmersionRatio`/`playerBuoyancyDepthFactor` in
-  `worldHazardState.ts`) and, likely, the pixel-material liquid behavior
-  (`stepLiquidParticle`) the same way `windResponse` reused
-  `applyWindForce` — a bounded enum mapped to existing water-interaction
-  code, with no new physics engine. It is the last of the "attenuate an
-  existing environmental force" family this custom-block system has been
-  building out since Phase 2C (material response → contact damage → break
-  resistance → wind transmission → liquid interaction), so it is the
-  lowest-risk remaining candidate with a precedent-following shape.
-  **Caveat**: unlike wind (a pure force-application layer), the water-zone
-  system directly drives player movement physics (buoyancy, submersion),
-  so a "seal" preset that blocks water from a region touches player-facing
-  physics more directly than any of Phases 2C-2F did — it should start with
-  the same investigation-first approach (locate the exact buoyancy
-  integration point, confirm it can be gated without touching the buoyancy
-  math itself) before committing to a property shape.
+  `worldHazardState.ts`), so a "seal" preset there touches player-facing
+  physics more directly than any phase so far. It should start with the
+  same investigation-first approach used for every phase in this series
+  (locate the exact buoyancy integration point, confirm it can be gated
+  without touching the buoyancy math itself) before committing to a
+  property shape.
 - **Trigger behavior** (a custom block that fires a room event — a
   dialogue trigger, a transition, a one-shot switch — on player contact)
-  would be a materially different kind of phase: every phase so far has
+  remains a materially different kind of phase: every phase so far has
   mapped a preset to an EXISTING deterministic subsystem, whereas triggers
   would need a new event-dispatch concept even if built from existing
   primitives (`RoomDialogueTriggerDef` already exists as a non-custom-block
   zone). This is likely more design work than a single bounded phase, and a
   poor fit for the "reuse an existing pathway" pattern that has kept every
-  phase so far low-risk.
-- **Directional wind vents** (a custom block that EMITS wind, rather than
-  merely attenuating it) is the most natural extension of this exact phase
-  — it would reuse `CustomBlockWindMask`'s footprint data and
-  `applyWindForce`'s existing force-application primitive, needing only a
-  new emitter call site (analogous to `pixelMaterialMovementWind.ts`) rather
-  than new sim architecture. It is a smaller, more tightly-scoped phase than
-  liquid interaction, but is arguably a refinement of Phase 2F rather than a
-  new capability category, so it is ranked below liquid interaction as the
-  next MAJOR phase.
+  phase in this series low-risk.
 
 Not implemented in this phase — no code changes were made toward it.
