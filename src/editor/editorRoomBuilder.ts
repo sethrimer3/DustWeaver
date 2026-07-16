@@ -15,13 +15,19 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef, RoomContactDamageBlockDef, RoomWindTransmissionBlockDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef, RoomContactDamageBlockDef, RoomWindTransmissionBlockDef, RoomLiquidInteractionBlockDef } from '../levels/roomDef';
 import type { EditorRoomData } from './editorState';
 import { stringToParticleKind } from './roomJsonSchema';
 import { buildCompleteBoundaryWalls } from '../levels/roomBoundaryWalls';
 import { rawIdFromNamespaced } from '../levels/customBlocks';
 import { getCustomBlockProperties } from '../render/customBlockSpriteCache';
-import { resolveWallBehavior, isEligibleForBreakablePathway, isEligibleForContactDamage, isEligibleForWindTransmission } from '../levels/customBlockProperties';
+import {
+  resolveWallBehavior,
+  isEligibleForBreakablePathway,
+  isEligibleForContactDamage,
+  isEligibleForWindTransmission,
+  isEligibleForLiquidInteraction,
+} from '../levels/customBlockProperties';
 
 // Re-export the reverse direction (RoomDef → EditorRoomData) from its own module
 // so existing callers that import from editorRoomBuilder are unaffected.
@@ -63,6 +69,24 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   // indestructible solid blocks. Used only to build the initial room-load
   // wind-transmission mask (see gameRoomPixelMaterials.ts).
   const customBlockWindTransmission: RoomWindTransmissionBlockDef[] = [];
+  // Phase 2G: one entry per ELIGIBLE placement (never per cell — see
+  // RoomLiquidInteractionBlockDef's doc comment), covering ANY collision
+  // preset (solid, one-way, or non-solid) — liquid interaction has no
+  // solid-collision requirement, unlike wind transmission/contact damage.
+  const customBlockLiquidInteraction: RoomLiquidInteractionBlockDef[] = [];
+  // Phase 2G: cells already claimed by a registered liquid-interaction
+  // placement, keyed by `yBlock * someLargeStride + xBlock`. Custom block
+  // placements should not normally overlap, but this guards deterministically
+  // against malformed/legacy data: a placement whose footprint overlaps an
+  // already-claimed cell is simply not registered for liquid interaction
+  // (its other properties are unaffected) — see "Overlapping liquid
+  // modifiers" in CustomBlockSpriteSystem.md. This keeps the runtime mask's
+  // single-byte-per-cell representation always unambiguous: every non-zero
+  // mask cell belongs to exactly one placement, so a fragile placement's
+  // destruction can always safely clear its own footprint without risking an
+  // overlapping neighbor's still-active effect.
+  const claimedLiquidCells = new Set<number>();
+  const LIQUID_CELL_STRIDE = 1 << 16;
   // Phase 2B: monotonically increasing group id, unique per room, assigned
   // only to multi-cell (2x2) fragile placements so their cells can be broken
   // atomically as one logical unit (see src/sim/hazards.ts). 1x1 fragile
@@ -79,8 +103,34 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     const rawId = rawIdFromNamespaced(p.blockId);
     const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
     const behavior = resolveWallBehavior(properties ?? {
-      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough',
+      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none',
     });
+
+    // Phase 2G: liquid interaction has NO solid-collision requirement, so it
+    // must be registered BEFORE the `generateWall` early-continue below —
+    // a non-solid custom block can be a pure liquid-only barrier/drain that
+    // the player passes through freely. `registeredLiquidTier` (set only when
+    // registration actually succeeds, i.e. no overlap) is reused below when
+    // threading the tier onto this placement's breakable-block cells.
+    let registeredLiquidTier: 'seal' | 'drain' | undefined;
+    if (properties !== undefined && isEligibleForLiquidInteraction(properties)) {
+      const tier = properties.liquidInteraction as 'seal' | 'drain'; // narrowed: isEligibleForLiquidInteraction excludes 'none'
+      let overlaps = false;
+      for (let dy = 0; dy < p.tileHeight && !overlaps; dy++) {
+        for (let dx = 0; dx < p.tileWidth; dx++) {
+          if (claimedLiquidCells.has((p.yBlock + dy) * LIQUID_CELL_STRIDE + (p.xBlock + dx))) { overlaps = true; break; }
+        }
+      }
+      if (!overlaps) {
+        for (let dy = 0; dy < p.tileHeight; dy++) {
+          for (let dx = 0; dx < p.tileWidth; dx++) {
+            claimedLiquidCells.add((p.yBlock + dy) * LIQUID_CELL_STRIDE + (p.xBlock + dx));
+          }
+        }
+        customBlockLiquidInteraction.push({ xBlock: p.xBlock, yBlock: p.yBlock, wBlock: p.tileWidth, hBlock: p.tileHeight, tier });
+        registeredLiquidTier = tier;
+      }
+    }
 
     if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
 
@@ -137,9 +187,14 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       // every fragile block that doesn't modify wind, identical to
       // pre-Phase-2F data.
       const windResponse = isEligibleForWindTransmission(properties) ? properties.windResponse as 'dampen' | 'block' : undefined;
+      // Phase 2G: only set when this placement was ALSO registered above for
+      // liquid interaction (i.e. it wasn't rejected as an overlap) — lets
+      // destroyBreakableBlockCell (sim/hazards.ts) know to clear this cell's
+      // native-pixel liquid-mask region when the block breaks.
+      const liquidInteraction = registeredLiquidTier;
       if (p.tileWidth === 1 && p.tileHeight === 1) {
         customBlockBreakables.push({
-          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance, windResponse,
+          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance, windResponse, liquidInteraction,
         });
       } else {
         const groupId = nextBreakableGroupId++;
@@ -153,6 +208,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
               materialResponse,
               breakResistance,
               windResponse,
+              liquidInteraction,
             });
           }
         }
@@ -250,6 +306,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     breakableBlocks: customBlockBreakables.length > 0 ? customBlockBreakables : undefined,
     contactDamageBlocks: customBlockContactDamage.length > 0 ? customBlockContactDamage : undefined,
     windTransmissionBlocks: customBlockWindTransmission.length > 0 ? customBlockWindTransmission : undefined,
+    liquidInteractionBlocks: customBlockLiquidInteraction.length > 0 ? customBlockLiquidInteraction : undefined,
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,

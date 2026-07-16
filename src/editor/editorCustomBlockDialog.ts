@@ -29,6 +29,7 @@ import type {
   ContactDamagePreset,
   BreakResistancePreset,
   CustomBlockWindResponsePreset,
+  CustomBlockLiquidInteractionPreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
@@ -39,6 +40,7 @@ import {
   CONTACT_DAMAGE_PRESET_REGISTRY,
   BREAK_RESISTANCE_PRESET_REGISTRY,
   CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
+  CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -83,7 +85,8 @@ export function openCustomBlockDialog(
   function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
     return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
       a.materialResponse === b.materialResponse && a.contactDamage === b.contactDamage &&
-      a.breakResistance === b.breakResistance && a.windResponse === b.windResponse;
+      a.breakResistance === b.breakResistance && a.windResponse === b.windResponse &&
+      a.liquidInteraction === b.liquidInteraction;
   }
 
   function isDirty(): boolean {
@@ -273,6 +276,11 @@ export function openCustomBlockDialog(
     () => properties.windResponse,
     (v) => { properties = { ...properties, windResponse: v }; },
   );
+  const liquidInteractionCtl = makePropertyRow<CustomBlockLiquidInteractionPreset>(
+    'Liquid interaction', CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY,
+    () => properties.liquidInteraction,
+    (v) => { properties = { ...properties, liquidInteraction: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
@@ -280,6 +288,11 @@ export function openCustomBlockDialog(
   propsSection.appendChild(contactDamageCtl.row);
   propsSection.appendChild(breakResistanceCtl.row);
   propsSection.appendChild(windResponseCtl.row);
+  propsSection.appendChild(liquidInteractionCtl.row);
+  const liquidInteractionNote = document.createElement('div');
+  liquidInteractionNote.textContent = 'Affects pixel-material water (falling/flowing water particles) only — not authored water-zone buoyancy.';
+  liquidInteractionNote.style.cssText = 'font-size:9px;color:#778;margin-left:88px;margin-top:-4px;';
+  propsSection.appendChild(liquidInteractionNote);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
@@ -318,6 +331,8 @@ export function openCustomBlockDialog(
     breakResistanceCtl.desc.textContent = BREAK_RESISTANCE_PRESET_REGISTRY[properties.breakResistance].description;
     windResponseCtl.select.value = properties.windResponse;
     windResponseCtl.desc.textContent = CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY[properties.windResponse].description;
+    liquidInteractionCtl.select.value = properties.liquidInteraction;
+    liquidInteractionCtl.desc.textContent = CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY[properties.liquidInteraction].description;
     refreshCompatibilityMessage();
   }
 

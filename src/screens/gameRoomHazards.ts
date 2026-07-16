@@ -27,7 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
-import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex, windResponseTierToIndex } from '../levels/customBlockProperties';
+import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex, windResponseTierToIndex, liquidInteractionTierToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -190,6 +190,10 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     // and built-in breakable block). Only set for cells whose originating
     // custom block was ALSO eligible for wind transmission.
     world.breakableBlockWindTier[bi] = b.windResponse !== undefined ? windResponseTierToIndex(b.windResponse) + 1 : 0;
+    // Phase 2G: 0 = not a seal/drain (default — matches every pre-Phase-2G
+    // and built-in breakable block). Only set for cells whose originating
+    // custom block was ALSO eligible for liquid interaction.
+    world.breakableBlockLiquidTier[bi] = b.liquidInteraction !== undefined ? liquidInteractionTierToIndex(b.liquidInteraction) + 1 : 0;
   }
 
   // ── Custom block contact damage (Phase 2D) ───────────────────────────────

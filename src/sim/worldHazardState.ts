@@ -284,6 +284,18 @@ export interface HazardWorldState {
    * only invalidation. 0 (no effect) for every pre-Phase-2F room.
    */
   breakableBlockWindTier: Uint8Array;
+  /**
+   * Packed liquid-interaction tier per breakable-block cell (Phase 2G):
+   * 0=none (not a seal/drain), 1=seal, 2=drain. Resolved once at hazard-load
+   * time from `RoomBreakableBlockDef.liquidInteraction`. Used ONLY by
+   * `destroyBreakableBlockCell` (sim/hazards.ts) to know whether — and how —
+   * to clear this cell's native-pixel region in
+   * `world.pixelMaterialSystem.liquidMask` when the cell is destroyed. The
+   * INITIAL mask is built independently at room-load time from
+   * `RoomDef.liquidInteractionBlocks`, so this field never affects placement,
+   * only invalidation. 0 (no effect) for every pre-Phase-2G room.
+   */
+  breakableBlockLiquidTier: Uint8Array;
 
   // ── Break events (Phase 2C) ─────────────────────────────────────────────────
   /**
@@ -810,6 +822,7 @@ export function createHazardWorldState(): HazardWorldState {
     breakableBlockMaterial:        new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockResistance:      new Uint8Array(MAX_BREAKABLE_BLOCKS).fill(1), // 1 = standard default
     breakableBlockWindTier:        new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a windbreak (default)
+    breakableBlockLiquidTier:      new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a seal/drain (default)
     breakEventCount:               0,
     breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
     breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),

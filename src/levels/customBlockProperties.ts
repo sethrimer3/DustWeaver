@@ -25,8 +25,12 @@
  * Presets implemented in Phase 2F:
  *   - Wind response: passThrough | dampen | block (pixel-material wind transmission)
  *
+ * Presets implemented in Phase 2G:
+ *   - Liquid interaction: none | seal | drain (pixel-material LIQUID seal/drain — see
+ *     sim/pixelMaterials/customBlockLiquidMask.ts)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (liquids, triggers).
+ * deferred categories (triggers, water-zone interaction).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -50,6 +54,21 @@ export type BreakResistancePreset = 'weak' | 'standard' | 'reinforced';
  * response multiplier — see CustomBlockSpriteSystem.md for the full formula.
  */
 export type CustomBlockWindResponsePreset = 'passThrough' | 'dampen' | 'block';
+/**
+ * Phase 2G: how a custom block interacts with PIXEL-MATERIAL liquids (currently
+ * only water — see `getMaterialBehavior(material) === 'liquid'` in
+ * pixelMaterialTypes.ts). Entirely independent of authored water-zone buoyancy
+ * (RoomZoneDef `waterZones`), player swimming/submersion, and rendering — this
+ * property affects ONLY `PixelMaterialSystem`'s liquid particles.
+ *   - 'none' — no additional liquid behavior. A solid block still blocks
+ *     particle occupancy via the existing solid mask, as it always has.
+ *   - 'seal' — prevents pixel-material liquid from entering or crossing this
+ *     block's footprint, independently of player collision.
+ *   - 'drain' — deterministically removes pixel-material liquid that attempts
+ *     to enter this block's footprint.
+ * See sim/pixelMaterials/customBlockLiquidMask.ts for the runtime mask.
+ */
+export type CustomBlockLiquidInteractionPreset = 'none' | 'seal' | 'drain';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
@@ -58,6 +77,7 @@ export const MATERIAL_RESPONSE_PRESET_IDS: readonly MaterialResponsePreset[] = [
 export const CONTACT_DAMAGE_PRESET_IDS: readonly ContactDamagePreset[] = ['none', 'low', 'high'];
 export const BREAK_RESISTANCE_PRESET_IDS: readonly BreakResistancePreset[] = ['weak', 'standard', 'reinforced'];
 export const CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS: readonly CustomBlockWindResponsePreset[] = ['passThrough', 'dampen', 'block'];
+export const CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_IDS: readonly CustomBlockLiquidInteractionPreset[] = ['none', 'seal', 'drain'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -79,6 +99,9 @@ export function isBreakResistancePreset(v: unknown): v is BreakResistancePreset 
 }
 export function isCustomBlockWindResponsePreset(v: unknown): v is CustomBlockWindResponsePreset {
   return typeof v === 'string' && (CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS as readonly string[]).includes(v);
+}
+export function isCustomBlockLiquidInteractionPreset(v: unknown): v is CustomBlockLiquidInteractionPreset {
+  return typeof v === 'string' && (CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_IDS as readonly string[]).includes(v);
 }
 
 // ── Validated property bundle ─────────────────────────────────────────────────
@@ -121,6 +144,14 @@ export interface CustomBlockProperties {
    * `windResponseRequiresSolid` below.
    */
   readonly windResponse: CustomBlockWindResponsePreset;
+  /**
+   * Phase 2G: selects how this block interacts with pixel-material liquids.
+   * 'none' (the default) is a complete no-op — matches all pre-Phase-2G
+   * behavior exactly. Compatible with any collision preset — see
+   * CustomBlockSpriteSystem.md for the "seal/drain independent of player
+   * collision" rationale.
+   */
+  readonly liquidInteraction: CustomBlockLiquidInteractionPreset;
 }
 
 /**
@@ -139,6 +170,7 @@ export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   contactDamage: 'none',
   breakResistance: 'standard',
   windResponse: 'passThrough',
+  liquidInteraction: 'none',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -266,6 +298,24 @@ export const CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY: Readonly<Record<CustomB
   },
 };
 
+export const CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY: Readonly<Record<CustomBlockLiquidInteractionPreset, PresetMeta<CustomBlockLiquidInteractionPreset>>> = {
+  none: {
+    id: 'none',
+    label: 'None',
+    description: 'No additional liquid behavior.',
+  },
+  seal: {
+    id: 'seal',
+    label: 'Seal',
+    description: 'Blocks pixel-material liquids (e.g. water) while preserving this block’s own player collision.',
+  },
+  drain: {
+    id: 'drain',
+    label: 'Drain',
+    description: 'Removes pixel-material liquids that contact this block.',
+  },
+};
+
 // ── Numeric packing (WorldState typed arrays never store strings) ───────────
 
 /** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
@@ -333,6 +383,22 @@ export function windResponseTierToIndex(tier: 'dampen' | 'block'): number {
 /** Unpacks a Uint8Array index back into the active wind-response tier. Unknown indices default to 'dampen'. */
 export function indexToWindResponseTier(index: number): 'dampen' | 'block' {
   return index === 1 ? 'block' : 'dampen';
+}
+
+/**
+ * Packs an active CustomBlockLiquidInteractionPreset ('seal'|'drain') into a
+ * compact index for Uint8Array storage. 'none' is never stored — a block with
+ * no liquid interaction has no entry in the runtime liquid mask/per-cell
+ * arrays at all (see isEligibleForLiquidInteraction), mirroring the
+ * windResponse 'passThrough'-is-never-stored convention above.
+ */
+export function liquidInteractionTierToIndex(tier: 'seal' | 'drain'): number {
+  return tier === 'drain' ? 1 : 0;
+}
+
+/** Unpacks a Uint8Array index back into the active liquid-interaction tier. Unknown indices default to 'seal'. */
+export function indexToLiquidInteractionTier(index: number): 'seal' | 'drain' {
+  return index === 1 ? 'drain' : 'seal';
 }
 
 // ── Compatibility rules ───────────────────────────────────────────────────────
@@ -458,16 +524,17 @@ export function validateAndResolveCustomBlockProperties(
   let contactDamage: ContactDamagePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.contactDamage;
   let breakResistance: BreakResistancePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakResistance;
   let windResponse: CustomBlockWindResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.windResponse;
+  let liquidInteraction: CustomBlockLiquidInteractionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.liquidInteraction;
 
   if (raw === undefined || raw === null) {
     // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
-    // block saved before Phase 2C/2D/2E/2F) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse }, errors, fallbackUsed: false };
+    // block saved before Phase 2C/2D/2E/2F/2G) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -542,15 +609,27 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // liquidInteraction is optional even on schemaVersion-2 blocks saved before
+  // Phase 2G — absence is not an error, it just resolves to the 'none'
+  // default already assigned above (a complete no-op on the existing
+  // pixel-material liquid system).
+  if ('liquidInteraction' in r) {
+    if (isCustomBlockLiquidInteractionPreset(r['liquidInteraction'])) {
+      liquidInteraction = r['liquidInteraction'];
+    } else {
+      pushError('properties.liquidInteraction', CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_IDS.join(' | '), String(r['liquidInteraction']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance', 'windResponse']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance', 'windResponse', 'liquidInteraction']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.
@@ -650,4 +729,19 @@ export function isEligibleForContactDamage(properties: CustomBlockProperties): b
  */
 export function isEligibleForWindTransmission(properties: CustomBlockProperties): boolean {
   return properties.windResponse !== 'passThrough' && properties.collision === 'solid';
+}
+
+/**
+ * Returns true if this block should be registered with the Phase 2G
+ * liquid-interaction mask (customBlockLiquidMask). UNLIKE contactDamage and
+ * windResponse, this has NO collision requirement — a solid block already
+ * blocks particle occupancy via the existing solid mask, but 'seal' remains
+ * valid and explicit there, and a one-way or non-solid block may use 'seal'
+ * or 'drain' as a liquid-only barrier/drain while the player passes through
+ * (or over) it normally. 'none' is never eligible: it has no runtime effect,
+ * so it is simply absent from the mask, mirroring the windResponse
+ * 'passThrough'-has-no-index convention.
+ */
+export function isEligibleForLiquidInteraction(properties: CustomBlockProperties): boolean {
+  return properties.liquidInteraction !== 'none';
 }

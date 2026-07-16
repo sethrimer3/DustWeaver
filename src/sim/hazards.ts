@@ -201,6 +201,23 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
       windMask.clearRect(xWorld - half, yWorld - half, xWorld + half, yWorld + half);
     }
   }
+
+  // Phase 2G: a fragile seal/drain block must stop sealing/draining pixel-
+  // material liquid the moment it breaks — same one-tick-lag/targeted-region
+  // precedent as the wind-mask clear above (this runs inside `applyHazards`,
+  // which the tick pipeline calls after this tick's liquid step — see
+  // tick.ts — so the clear takes effect starting the NEXT tick). Each
+  // breakable-block cell is exactly one grid block (even 2x2 fragile custom
+  // blocks decompose into 4 independent 1x1 cells), so a single
+  // BLOCK_SIZE_MEDIUM square centered at (xWorld, yWorld) is always this
+  // cell's exact footprint.
+  if (world.breakableBlockLiquidTier[index] !== 0) {
+    const liquidMask = world.pixelMaterialSystem.liquidMask;
+    if (liquidMask !== null) {
+      const half = BLOCK_SIZE_MEDIUM * 0.5;
+      liquidMask.clearRect(xWorld - half, yWorld - half, xWorld + half, yWorld + half);
+    }
+  }
 }
 
 /**

@@ -14,6 +14,7 @@ import { BLOCK_SIZE_MEDIUM, type RoomDef } from '../levels/roomDef';
 import { PixelMaterialSystem } from '../sim/pixelMaterials/pixelMaterialSystem';
 import { buildSolidMaskFromWorld } from '../sim/pixelMaterials/pixelMaterialSolid';
 import { CustomBlockWindMask } from '../sim/pixelMaterials/customBlockWindMask';
+import { CustomBlockLiquidMask } from '../sim/pixelMaterials/customBlockLiquidMask';
 
 /**
  * Builds the Phase 2F wind-transmission mask from the room's registered
@@ -35,6 +36,23 @@ function buildCustomBlockWindMaskFromRoom(room: RoomDef, widthPx: number, height
   return mask;
 }
 
+/**
+ * Builds the Phase 2G liquid-interaction mask from the room's registered
+ * seal/drain placements (`RoomDef.liquidInteractionBlocks` — one entry per
+ * placement, see its doc comment). Mirrors `buildCustomBlockWindMaskFromRoom`.
+ */
+function buildCustomBlockLiquidMaskFromRoom(room: RoomDef, widthPx: number, heightPx: number): CustomBlockLiquidMask {
+  const mask = new CustomBlockLiquidMask(widthPx, heightPx);
+  for (const d of room.liquidInteractionBlocks ?? []) {
+    const x0 = d.xBlock * BLOCK_SIZE_MEDIUM;
+    const y0 = d.yBlock * BLOCK_SIZE_MEDIUM;
+    const x1 = (d.xBlock + d.wBlock) * BLOCK_SIZE_MEDIUM;
+    const y1 = (d.yBlock + d.hBlock) * BLOCK_SIZE_MEDIUM;
+    mask.markRect(x0, y0, x1, y1, d.tier === 'drain' ? 2 : 1);
+  }
+  return mask;
+}
+
 export function loadRoomPixelMaterials(world: WorldState, room: RoomDef): void {
   const widthPx = Math.max(1, Math.round(world.worldWidthWorld));
   const heightPx = Math.max(1, Math.round(world.worldHeightWorld));
@@ -42,7 +60,12 @@ export function loadRoomPixelMaterials(world: WorldState, room: RoomDef): void {
   const system = new PixelMaterialSystem(widthPx, heightPx);
   system.solid = buildSolidMaskFromWorld(world, widthPx, heightPx);
   system.windMask = buildCustomBlockWindMaskFromRoom(room, widthPx, heightPx);
+  system.liquidMask = buildCustomBlockLiquidMaskFromRoom(room, widthPx, heightPx);
   system.loadFromDefs(room.pixelMaterials ?? []);
+  // Phase 2G: authored liquid that initially overlaps a drain footprint is
+  // removed HERE, at room-init time (see `dropLiquidsOverlappingDrainMask`'s
+  // doc comment for why this policy was chosen over "remove on first step").
+  system.dropLiquidsOverlappingDrainMask();
 
   world.pixelMaterialSystem = system;
 }

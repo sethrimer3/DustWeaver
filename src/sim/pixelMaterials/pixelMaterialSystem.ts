@@ -55,6 +55,12 @@ import {
   type CustomBlockWindMask,
 } from './customBlockWindMask';
 import {
+  LIQUID_TIER_NONE,
+  LIQUID_TIER_SEAL,
+  LIQUID_TIER_DRAIN,
+  type CustomBlockLiquidMask,
+} from './customBlockLiquidMask';
+import {
   MATERIAL_SAND,
   MATERIAL_SANDSTONE,
   SLEEP_DELAY_STEPS,
@@ -96,6 +102,15 @@ export class PixelMaterialSystem {
    * registers a windbreak.
    */
   windMask: CustomBlockWindMask | null = null;
+  /**
+   * Phase 2G: native-pixel liquid-interaction mask built from the room's
+   * seal/drain custom block placements — see customBlockLiquidMask.ts. `null`
+   * (pre-Phase-2G rooms, or before a room is loaded) is treated identically
+   * to an empty mask: `stepLiquidParticle`'s fast path skips all mask lookups
+   * whenever `liquidMask === null || liquidMask.isEmpty`, so this is a
+   * complete no-op unless a room actually registers a seal/drain block.
+   */
+  liquidMask: CustomBlockLiquidMask | null = null;
 
   /** One entry per occupied CELL (a size-N particle owns N*N keys, all pointing to the same particle). */
   private readonly occupancy = new Map<number, PixelMaterialParticle>();
@@ -648,22 +663,28 @@ export class PixelMaterialSystem {
    * choices don't always agree — still fully deterministic, no RNG).
    * Liquids never swap with sand — they can only move into genuinely empty,
    * non-solid cells, so water flows around sand rather than through it.
+   *
+   * Every candidate destination goes through `tryLiquidMove` — the single
+   * authoritative liquid-movement-eligibility pathway (Phase 2G) — instead of
+   * calling `tryMoveParticle` directly, so seal/drain custom blocks are
+   * enforced in exactly one place rather than duplicated across the five
+   * movement attempts below.
    */
   private stepLiquidParticle(p: PixelMaterialParticle): void {
     this.decayWindMomentum(p);
 
     // 1. Gravity: straight down.
-    if (this.tryMoveParticle(p, p.x, p.y + 1)) return;
+    if (this.tryLiquidMove(p, p.x, p.y + 1)) return;
 
     // 2. Diagonal fall, alternating preference.
     const leftFirst = preferLeftFirst(this.stepCounter, p.x);
     const dx1 = leftFirst ? -1 : 1;
     const dx2 = -dx1;
-    if (this.tryMoveParticle(p, p.x + dx1, p.y + 1)) return;
-    if (this.tryMoveParticle(p, p.x + dx2, p.y + 1)) return;
+    if (this.tryLiquidMove(p, p.x + dx1, p.y + 1)) return;
+    if (this.tryLiquidMove(p, p.x + dx2, p.y + 1)) return;
 
     // 3. Wind-driven upward displacement.
-    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.tryMoveParticle(p, p.x, p.y - 1)) return;
+    if (p.windVelY < -WIND_MOMENTUM_EPSILON && this.tryLiquidMove(p, p.x, p.y - 1)) return;
 
     // 4. Horizontal spread — wind-biased direction if momentum is present,
     //    otherwise a deterministic alternation independent of the diagonal
@@ -671,11 +692,99 @@ export class PixelMaterialSystem {
     const dir = p.windVelX !== 0
       ? (p.windVelX > 0 ? 1 : -1)
       : (preferLeftFirst(this.stepCounter + 1, p.x) ? -1 : 1);
-    if (this.tryMoveParticle(p, p.x + dir, p.y)) return;
-    if (this.tryMoveParticle(p, p.x - dir, p.y)) return;
+    if (this.tryLiquidMove(p, p.x + dir, p.y)) return;
+    if (this.tryLiquidMove(p, p.x - dir, p.y)) return;
 
     // 5. No valid movement — remain stationary; count toward sleep.
     this.countUnchangedAndMaybeSleep(p);
+  }
+
+  /**
+   * Phase 2G: the one shared "can this LIQUID particle move here" gate, used
+   * by every candidate destination in `stepLiquidParticle`. Returns true if
+   * the movement attempt was CONSUMED — either the particle actually moved,
+   * or it was drained (removed) — so the caller's `||` cascade stops exactly
+   * like a successful `tryMoveParticle` would.
+   *
+   * Fast path: when `liquidMask` is null or empty (every pre-Phase-2G room,
+   * and any room with no seal/drain blocks), this is a direct passthrough to
+   * `tryMoveParticle` with zero extra work — no allocation, no lookup.
+   *
+   * Seal: if ANY cell of the destination footprint is sealed, the whole move
+   * is rejected outright (never reaches `tryMoveParticle`) — this is what
+   * makes a sealed cell unavailable to liquid regardless of direction
+   * (down/diagonal/horizontal), independent of whether the cell is otherwise
+   * empty and non-solid.
+   *
+   * Drain: only triggers if the destination is otherwise reachable by the
+   * EXISTING rules (in bounds, not solid, not occupied by anything but `p`
+   * itself — via `isRegionFree`) — i.e. the particle "attempts to enter" the
+   * drain cell. A solid+drain block therefore never drains anything, since
+   * the particle could never reach it in the first place (solid mask already
+   * blocks it) — the drain tier is simply moot there, not a special case.
+   */
+  private tryLiquidMove(p: PixelMaterialParticle, nx: number, ny: number): boolean {
+    const mask = this.liquidMask;
+    if (mask !== null && !mask.isEmpty) {
+      const size = getMaterialFootprintSize(p.material);
+      let tier = LIQUID_TIER_NONE;
+      for (let dy = 0; dy < size; dy++) {
+        for (let dx = 0; dx < size; dx++) {
+          const t = mask.tierAt(nx + dx, ny + dy);
+          if (t > tier) tier = t;
+        }
+      }
+      if (tier === LIQUID_TIER_SEAL) return false;
+      if (tier === LIQUID_TIER_DRAIN) {
+        if (!this.isRegionFree(nx, ny, size, p)) return false;
+        this.drainParticle(p);
+        return true;
+      }
+    }
+    return this.tryMoveParticle(p, nx, ny);
+  }
+
+  /**
+   * Phase 2G: removes a liquid particle entirely (occupancy, particle
+   * membership, active membership) instead of moving it — used when
+   * `tryLiquidMove` detects the particle attempting to enter a drain cell.
+   * Mirrors `erase()`'s bookkeeping exactly (this IS effectively "erase this
+   * particle at its current position"), including waking neighbors so an
+   * adjacent settled particle re-evaluates now that support/contents changed.
+   * Atomic: occupancy, `particles`, and `activeSet` are updated together, so
+   * there is no window where stale state could be observed, and the caller
+   * treats this as a terminal outcome for the step (no further movement
+   * attempts against an already-removed particle).
+   */
+  private drainParticle(p: PixelMaterialParticle): void {
+    const size = getMaterialFootprintSize(p.material);
+    const x = p.x;
+    const y = p.y;
+    this.clearFootprintKeys(x, y, size);
+    this.particles.delete(p);
+    this.activeSet.delete(p);
+    this.wakeAround(x, y, size);
+  }
+
+  /**
+   * Phase 2G: room-load-time policy for authored liquid that initially
+   * overlaps a drain footprint — removed HERE, at initialization, rather than
+   * left to disappear on the first simulation step (see
+   * gameRoomPixelMaterials.ts, which calls this once right after
+   * `loadFromDefs`). Chosen over the "remove on first step" alternative so a
+   * freshly loaded room never renders a frame of liquid sitting inside a
+   * drain it's about to vanish from. Only affects particles whose material
+   * behavior is `'liquid'` — sand/sandstone are never removed by a drain.
+   * Snapshots the particle list first (via `Array.from`) since `drainParticle`
+   * mutates `this.particles` during iteration.
+   */
+  dropLiquidsOverlappingDrainMask(): void {
+    const mask = this.liquidMask;
+    if (mask === null || mask.isEmpty) return;
+    for (const p of Array.from(this.particles)) {
+      if (getMaterialBehavior(p.material) !== 'liquid') continue;
+      if (mask.tierAt(p.x, p.y) === LIQUID_TIER_DRAIN) this.drainParticle(p);
+    }
   }
 
   /**

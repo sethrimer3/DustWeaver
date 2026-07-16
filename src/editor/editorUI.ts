@@ -815,8 +815,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
                 : '';
               // 'passThrough' is the silent default (matches pre-Phase-2F behavior) so it gets no badge.
               const windBadge = { passThrough: '', dampen: ' · Dampens wind', block: ' · Windbreak' }[def.properties.windResponse];
-              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}${windBadge}`;
-              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance/wind-response properties for this block.';
+              // 'none' is the silent default (matches pre-Phase-2G behavior) so it gets no badge.
+              const liquidBadge = { none: '', seal: ' · Seals liquid', drain: ' · Drain' }[def.properties.liquidInteraction];
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}${windBadge}${liquidBadge}`;
+              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance/wind-response/liquid-interaction properties for this block.';
 
               info.appendChild(nameEl);
               info.appendChild(sizeEl);

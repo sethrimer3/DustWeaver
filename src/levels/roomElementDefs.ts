@@ -100,6 +100,19 @@ export interface RoomBreakableBlockDef {
    * per-cell optional field above.
    */
   windResponse?: 'dampen' | 'block';
+  /**
+   * Phase 2G: the resolved liquid-interaction tier for this breakable cell,
+   * threaded from the originating custom block's `properties.liquidInteraction`
+   * when it is 'seal' or 'drain' (never 'none' — see
+   * isEligibleForLiquidInteraction in customBlockProperties.ts). Used ONLY to
+   * invalidate this cell's native-pixel liquid-mask region when it is
+   * destroyed (see destroyBreakableBlockCell in sim/hazards.ts) — the initial
+   * mask itself is built once at room-load time from
+   * `RoomDef.liquidInteractionBlocks`, independently of this per-cell field.
+   * Omitted for pre-Phase-2G data and for built-in (non-custom-block)
+   * breakable blocks, matching every other per-cell optional field above.
+   */
+  liquidInteraction?: 'seal' | 'drain';
 }
 
 /**
@@ -125,6 +138,29 @@ export interface RoomWindTransmissionBlockDef {
   hBlock: number;
   /** Which engine-owned wind-transmission tier this placement applies. */
   tier: 'dampen' | 'block';
+}
+
+/**
+ * Phase 2G: a custom-block placement that seals or drains pixel-material
+ * liquid (currently water — see PixelMaterialSystem.stepLiquidParticle and
+ * sim/pixelMaterials/customBlockLiquidMask.ts). Registered ONCE PER PLACEMENT
+ * (not per cell), mirroring RoomWindTransmissionBlockDef — the liquid mask is
+ * a static native-pixel region marked at room-load time from the placement's
+ * full footprint. UNLIKE RoomWindTransmissionBlockDef, this is present for
+ * ANY collision preset (solid, one-way, or non-solid) — liquid interaction
+ * has no solid-collision requirement (see isEligibleForLiquidInteraction).
+ */
+export interface RoomLiquidInteractionBlockDef {
+  /** Left edge of the placement's footprint (block units). */
+  xBlock: number;
+  /** Top edge of the placement's footprint (block units). */
+  yBlock: number;
+  /** Footprint width (block units) — 1 or 2. */
+  wBlock: number;
+  /** Footprint height (block units) — 1 or 2. */
+  hBlock: number;
+  /** Which engine-owned liquid-interaction tier this placement applies. */
+  tier: 'seal' | 'drain';
 }
 
 /**
