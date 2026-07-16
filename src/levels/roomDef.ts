@@ -34,6 +34,7 @@ import type {
   RoomContactDamageBlockDef,
   RoomWindTransmissionBlockDef,
   RoomLiquidInteractionBlockDef,
+  RoomCustomBlockWindVentDef,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
   RoomKineticBlockDef,
@@ -512,6 +513,7 @@ export type {
   RoomContactDamageBlockDef,
   RoomWindTransmissionBlockDef,
   RoomLiquidInteractionBlockDef,
+  RoomCustomBlockWindVentDef,
   CrumbleVariant,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
@@ -759,6 +761,12 @@ export interface RoomDef {
    * RoomLiquidInteractionBlockDef's doc comment.
    */
   liquidInteractionBlocks?: readonly RoomLiquidInteractionBlockDef[];
+  /**
+   * Custom-block placements that continuously emit directional pixel-material
+   * wind (Phase 2H). One entry per placement (not per cell) — see
+   * RoomCustomBlockWindVentDef's doc comment.
+   */
+  windVentBlocks?: readonly RoomCustomBlockWindVentDef[];
   /** Crumble blocks that collapse on first player contact. */
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Bounce pad blocks that reflect the player's velocity on contact. */

@@ -218,6 +218,22 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
       liquidMask.clearRect(xWorld - half, yWorld - half, xWorld + half, yWorld + half);
     }
   }
+
+  // Phase 2H: a fragile wind-vent block must stop emitting the moment it
+  // breaks. Uses an explicit runtime OWNERSHIP LINK (the index resolved once
+  // at hazard-load time in gameRoomHazards.ts), not a position-matching scan
+  // — so all four cells of a grouped 2x2 fragile vent (which all carry the
+  // SAME `breakableBlockWindVentIndex`) independently but idempotently
+  // deactivate the one shared logical vent, and contacting/destroying any of
+  // them never produces more than one deactivation. `applyCustomBlockWindVents`
+  // (called earlier this tick, before this hazard pass — see tick.ts) already
+  // emitted this tick's impulse before the vent was destroyed, so — exactly
+  // like the wind/liquid mask clears above — this takes effect starting the
+  // NEXT tick, not retroactively.
+  const windVentIndex = world.breakableBlockWindVentIndex[index];
+  if (windVentIndex >= 0 && windVentIndex < world.windVentCount) {
+    world.windVentActiveFlag[windVentIndex] = 0;
+  }
 }
 
 /**

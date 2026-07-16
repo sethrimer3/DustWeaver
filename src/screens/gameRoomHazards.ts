@@ -27,7 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
-import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex, windResponseTierToIndex, liquidInteractionTierToIndex } from '../levels/customBlockProperties';
+import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex, windResponseTierToIndex, liquidInteractionTierToIndex, windEmissionDirectionToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -80,6 +80,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.fireflyCount = 0;
   world.isPlayerInWaterFlag = 0;
   world.dustPileCount = 0;
+  world.windVentCount = 0;
 
   // ── Spikes ────────────────────────────────────────────────────────────────
   const spikeDefs = room.spikes ?? [];
@@ -136,6 +137,23 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
 
   // Invalidate the liquid body render cache whenever zones are (re)loaded.
   markLiquidBodiesDirty();
+
+  // ── Custom-block wind vents (Phase 2H) ───────────────────────────────────
+  // One runtime slot per registered placement (see RoomCustomBlockWindVentDef's
+  // doc comment) — room-array order here matches the order editorRoomBuilder.ts
+  // assigned as `windVentIndex` on each vent's breakable-block cells (if any),
+  // so no separate lookup/remap is needed below.
+  const windVentDefs = room.windVentBlocks ?? [];
+  for (let i = 0; i < windVentDefs.length && world.windVentCount < world.windVentXWorld.length; i++) {
+    const v = windVentDefs[i];
+    const vi = world.windVentCount++;
+    world.windVentXWorld[vi] = v.xBlock * BLOCK_SIZE_MEDIUM;
+    world.windVentYWorld[vi] = v.yBlock * BLOCK_SIZE_MEDIUM;
+    world.windVentWWorld[vi] = v.wBlock * BLOCK_SIZE_MEDIUM;
+    world.windVentHWorld[vi] = v.hBlock * BLOCK_SIZE_MEDIUM;
+    world.windVentDirection[vi] = windEmissionDirectionToIndex(v.direction);
+    world.windVentActiveFlag[vi] = 1;
+  }
 
   // ── Breakable blocks ──────────────────────────────────────────────────────
   // Each breakable block is added as a wall AND tracked in the breakable arrays.
@@ -194,6 +212,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     // and built-in breakable block). Only set for cells whose originating
     // custom block was ALSO eligible for liquid interaction.
     world.breakableBlockLiquidTier[bi] = b.liquidInteraction !== undefined ? liquidInteractionTierToIndex(b.liquidInteraction) + 1 : 0;
+    // Phase 2H: -1 = not a wind-vent cell (default). Only set for cells whose
+    // originating custom block was ALSO eligible for wind emission — the
+    // index directly addresses `world.windVentActiveFlag` etc. above, no
+    // position-matching scan needed at destruction time.
+    world.breakableBlockWindVentIndex[bi] = b.windVentIndex ?? -1;
   }
 
   // ── Custom block contact damage (Phase 2D) ───────────────────────────────

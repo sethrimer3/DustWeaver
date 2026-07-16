@@ -15,7 +15,7 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef, RoomContactDamageBlockDef, RoomWindTransmissionBlockDef, RoomLiquidInteractionBlockDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef, RoomContactDamageBlockDef, RoomWindTransmissionBlockDef, RoomLiquidInteractionBlockDef, RoomCustomBlockWindVentDef } from '../levels/roomDef';
 import type { EditorRoomData } from './editorState';
 import { stringToParticleKind } from './roomJsonSchema';
 import { buildCompleteBoundaryWalls } from '../levels/roomBoundaryWalls';
@@ -27,6 +27,7 @@ import {
   isEligibleForContactDamage,
   isEligibleForWindTransmission,
   isEligibleForLiquidInteraction,
+  isEligibleForWindVent,
 } from '../levels/customBlockProperties';
 
 // Re-export the reverse direction (RoomDef → EditorRoomData) from its own module
@@ -87,6 +88,14 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   // overlapping neighbor's still-active effect.
   const claimedLiquidCells = new Set<number>();
   const LIQUID_CELL_STRIDE = 1 << 16;
+  // Phase 2H: one entry per ELIGIBLE placement (never per cell — see
+  // RoomCustomBlockWindVentDef's doc comment), covering ANY collision preset
+  // — wind emission has no solid-collision requirement, exactly like liquid
+  // interaction. No overlap-rejection is needed here (unlike the liquid
+  // mask): each vent is an independent point-source registration, not a
+  // shared single-byte-per-cell mask, so two overlapping vent footprints
+  // simply both emit independently with no ambiguity to resolve.
+  const customBlockWindVents: RoomCustomBlockWindVentDef[] = [];
   // Phase 2B: monotonically increasing group id, unique per room, assigned
   // only to multi-cell (2x2) fragile placements so their cells can be broken
   // atomically as one logical unit (see src/sim/hazards.ts). 1x1 fragile
@@ -103,7 +112,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     const rawId = rawIdFromNamespaced(p.blockId);
     const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
     const behavior = resolveWallBehavior(properties ?? {
-      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none',
+      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough', liquidInteraction: 'none', windEmission: 'none',
     });
 
     // Phase 2G: liquid interaction has NO solid-collision requirement, so it
@@ -130,6 +139,20 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
         customBlockLiquidInteraction.push({ xBlock: p.xBlock, yBlock: p.yBlock, wBlock: p.tileWidth, hBlock: p.tileHeight, tier });
         registeredLiquidTier = tier;
       }
+    }
+
+    // Phase 2H: wind emission has NO solid-collision requirement either, so
+    // it must also be registered BEFORE the `generateWall` early-continue —
+    // a non-solid custom block can be a purely visible vent the player walks
+    // through. `registeredWindVentIndex` (the vent's position in
+    // `customBlockWindVents`, i.e. its room-local runtime index) is reused
+    // below when threading it onto this placement's breakable-block cells so
+    // `destroyBreakableBlockCell` can deactivate the correct vent.
+    let registeredWindVentIndex: number | undefined;
+    if (properties !== undefined && isEligibleForWindVent(properties)) {
+      const direction = properties.windEmission as 'left' | 'right' | 'up' | 'down'; // narrowed: isEligibleForWindVent excludes 'none'
+      registeredWindVentIndex = customBlockWindVents.length;
+      customBlockWindVents.push({ xBlock: p.xBlock, yBlock: p.yBlock, wBlock: p.tileWidth, hBlock: p.tileHeight, direction });
     }
 
     if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
@@ -192,9 +215,13 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       // destroyBreakableBlockCell (sim/hazards.ts) know to clear this cell's
       // native-pixel liquid-mask region when the block breaks.
       const liquidInteraction = registeredLiquidTier;
+      // Phase 2H: only set when this placement was ALSO registered above for
+      // wind emission — lets destroyBreakableBlockCell (sim/hazards.ts)
+      // deactivate the correct room-local vent index when the block breaks.
+      const windVentIndex = registeredWindVentIndex;
       if (p.tileWidth === 1 && p.tileHeight === 1) {
         customBlockBreakables.push({
-          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance, windResponse, liquidInteraction,
+          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance, windResponse, liquidInteraction, windVentIndex,
         });
       } else {
         const groupId = nextBreakableGroupId++;
@@ -209,6 +236,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
               breakResistance,
               windResponse,
               liquidInteraction,
+              windVentIndex,
             });
           }
         }
@@ -307,6 +335,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     contactDamageBlocks: customBlockContactDamage.length > 0 ? customBlockContactDamage : undefined,
     windTransmissionBlocks: customBlockWindTransmission.length > 0 ? customBlockWindTransmission : undefined,
     liquidInteractionBlocks: customBlockLiquidInteraction.length > 0 ? customBlockLiquidInteraction : undefined,
+    windVentBlocks: customBlockWindVents.length > 0 ? customBlockWindVents : undefined,
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,

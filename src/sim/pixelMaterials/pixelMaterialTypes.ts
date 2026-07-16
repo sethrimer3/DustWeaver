@@ -230,4 +230,23 @@ export interface WindForceParams {
   /** 0 = no falloff (uniform within radius), 1 = full linear falloff to 0 at the edge. Default 1. */
   readonly falloff?: number;
   readonly sourceId?: string;
+  /**
+   * Phase 2H: optional deterministic forward-only directional gate, for
+   * custom-block wind vents (see customBlockWindVents.ts). Both `dirX` and
+   * `dirY` must form a UNIT vector when provided together; a candidate cell
+   * at offset (dx, dy) from the center is affected only if the angle between
+   * (dx, dy) and (dirX, dirY) is within `cosHalfFanAngle` of parallel (i.e.
+   * `dot((dx,dy)/|(dx,dy)|, (dirX,dirY)) >= cosHalfFanAngle`) — an oriented
+   * cone intersected with the existing circular radius+falloff region, so
+   * "forward range" is just `radiusPx` and "lateral fan width" is just this
+   * angle, with NO new geometry primitive. Omitted (the default for every
+   * existing caller — movement wind, tests, etc.) disables the gate entirely,
+   * so every cell within `radiusPx` is affected exactly as before Phase 2H.
+   * A cell exactly at the center (zero-length offset) always counts as
+   * "forward" (undefined direction, never excluded).
+   */
+  readonly dirX?: number;
+  readonly dirY?: number;
+  /** Cosine of the half-angle of the forward cone. Ignored unless `dirX`/`dirY` are set. Defaults to 0 (a full forward half-plane, 90° each side) when `dirX`/`dirY` are set but this is omitted. */
+  readonly cosHalfFanAngle?: number;
 }

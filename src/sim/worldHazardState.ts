@@ -40,6 +40,14 @@ export const MAX_CRUMBLE_BLOCKS = 32;
 export const MAX_BOUNCE_PADS = 64;
 export const MAX_GRAPPLE_CARRY_BLOCKS = 64;
 export const MAX_PHANTASMAL_TILES = 512;
+/**
+ * Maximum number of custom-block wind-vent emitters per room (Phase 2H).
+ * Only ONE entry per logical placement (never per cell — see
+ * RoomCustomBlockWindVentDef's doc comment), so this is generously above what
+ * any real room would place, matching MAX_BREAKABLE_BLOCKS/
+ * MAX_CONTACT_DAMAGE_BLOCKS's scale.
+ */
+export const MAX_CUSTOM_BLOCK_WIND_VENTS = 32;
 
 import { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
 export { MAX_KINETIC_BLOCKS } from './kineticBlocks/kineticBlockTypes';
@@ -296,6 +304,33 @@ export interface HazardWorldState {
    * only invalidation. 0 (no effect) for every pre-Phase-2G room.
    */
   breakableBlockLiquidTier: Uint8Array;
+  /**
+   * Room-local runtime wind-vent index per breakable-block cell (Phase 2H),
+   * or -1 if this cell is not a wind-vent emitter. Resolved once at
+   * hazard-load time from `RoomBreakableBlockDef.windVentIndex`. Used ONLY by
+   * `destroyBreakableBlockCell` (sim/hazards.ts) to deactivate the indexed
+   * entry in `windVentActiveFlag` — an explicit ownership link (not a
+   * position-matching scan), so all four cells of a grouped 2x2 fragile vent
+   * share the SAME index and idempotently deactivate one shared logical
+   * vent. -1 (no effect) for every pre-Phase-2H room and every non-vent cell.
+   */
+  breakableBlockWindVentIndex: Int16Array;
+
+  // ── Custom-block wind vents (Phase 2H) ───────────────────────────────────────
+  /** Number of registered wind-vent emitters this room (bounded by MAX_CUSTOM_BLOCK_WIND_VENTS). */
+  windVentCount: number;
+  /** Left edge (world units) of each vent's owning placement footprint. */
+  windVentXWorld: Float32Array;
+  /** Top edge (world units) of each vent's owning placement footprint. */
+  windVentYWorld: Float32Array;
+  /** Footprint width (world units) of each vent's owning placement. */
+  windVentWWorld: Float32Array;
+  /** Footprint height (world units) of each vent's owning placement. */
+  windVentHWorld: Float32Array;
+  /** Packed emission direction per vent: 0=left, 1=right, 2=up, 3=down (see windEmissionDirectionToIndex). */
+  windVentDirection: Uint8Array;
+  /** 1 = actively emitting, 0 = inactive (broken, or never active). Indestructible/non-fragile vents stay 1 forever. */
+  windVentActiveFlag: Uint8Array;
 
   // ── Break events (Phase 2C) ─────────────────────────────────────────────────
   /**
@@ -823,6 +858,15 @@ export function createHazardWorldState(): HazardWorldState {
     breakableBlockResistance:      new Uint8Array(MAX_BREAKABLE_BLOCKS).fill(1), // 1 = standard default
     breakableBlockWindTier:        new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a windbreak (default)
     breakableBlockLiquidTier:      new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a seal/drain (default)
+    breakableBlockWindVentIndex:   new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
+
+    windVentCount: 0,
+    windVentXWorld:    new Float32Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
+    windVentYWorld:    new Float32Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
+    windVentWWorld:    new Float32Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
+    windVentHWorld:    new Float32Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
+    windVentDirection: new Uint8Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
+    windVentActiveFlag: new Uint8Array(MAX_CUSTOM_BLOCK_WIND_VENTS),
     breakEventCount:               0,
     breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
     breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),

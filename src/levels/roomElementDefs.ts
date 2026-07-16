@@ -113,6 +113,18 @@ export interface RoomBreakableBlockDef {
    * breakable blocks, matching every other per-cell optional field above.
    */
   liquidInteraction?: 'seal' | 'drain';
+  /**
+   * Phase 2H: room-local runtime index into `WorldState`'s wind-vent arrays
+   * (see `RoomCustomBlockWindVentDef`), set only when the originating custom
+   * block was ALSO eligible for wind emission (`isEligibleForWindVent`).
+   * `destroyBreakableBlockCell` (sim/hazards.ts) uses this to deactivate the
+   * indexed vent the moment this cell breaks — an explicit ownership link,
+   * not a position-matching scan, so a grouped 2x2 fragile vent's four cells
+   * (which all carry the SAME index) each independently but idempotently
+   * deactivate the one shared logical vent. Omitted for pre-Phase-2H data,
+   * non-vent blocks, and built-in (non-custom-block) breakable blocks.
+   */
+  windVentIndex?: number;
 }
 
 /**
@@ -161,6 +173,31 @@ export interface RoomLiquidInteractionBlockDef {
   hBlock: number;
   /** Which engine-owned liquid-interaction tier this placement applies. */
   tier: 'seal' | 'drain';
+}
+
+/**
+ * Phase 2H: a custom-block placement that continuously emits directional
+ * pixel-material wind from one face (see
+ * sim/pixelMaterials/customBlockWindVents.ts and
+ * PixelMaterialSystem.applyWindForce's directional-gate extension).
+ * Registered ONCE PER PLACEMENT (not per cell), mirroring
+ * RoomWindTransmissionBlockDef/RoomLiquidInteractionBlockDef — a 2x2 vent
+ * emits from the center of its complete two-tile-wide face, never once per
+ * occupied tile. Present for ANY collision preset (solid, one-way, or
+ * non-solid) — wind emission has no solid-collision requirement, exactly
+ * like liquid interaction (see isEligibleForWindVent).
+ */
+export interface RoomCustomBlockWindVentDef {
+  /** Left edge of the placement's footprint (block units). */
+  xBlock: number;
+  /** Top edge of the placement's footprint (block units). */
+  yBlock: number;
+  /** Footprint width (block units) — 1 or 2. */
+  wBlock: number;
+  /** Footprint height (block units) — 1 or 2. */
+  hBlock: number;
+  /** Which face this vent emits from. */
+  direction: 'left' | 'right' | 'up' | 'down';
 }
 
 /**

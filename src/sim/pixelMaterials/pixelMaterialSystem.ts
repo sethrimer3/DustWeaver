@@ -382,10 +382,21 @@ export class PixelMaterialSystem {
    * with no dampen/block blocks), `transmission` is always exactly 1 and NO
    * ray trace runs at all (see the fast-path check below) — byte-identical
    * to pre-Phase-2F behavior.
+   *
+   * Phase 2H directional gate: when `params.dirX`/`params.dirY` are set (only
+   * `applyCustomBlockWindVents` does this — see customBlockWindVents.ts),
+   * each candidate cell must additionally fall within the forward cone (see
+   * `WindForceParams`'s doc comment) or it is skipped entirely — no force, no
+   * wake, exactly as if it were outside `radiusPx`. This reuses the same
+   * `dist` value already computed for the falloff check (no extra sqrt), and
+   * every existing caller (movement wind, direct test calls) omits
+   * `dirX`/`dirY`, so the gate is a single skipped `undefined` check for them
+   * — behaviorally unchanged.
    */
   applyWindForce(params: WindForceParams): void {
-    const { centerXPx, centerYPx, radiusPx, forceX, forceY } = params;
+    const { centerXPx, centerYPx, radiusPx, forceX, forceY, dirX, dirY } = params;
     const falloff = params.falloff ?? 1;
+    const cosHalfFanAngle = params.cosHalfFanAngle ?? 0;
     const affected = this.windAffectedScratch;
     affected.clear();
     if (radiusPx <= 0) return;
@@ -403,6 +414,10 @@ export class PixelMaterialSystem {
         const dy = y - centerYPx;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist > radiusPx) continue;
+        if (dirX !== undefined && dirY !== undefined && dist > 0) {
+          const cosAngle = (dx * dirX + dy * dirY) / dist;
+          if (cosAngle < cosHalfFanAngle) continue;
+        }
         const t = radiusPx > 0 ? dist / radiusPx : 0;
         const strength = 1 - falloff * t;
         if (strength <= 0) continue;

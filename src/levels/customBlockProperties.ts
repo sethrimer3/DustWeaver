@@ -29,8 +29,13 @@
  *   - Liquid interaction: none | seal | drain (pixel-material LIQUID seal/drain — see
  *     sim/pixelMaterials/customBlockLiquidMask.ts)
  *
+ * Presets implemented in Phase 2H:
+ *   - Wind emission: none | left | right | up | down (continuous directional
+ *     pixel-material wind vent — see sim/pixelMaterials/customBlockWindVents.ts)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (triggers, water-zone interaction).
+ * deferred categories (triggers, water-zone interaction, multi-tier wind
+ * vent strength).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -69,6 +74,16 @@ export type CustomBlockWindResponsePreset = 'passThrough' | 'dampen' | 'block';
  * See sim/pixelMaterials/customBlockLiquidMask.ts for the runtime mask.
  */
 export type CustomBlockLiquidInteractionPreset = 'none' | 'seal' | 'drain';
+/**
+ * Phase 2H: continuous directional pixel-material wind EMISSION from a custom
+ * block's face. Distinct concept from BOTH `windResponse` (how much of an
+ * external force is transmitted THROUGH this block) and the per-material
+ * `getMaterialWindResponse` (how reactive a material itself is) — this
+ * property makes the block itself a wind SOURCE, reusing the exact same
+ * `PixelMaterialSystem.applyWindForce` primitive those other two concepts
+ * already flow through. 'none' (the default) emits nothing.
+ */
+export type CustomBlockWindEmissionPreset = 'none' | 'left' | 'right' | 'up' | 'down';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
@@ -78,6 +93,7 @@ export const CONTACT_DAMAGE_PRESET_IDS: readonly ContactDamagePreset[] = ['none'
 export const BREAK_RESISTANCE_PRESET_IDS: readonly BreakResistancePreset[] = ['weak', 'standard', 'reinforced'];
 export const CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS: readonly CustomBlockWindResponsePreset[] = ['passThrough', 'dampen', 'block'];
 export const CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_IDS: readonly CustomBlockLiquidInteractionPreset[] = ['none', 'seal', 'drain'];
+export const CUSTOM_BLOCK_WIND_EMISSION_PRESET_IDS: readonly CustomBlockWindEmissionPreset[] = ['none', 'left', 'right', 'up', 'down'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -102,6 +118,9 @@ export function isCustomBlockWindResponsePreset(v: unknown): v is CustomBlockWin
 }
 export function isCustomBlockLiquidInteractionPreset(v: unknown): v is CustomBlockLiquidInteractionPreset {
   return typeof v === 'string' && (CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_IDS as readonly string[]).includes(v);
+}
+export function isCustomBlockWindEmissionPreset(v: unknown): v is CustomBlockWindEmissionPreset {
+  return typeof v === 'string' && (CUSTOM_BLOCK_WIND_EMISSION_PRESET_IDS as readonly string[]).includes(v);
 }
 
 // ── Validated property bundle ─────────────────────────────────────────────────
@@ -152,6 +171,14 @@ export interface CustomBlockProperties {
    * collision" rationale.
    */
   readonly liquidInteraction: CustomBlockLiquidInteractionPreset;
+  /**
+   * Phase 2H: selects which face (if any) this block continuously emits
+   * pixel-material wind from. 'none' (the default) is a complete no-op —
+   * matches all pre-Phase-2H behavior exactly. Compatible with any collision
+   * preset, any breakability, and any other property — see
+   * CustomBlockSpriteSystem.md for the full compatibility matrix.
+   */
+  readonly windEmission: CustomBlockWindEmissionPreset;
 }
 
 /**
@@ -171,6 +198,7 @@ export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   breakResistance: 'standard',
   windResponse: 'passThrough',
   liquidInteraction: 'none',
+  windEmission: 'none',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -316,6 +344,34 @@ export const CUSTOM_BLOCK_LIQUID_INTERACTION_PRESET_REGISTRY: Readonly<Record<Cu
   },
 };
 
+export const CUSTOM_BLOCK_WIND_EMISSION_PRESET_REGISTRY: Readonly<Record<CustomBlockWindEmissionPreset, PresetMeta<CustomBlockWindEmissionPreset>>> = {
+  none: {
+    id: 'none',
+    label: 'None',
+    description: 'Emits no wind.',
+  },
+  left: {
+    id: 'left',
+    label: 'Left',
+    description: 'Continuously emits pixel-material wind from the left face.',
+  },
+  right: {
+    id: 'right',
+    label: 'Right',
+    description: 'Continuously emits pixel-material wind from the right face.',
+  },
+  up: {
+    id: 'up',
+    label: 'Up',
+    description: 'Continuously emits pixel-material wind from the upper face.',
+  },
+  down: {
+    id: 'down',
+    label: 'Down',
+    description: 'Continuously emits pixel-material wind from the lower face.',
+  },
+};
+
 // ── Numeric packing (WorldState typed arrays never store strings) ───────────
 
 /** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
@@ -399,6 +455,32 @@ export function liquidInteractionTierToIndex(tier: 'seal' | 'drain'): number {
 /** Unpacks a Uint8Array index back into the active liquid-interaction tier. Unknown indices default to 'seal'. */
 export function indexToLiquidInteractionTier(index: number): 'seal' | 'drain' {
   return index === 1 ? 'drain' : 'seal';
+}
+
+/**
+ * Packs an active CustomBlockWindEmissionPreset direction ('left'|'right'|
+ * 'up'|'down') into a compact index for Uint8Array/room-array storage.
+ * 'none' is never stored — a block with no wind emission has no entry in the
+ * runtime vent arrays at all (see isEligibleForWindVent), mirroring the
+ * windResponse 'passThrough'-has-no-index convention.
+ */
+export function windEmissionDirectionToIndex(direction: 'left' | 'right' | 'up' | 'down'): number {
+  switch (direction) {
+    case 'left': return 0;
+    case 'right': return 1;
+    case 'up': return 2;
+    case 'down': return 3;
+  }
+}
+
+/** Unpacks a packed index back into the active wind-emission direction. Unknown indices default to 'left'. */
+export function indexToWindEmissionDirection(index: number): 'left' | 'right' | 'up' | 'down' {
+  switch (index) {
+    case 1: return 'right';
+    case 2: return 'up';
+    case 3: return 'down';
+    default: return 'left';
+  }
 }
 
 // ── Compatibility rules ───────────────────────────────────────────────────────
@@ -525,16 +607,17 @@ export function validateAndResolveCustomBlockProperties(
   let breakResistance: BreakResistancePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakResistance;
   let windResponse: CustomBlockWindResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.windResponse;
   let liquidInteraction: CustomBlockLiquidInteractionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.liquidInteraction;
+  let windEmission: CustomBlockWindEmissionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.windEmission;
 
   if (raw === undefined || raw === null) {
     // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
-    // block saved before Phase 2C/2D/2E/2F/2G) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction }, errors, fallbackUsed: false };
+    // block saved before Phase 2C/2D/2E/2F/2G/2H) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction, windEmission }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction, windEmission }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -621,15 +704,27 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // windEmission is optional even on schemaVersion-2 blocks saved before
+  // Phase 2H — absence is not an error, it just resolves to the 'none'
+  // default already assigned above (a complete no-op on the existing wind
+  // system).
+  if ('windEmission' in r) {
+    if (isCustomBlockWindEmissionPreset(r['windEmission'])) {
+      windEmission = r['windEmission'];
+    } else {
+      pushError('properties.windEmission', CUSTOM_BLOCK_WIND_EMISSION_PRESET_IDS.join(' | '), String(r['windEmission']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance', 'windResponse', 'liquidInteraction']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance', 'windResponse', 'liquidInteraction', 'windEmission']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse, liquidInteraction, windEmission };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.
@@ -744,4 +839,21 @@ export function isEligibleForWindTransmission(properties: CustomBlockProperties)
  */
 export function isEligibleForLiquidInteraction(properties: CustomBlockProperties): boolean {
   return properties.liquidInteraction !== 'none';
+}
+
+/**
+ * Returns true if this block should be registered as a Phase 2H wind-vent
+ * emitter (customBlockWindVents.ts). Like `isEligibleForLiquidInteraction`,
+ * this has NO collision requirement — a non-solid block may be a purely
+ * visible vent the player walks through, a one-way block may vent while
+ * still allowing pass-through-from-below collision, and a solid block may
+ * vent even if its OWN `windResponse` is 'block' (the vent's outgoing wind
+ * is never self-occluded by its own transmission-mask footprint — see
+ * customBlockWindVents.ts's source-placement geometry). 'none' is never
+ * eligible: it has no runtime effect, so it is simply absent from the
+ * runtime vent list, mirroring the `windResponse`/`liquidInteraction`
+ * 'inert value has no packed representation' convention.
+ */
+export function isEligibleForWindVent(properties: CustomBlockProperties): boolean {
+  return properties.windEmission !== 'none';
 }
