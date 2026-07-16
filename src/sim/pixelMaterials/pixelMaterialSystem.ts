@@ -50,6 +50,11 @@
 
 import type { SolidMask } from './pixelMaterialSolid';
 import {
+  traceMaxWindTransmissionTier,
+  resolveCustomBlockWindTransmission,
+  type CustomBlockWindMask,
+} from './customBlockWindMask';
+import {
   MATERIAL_SAND,
   MATERIAL_SANDSTONE,
   SLEEP_DELAY_STEPS,
@@ -81,6 +86,16 @@ export class PixelMaterialSystem {
   widthPx: number;
   heightPx: number;
   solid: SolidMask | null = null;
+  /**
+   * Phase 2F: native-pixel wind-transmission mask built from the room's solid
+   * custom blocks with `windResponse: 'dampen' | 'block'` — see
+   * customBlockWindMask.ts. `null` (pre-Phase-2F rooms, or before a room is
+   * loaded) is treated identically to an empty mask: `applyWindForce`'s fast
+   * path skips ray tracing entirely whenever `windMask === null ||
+   * windMask.isEmpty`, so this is a complete no-op unless a room actually
+   * registers a windbreak.
+   */
+  windMask: CustomBlockWindMask | null = null;
 
   /** One entry per occupied CELL (a size-N particle owns N*N keys, all pointing to the same particle). */
   private readonly occupancy = new Map<number, PixelMaterialParticle>();
@@ -336,6 +351,22 @@ export class PixelMaterialSystem {
    * 2x2 sand accumulates less momentum than 1x1 sand from the same gust,
    * making it feel heavier. This is a per-material table lookup, not a
    * material-id branch in this function.
+   *
+   * Phase 2F wind transmission: when `this.windMask` is non-null and
+   * non-empty (i.e. the room has at least one solid custom block set to
+   * 'dampen' or 'block'), each newly-affected particle also gets a
+   * TRANSMISSION multiplier — how much of this force reaches it through any
+   * custom blocks standing between the emitter center and the particle —
+   * via a bounded ray trace (`traceMaxWindTransmissionTier`) and
+   * `resolveCustomBlockWindTransmission`. This is a pure multiplicative term
+   * alongside the existing distance falloff and per-material response:
+   *
+   *   velocity delta = forceX/Y * strength(falloff) * transmission * materialResponse
+   *
+   * When `windMask` is null or empty (every pre-Phase-2F room, and any room
+   * with no dampen/block blocks), `transmission` is always exactly 1 and NO
+   * ray trace runs at all (see the fast-path check below) — byte-identical
+   * to pre-Phase-2F behavior.
    */
   applyWindForce(params: WindForceParams): void {
     const { centerXPx, centerYPx, radiusPx, forceX, forceY } = params;
@@ -343,6 +374,8 @@ export class PixelMaterialSystem {
     const affected = this.windAffectedScratch;
     affected.clear();
     if (radiusPx <= 0) return;
+    const mask = this.windMask;
+    const maskActive = mask !== null && !mask.isEmpty;
     const minX = Math.max(0, Math.floor(centerXPx - radiusPx));
     const maxX = Math.min(this.widthPx - 1, Math.ceil(centerXPx + radiusPx));
     const minY = Math.max(0, Math.floor(centerYPx - radiusPx));
@@ -358,9 +391,13 @@ export class PixelMaterialSystem {
         const t = radiusPx > 0 ? dist / radiusPx : 0;
         const strength = 1 - falloff * t;
         if (strength <= 0) continue;
+        const transmission = maskActive && mask !== null
+          ? resolveCustomBlockWindTransmission(traceMaxWindTransmissionTier(mask, centerXPx, centerYPx, x, y))
+          : 1;
+        if (transmission <= 0) { affected.add(p); continue; } // fully blocked — no force, no wake.
         const response = getMaterialWindResponse(p.material);
-        p.windVelX += forceX * strength * response;
-        p.windVelY += forceY * strength * response;
+        p.windVelX += forceX * strength * transmission * response;
+        p.windVelY += forceY * strength * transmission * response;
         this.wake(p);
         affected.add(p);
       }

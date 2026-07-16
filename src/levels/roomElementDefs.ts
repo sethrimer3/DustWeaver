@@ -68,6 +68,88 @@ export interface RoomBreakableBlockDef {
    * default theme for every breakable-block wall.
    */
   blockTheme?: 'blackRock' | 'ice';
+  /**
+   * Phase 2C: the resolved material-response preset for this breakable cell,
+   * threaded from the originating custom block's `properties.materialResponse`
+   * (see resolveMaterialResponse in customBlockProperties.ts). Omitted (defaults
+   * to 'stone' at hazard-load time) for pre-Phase-2C data. Purely a break-sound
+   * and break-particle selector — it never adds executable content or asset
+   * paths to room JSON.
+   */
+  materialResponse?: 'stone' | 'wood' | 'metal';
+  /**
+   * Phase 2E: the resolved break-resistance tier for this breakable cell,
+   * threaded from the originating custom block's `properties.breakResistance`.
+   * Omitted (defaults to 'standard' — byte-identical to the pre-Phase-2E
+   * global momentum threshold — at hazard-load time) for pre-Phase-2E data
+   * and for built-in (non-custom-block) breakable blocks. All cells sharing
+   * one `groupId` always carry the same tier — it is resolved once per
+   * placement, not per cell.
+   */
+  breakResistance?: 'weak' | 'standard' | 'reinforced';
+  /**
+   * Phase 2F: the resolved wind-transmission tier for this breakable cell,
+   * threaded from the originating custom block's `properties.windResponse`
+   * when it is 'dampen' or 'block' (never 'passThrough' — see
+   * isEligibleForWindTransmission in customBlockProperties.ts). Used ONLY to
+   * invalidate this cell's native-pixel wind-mask region when it is destroyed
+   * (see destroyBreakableBlockCell in sim/hazards.ts) — the initial mask
+   * itself is built once at room-load time from `RoomDef.windTransmissionBlocks`,
+   * independently of this per-cell field. Omitted for pre-Phase-2F data and
+   * for built-in (non-custom-block) breakable blocks, matching every other
+   * per-cell optional field above.
+   */
+  windResponse?: 'dampen' | 'block';
+}
+
+/**
+ * Phase 2F: a solid custom-block placement that dampens or blocks
+ * pixel-material wind transmission (sand/water/sandstone wind — see
+ * PixelMaterialSystem.applyWindForce and sim/pixelMaterials/customBlockWindMask.ts).
+ * Registered ONCE PER PLACEMENT (not per cell, unlike RoomBreakableBlockDef/
+ * RoomContactDamageBlockDef) — the wind mask is a static native-pixel region
+ * marked at room-load time from the placement's full footprint, not a
+ * per-tick runtime detection array, so there is no need to decompose a 2x2
+ * placement into 4 cell entries sharing a group id. Present for BOTH fragile
+ * and indestructible solid blocks — breakability is unrelated to whether a
+ * block modifies wind transmission.
+ */
+export interface RoomWindTransmissionBlockDef {
+  /** Left edge of the placement's footprint (block units). */
+  xBlock: number;
+  /** Top edge of the placement's footprint (block units). */
+  yBlock: number;
+  /** Footprint width (block units) — 1 or 2. */
+  wBlock: number;
+  /** Footprint height (block units) — 1 or 2. */
+  hBlock: number;
+  /** Which engine-owned wind-transmission tier this placement applies. */
+  tier: 'dampen' | 'block';
+}
+
+/**
+ * Phase 2D: a solid custom-block cell that damages the player on contact.
+ * Independent of `RoomBreakableBlockDef` — a placement may appear in neither,
+ * either, or both arrays (a fragile+damaging block appears in both). Purely a
+ * damage-tier selector: never a raw damage number, callback, or asset path.
+ */
+export interface RoomContactDamageBlockDef {
+  xBlock: number;
+  yBlock: number;
+  /** Which engine-owned contact-damage tier this cell applies. */
+  tier: 'low' | 'high';
+  /**
+   * Logical placement group id, analogous to `RoomBreakableBlockDef.groupId`.
+   * Cells sharing the same `groupId` belong to one multi-cell (2x2) damaging
+   * placement and must be treated as a single logical damage owner — struck
+   * once per simulation update regardless of how many of its cells the player
+   * overlaps. Omitted (undefined) for ordinary single-cell (1x1) placements.
+   * This id space is independent of `RoomBreakableBlockDef.groupId` — a
+   * fragile+damaging 2x2 block gets its own damage groupId separate from its
+   * breakable groupId, since the two arrays are unrelated and compared only
+   * against their own entries.
+   */
+  groupId?: number;
 }
 
 /**

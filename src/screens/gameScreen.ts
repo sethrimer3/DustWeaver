@@ -14,6 +14,7 @@ import { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
 import { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
+import { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
@@ -56,6 +57,7 @@ import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometer
 import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
+import { tickBreakEvents } from './gameBreakEvents';
 import {
   createGameInterpolationBuffers,
   captureClusterInterpolationState,
@@ -407,6 +409,7 @@ export function startGameScreen(
   const guideDustPathRenderer = new GuideDustPathRenderer();
   const skidDebris = new SkidDebrisRenderer();
   const crumbleDebris = new CrumbleDebrisRenderer();
+  const breakEffects = new BreakEffectRenderer();
   const weakWallJumpDebris = new WeakWallJumpDebrisRenderer();
   // Wire real audio for debris thud impacts. The callback uses jump_impact_soft
   // at the per-particle volume so thuds are subtle and not spammy.
@@ -1478,6 +1481,9 @@ export function startGameScreen(
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────
       tickCrumbleDebrisEvents(world, crumbleDebris, prevCrumbleActive, prevCrumbleHits, FIXED_DT_MS);
+
+      // ── Fragile custom-block break events (Phase 2C) ──────────────────────
+      tickBreakEvents(world, breakEffects, playerSfx, getGraphicsQuality(), FIXED_DT_MS);
       accumulatorMs -= FIXED_DT_MS;
     }
 
@@ -1622,7 +1628,7 @@ export function startGameScreen(
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom,

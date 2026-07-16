@@ -17,7 +17,7 @@
  * All logic is deterministic — no Math.random, no DOM, no wall-clock time.
  */
 
-import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR } from './world';
+import { WorldState, MAX_FIREFLIES, FIREFLIES_PER_JAR, MAX_BREAK_EVENTS } from './world';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
@@ -90,8 +90,61 @@ const LAVA_ZONE_INVULN_TICKS = 30;
  * Minimum momentum (speed × mass approximation) to break a breakable block.
  * Player mass is implicitly 1.0, so this is effectively a speed threshold.
  * Sprint+dash (~373 px/s) should break blocks; normal running (~105 px/s) should not.
+ * This is the 'standard' break-resistance tier (Phase 2E) — the name and
+ * value are UNCHANGED from pre-Phase-2E so every existing built-in breakable
+ * block and every custom fragile block that doesn't set breakResistance
+ * keeps byte-identical behavior.
  */
 const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
+
+/**
+ * Phase 2E break-resistance tiers, chosen from DustWeaver's real movement
+ * speed scale (see src/sim/clusters/movementConstants.ts):
+ *   - MAX_RUN_SPEED_WORLD_PER_SEC = 105 (normal running/walking top speed)
+ *   - sprint speed = MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER ≈ 157.5
+ *   - GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210
+ *   - FAST_MAX_FALL_APPROACH_PER_SEC = 300 (fast-dive vertical speed alone;
+ *     combined with any horizontal movement the total magnitude comfortably
+ *     exceeds 300)
+ *
+ * 'weak' (150) sits just above sprint speed (~157.5 clears it) so a bare
+ * sprint — not just normal running/walking — reliably breaks a weak block,
+ * while ordinary running (105) and any resting/low-speed contact never do.
+ *
+ * 'standard' (250, BREAKABLE_MOMENTUM_THRESHOLD_WORLD) is unchanged.
+ *
+ * 'reinforced' (350) sits above a fast dive alone (300) but is reachable by
+ * combining a fast dive with horizontal sprint/grapple-zip momentum, or a
+ * grapple-zip release chained into a dash — i.e. deliberately achievable
+ * through normal high-speed DustWeaver mechanics, never impossible.
+ */
+const BREAKABLE_RESISTANCE_WEAK_THRESHOLD_WORLD = 150.0;
+const BREAKABLE_RESISTANCE_REINFORCED_THRESHOLD_WORLD = 350.0;
+
+/**
+ * The ONE authoritative place that maps a packed break-resistance tier index
+ * (0=weak, 1=standard, 2=reinforced — see breakResistanceToIndex in
+ * customBlockProperties.ts) to the momentum threshold a fragile placement
+ * must meet to break. No other code path compares resistance tiers directly.
+ */
+function resolveBreakThresholdWorld(resistanceIndex: number): number {
+  switch (resistanceIndex) {
+    case 0: return BREAKABLE_RESISTANCE_WEAK_THRESHOLD_WORLD;
+    case 2: return BREAKABLE_RESISTANCE_REINFORCED_THRESHOLD_WORLD;
+    default: return BREAKABLE_MOMENTUM_THRESHOLD_WORLD; // 1 = standard, and any invalid index falls back safely.
+  }
+}
+
+/**
+ * Phase 2D custom-block contact-damage tiers, matched to the existing
+ * low(1)/high(2) damage scale already used throughout the hazard/enemy
+ * roster (LAVA_ZONE_DAMAGE = 1, SPIKE_DAMAGE = 2, and the majority of enemy
+ * contact-damage constants across src/sim/clusters/*Config.ts). No new
+ * damage scale is introduced — these two constants simply give the existing
+ * 1/2 tiers stable, engine-owned names for the contact-damage property.
+ */
+const CUSTOM_BLOCK_CONTACT_DAMAGE_LOW = 1;
+const CUSTOM_BLOCK_CONTACT_DAMAGE_HIGH = 2;
 
 /**
  * Destroys one breakable-block cell: deactivates its flag and zeroes its
@@ -109,6 +162,75 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
     world.wallWWorld[wi] = 0;
     world.wallHWorld[wi] = 0;
   }
+  // Phase 2D: a fragile+damaging block that is destroyed must stop damaging
+  // the player — deactivate any contact-damage cell at the same world
+  // position. Matched by position (like customBlockGameplayRenderer.ts's
+  // isFragilePlacementBroken) rather than a shared index, since the
+  // breakable and contact-damage arrays are independently populated and
+  // sized. A tiny epsilon guards against float accumulation; cell centers
+  // are computed identically in gameRoomHazards.ts so an exact match is
+  // the common case.
+  const xWorld = world.breakableBlockXWorld[index];
+  const yWorld = world.breakableBlockYWorld[index];
+  for (let ci = 0; ci < world.contactDamageBlockCount; ci++) {
+    if (world.isContactDamageBlockActiveFlag[ci] === 0) continue;
+    if (Math.abs(world.contactDamageBlockXWorld[ci] - xWorld) < 0.5 &&
+        Math.abs(world.contactDamageBlockYWorld[ci] - yWorld) < 0.5) {
+      world.isContactDamageBlockActiveFlag[ci] = 0;
+    }
+  }
+
+  // Phase 2F: a fragile windbreak/dampener must stop attenuating wind the
+  // moment it breaks. `destroyBreakableBlockCell` runs inside `applyHazards`,
+  // which the tick pipeline calls AFTER this tick's wind application and
+  // pixel-material step (see tick.ts) — clearing here takes effect starting
+  // the NEXT tick's `applyWindForce` calls, exactly the same documented
+  // one-tick lag already accepted for the analogous solid-mask sync (see
+  // pixelMaterialSolidSync.ts). Only this cell's own native-pixel rect is
+  // cleared — a targeted region, not a full room-mask rebuild — matching
+  // that same file's "cheap, bounded, not a full rescan" precedent. Each
+  // breakable-block cell is exactly one grid block (even 2x2 fragile custom
+  // blocks decompose into 4 independent 1x1 cells — see the class doc
+  // comment on `RoomBreakableBlockDef`), so a single BLOCK_SIZE_MEDIUM
+  // square centered at (xWorld, yWorld) is always this cell's exact
+  // footprint.
+  if (world.breakableBlockWindTier[index] !== 0) {
+    const windMask = world.pixelMaterialSystem.windMask;
+    if (windMask !== null) {
+      const half = BLOCK_SIZE_MEDIUM * 0.5;
+      windMask.clearRect(xWorld - half, yWorld - half, xWorld + half, yWorld + half);
+    }
+  }
+}
+
+/**
+ * Records one break event for the render layer to consume (Phase 2C).
+ *
+ * This is the ONLY place that pushes to the break-event queue — it is called
+ * exactly once per destroyed LOGICAL placement (once for a 1x1 cell, once for
+ * a complete 2x2 group), never once per cell. Bounded by MAX_BREAK_EVENTS;
+ * silently drops overflow events since they are purely cosmetic (sound +
+ * particles) and never affect collision, damage, or persistence.
+ */
+function emitBreakEvent(
+  world: WorldState,
+  centerXWorld: number,
+  centerYWorld: number,
+  widthWorld: number,
+  heightWorld: number,
+  material: number,
+  groupId: number,
+  isGrouped: boolean,
+): void {
+  if (world.breakEventCount >= MAX_BREAK_EVENTS) return;
+  const ei = world.breakEventCount++;
+  world.breakEventXWorld[ei] = centerXWorld;
+  world.breakEventYWorld[ei] = centerYWorld;
+  world.breakEventWWorld[ei] = widthWorld;
+  world.breakEventHWorld[ei] = heightWorld;
+  world.breakEventMaterial[ei] = material;
+  world.breakEventGroupId[ei] = groupId;
+  world.breakEventIsGroupedFlag[ei] = isGrouped ? 1 : 0;
 }
 
 /** Interaction radius for jars (world units). */
@@ -205,6 +327,11 @@ export function computePlayerWaterState(world: WorldState): void {
  * Main hazard update — called once per tick after cluster movement.
  */
 export function applyHazards(world: WorldState): void {
+  // Phase 2C: break events are a one-tick queue — always reset at the top so a
+  // stale event from a previous tick can never be double-processed by the
+  // render layer, even on the early-return path below.
+  world.breakEventCount = 0;
+
   const dtSec = world.dtMs / 1000.0;
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
@@ -401,12 +528,97 @@ export function applyHazards(world: WorldState): void {
     }
   }
 
+  // Captured BEFORE the contact-damage section below so the breakable-block
+  // momentum-threshold check (further down) reflects the player's actual
+  // incoming speed, not the post-knockback velocity that
+  // applyPlayerDamageWithKnockback may have just blended in. Without this, a
+  // fragile+damaging block's own contact-damage knockback could sap enough
+  // momentum to make the SAME hit fail the break threshold immediately
+  // afterward, silently preventing fragile+damaging blocks from ever
+  // breaking. Spikes/springboards/water/lava run before this point and can
+  // still affect this captured speed — that ordering is unchanged from
+  // pre-Phase-2D behavior.
+  const playerSpeedBeforeContactDamage = Math.sqrt(
+    player.velocityXWorld * player.velocityXWorld +
+    player.velocityYWorld * player.velocityYWorld,
+  );
+
+  // ── Custom block contact damage (Phase 2D) ──────────────────────────────
+  // Runs BEFORE the breakable-block section below so a fragile+damaging
+  // block applies its contact damage first, then (independently, subject to
+  // its own momentum threshold) is destroyed in the same tick — matching the
+  // documented ordering. Damage itself does not depend on player momentum;
+  // it is a plain solid-contact check, exactly like spikes/lava above.
+  //
+  // Every occupied cell of a grouped (2x2) placement shares one logical
+  // damage owner (contactDamageBlockGroupId) so contacting two of its cells
+  // in the same tick still produces at most one applyPlayerDamageWithKnockback
+  // call — the knockback source point is the nearest point on the FULL
+  // placement's union AABB, not just the one cell found first, so multi-cell
+  // contact always resolves to the same result regardless of scan order.
+  // Reuses the existing damage/knockback/invulnerability function verbatim
+  // (see src/sim/playerDamage.ts) — no parallel damage system is introduced.
+  {
+    const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
+    for (let i = 0; i < world.contactDamageBlockCount; i++) {
+      if (world.isContactDamageBlockActiveFlag[i] === 0) continue;
+
+      const bx = world.contactDamageBlockXWorld[i];
+      const by = world.contactDamageBlockYWorld[i];
+      const bLeft = bx - bHalf;
+      const bRight = bx + bHalf;
+      const bTop = by - bHalf;
+      const bBottom = by + bHalf;
+
+      if (!overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom)) continue;
+
+      const groupId = world.contactDamageBlockGroupId[i];
+      let srcLeft = bLeft, srcRight = bRight, srcTop = bTop, srcBottom = bBottom;
+
+      if (groupId >= 0) {
+        let minXWorld = bx, maxXWorld = bx;
+        let minYWorld = by, maxYWorld = by;
+        for (let j = 0; j < world.contactDamageBlockCount; j++) {
+          if (world.contactDamageBlockGroupId[j] !== groupId) continue;
+          if (world.isContactDamageBlockActiveFlag[j] === 0) continue;
+          const jx = world.contactDamageBlockXWorld[j];
+          const jy = world.contactDamageBlockYWorld[j];
+          if (jx < minXWorld) minXWorld = jx;
+          if (jx > maxXWorld) maxXWorld = jx;
+          if (jy < minYWorld) minYWorld = jy;
+          if (jy > maxYWorld) maxYWorld = jy;
+        }
+        srcLeft = minXWorld - bHalf;
+        srcRight = maxXWorld + bHalf;
+        srcTop = minYWorld - bHalf;
+        srcBottom = maxYWorld + bHalf;
+      }
+
+      // Nearest point on the (possibly grouped) footprint to the player
+      // center — identical pattern to the lava-zone source point above, so
+      // knockback direction follows whichever side the player is actually
+      // touching rather than always pointing one fixed way.
+      const sourceXWorld = Math.max(srcLeft, Math.min(px, srcRight));
+      const sourceYWorld = Math.max(srcTop, Math.min(py, srcBottom));
+      const damagePoints = world.contactDamageBlockTier[i] === 1
+        ? CUSTOM_BLOCK_CONTACT_DAMAGE_HIGH
+        : CUSTOM_BLOCK_CONTACT_DAMAGE_LOW;
+
+      // applyPlayerDamageWithKnockback itself no-ops while the player is
+      // still invulnerable from a previous hit this tick or a recent one,
+      // so even if two DISTINCT damaging placements are both contacted this
+      // tick, at most one ever produces a real effect — no separate
+      // per-block cooldown bookkeeping is needed here.
+      applyPlayerDamageWithKnockback(player, damagePoints, sourceXWorld, sourceYWorld);
+      break; // one damage attempt per tick, mirrors the spike/lava pattern above.
+    }
+  }
+
   // ── Breakable blocks ─────────────────────────────────────────────────────
   {
-    const playerSpeed = Math.sqrt(
-      player.velocityXWorld * player.velocityXWorld +
-      player.velocityYWorld * player.velocityYWorld,
-    );
+    // Uses the speed captured BEFORE the contact-damage section above ran —
+    // see playerSpeedBeforeContactDamage's doc comment.
+    const playerSpeed = playerSpeedBeforeContactDamage;
 
     for (let i = 0; i < world.breakableBlockCount; i++) {
       if (world.isBreakableBlockActiveFlag[i] === 0) continue;
@@ -419,9 +631,12 @@ export function applyHazards(world: WorldState): void {
       const bTop = by - bHalf;
       const bBottom = by + bHalf;
 
+      // Phase 2E: every cell of a grouped placement carries the same
+      // resistance tier (resolved once in editorRoomBuilder.ts), so reading
+      // it from the struck cell alone already reflects the whole placement.
       if (
         overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom) &&
-        playerSpeed >= BREAKABLE_MOMENTUM_THRESHOLD_WORLD
+        playerSpeed >= resolveBreakThresholdWorld(world.breakableBlockResistance[i])
       ) {
         // Break the struck cell, and — for Phase 2B multi-cell placements —
         // atomically break every other cell sharing its logical group id in
@@ -430,9 +645,45 @@ export function applyHazards(world: WorldState): void {
         // for an already-broken cell is a no-op (guarded by the active-flag
         // check at the top of the loop), so duplicate destruction callbacks
         // within one frame are idempotent.
+        //
+        // Phase 2C: the cell that first initiates the destroy owns the ONE
+        // break event for the whole placement. For a grouped (2x2) placement
+        // the event's footprint/center covers the union of all member cells,
+        // computed BEFORE any cell is deactivated (every group member is
+        // still active at this point — the atomic-group invariant guarantees
+        // a group is either fully active or fully destroyed, and the
+        // active-flag check above already proved this cell was active).
+        const material = world.breakableBlockMaterial[i];
+        const groupId = world.breakableBlockGroupId[i];
+
+        if (groupId >= 0) {
+          let minXWorld = bx, maxXWorld = bx;
+          let minYWorld = by, maxYWorld = by;
+          for (let j = 0; j < world.breakableBlockCount; j++) {
+            if (world.breakableBlockGroupId[j] !== groupId) continue;
+            const jx = world.breakableBlockXWorld[j];
+            const jy = world.breakableBlockYWorld[j];
+            if (jx < minXWorld) minXWorld = jx;
+            if (jx > maxXWorld) maxXWorld = jx;
+            if (jy < minYWorld) minYWorld = jy;
+            if (jy > maxYWorld) maxYWorld = jy;
+          }
+          emitBreakEvent(
+            world,
+            (minXWorld + maxXWorld) * 0.5,
+            (minYWorld + maxYWorld) * 0.5,
+            (maxXWorld - minXWorld) + BLOCK_SIZE_MEDIUM,
+            (maxYWorld - minYWorld) + BLOCK_SIZE_MEDIUM,
+            material,
+            groupId,
+            true,
+          );
+        } else {
+          emitBreakEvent(world, bx, by, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_MEDIUM, material, -1, false);
+        }
+
         destroyBreakableBlockCell(world, i);
 
-        const groupId = world.breakableBlockGroupId[i];
         if (groupId >= 0) {
           for (let j = 0; j < world.breakableBlockCount; j++) {
             if (j === i) continue;

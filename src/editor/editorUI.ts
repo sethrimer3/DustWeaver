@@ -806,8 +806,17 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const collisionBadge = { solid: 'Solid', oneWay: '1-Way', nonSolid: 'Non-solid' }[def.properties.collision];
               const frictionBadge = def.properties.friction === 'slippery' ? ' · Slippery' : '';
               const breakBadge = def.properties.breakability === 'fragile' ? ' · Fragile' : '';
-              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}`;
-              propsEl.title = 'Collision/friction/breakability properties for this block.';
+              const materialBadge = { stone: ' · Stone', wood: ' · Wood', metal: ' · Metal' }[def.properties.materialResponse];
+              const damageBadge = { none: '', low: ' · Dmg:Low', high: ' · Dmg:High' }[def.properties.contactDamage];
+              // Resistance is only meaningful for fragile blocks, and 'standard' is the
+              // silent default (matches pre-Phase-2E behavior) so it gets no badge.
+              const resistanceBadge = def.properties.breakability === 'fragile'
+                ? { weak: ' · Weak', standard: '', reinforced: ' · Reinforced' }[def.properties.breakResistance]
+                : '';
+              // 'passThrough' is the silent default (matches pre-Phase-2F behavior) so it gets no badge.
+              const windBadge = { passThrough: '', dampen: ' · Dampens wind', block: ' · Windbreak' }[def.properties.windResponse];
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}${windBadge}`;
+              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance/wind-response properties for this block.';
 
               info.appendChild(nameEl);
               info.appendChild(sizeEl);

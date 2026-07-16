@@ -15,13 +15,13 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
-import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef } from '../levels/roomDef';
+import type { RoomDef, RoomEnemyDef, RoomWallDef, RoomTransitionDef, RoomBreakableBlockDef, RoomContactDamageBlockDef, RoomWindTransmissionBlockDef } from '../levels/roomDef';
 import type { EditorRoomData } from './editorState';
 import { stringToParticleKind } from './roomJsonSchema';
 import { buildCompleteBoundaryWalls } from '../levels/roomBoundaryWalls';
 import { rawIdFromNamespaced } from '../levels/customBlocks';
 import { getCustomBlockProperties } from '../render/customBlockSpriteCache';
-import { resolveWallBehavior, isEligibleForBreakablePathway } from '../levels/customBlockProperties';
+import { resolveWallBehavior, isEligibleForBreakablePathway, isEligibleForContactDamage, isEligibleForWindTransmission } from '../levels/customBlockProperties';
 
 // Re-export the reverse direction (RoomDef → EditorRoomData) from its own module
 // so existing callers that import from editorRoomBuilder are unaffected.
@@ -57,18 +57,58 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   // solid/default/indestructible defaults, matching Phase 1 behavior.
   const customBlockWalls: RoomWallDef[] = [];
   const customBlockBreakables: RoomBreakableBlockDef[] = [];
+  const customBlockContactDamage: RoomContactDamageBlockDef[] = [];
+  // Phase 2F: one entry per ELIGIBLE placement (never per cell — see
+  // RoomWindTransmissionBlockDef's doc comment), covering both fragile and
+  // indestructible solid blocks. Used only to build the initial room-load
+  // wind-transmission mask (see gameRoomPixelMaterials.ts).
+  const customBlockWindTransmission: RoomWindTransmissionBlockDef[] = [];
   // Phase 2B: monotonically increasing group id, unique per room, assigned
   // only to multi-cell (2x2) fragile placements so their cells can be broken
   // atomically as one logical unit (see src/sim/hazards.ts). 1x1 fragile
   // placements are pushed with no groupId — byte-identical to pre-Phase-2B
   // behavior.
   let nextBreakableGroupId = 0;
+  // Phase 2D: separate monotonically increasing group id for multi-cell
+  // (2x2) DAMAGING placements. Independent of nextBreakableGroupId — a
+  // fragile+damaging 2x2 placement gets one id in each id space, since the
+  // two arrays (customBlockBreakables / customBlockContactDamage) are never
+  // compared against each other.
+  let nextContactDamageGroupId = 0;
   for (const p of data.customBlockPlacements ?? []) {
     const rawId = rawIdFromNamespaced(p.blockId);
     const properties = rawId !== null ? getCustomBlockProperties(rawId) : undefined;
-    const behavior = resolveWallBehavior(properties ?? { collision: 'solid', friction: 'default', breakability: 'indestructible' });
+    const behavior = resolveWallBehavior(properties ?? {
+      collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough',
+    });
 
     if (!behavior.generateWall) continue; // nonSolid — visual only, no collision wall.
+
+    // Phase 2D: contact damage is orthogonal to breakability — a solid
+    // placement may be fragile, indestructible, or both damaging and
+    // fragile at once. Register it before branching on the breakable
+    // pathway below so both branches (breakable cell / plain wall) get it.
+    if (properties !== undefined && isEligibleForContactDamage(properties)) {
+      const tier = properties.contactDamage as 'low' | 'high'; // narrowed: isEligibleForContactDamage excludes 'none'
+      if (p.tileWidth === 1 && p.tileHeight === 1) {
+        customBlockContactDamage.push({ xBlock: p.xBlock, yBlock: p.yBlock, tier });
+      } else {
+        const groupId = nextContactDamageGroupId++;
+        for (let dy = 0; dy < p.tileHeight; dy++) {
+          for (let dx = 0; dx < p.tileWidth; dx++) {
+            customBlockContactDamage.push({ xBlock: p.xBlock + dx, yBlock: p.yBlock + dy, tier, groupId });
+          }
+        }
+      }
+    }
+
+    // Phase 2F: wind transmission is orthogonal to both breakability and
+    // contact damage — register it before branching on the breakable
+    // pathway below so both branches (breakable cell / plain wall) get it.
+    if (properties !== undefined && isEligibleForWindTransmission(properties)) {
+      const tier = properties.windResponse as 'dampen' | 'block'; // narrowed: isEligibleForWindTransmission excludes 'passThrough'
+      customBlockWindTransmission.push({ xBlock: p.xBlock, yBlock: p.yBlock, wBlock: p.tileWidth, hBlock: p.tileHeight, tier });
+    }
 
     if (properties !== undefined && isEligibleForBreakablePathway(properties, p.tileWidth, p.tileHeight)) {
       // Reuse the existing breakable-block pathway wholesale: it creates its
@@ -83,8 +123,24 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       // "use the room's default theme") rather than forcing a concrete
       // blackRock index — a behavior change we don't want to introduce here.
       const breakableBlockTheme = behavior.blockTheme === 'ice' ? 'ice' as const : undefined;
+      // Phase 2C: thread the resolved material-response preset onto every
+      // cell of the placement so gameRoomHazards.ts can pack it into
+      // world.breakableBlockMaterial without re-reading the custom block
+      // registry at hazard-load time.
+      const materialResponse = properties.materialResponse;
+      // Phase 2E: same idea for the resolved break-resistance tier — every
+      // cell of the placement carries the SAME tier, resolved once here.
+      const breakResistance = properties.breakResistance;
+      // Phase 2F: only set when this placement is ALSO wind-eligible — lets
+      // destroyBreakableBlockCell (sim/hazards.ts) know to clear this cell's
+      // native-pixel wind-mask region when the block breaks. undefined for
+      // every fragile block that doesn't modify wind, identical to
+      // pre-Phase-2F data.
+      const windResponse = isEligibleForWindTransmission(properties) ? properties.windResponse as 'dampen' | 'block' : undefined;
       if (p.tileWidth === 1 && p.tileHeight === 1) {
-        customBlockBreakables.push({ xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme });
+        customBlockBreakables.push({
+          xBlock: p.xBlock, yBlock: p.yBlock, blockTheme: breakableBlockTheme, materialResponse, breakResistance, windResponse,
+        });
       } else {
         const groupId = nextBreakableGroupId++;
         for (let dy = 0; dy < p.tileHeight; dy++) {
@@ -94,6 +150,9 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
               yBlock: p.yBlock + dy,
               groupId,
               blockTheme: breakableBlockTheme,
+              materialResponse,
+              breakResistance,
+              windResponse,
             });
           }
         }
@@ -189,6 +248,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     heightBlocks: data.heightBlocks,
     walls: allWalls,
     breakableBlocks: customBlockBreakables.length > 0 ? customBlockBreakables : undefined,
+    contactDamageBlocks: customBlockContactDamage.length > 0 ? customBlockContactDamage : undefined,
+    windTransmissionBlocks: customBlockWindTransmission.length > 0 ? customBlockWindTransmission : undefined,
     enemies,
     playerSpawnBlock: [data.playerSpawnBlock[0], data.playerSpawnBlock[1]],
     transitions,

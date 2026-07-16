@@ -25,12 +25,20 @@ import type {
   CollisionPreset,
   FrictionPreset,
   BreakabilityPreset,
+  MaterialResponsePreset,
+  ContactDamagePreset,
+  BreakResistancePreset,
+  CustomBlockWindResponsePreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
   COLLISION_PRESET_REGISTRY,
   FRICTION_PRESET_REGISTRY,
   BREAKABILITY_PRESET_REGISTRY,
+  MATERIAL_RESPONSE_PRESET_REGISTRY,
+  CONTACT_DAMAGE_PRESET_REGISTRY,
+  BREAK_RESISTANCE_PRESET_REGISTRY,
+  CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -73,7 +81,9 @@ export function openCustomBlockDialog(
   let savedProperties: CustomBlockProperties = properties;
 
   function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
-    return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability;
+    return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
+      a.materialResponse === b.materialResponse && a.contactDamage === b.contactDamage &&
+      a.breakResistance === b.breakResistance && a.windResponse === b.windResponse;
   }
 
   function isDirty(): boolean {
@@ -243,17 +253,54 @@ export function openCustomBlockDialog(
     () => properties.breakability,
     (v) => { properties = { ...properties, breakability: v }; },
   );
+  const materialResponseCtl = makePropertyRow<MaterialResponsePreset>(
+    'Material response', MATERIAL_RESPONSE_PRESET_REGISTRY,
+    () => properties.materialResponse,
+    (v) => { properties = { ...properties, materialResponse: v }; },
+  );
+  const contactDamageCtl = makePropertyRow<ContactDamagePreset>(
+    'Contact damage', CONTACT_DAMAGE_PRESET_REGISTRY,
+    () => properties.contactDamage,
+    (v) => { properties = { ...properties, contactDamage: v }; },
+  );
+  const breakResistanceCtl = makePropertyRow<BreakResistancePreset>(
+    'Break resistance', BREAK_RESISTANCE_PRESET_REGISTRY,
+    () => properties.breakResistance,
+    (v) => { properties = { ...properties, breakResistance: v }; },
+  );
+  const windResponseCtl = makePropertyRow<CustomBlockWindResponsePreset>(
+    'Wind response', CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
+    () => properties.windResponse,
+    (v) => { properties = { ...properties, windResponse: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
+  propsSection.appendChild(materialResponseCtl.row);
+  propsSection.appendChild(contactDamageCtl.row);
+  propsSection.appendChild(breakResistanceCtl.row);
+  propsSection.appendChild(windResponseCtl.row);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
   propsSection.appendChild(compatMsg);
 
+  /**
+   * Break resistance is only meaningful when breakability is 'fragile' — for
+   * indestructible blocks it is retained (so switching back to fragile
+   * restores the creator's choice) but has no runtime effect, so the control
+   * is visually/functionally disabled without resetting its value.
+   */
+  function refreshBreakResistanceEnabled(): void {
+    const isFragile = properties.breakability === 'fragile';
+    breakResistanceCtl.select.disabled = !isFragile;
+    breakResistanceCtl.row.style.opacity = isFragile ? '1' : '0.5';
+  }
+
   function refreshCompatibilityMessage(): void {
     const issues = checkCustomBlockPropertyCompatibility(properties, tileWidth, tileHeight);
     compatMsg.textContent = issues.length > 0 ? `⚠ ${issues.map(i => i.message).join(' ')}` : '';
+    refreshBreakResistanceEnabled();
   }
 
   function refreshPropertyControls(): void {
@@ -263,6 +310,14 @@ export function openCustomBlockDialog(
     frictionCtl.desc.textContent = FRICTION_PRESET_REGISTRY[properties.friction].description;
     breakabilityCtl.select.value = properties.breakability;
     breakabilityCtl.desc.textContent = BREAKABILITY_PRESET_REGISTRY[properties.breakability].description;
+    materialResponseCtl.select.value = properties.materialResponse;
+    materialResponseCtl.desc.textContent = MATERIAL_RESPONSE_PRESET_REGISTRY[properties.materialResponse].description;
+    contactDamageCtl.select.value = properties.contactDamage;
+    contactDamageCtl.desc.textContent = CONTACT_DAMAGE_PRESET_REGISTRY[properties.contactDamage].description;
+    breakResistanceCtl.select.value = properties.breakResistance;
+    breakResistanceCtl.desc.textContent = BREAK_RESISTANCE_PRESET_REGISTRY[properties.breakResistance].description;
+    windResponseCtl.select.value = properties.windResponse;
+    windResponseCtl.desc.textContent = CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY[properties.windResponse].description;
     refreshCompatibilityMessage();
   }
 

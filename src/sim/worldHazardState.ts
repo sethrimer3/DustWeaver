@@ -20,6 +20,20 @@ export const MAX_WATER_ZONES = 6000;
 export const MAX_LAVA_ZONES = 6000;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
+/**
+ * Maximum number of break events emitted in a single tick (Phase 2C). One
+ * event = one logical fragile placement destroyed (a 2x2 group counts as
+ * ONE event, not four). Bounded generously above what a single player-sized
+ * AABB could plausibly overlap in one tick; overflow events are silently
+ * dropped (cosmetic-only, never affects collision or destruction state).
+ */
+export const MAX_BREAK_EVENTS = 8;
+/**
+ * Maximum number of contact-damage cells per room (Phase 2D). Only cells
+ * belonging to a solid custom block with `contactDamage !== 'none'` occupy a
+ * slot — a block with no contact damage never touches this array at all.
+ */
+export const MAX_CONTACT_DAMAGE_BLOCKS = 32;
 /** Maximum number of crumble blocks per room. */
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
@@ -240,6 +254,91 @@ export interface HazardWorldState {
    * single-cell breakable block — identical to pre-Phase-2B behavior).
    */
   breakableBlockGroupId: Int16Array;
+  /**
+   * Packed material-response preset index per breakable-block cell (Phase 2C).
+   * 0=stone, 1=wood, 2=metal — see materialResponseToIndex/indexToMaterialResponse
+   * in customBlockProperties.ts. Resolved once at hazard-load time
+   * (gameRoomHazards.ts) from the originating custom block's validated
+   * properties; never re-read from JSON during the simulation loop.
+   */
+  breakableBlockMaterial: Uint8Array;
+  /**
+   * Packed break-resistance tier index per breakable-block cell (Phase 2E).
+   * 0=weak, 1=standard, 2=reinforced — see breakResistanceToIndex/
+   * indexToBreakResistance in customBlockProperties.ts. Resolved once at
+   * hazard-load time (gameRoomHazards.ts); the simulation loop only ever
+   * reads this packed index to select a momentum threshold (see
+   * resolveBreakThresholdWorld in src/sim/hazards.ts), never a raw string.
+   * All cells sharing one breakableBlockGroupId always carry the same value.
+   */
+  breakableBlockResistance: Uint8Array;
+  /**
+   * Packed wind-transmission tier per breakable-block cell (Phase 2F):
+   * 0=none/passThrough (not a windbreak), 1=dampen, 2=block. Resolved once at
+   * hazard-load time from `RoomBreakableBlockDef.windResponse`. Used ONLY by
+   * `destroyBreakableBlockCell` (sim/hazards.ts) to know whether — and how —
+   * to clear this cell's native-pixel region in
+   * `world.pixelMaterialSystem.windMask` when the cell is destroyed. The
+   * INITIAL mask is built independently at room-load time from
+   * `RoomDef.windTransmissionBlocks`, so this field never affects placement,
+   * only invalidation. 0 (no effect) for every pre-Phase-2F room.
+   */
+  breakableBlockWindTier: Uint8Array;
+
+  // ── Break events (Phase 2C) ─────────────────────────────────────────────────
+  /**
+   * One-tick queue of break events, populated by applyHazards() when a
+   * fragile breakable-block placement is destroyed, and drained by the
+   * render/screen layer (see gameBreakEvents.ts) before the next tick.
+   * Reset to 0 at the top of every applyHazards() call. A 2x2 placement
+   * emits exactly ONE event (for the whole logical group), never one per cell.
+   */
+  breakEventCount: number;
+  /** World-space center X of each break event's full footprint. */
+  breakEventXWorld: Float32Array;
+  /** World-space center Y of each break event's full footprint. */
+  breakEventYWorld: Float32Array;
+  /** Full footprint width (world units) — one block for 1x1, union width for grouped placements. */
+  breakEventWWorld: Float32Array;
+  /** Full footprint height (world units). */
+  breakEventHWorld: Float32Array;
+  /** Packed material-response preset index (see breakableBlockMaterial). */
+  breakEventMaterial: Uint8Array;
+  /** Logical group id that produced this event, or -1 if an ungrouped 1x1 placement. */
+  breakEventGroupId: Int16Array;
+  /** 1 if this event represents a multi-cell grouped placement, 0 for a plain 1x1. */
+  breakEventIsGroupedFlag: Uint8Array;
+
+  // ── Custom block contact damage (Phase 2D) ──────────────────────────────────
+  /**
+   * Number of contact-damage cells loaded for the current room. Only cells
+   * belonging to a solid custom block with `contactDamage !== 'none'` are
+   * present — populated once at hazard-load time from
+   * `RoomDef.contactDamageBlocks`, never re-parsed during the simulation loop.
+   */
+  contactDamageBlockCount: number;
+  /** Center X of each contact-damage cell (world units). */
+  contactDamageBlockXWorld: Float32Array;
+  /** Center Y of each contact-damage cell (world units). */
+  contactDamageBlockYWorld: Float32Array;
+  /** Packed damage tier index per cell: 0=low, 1=high (see contactDamageTierToIndex). */
+  contactDamageBlockTier: Uint8Array;
+  /**
+   * Logical placement group id, analogous to breakableBlockGroupId. Cells
+   * sharing the same non-negative group id belong to one multi-cell (2x2)
+   * damaging placement and are treated as a single logical damage owner
+   * (struck at most once per simulation update). -1 means an ungrouped 1x1
+   * placement. Independent id space from breakableBlockGroupId.
+   */
+  contactDamageBlockGroupId: Int16Array;
+  /**
+   * 1 if this cell's placement is still present (has not been destroyed by
+   * the atomic fragile-block transaction), 0 if the underlying fragile block
+   * was broken and no longer damages the player. Indestructible damaging
+   * blocks stay at 1 for the lifetime of the room. Always 1 for cells that
+   * were never eligible for the breakable pathway in the first place.
+   */
+  isContactDamageBlockActiveFlag: Uint8Array;
 
   // ── Crumble blocks ─────────────────────────────────────────────────────────
   /** Number of crumble blocks (active + broken). */
@@ -708,6 +807,23 @@ export function createHazardWorldState(): HazardWorldState {
     isBreakableBlockActiveFlag:    new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockWallIndex:       new Int8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockGroupId:         new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
+    breakableBlockMaterial:        new Uint8Array(MAX_BREAKABLE_BLOCKS),
+    breakableBlockResistance:      new Uint8Array(MAX_BREAKABLE_BLOCKS).fill(1), // 1 = standard default
+    breakableBlockWindTier:        new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a windbreak (default)
+    breakEventCount:               0,
+    breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventWWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventHWorld:              new Float32Array(MAX_BREAK_EVENTS),
+    breakEventMaterial:            new Uint8Array(MAX_BREAK_EVENTS),
+    breakEventGroupId:             new Int16Array(MAX_BREAK_EVENTS).fill(-1),
+    breakEventIsGroupedFlag:       new Uint8Array(MAX_BREAK_EVENTS),
+    contactDamageBlockCount:       0,
+    contactDamageBlockXWorld:      new Float32Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockYWorld:      new Float32Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockTier:        new Uint8Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockGroupId:     new Int16Array(MAX_CONTACT_DAMAGE_BLOCKS).fill(-1),
+    isContactDamageBlockActiveFlag: new Uint8Array(MAX_CONTACT_DAMAGE_BLOCKS),
     crumbleBlockCount:             0,
     crumbleBlockXWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
