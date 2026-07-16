@@ -499,6 +499,10 @@ export interface HazardWorldState {
   isPlayerInWaterFlag: 0 | 1;
   /** 1 if the player was in water on the previous tick (for entry-event detection). */
   isPlayerWasInWaterLastTickFlag: 0 | 1;
+  /** Stable contact classification: 0 outside, 1 surface contact, 2 substantially submerged. */
+  playerWaterState: 0 | 1 | 2;
+  /** Water-zone index owning the current contact, or -1 while outside. */
+  playerWaterZoneIndex: number;
   /** Submersion ratio 0–1: 0 = just touching surface, 1 = fully submerged. */
   playerWaterSubmersionRatio: number;
   /** Speed magnitude (wu/s) the player had when they entered water this tick. 0 when not entering. */
@@ -514,6 +518,16 @@ export interface HazardWorldState {
    * 0 when not in water.
    */
   playerBuoyancyDepthFactor: number;
+  /** Player bottom Y captured before movement integration for surface-crossing tests. */
+  playerWaterPreMovementBottomYWorld: number;
+  /** Monotonic cosmetic event sequence incremented for upper-surface entry/exit. */
+  playerWaterSurfaceEventSequence: number;
+  /** Latest surface event: 0 none, 1 entry, 2 exit. */
+  playerWaterSurfaceEventKind: 0 | 1 | 2;
+  playerWaterSurfaceEventXWorld: number;
+  playerWaterSurfaceEventYWorld: number;
+  playerWaterSurfaceEventVelocityXWorld: number;
+  playerWaterSurfaceEventVelocityYWorld: number;
 
   // ── Dust piles ────────────────────────────────────────────────────────────
   /** Number of dust piles loaded in the current room. */
@@ -929,10 +943,19 @@ export function createHazardWorldState(): HazardWorldState {
     fireflyVelYWorld:              new Float32Array(MAX_FIREFLIES),
     isPlayerInWaterFlag:           0,
     isPlayerWasInWaterLastTickFlag: 0,
+    playerWaterState:              0,
+    playerWaterZoneIndex:          -1,
     playerWaterSubmersionRatio:    0,
     playerWaterEntrySpeedWorld:    0,
     playerBuoyancySurfaceYWorld:   0,
     playerBuoyancyDepthFactor:     0,
+    playerWaterPreMovementBottomYWorld: 0,
+    playerWaterSurfaceEventSequence: 0,
+    playerWaterSurfaceEventKind:   0,
+    playerWaterSurfaceEventXWorld: 0,
+    playerWaterSurfaceEventYWorld: 0,
+    playerWaterSurfaceEventVelocityXWorld: 0,
+    playerWaterSurfaceEventVelocityYWorld: 0,
     dustPileCount:                 0,
     dustPileXWorld:                new Float32Array(MAX_DUST_PILES),
     dustPileYWorld:                new Float32Array(MAX_DUST_PILES),

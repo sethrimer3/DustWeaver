@@ -11,7 +11,11 @@ import type { WorldState } from '../sim/world';
 import type { InputState } from '../input/handler';
 import type { HudDebugState } from '../render/hud/overlay';
 import { ZIP_JUMP_WINDOW_SECONDS } from '../sim/clusters/grappleZip';
-import { WATER_GRAVITY_MULTIPLIER, WATER_BUOYANCY_FORCE_WORLD } from '../sim/hazards';
+import {
+  WATER_BUOYANCY_BASE_ACCEL_WORLD_PER_SEC2,
+  WATER_BUOYANCY_SUBMERSION_ACCEL_WORLD_PER_SEC2,
+  WATER_GRAVITY_MULTIPLIER,
+} from '../sim/clusters/playerWaterPhysics';
 import {
   computeLogicalWallSurface,
   computeGroundConnectedExclusion,
@@ -143,9 +147,10 @@ export function buildHudDebugState(
     submergedFraction:    world.playerWaterSubmersionRatio,
     liquidSurfaceYWorld:  world.playerBuoyancySurfaceYWorld,
     depthFactor:          world.playerBuoyancyDepthFactor,
-    buoyancyAccelWorldPerSec2: WATER_BUOYANCY_FORCE_WORLD
-      * world.playerWaterSubmersionRatio
-      * world.playerBuoyancyDepthFactor,
+    buoyancyAccelWorldPerSec2: world.isPlayerInWaterFlag === 1
+      ? WATER_BUOYANCY_BASE_ACCEL_WORLD_PER_SEC2
+        + WATER_BUOYANCY_SUBMERSION_ACCEL_WORLD_PER_SEC2 * world.playerWaterSubmersionRatio
+      : 0,
     gravityScale: world.isPlayerInWaterFlag === 1
       ? WATER_GRAVITY_MULTIPLIER
       : 1.0,

@@ -9,8 +9,11 @@
 
 import { WorldState } from '../world';
 import { ClusterState } from './state';
-import { WATER_GRAVITY_MULTIPLIER } from '../hazards';
 import { getWallJumpCandidate } from './playerWallJump';
+import {
+  applyNonAdditiveWaterJump,
+  applyPlayerWaterVerticalForces,
+} from './playerWaterPhysics';
 import {
   debugSpeedOverrides,
   ov,
@@ -48,62 +51,57 @@ export function applyPlayerGravityAndJump(
   world: WorldState,
   dtSec: number,
 ): void {
+  const isTouchingWater = world.isPlayerInWaterFlag === 1;
   // ── Apply gravity (unified + jump-cut + apex half-gravity) ────────
   // When grappling, use consistent gravity (no jump-cut multiplier, no
   // apex modifier) for a natural pendulum feel.  The grapple constraint
   // (step 0.25) handles the actual swing physics.
   const baseGrav = ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2);
-  // Water buoyancy: reduce gravity to a constant low fraction whenever any part
-  // of the player overlaps a water zone.  The old submersion-lerp formula
-  // (0.12 + 0.88*(1−s)) left gravity at ~56% of normal when half-submerged,
-  // meaning buoyancy (520*0.5 = 260 wu/s²) could never overcome it
-  // (504 wu/s²) — the player always sank.  Using a constant multiplier (0.12)
-  // keeps effective gravity at only 108 wu/s² regardless of submersion, so
-  // buoyancy wins whenever the player is meaningfully submerged (>~21%).
-  const waterMult = world.isPlayerInWaterFlag === 1
-    ? WATER_GRAVITY_MULTIPLIER
-    : 1.0;
-  let grav: number;
-  if (world.isGrappleActiveFlag === 1) {
-    // Consistent gravity for pendulum swing.
-    grav = baseGrav;
-  } else if (cluster.velocityYWorld < 0) {
-    // Rising: check for apex float, then jump-cut multiplier.
-    const absVy = -cluster.velocityYWorld; // positive magnitude
-    if (
-      absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
-      world.playerJumpHeldFlag === 1
-    ) {
-      // Apex band: reduce gravity for a brief floaty feel at the top.
-      // Fast-fall cannot be active while rising (cleared on jump), so no guard needed here.
-      grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
-    } else if (world.playerJumpHeldFlag === 0) {
-      // Jump released while rising: apply jump-cut heavy gravity.
-      grav = baseGrav * JUMP_CUT_GRAVITY_MULTIPLIER;
-    } else {
-      grav = baseGrav;
-    }
+  let grav = 0;
+  if (isTouchingWater) {
+    applyPlayerWaterVerticalForces(cluster, world, dtSec);
   } else {
-    // Falling: check for apex float (vy just crossed zero, near apex).
-    // Fast fall overrides apex float; early jump release is already handled above.
-    const absVy = cluster.velocityYWorld; // already positive when falling
-    if (
-      absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
-      world.playerJumpHeldFlag === 1 &&
-      cluster.isFastFallModeFlag === 0
-    ) {
-      grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
-    } else {
+    if (world.isGrappleActiveFlag === 1) {
+      // Consistent gravity for pendulum swing.
       grav = baseGrav;
+    } else if (cluster.velocityYWorld < 0) {
+      // Rising: check for apex float, then jump-cut multiplier.
+      const absVy = -cluster.velocityYWorld; // positive magnitude
+      if (
+        absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
+        world.playerJumpHeldFlag === 1
+      ) {
+        // Apex band: reduce gravity for a brief floaty feel at the top.
+        // Fast-fall cannot be active while rising (cleared on jump), so no guard needed here.
+        grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
+      } else if (world.playerJumpHeldFlag === 0) {
+        // Jump released while rising: apply jump-cut heavy gravity.
+        grav = baseGrav * JUMP_CUT_GRAVITY_MULTIPLIER;
+      } else {
+        grav = baseGrav;
+      }
+    } else {
+      // Falling: check for apex float (vy just crossed zero, near apex).
+      // Fast fall overrides apex float; early jump release is already handled above.
+      const absVy = cluster.velocityYWorld; // already positive when falling
+      if (
+        absVy < ov(debugSpeedOverrides.apexFloatVelocityThreshold, APEX_FLOAT_VELOCITY_THRESHOLD) &&
+        world.playerJumpHeldFlag === 1 &&
+        cluster.isFastFallModeFlag === 0
+      ) {
+        grav = baseGrav * ov(debugSpeedOverrides.apexFloatGravityMultiplier, APEX_FLOAT_GRAVITY_MULTIPLIER);
+      } else {
+        grav = baseGrav;
+      }
     }
+    cluster.velocityYWorld += grav * dtSec;
   }
-  cluster.velocityYWorld += grav * waterMult * dtSec;
 
   // ── Variable jump sustain ────────────────────────────────────────────
   // While the sustain timer is running and the player holds jump, prevent
   // gravity from eating into the initial launch speed.  If jump is released,
   // cancel the sustain immediately.
-  if (cluster.varJumpTimerTicks > 0 && world.isGrappleActiveFlag === 0) {
+  if (!isTouchingWater && cluster.varJumpTimerTicks > 0 && world.isGrappleActiveFlag === 0) {
     if (world.playerJumpHeldFlag === 1) {
       // Cap vy so it doesn't decay past the stored launch speed (negative = up).
       if (cluster.velocityYWorld > cluster.varJumpSpeedWorld) {
@@ -119,7 +117,7 @@ export function applyPlayerGravityAndJump(
   // Skip terminal velocity cap during grapple — the swing can legitimately
   // exceed the normal fall speed cap without causing tunnelling issues
   // because the rope constraint clamps displacement each tick.
-  if (world.isGrappleActiveFlag === 0 && cluster.velocityYWorld > 0) {
+  if (!isTouchingWater && world.isGrappleActiveFlag === 0 && cluster.velocityYWorld > 0) {
     const normalFallCap = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
     const fastFallCap = ov(debugSpeedOverrides.fastFallCapWorld, FAST_MAX_FALL_WORLD_PER_SEC);
     // Enter committed fast-fall mode when holding down while falling.
@@ -142,7 +140,7 @@ export function applyPlayerGravityAndJump(
     // Upward brake: holding jump while in committed fast-fall brakes descent
     // back toward normalFallCap.  Once at or below normalFallCap, exit mode.
     //
-    // Bug fix: we subtract (upwardBrake + grav * waterMult) instead of just
+    // Bug fix: we subtract (upwardBrake + grav) instead of just
     // upwardBrake.  Gravity was already applied above this section, so without
     // canceling it the net deceleration would be (brake - gravity) ≈ negative
     // (i.e., still accelerating).  Adding grav back cancels the gravity that
@@ -152,7 +150,7 @@ export function applyPlayerGravityAndJump(
         && cluster.velocityYWorld > normalFallCap;
     if (isBraking) {
       const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
-      cluster.velocityYWorld -= (upwardBrake + grav * waterMult) * dtSec;
+      cluster.velocityYWorld -= (upwardBrake + grav) * dtSec;
       if (cluster.velocityYWorld <= normalFallCap) {
         cluster.velocityYWorld = normalFallCap;
         cluster.isFastFallModeFlag = 0;
@@ -167,6 +165,14 @@ export function applyPlayerGravityAndJump(
   // While the grapple is active the jump button controls rope pull-in
   // (handled in grapple.ts step 0.25), so normal / wall jumps are skipped.
   if (world.playerJumpTriggeredFlag === 1 && world.isGrappleActiveFlag === 0) {
+    if (isTouchingWater) {
+      applyNonAdditiveWaterJump(cluster);
+      cluster.isGroundedFlag = 0;
+      cluster.isFastFallModeFlag = 0;
+      cluster.varJumpTimerTicks = 0;
+      world.playerJumpTriggeredFlag = 0;
+      return;
+    }
     const baseJumpSpeed = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
     // Skid jump boost: if jumping while skidding, increase jump height
     const skidJumpMult = ov(debugSpeedOverrides.skidJumpMultiplier, SKID_JUMP_MULTIPLIER);

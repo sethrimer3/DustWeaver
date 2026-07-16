@@ -79,6 +79,20 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.fireflyJarCount = 0;
   world.fireflyCount = 0;
   world.isPlayerInWaterFlag = 0;
+  world.isPlayerWasInWaterLastTickFlag = 0;
+  world.playerWaterState = 0;
+  world.playerWaterZoneIndex = -1;
+  world.playerWaterSubmersionRatio = 0;
+  world.playerWaterEntrySpeedWorld = 0;
+  world.playerBuoyancySurfaceYWorld = 0;
+  world.playerBuoyancyDepthFactor = 0;
+  world.playerWaterPreMovementBottomYWorld = 0;
+  world.playerWaterSurfaceEventSequence = 0;
+  world.playerWaterSurfaceEventKind = 0;
+  world.playerWaterSurfaceEventXWorld = 0;
+  world.playerWaterSurfaceEventYWorld = 0;
+  world.playerWaterSurfaceEventVelocityXWorld = 0;
+  world.playerWaterSurfaceEventVelocityYWorld = 0;
   world.dustPileCount = 0;
   world.windVentCount = 0;
 

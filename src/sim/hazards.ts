@@ -22,6 +22,15 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
 import { overlapAABB } from './physics/collision';
+import {
+  PLAYER_WATER_STATE_OUTSIDE,
+  PLAYER_WATER_STATE_SUBMERGED,
+  PLAYER_WATER_STATE_SURFACE,
+  WATER_SUBMERGED_ENTER_RATIO,
+  WATER_SUBMERGED_EXIT_RATIO,
+  WATER_SURFACE_STATE_TOLERANCE_WORLD,
+  type PlayerWaterState,
+} from './clusters/playerWaterPhysics';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,50 +45,6 @@ const SPRINGBOARD_LAUNCH_SPEED_WORLD = 420.0;
 const SPRINGBOARD_ANIM_TICKS = 12;
 
 // ── Water physics tuning ─────────────────────────────────────────────────────
-
-/**
- * Gravity multiplier when inside a water zone.
- * At 0.12, gravity is very weak — buoyancy force dominates for a strongly
- * floaty feel. Fast divers bleed speed via per-tick drag instead of a hard cap.
- */
-export const WATER_GRAVITY_MULTIPLIER = 0.12;
-
-/**
- * Strong upward buoyancy force (world units/s²), scaled by submersion ratio.
- * Full force when fully submerged; partial when only partly in water.
- * Tuned higher so medium/deep submersion consistently pushes the player up.
- */
-export const WATER_BUOYANCY_FORCE_WORLD = 700.0;
-
-/**
- * Horizontal drag multiplier applied per tick in water (0–1).
- * 1.0 = no drag; lower = more resistance per tick.
- */
-export const WATER_HORIZONTAL_DRAG_FACTOR = 0.90;
-
-/**
- * Vertical drag multiplier applied per tick in water (0–1).
- * Applied AFTER buoyancy so fast dives naturally bleed momentum.
- */
-export const WATER_VERTICAL_DRAG_FACTOR = 0.88;
-
-/**
- * Maximum upward float speed in water (negative = upward, wu/s).
- * Prevents the player from rocketing to the surface indefinitely.
- */
-export const WATER_MAX_FLOAT_SPEED_WORLD = -80.0;
-
-/**
- * Maximum fall/dive speed in water (wu/s). Set high so fast dives are not
- * capped — rely on WATER_VERTICAL_DRAG_FACTOR instead for natural slow-down.
- */
-export const WATER_MAX_FALL_SPEED_WORLD = 400.0;
-
-/**
- * Horizontal speed safety clamp in water (wu/s, extreme edge case only).
- * Normal resistance comes from WATER_HORIZONTAL_DRAG_FACTOR.
- */
-export const WATER_MAX_HORIZONTAL_SPEED_WORLD = 80.0;
 
 /** Damage dealt by lava per contact (with invulnerability cooldown). */
 const LAVA_ZONE_DAMAGE = 1;
@@ -313,46 +278,90 @@ function bounceAxis(
  * Uses AABB overlap instead of center-point: entry fires when the player's
  * feet first break the water surface.
  */
-export function computePlayerWaterState(world: WorldState): void {
+function updatePlayerWaterDetection(world: WorldState): void {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) {
     world.isPlayerInWaterFlag = 0;
+    world.playerWaterState = PLAYER_WATER_STATE_OUTSIDE;
+    world.playerWaterZoneIndex = -1;
     world.playerWaterSubmersionRatio = 0;
+    world.playerBuoyancySurfaceYWorld = 0;
+    world.playerBuoyancyDepthFactor = 0;
     return;
   }
 
-  const px  = player.positionXWorld;
-  const py  = player.positionYWorld;
-  const phw = player.halfWidthWorld;
-  const phh = player.halfHeightWorld;
+  const previousState = world.playerWaterState;
+  const previousZoneIndex = world.playerWaterZoneIndex;
+  const pLeft = player.positionXWorld - player.halfWidthWorld;
+  const pRight = player.positionXWorld + player.halfWidthWorld;
+  const pTop = player.positionYWorld - player.halfHeightWorld;
+  const pBottom = player.positionYWorld + player.halfHeightWorld;
+  const playerHeight = player.halfHeightWorld * 2;
 
-  world.isPlayerInWaterFlag = 0;
-  world.playerWaterSubmersionRatio = 0;
+  let bestZoneIndex = -1;
+  let bestSubmersion = 0;
+  let bestSurfaceYWorld = 0;
 
   for (let i = 0; i < world.waterZoneCount; i++) {
-    if (world.frozenWaterZoneMask[i] === 1) continue; // zone is frozen — skip buoyancy
-    const wLeft   = world.waterZoneXWorld[i];
-    const wTop    = world.waterZoneYWorld[i];
-    const wRight  = wLeft + world.waterZoneWWorld[i];
-    const wBottom = wTop  + world.waterZoneHWorld[i];
+    if (world.frozenWaterZoneMask[i] === 1) continue;
+    const wLeft = world.waterZoneXWorld[i];
+    const wTop = world.waterZoneYWorld[i];
+    const wRight = wLeft + world.waterZoneWWorld[i];
+    const wBottom = wTop + world.waterZoneHWorld[i];
+    if (pRight <= wLeft || pLeft >= wRight || pTop >= wBottom) continue;
 
-    const pLeft   = px - phw;
-    const pRight  = px + phw;
-    const pTop    = py - phh;
-    const pBottom = py + phh;
+    const overlaps = pBottom > wTop;
+    const retainsSurfaceContact = previousState !== PLAYER_WATER_STATE_OUTSIDE
+      && i === previousZoneIndex
+      && pBottom >= wTop - WATER_SURFACE_STATE_TOLERANCE_WORLD
+      && pBottom <= wTop + WATER_SURFACE_STATE_TOLERANCE_WORLD;
+    if (!overlaps && !retainsSurfaceContact) continue;
 
-    if (pRight <= wLeft || pLeft >= wRight || pBottom <= wTop || pTop >= wBottom) continue;
-
-    // Compute vertical submersion ratio (0 = foot just touching, 1 = fully under)
-    const overlapTop    = Math.max(pTop, wTop);
+    const overlapTop = Math.max(pTop, wTop);
     const overlapBottom = Math.min(pBottom, wBottom);
-    const overlapH      = Math.max(0, overlapBottom - overlapTop);
-    const playerH       = phh * 2.0;
-    const submersion    = playerH > 0.1 ? Math.min(1.0, overlapH / playerH) : 0;
+    const overlapHeight = Math.max(0, overlapBottom - overlapTop);
+    const submersion = playerHeight > 0.1
+      ? Math.min(1, overlapHeight / playerHeight)
+      : 0;
+    if (bestZoneIndex < 0 || submersion > bestSubmersion) {
+      bestZoneIndex = i;
+      bestSubmersion = submersion;
+      bestSurfaceYWorld = wTop;
+    }
+  }
 
-    world.isPlayerInWaterFlag = 1;
-    world.playerWaterSubmersionRatio = submersion;
-    break;
+  if (bestZoneIndex < 0) {
+    world.isPlayerInWaterFlag = 0;
+    world.playerWaterState = PLAYER_WATER_STATE_OUTSIDE;
+    world.playerWaterZoneIndex = -1;
+    world.playerWaterSubmersionRatio = 0;
+    world.playerBuoyancySurfaceYWorld = 0;
+    world.playerBuoyancyDepthFactor = 0;
+    return;
+  }
+
+  const remainsSubmerged = previousState === PLAYER_WATER_STATE_SUBMERGED
+    && bestZoneIndex === previousZoneIndex;
+  const submergedThreshold = remainsSubmerged
+    ? WATER_SUBMERGED_EXIT_RATIO
+    : WATER_SUBMERGED_ENTER_RATIO;
+  const nextState: PlayerWaterState = bestSubmersion >= submergedThreshold
+    ? PLAYER_WATER_STATE_SUBMERGED
+    : PLAYER_WATER_STATE_SURFACE;
+
+  world.isPlayerInWaterFlag = 1;
+  world.playerWaterState = nextState;
+  world.playerWaterZoneIndex = bestZoneIndex;
+  world.playerWaterSubmersionRatio = bestSubmersion;
+  world.playerBuoyancySurfaceYWorld = bestSurfaceYWorld;
+  world.playerBuoyancyDepthFactor = bestSubmersion;
+}
+
+export function computePlayerWaterState(world: WorldState): void {
+  updatePlayerWaterDetection(world);
+  const player = world.clusters[0];
+  if (player !== undefined) {
+    world.playerWaterPreMovementBottomYWorld = player.positionYWorld + player.halfHeightWorld;
   }
 }
 
@@ -454,93 +463,43 @@ export function applyHazards(world: WorldState): void {
   }
 
   // ── Water zones ──────────────────────────────────────────────────────────
-  // isPlayerInWaterFlag + playerWaterSubmersionRatio were pre-computed by
-  // computePlayerWaterState() before applyClusterMovement this tick.
-  // Re-run AABB detection here to apply buoyancy/drag physics and track entry.
-  const wasInWaterLastTick = world.isPlayerWasInWaterLastTickFlag;
+  // Water forces were applied in playerMovement before integration. Refresh
+  // contact after collision resolution and publish upper-surface transitions
+  // as a one-record sequence for the cosmetic ripple system.
+  const preMovementWaterState = world.playerWaterState;
+  const preMovementSurfaceYWorld = world.playerBuoyancySurfaceYWorld;
+  updatePlayerWaterDetection(world);
 
-  world.isPlayerInWaterFlag = 0;
-  world.playerWaterSubmersionRatio = 0;
-  world.playerBuoyancySurfaceYWorld = 0;
-  world.playerBuoyancyDepthFactor = 0;
+  const currentBottomYWorld = player.positionYWorld + player.halfHeightWorld;
+  const enteredThroughTop = preMovementWaterState === PLAYER_WATER_STATE_OUTSIDE
+    && world.playerWaterState !== PLAYER_WATER_STATE_OUTSIDE
+    && player.velocityYWorld > 0
+    && world.playerWaterPreMovementBottomYWorld <= world.playerBuoyancySurfaceYWorld
+      + WATER_SURFACE_STATE_TOLERANCE_WORLD
+    && currentBottomYWorld > world.playerBuoyancySurfaceYWorld;
+  const exitedThroughTop = preMovementWaterState !== PLAYER_WATER_STATE_OUTSIDE
+    && world.playerWaterState === PLAYER_WATER_STATE_OUTSIDE
+    && player.velocityYWorld < 0
+    && world.playerWaterPreMovementBottomYWorld >= preMovementSurfaceYWorld
+      - WATER_SURFACE_STATE_TOLERANCE_WORLD
+    && currentBottomYWorld < preMovementSurfaceYWorld
+      + WATER_SURFACE_STATE_TOLERANCE_WORLD;
 
-  for (let i = 0; i < world.waterZoneCount; i++) {
-    if (world.frozenWaterZoneMask[i] === 1) continue; // zone is frozen — skip buoyancy
-    const wLeft   = world.waterZoneXWorld[i];
-    const wTop    = world.waterZoneYWorld[i];
-    const wRight  = wLeft + world.waterZoneWWorld[i];
-    const wBottom = wTop  + world.waterZoneHWorld[i];
-
-    const pLeft   = px - phw;
-    const pRight  = px + phw;
-    const pTop    = py - phh;
-    const pBottom = py + phh;
-
-    if (pRight <= wLeft || pLeft >= wRight || pBottom <= wTop || pTop >= wBottom) continue;
-
-    const overlapTop    = Math.max(pTop, wTop);
-    const overlapBottom = Math.min(pBottom, wBottom);
-    const overlapH      = Math.max(0, overlapBottom - overlapTop);
-    const playerH       = phh * 2.0;
-    const submersion    = playerH > 0.1 ? Math.min(1.0, overlapH / playerH) : 0;
-
-    world.isPlayerInWaterFlag = 1;
-    world.playerWaterSubmersionRatio = submersion;
-    world.playerBuoyancySurfaceYWorld = wTop;
-
-    // ── Buoyancy ──────────────────────────────────────────────────────────
-    // Two-factor upward force: `submersion` (how much body is in water) ×
-    // `depthFactor` (how deep the player is relative to the surface).
-    //
-    // depthFactor is derived from the player's top edge relative to the water
-    // surface — mathematically it equals `submersion`, so the net formula is
-    // effectively BUOYANCY × submersion².  This naturally tapers to near-zero
-    // at the surface (small submersion → small depth → minimal lift) while
-    // providing strong upward force deep underwater (large submersion → large
-    // depth → full lift).  Combined with the fixed constant waterMult (0.12x
-    // gravity) in playerMovement.ts, equilibrium settles at ~39% submersion
-    // (player floating with upper body out of water).
-    //
-    // Formula derivation:
-    //   depthFactor = clamp(1 + (pTop - wTop) / playerH, 0, 1)
-    //               = clamp(overlapH / playerH, 0, 1)   (when pBottom ≥ wTop)
-    //               = submersion      (same as overlapH/playerH, clamped 0→1)
-    if (submersion > 0) {
-      const depthFactor = submersion;
-      world.playerBuoyancyDepthFactor = depthFactor;
-      const buoyancyAccelWorldPerSec2 = WATER_BUOYANCY_FORCE_WORLD * submersion * depthFactor;
-      player.velocityYWorld -= buoyancyAccelWorldPerSec2 * dtSec;
-    }
-
-    // Clamp upward float speed (prevent rocketing to surface)
-    if (player.velocityYWorld < WATER_MAX_FLOAT_SPEED_WORLD) {
-      player.velocityYWorld = WATER_MAX_FLOAT_SPEED_WORLD;
-    }
-
-    // Per-tick drag — bleeds off both downward dive momentum and upward excess
-    player.velocityYWorld *= WATER_VERTICAL_DRAG_FACTOR;
-    player.velocityXWorld *= WATER_HORIZONTAL_DRAG_FACTOR;
-
-    // Extreme safety clamp horizontal (drag handles normal range)
-    if (player.velocityXWorld > WATER_MAX_HORIZONTAL_SPEED_WORLD) {
-      player.velocityXWorld = WATER_MAX_HORIZONTAL_SPEED_WORLD;
-    } else if (player.velocityXWorld < -WATER_MAX_HORIZONTAL_SPEED_WORLD) {
-      player.velocityXWorld = -WATER_MAX_HORIZONTAL_SPEED_WORLD;
-    }
-
-    break; // one water zone per tick
+  if (enteredThroughTop || exitedThroughTop) {
+    world.playerWaterSurfaceEventSequence += 1;
+    world.playerWaterSurfaceEventKind = enteredThroughTop ? 1 : 2;
+    world.playerWaterSurfaceEventXWorld = player.positionXWorld;
+    world.playerWaterSurfaceEventYWorld = enteredThroughTop
+      ? world.playerBuoyancySurfaceYWorld
+      : preMovementSurfaceYWorld;
+    world.playerWaterSurfaceEventVelocityXWorld = player.velocityXWorld;
+    world.playerWaterSurfaceEventVelocityYWorld = player.velocityYWorld;
   }
 
-  // Update previous-tick flag and record entry speed for splash detection
   world.isPlayerWasInWaterLastTickFlag = world.isPlayerInWaterFlag;
-  if (wasInWaterLastTick === 0 && world.isPlayerInWaterFlag === 1) {
-    world.playerWaterEntrySpeedWorld = Math.sqrt(
-      player.velocityXWorld * player.velocityXWorld +
-      player.velocityYWorld * player.velocityYWorld,
-    );
-  } else if (world.isPlayerInWaterFlag === 0) {
-    world.playerWaterEntrySpeedWorld = 0;
-  }
+  world.playerWaterEntrySpeedWorld = enteredThroughTop
+    ? Math.hypot(player.velocityXWorld, player.velocityYWorld)
+    : 0;
 
   // ── Lava zones ───────────────────────────────────────────────────────────
   if (world.lavaInvulnTicks === 0) {

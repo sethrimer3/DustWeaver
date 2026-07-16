@@ -25,6 +25,7 @@ import {
 } from './movementConstants';
 import { applyPlayerGravityAndJump } from './playerVerticalMovement';
 import { applyPlayerHorizontalMovement } from './playerHorizontalMovement';
+import { applyPlayerWaterHorizontalDrag } from './playerWaterPhysics';
 
 /**
  * Tick all player-specific velocity and input logic for a single cluster.
@@ -189,4 +190,7 @@ export function tickPlayerMovement(
 
   // ── Horizontal movement + skid detection + fast-fall hitbox ──────────────
   applyPlayerHorizontalMovement(cluster, world, dtSec);
+  if (world.isPlayerInWaterFlag === 1) {
+    applyPlayerWaterHorizontalDrag(cluster, dtSec);
+  }
 }
