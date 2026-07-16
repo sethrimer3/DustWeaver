@@ -32,6 +32,7 @@ import type {
   RoomZoneDef,
   RoomBreakableBlockDef,
   RoomContactDamageBlockDef,
+  RoomWindTransmissionBlockDef,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
   RoomKineticBlockDef,
@@ -508,6 +509,7 @@ export type {
   RoomZoneDef,
   RoomBreakableBlockDef,
   RoomContactDamageBlockDef,
+  RoomWindTransmissionBlockDef,
   CrumbleVariant,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
@@ -743,6 +745,12 @@ export interface RoomDef {
   breakableBlocks?: readonly RoomBreakableBlockDef[];
   /** Solid custom-block cells that damage the player on contact (Phase 2D). */
   contactDamageBlocks?: readonly RoomContactDamageBlockDef[];
+  /**
+   * Solid custom-block placements that dampen or block pixel-material wind
+   * transmission (Phase 2F). One entry per placement (not per cell) — see
+   * RoomWindTransmissionBlockDef's doc comment.
+   */
+  windTransmissionBlocks?: readonly RoomWindTransmissionBlockDef[];
   /** Crumble blocks that collapse on first player contact. */
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Bounce pad blocks that reflect the player's velocity on contact. */

@@ -28,6 +28,7 @@ import type {
   MaterialResponsePreset,
   ContactDamagePreset,
   BreakResistancePreset,
+  CustomBlockWindResponsePreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
@@ -37,6 +38,7 @@ import {
   MATERIAL_RESPONSE_PRESET_REGISTRY,
   CONTACT_DAMAGE_PRESET_REGISTRY,
   BREAK_RESISTANCE_PRESET_REGISTRY,
+  CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -81,7 +83,7 @@ export function openCustomBlockDialog(
   function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
     return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
       a.materialResponse === b.materialResponse && a.contactDamage === b.contactDamage &&
-      a.breakResistance === b.breakResistance;
+      a.breakResistance === b.breakResistance && a.windResponse === b.windResponse;
   }
 
   function isDirty(): boolean {
@@ -266,12 +268,18 @@ export function openCustomBlockDialog(
     () => properties.breakResistance,
     (v) => { properties = { ...properties, breakResistance: v }; },
   );
+  const windResponseCtl = makePropertyRow<CustomBlockWindResponsePreset>(
+    'Wind response', CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY,
+    () => properties.windResponse,
+    (v) => { properties = { ...properties, windResponse: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
   propsSection.appendChild(materialResponseCtl.row);
   propsSection.appendChild(contactDamageCtl.row);
   propsSection.appendChild(breakResistanceCtl.row);
+  propsSection.appendChild(windResponseCtl.row);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
@@ -308,6 +316,8 @@ export function openCustomBlockDialog(
     contactDamageCtl.desc.textContent = CONTACT_DAMAGE_PRESET_REGISTRY[properties.contactDamage].description;
     breakResistanceCtl.select.value = properties.breakResistance;
     breakResistanceCtl.desc.textContent = BREAK_RESISTANCE_PRESET_REGISTRY[properties.breakResistance].description;
+    windResponseCtl.select.value = properties.windResponse;
+    windResponseCtl.desc.textContent = CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY[properties.windResponse].description;
     refreshCompatibilityMessage();
   }
 

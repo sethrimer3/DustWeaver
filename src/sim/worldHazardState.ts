@@ -272,6 +272,18 @@ export interface HazardWorldState {
    * All cells sharing one breakableBlockGroupId always carry the same value.
    */
   breakableBlockResistance: Uint8Array;
+  /**
+   * Packed wind-transmission tier per breakable-block cell (Phase 2F):
+   * 0=none/passThrough (not a windbreak), 1=dampen, 2=block. Resolved once at
+   * hazard-load time from `RoomBreakableBlockDef.windResponse`. Used ONLY by
+   * `destroyBreakableBlockCell` (sim/hazards.ts) to know whether — and how —
+   * to clear this cell's native-pixel region in
+   * `world.pixelMaterialSystem.windMask` when the cell is destroyed. The
+   * INITIAL mask is built independently at room-load time from
+   * `RoomDef.windTransmissionBlocks`, so this field never affects placement,
+   * only invalidation. 0 (no effect) for every pre-Phase-2F room.
+   */
+  breakableBlockWindTier: Uint8Array;
 
   // ── Break events (Phase 2C) ─────────────────────────────────────────────────
   /**
@@ -797,6 +809,7 @@ export function createHazardWorldState(): HazardWorldState {
     breakableBlockGroupId:         new Int16Array(MAX_BREAKABLE_BLOCKS).fill(-1),
     breakableBlockMaterial:        new Uint8Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockResistance:      new Uint8Array(MAX_BREAKABLE_BLOCKS).fill(1), // 1 = standard default
+    breakableBlockWindTier:        new Uint8Array(MAX_BREAKABLE_BLOCKS), // 0 = not a windbreak (default)
     breakEventCount:               0,
     breakEventXWorld:              new Float32Array(MAX_BREAK_EVENTS),
     breakEventYWorld:              new Float32Array(MAX_BREAK_EVENTS),

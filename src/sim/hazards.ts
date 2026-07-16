@@ -179,6 +179,28 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
       world.isContactDamageBlockActiveFlag[ci] = 0;
     }
   }
+
+  // Phase 2F: a fragile windbreak/dampener must stop attenuating wind the
+  // moment it breaks. `destroyBreakableBlockCell` runs inside `applyHazards`,
+  // which the tick pipeline calls AFTER this tick's wind application and
+  // pixel-material step (see tick.ts) — clearing here takes effect starting
+  // the NEXT tick's `applyWindForce` calls, exactly the same documented
+  // one-tick lag already accepted for the analogous solid-mask sync (see
+  // pixelMaterialSolidSync.ts). Only this cell's own native-pixel rect is
+  // cleared — a targeted region, not a full room-mask rebuild — matching
+  // that same file's "cheap, bounded, not a full rescan" precedent. Each
+  // breakable-block cell is exactly one grid block (even 2x2 fragile custom
+  // blocks decompose into 4 independent 1x1 cells — see the class doc
+  // comment on `RoomBreakableBlockDef`), so a single BLOCK_SIZE_MEDIUM
+  // square centered at (xWorld, yWorld) is always this cell's exact
+  // footprint.
+  if (world.breakableBlockWindTier[index] !== 0) {
+    const windMask = world.pixelMaterialSystem.windMask;
+    if (windMask !== null) {
+      const half = BLOCK_SIZE_MEDIUM * 0.5;
+      windMask.clearRect(xWorld - half, yWorld - half, xWorld + half, yWorld + half);
+    }
+  }
 }
 
 /**

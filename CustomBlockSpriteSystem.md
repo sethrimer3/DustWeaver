@@ -1455,34 +1455,448 @@ property bundle now legitimately has one more field — no other Phase
    per-room or per-campaign — tuning them requires an engine code change,
    not a JSON change (by design, per this phase's constraints).
 
-## Proposed Phase 2F: Wind-Response Presets (Not Implemented)
+## Phase 2F: Wind-Transmission Presets
 
-Recommendation: **wind-response presets**, ahead of liquid-interaction
-presets, should be the next phase.
+Continues directly from Phase 2E (`breakResistance`, present and stable —
+`customBlocksPhase2E.test.ts` and the full suite were re-verified green
+before this phase's first code change). Adds `windResponse`, a preset that
+lets a solid custom block attenuate the existing pixel-material wind system
+(`PixelMaterialSystem.applyWindForce`) reaching sand, water, and sandstone
+particles standing behind it.
 
-- **Wind response** reuses the existing wind-particle force system
-  (`pixelMaterialMovementWind.ts`, `environmentalDust`) the same way
-  `materialResponse` reused `PlayerSfxManager`/`CrumbleDebrisRenderer`,
-  `contactDamage` reused `applyPlayerDamageWithKnockback`, and
-  `breakResistance` reused the existing momentum-threshold comparison — a
-  bounded enum of wind-interaction presets (e.g. `none | blocksWind |
-  deflects`) mapped to existing force/occlusion behavior, with no new
-  physics engine. It is purely cosmetic/environmental (does not touch player
-  health, collision, or destruction), making it a lower-risk phase than any
-  of the four already completed.
-- **Liquid interaction** (`'seal' | 'drain' | 'none'`) reaches into the
-  water-zone buoyancy system, which is more architecturally entangled (it
-  drives player movement physics directly, not just a cosmetic layer or a
-  contact/momentum check), and is more likely to interact unexpectedly with
-  the existing water-zone/frozen-zone mechanics than wind response would.
+### The New Property and Defaults
 
-Caveat: unlike Phases 2A→2E, neither remaining candidate has as clean and
-obvious a reuse target as `applyPlayerDamageWithKnockback` was for Phase 2D
-or the existing momentum comparison was for Phase 2E — whichever is chosen
-next should start with the same investigation-first approach (locate the
-existing wind/liquid system, document its constants and integration points)
-before committing to a property shape.
+```ts
+readonly windResponse: CustomBlockWindResponsePreset; // 'passThrough' | 'dampen' | 'block'
+```
 
-Not implemented in this phase — no code changes were made toward it.
+Example campaign JSON, alongside every prior phase's properties:
+
+```json
+{
+  "properties": {
+    "collision": "solid",
+    "friction": "default",
+    "breakability": "fragile",
+    "materialResponse": "stone",
+    "contactDamage": "none",
+    "breakResistance": "standard",
+    "windResponse": "block"
+  }
+}
+```
+
+`'passThrough'` is the default and a complete no-op — every pre-Phase-2F
+campaign, and every block that never sets this field, resolves to it with
+zero validation errors. Only enum ids are ever serialized; no numeric wind
+multiplier, callback, or asset path is ever present in JSON.
+
+### The Two Wind-Response Concepts (Naming Disambiguation)
+
+DustWeaver already had an unrelated "wind response" concept before this
+phase: `getMaterialWindResponse(material)` in `pixelMaterialTypes.ts`, a
+per-material multiplier (sand `1`, 2×2 sand `0.55`, water `1.3`, sandstone
+`0.6`) describing how reactive a material itself is to wind that reaches it.
+This phase's property answers a different question — how much force reaches
+a pixel at all, given the custom blocks standing between the emitter and
+that pixel — so it was deliberately named `CustomBlockWindResponsePreset`
+(not `WindResponsePreset`), and its resolution function
+`resolveCustomBlockWindTransmission` (not a second `getWindResponse`), to
+keep the two concepts textually and semantically distinct. The full formula
+applied per affected particle is:
+
+```
+velocity delta = forceX/Y * distanceFalloff * customBlockTransmission * materialWindResponse
+```
+
+`distanceFalloff` and `materialWindResponse` are completely unchanged by
+this phase; `customBlockTransmission` is the only new term, and it defaults
+to exactly `1` (no-op) whenever no custom block sits between the emitter and
+the particle.
+
+### Registry and the Centralized Transmission Factor
+
+`CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS = ['passThrough', 'dampen', 'block']`
+and `CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY` follow the same
+`PresetMeta<T>` shape as every other preset registry. Numeric packing
+(`windResponseTierToIndex` / `indexToWindResponseTier`) follows the
+`contactDamage` convention exactly: only the two "active" tiers (`'dampen'`
+→ 0, `'block'` → 1) are ever packed into a `Uint8Array` slot —
+`'passThrough'` is never stored numerically at all, since a pass-through
+block simply has no entry in the runtime wind-transmission mask (see
+`isEligibleForWindTransmission`).
+
+The centralized dampening multiplier lives in
+`src/sim/pixelMaterials/customBlockWindMask.ts`:
+
+```ts
+export const CUSTOM_BLOCK_WIND_DAMPEN_FACTOR = 0.4;
+```
+
+Chosen (not blindly copied from the suggested 0.35–0.5 range) by relating it
+to the existing per-material `windResponse` table: those values span
+0.55–1.3, so `0.4` sits below that entire range — a dampened impulse is
+therefore always measurably weaker than even the heaviest existing
+material's own response would otherwise produce, while remaining clearly
+distinguishable from `'block'`'s exact `0`. `'block'` transmits exactly `0`;
+`'passThrough'`/no-occluder transmits exactly `1`. These three values are
+converted from a tier by the single function
+`resolveCustomBlockWindTransmission` — no other call site branches on a tier
+or hardcodes a factor.
+
+### Compatibility
+
+One new rule, `windResponseRequiresSolid`, added to
+`checkCustomBlockPropertyCompatibility`:
+
+- `windResponse !== 'passThrough'` combined with `collision !== 'solid'` is
+  flagged — a one-way or non-solid block has no continuous native-pixel
+  footprint for the ray-trace to treat as an occluder. `'passThrough'` is
+  always valid regardless of collision.
+- Both indestructible and fragile solid blocks may use any tier — wind
+  transmission is completely independent of breakability, mirroring how
+  `contactDamage` is independent of `breakability`.
+- At load time, an incompatible combination never rejects the block —
+  `validateAndResolveCustomBlockProperties` safely forces `windResponse`
+  back to `'passThrough'` and reports a diagnostic, the same
+  fallback-not-reject pattern used for every other compatibility rule.
+- In the editor, the same `refreshCompatibilityMessage()` hook (unchanged
+  call site, extended body) surfaces the message and blocks Save, exactly
+  like the pre-existing `contactDamageRequiresSolid` rule.
+
+### Runtime Architecture: CustomBlockWindMask and Directional Occlusion
+
+`src/sim/pixelMaterials/customBlockWindMask.ts` introduces `CustomBlockWindMask`,
+a native-pixel-resolution `Uint8Array` (0 = no restriction, 1 = dampen,
+2 = block) that deliberately mirrors the existing `SolidMask` class's shape
+(`markRect`/`tierAt`/bounds handling) without touching or repurposing
+`SolidMask` itself — a different array, a different meaning, built and owned
+independently. It tracks a running non-zero-cell count so `isEmpty` is an
+O(1) check rather than a scan, which is what the fast path (below) relies
+on.
+
+Directional occlusion is resolved by `traceMaxWindTransmissionTier`, a
+bounded integer Bresenham line trace from the emitter's center to the
+target particle's cell:
+
+- **Beside vs. between**: only cells the line itself crosses are visited —
+  a block standing next to the straight-line path, but not on it, is never
+  consulted and therefore never affects the impulse.
+- **Same-side-as-source**: a block beyond the emitter (not between the
+  emitter and the particle) is likewise never on the traced segment, so it
+  has no effect — occlusion is strictly directional.
+- **Minimum-transmission-encountered policy**: the trace tracks the MAXIMUM
+  tier seen along the path (tier ordering `0 < 1 < 2` is monotonic in
+  restrictiveness, so max-tier ≡ min-transmission), converting to a float
+  multiplier exactly once via `resolveCustomBlockWindTransmission` after the
+  walk completes. This is what makes a 2-cell-thick dampening wall attenuate
+  identically to a 1-cell-thick one, and what makes crossing a `'dampen'`
+  cell then a `'block'` cell resolve to fully blocked rather than
+  double-dampened — thickness and multiple distinct blocks never compound.
+- The trace exits early the instant tier 2 (`'block'`) is seen, since no
+  tier can exceed it.
+- No heap allocation, no recursion, and a defensive `MAX_TRACE_STEPS` bound
+  (4096) that no real room's native-pixel diagonal comes close to.
+
+### Integration into applyWindForce
+
+`PixelMaterialSystem.applyWindForce` (the single shared primitive already
+used by every wind emitter — player-movement wind, and any future emitter,
+with zero per-emitter special-casing) gained one new field
+(`windMask: CustomBlockWindMask | null`) and one new computation per
+newly-affected particle:
+
+```ts
+const transmission = maskActive && mask !== null
+  ? resolveCustomBlockWindTransmission(traceMaxWindTransmissionTier(mask, centerXPx, centerYPx, x, y))
+  : 1;
+if (transmission <= 0) { affected.add(p); continue; } // fully blocked — no force, no wake.
+...
+p.windVelX += forceX * strength * transmission * response;
+p.windVelY += forceY * strength * transmission * response;
+```
+
+Because the dedup check (`affected.has(p)`) runs before the transmission
+computation, a multi-cell particle (e.g. 2×2 sand) still receives the trace
+and impulse exactly once per `applyWindForce` call, regardless of how many
+of its footprint cells fall within the force radius — the existing
+Phase-3 dedup guarantee is untouched. No existing wind strength, radius,
+falloff, damping, or per-material response constant was changed.
+
+### Fast Path for passThrough-Only Rooms
+
+`maskActive = mask !== null && !mask.isEmpty` is computed ONCE per
+`applyWindForce` call, not per particle. When false (every pre-Phase-2F
+room, and any room where every custom block is `'passThrough'`),
+`transmission` is set to exactly `1` for every particle with no ray trace
+ever invoked — behavior is byte-identical to pre-Phase-2F code. This was
+verified directly: `customBlocksPhase2F.test.ts` asserts that a null
+`windMask` and an explicitly-empty (but non-null) `CustomBlockWindMask`
+produce IDENTICAL `windVelX` results for the same gust, and that
+`traceMaxWindTransmissionTier` on an empty mask returns instantly (well
+under a millisecond) even when asked to trace a 2000-pixel span.
+
+### Fragile-Windbreak Invalidation and Tick Ordering
+
+The real tick order (verified directly in `tick.ts`) is
+`syncPixelMaterialSolidGeometry` → `applyMovementWindToPixelMaterials` →
+`tickPixelMaterials` → `applyHazards` (last). Since fragile-block
+destruction happens inside `applyHazards`, a windbreak destroyed this tick
+is reflected starting the NEXT tick's wind application — the exact same
+one-tick lag already accepted and documented for the analogous solid-mask
+sync in `pixelMaterialSolidSync.ts`, not a new inconsistency introduced by
+this phase.
+
+`destroyBreakableBlockCell` (`sim/hazards.ts`) — the single shared
+destruction function used by both the 1×1 and grouped 2×2 pathways — gained
+one new branch: if the destroyed cell's packed `breakableBlockWindTier` is
+non-zero, it calls `windMask.clearRect(...)` for exactly that cell's
+native-pixel footprint (one block, always, even for a cell that's part of a
+2×2 group — 2×2 fragile placements already decompose into four independent
+1×1 breakable-block cells, so this is a targeted region clear, never a full
+room-mask rebuild). For a grouped 2×2 windbreak, all four cells carry the
+tier and are destroyed in the same pass, so the whole footprint is cleared
+atomically.
+
+This relies on a second, independent per-cell field —
+`RoomBreakableBlockDef.windResponse` / `world.breakableBlockWindTier` — kept
+deliberately separate from the room-load-time
+`RoomDef.windTransmissionBlocks` list (which builds the INITIAL mask,
+covering both fragile and indestructible windbreaks, one entry per
+placement). The initial-mask list and the per-cell invalidation field serve
+different purposes and are populated independently, exactly mirroring how
+`materialResponse` and `contactDamage` are each resolved once, for their own
+purpose, by their own consumer.
+
+### 1×1 and 2×2 Semantics
+
+`RoomWindTransmissionBlockDef` is registered ONCE PER PLACEMENT — not per
+cell — since building the wind mask is a static, room-load-time rectangle
+mark, not a per-tick runtime detection array like `breakableBlocks` or
+`contactDamageBlocks`. A 2×2 placement therefore produces exactly one
+`windTransmissionBlocks` entry (`{ xBlock, yBlock, wBlock: 2, hBlock: 2,
+tier }`), marked as one `markRect` call covering the full footprint —
+confirmed directly by test (a 2×2 block registers exactly one entry, not
+four). Per-cell invalidation on fragile destruction (above) still operates
+at the cell level, since that's how the breakable-block pathway already
+tracks destruction — but since the four cells of a group are always
+destroyed together, the net effect is that the whole 2×2 mask region is
+always cleared atomically as one unit.
+
+### Interaction with Sand, Water, and Sandstone
+
+- **Sand**: pass-through preserves the exact pre-Phase-2F impulse; dampen
+  reduces (never zeroes) it by exactly `CUSTOM_BLOCK_WIND_DAMPEN_FACTOR`;
+  block reduces it to exactly zero and does not wake a sleeping particle.
+- **Water**: retains its own (higher, `1.3`) material-response multiplier
+  after transmission is applied — dampening scales water and sand by the
+  identical transmission factor, so their relative momentum ratio after a
+  dampened gust is unchanged from their undampened ratio; dampening reduces
+  water's response, it never replaces or overrides it.
+- **Sandstone**: erosion accumulation (`p.erosionDamage += windSpeed *
+  SANDSTONE_EROSION_RATE`) is purely downstream of `p.windVelX/Y`, so
+  transmission scaling automatically affects erosion speed with zero
+  sandstone-specific code changes — dampening erodes slower (confirmed by
+  test: less accumulated damage than an identical undampened gust), a full
+  windbreak prevents erosion entirely (confirmed: zero accumulated damage
+  after 50 gust+step cycles behind a `'block'` wall), and
+  `SANDSTONE_EROSION_THRESHOLD`/`SANDSTONE_EROSION_RATE` themselves are
+  untouched. Player-impact fracture (`applyPlayerImpactFracture`) uses fixed
+  impact-speed constants entirely independent of the wind mask and is
+  unaffected (confirmed by test).
+- **2×2 sand**: receives exactly one transmitted impulse per
+  `applyWindForce` call regardless of footprint size, via the pre-existing
+  dedup mechanism — confirmed by test that a 2×2 particle's resulting
+  velocity never exceeds what a single dampened/blocked impulse could
+  produce.
+
+### Interaction with Other Custom-Block Properties
+
+Verified independent, by test, against every other property this phase
+touches: collision variants (wind transmission requires solid, exactly like
+contact damage), slippery friction (untouched), all three contact-damage
+tiers (a fragile windbreak can still damage the player on contact — the two
+systems share no code path), player invulnerability (untouched), all three
+break-resistance tiers (a windbreak can be weak, standard, or reinforced —
+its own threshold governs when it breaks, independent of its wind tier),
+material-specific break sounds/particles (a metal windbreak still emits
+exactly one material-specific break event when destroyed), and stable
+IDs/placement ownership (adjacent windbreak placements — one fragile, one
+indestructible — remain fully independent; breaking one never clears the
+other's mask region).
+
+### Editor Integration
+
+`editorCustomBlockDialog.ts` gained one more `makePropertyRow` call
+(`windResponseCtl`, labels "Pass-through" / "Dampen" / "Windbreak"),
+threaded through `propertiesEqual` (dirty-tracking), the undo/redo snapshot
+(already a full `{pixelData, properties}` object — no new snapshot shape
+needed), and `refreshPropertyControls` (rename/duplicate/reload sync) —
+exactly the same call-site pattern as every prior phase's dropdown, no new
+architecture. `editorUI.ts`'s palette card gained a `windBadge` (`· Dampens
+wind` / `· Windbreak`, no badge for the silent `'passThrough'` default),
+appended to the existing collision/friction/breakability/material/damage/
+resistance badge line.
+
+### Backward Compatibility
+
+- Schema-v1 blocks, and schema-v2 blocks saved before Phase 2F, load exactly
+  as before and resolve `windResponse` to `'passThrough'` with zero
+  validation errors.
+- Built-in (hand-authored, non-custom-block) `breakableBlocks` room entries
+  have no `windResponse` field and default to packed tier `0` — never
+  registered as a windbreak, confirmed by test.
+- A room with no custom blocks at all (or only `'passThrough'` ones) builds
+  a `windMask` with `isEmpty === true`, and wind behaves byte-identically to
+  every pre-Phase-2F room — confirmed by test.
+- Built-in walls and platforms are completely unaffected — only custom
+  blocks explicitly registered in `RoomDef.windTransmissionBlocks` (which is
+  populated exclusively from custom-block placements in
+  `editorRoomBuilder.ts`) ever appear in the mask; ordinary authored walls
+  never globally block wind.
+- Existing wind emitters (movement-generated wind via
+  `pixelMaterialMovementWind.ts`) call the same `applyWindForce` with no
+  changes to their own call sites — transmission is applied transparently
+  inside the shared primitive.
+- Export/relocation and room reload are unchanged: the mask is rebuilt fresh
+  from `RoomDef.windTransmissionBlocks` on every `loadRoomPixelMaterials`
+  call, exactly like the solid mask.
+- Sprite caching: `updateCustomBlockProperties` updates `windResponse`
+  without rebuilding the cached canvas, confirmed by test (same canvas
+  object instance before/after).
+
+### Performance Considerations
+
+- The fast path (`maskActive` computed once per `applyWindForce` call) means
+  a room with zero dampen/block blocks pays zero extra cost versus
+  pre-Phase-2F code — no per-particle branch beyond one boolean check.
+- The Bresenham trace is allocation-free and bounded; it only runs for
+  newly-affected particles (already deduped), never per footprint cell of a
+  multi-cell particle, and never for a room with an empty mask.
+- `CustomBlockWindMask`'s `isEmpty` is an O(1) counter check, not a scan.
+- `clearRect`/`markRect` touch only the affected rectangle, never the whole
+  mask — room-load builds the mask once via bounded `markRect` calls (one
+  per eligible placement), and fragile destruction clears one cell's
+  rectangle at a time, never triggering a full mask rebuild.
+
+### Tests (Phase 2F)
+
+New file `src/tests/customBlocksPhase2F.test.ts` (55 tests) exercises the
+real pipeline end to end: schema-v1/v2 defaults, all three presets
+round-tripping, unknown-value fallback with a structured diagnostic, numeric
+packing round trip, the `windResponseRequiresSolid` compatibility rule
+(rejecting oneWay/nonSolid + dampen/block, always accepting passThrough,
+accepting solid + either tier regardless of breakability) and its load-time
+safe-fallback, `CustomBlockWindMask` unit behavior (empty/non-empty,
+markRect/clearRect, out-of-bounds reads, the empty-mask fast-return
+performance check), direct `PixelMaterialSystem.applyWindForce` transmission
+tests (null-mask/empty-mask equivalence, exact dampen-factor application,
+exact-zero blocking without waking a sleeping particle, beside-vs-between
+and same-side-as-source directional exclusion, 2-cell-thick vs. 1-cell-thick
+non-compounding, dampen-then-block strongest-restriction, two distinct
+dampen blocks not compounding below the single-block factor), per-material
+retention (water's higher response preserved through dampening, sand
+correctly reduced), sandstone erosion interaction (dampened erosion slower
+but nonzero, full block prevents erosion entirely, player-impact fracture
+unaffected), 2×2 single-impulse dedup with transmission, real room-builder
+wiring (one `windTransmissionBlocks` entry per placement — 1×1 and 2×2 alike
+— never per cell, no entry at all for passThrough, `loadRoomPixelMaterials`
+building a correctly-populated non-empty mask, a passThrough-only room
+building an empty one), fragile-windbreak invalidation through the real
+`applyHazards` destruction pathway (unbroken 1×1 occludes / broken 1×1 no
+longer does, a grouped 2×2 clears its whole footprint atomically on group
+destruction, adjacent independent placements never affect each other,
+indestructible windbreaks can never be cleared), interaction preservation
+with contact damage/break-resistance/material-response, editor
+dirty-tracking/undo-redo/rename/duplicate at the data-model level, the
+sprite-cache properties-only update, export/relocation and campaign-switch
+isolation, and built-in/no-custom-block backward compatibility. No other
+Phase 2A-2E test file was touched, and all 968 tests in the full suite pass.
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (968/968
+  passing), and `npm run build` were all actually run for this phase.
+  `customBlocksPhase2F.test.ts`, the pixel-material test files
+  (`pixelMaterials*.test.ts`), and the full custom-block test suite were
+  additionally run directly and pass.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session, for the same reason documented in every prior
+  phase's section — this environment's headless Chromium reproducibly
+  stalls/crashes on this project's editor/campaign-loading flows (confirmed
+  base-branch-reproducible, not something this or any prior phase
+  introduced). All verification here was done through the automated test
+  suite exercising the real `PixelMaterialSystem.applyWindForce`,
+  `editorRoomDataToRoomDef`, `loadRoomHazards`/`loadRoomPixelMaterials`, and
+  `applyHazards` code paths (not mocks) — but no actual frame was rendered,
+  no wind visual/debug overlay was observed by a human or automated UI
+  driver, and no actual player-driven gust or windbreak destruction was
+  triggered through real input.
+- Anyone relying on this phase for a real campaign should manually create
+  pass-through, dampen, and windbreak blocks (both 1×1 and 2×2), place
+  sand/water/sandstone behind each, generate wind from both sides, confirm
+  only the shielded side is affected, break a fragile windbreak and confirm
+  wind passes through on the very next visible frame, test weak/reinforced
+  fragile windbreaks, confirm contact damage and break destruction still
+  feel correct, save/reopen/export/relocate/reopen, and confirm older
+  campaigns are visually and behaviorally unchanged, prior to shipping.
+
+### Remaining Limitations
+
+1. **No wind-caused block movement or damage** — a custom block's own
+   `windResponse` never moves, damages, or destroys the block itself; it
+   only changes wind transmission to particles behind it, by design.
+2. **A single global dampening factor** — `CUSTOM_BLOCK_WIND_DAMPEN_FACTOR`
+   applies to every `'dampen'` block in every room; there is no per-block
+   numeric override (deliberately, to keep campaign JSON free of arbitrary
+   physics numbers).
+3. **No directional vents or wind sources on custom blocks** — this phase
+   only lets a block ATTENUATE wind passing through; it cannot yet emit,
+   redirect, or amplify wind itself.
+4. **No liquid-specific interaction** — a windbreak affects water's wind
+   momentum exactly like sand's, but does not yet seal, drain, or otherwise
+   interact with the water-zone buoyancy system.
+
+## Proposed Phase 2G: Liquid-Interaction Presets, Trigger Behavior, or Directional Wind Vents (Not Implemented)
+
+Recommendation: **liquid-interaction presets** (`'none' | 'seal' | 'drain'`)
+are the most natural next phase, ahead of generic trigger behavior or
+directional wind vents — but with a real architectural caveat noted below.
+
+- **Liquid interaction** would reuse the existing water-zone buoyancy system
+  (`playerWaterSubmersionRatio`/`playerBuoyancyDepthFactor` in
+  `worldHazardState.ts`) and, likely, the pixel-material liquid behavior
+  (`stepLiquidParticle`) the same way `windResponse` reused
+  `applyWindForce` — a bounded enum mapped to existing water-interaction
+  code, with no new physics engine. It is the last of the "attenuate an
+  existing environmental force" family this custom-block system has been
+  building out since Phase 2C (material response → contact damage → break
+  resistance → wind transmission → liquid interaction), so it is the
+  lowest-risk remaining candidate with a precedent-following shape.
+  **Caveat**: unlike wind (a pure force-application layer), the water-zone
+  system directly drives player movement physics (buoyancy, submersion),
+  so a "seal" preset that blocks water from a region touches player-facing
+  physics more directly than any of Phases 2C-2F did — it should start with
+  the same investigation-first approach (locate the exact buoyancy
+  integration point, confirm it can be gated without touching the buoyancy
+  math itself) before committing to a property shape.
+- **Trigger behavior** (a custom block that fires a room event — a
+  dialogue trigger, a transition, a one-shot switch — on player contact)
+  would be a materially different kind of phase: every phase so far has
+  mapped a preset to an EXISTING deterministic subsystem, whereas triggers
+  would need a new event-dispatch concept even if built from existing
+  primitives (`RoomDialogueTriggerDef` already exists as a non-custom-block
+  zone). This is likely more design work than a single bounded phase, and a
+  poor fit for the "reuse an existing pathway" pattern that has kept every
+  phase so far low-risk.
+- **Directional wind vents** (a custom block that EMITS wind, rather than
+  merely attenuating it) is the most natural extension of this exact phase
+  — it would reuse `CustomBlockWindMask`'s footprint data and
+  `applyWindForce`'s existing force-application primitive, needing only a
+  new emitter call site (analogous to `pixelMaterialMovementWind.ts`) rather
+  than new sim architecture. It is a smaller, more tightly-scoped phase than
+  liquid interaction, but is arguably a refinement of Phase 2F rather than a
+  new capability category, so it is ranked below liquid interaction as the
+  next MAJOR phase.
 
 Not implemented in this phase — no code changes were made toward it.

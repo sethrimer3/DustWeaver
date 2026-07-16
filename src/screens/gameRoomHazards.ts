@@ -27,7 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
-import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex } from '../levels/customBlockProperties';
+import { materialResponseToIndex, contactDamageTierToIndex, breakResistanceToIndex, windResponseTierToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -186,6 +186,10 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     // the pre-Phase-2E global momentum threshold, so built-in breakable
     // blocks are completely unaffected by this phase.
     world.breakableBlockResistance[bi] = breakResistanceToIndex(b.breakResistance ?? 'standard');
+    // Phase 2F: 0 = not a windbreak (default — matches every pre-Phase-2F
+    // and built-in breakable block). Only set for cells whose originating
+    // custom block was ALSO eligible for wind transmission.
+    world.breakableBlockWindTier[bi] = b.windResponse !== undefined ? windResponseTierToIndex(b.windResponse) + 1 : 0;
   }
 
   // ── Custom block contact damage (Phase 2D) ───────────────────────────────

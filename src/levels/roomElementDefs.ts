@@ -87,6 +87,44 @@ export interface RoomBreakableBlockDef {
    * placement, not per cell.
    */
   breakResistance?: 'weak' | 'standard' | 'reinforced';
+  /**
+   * Phase 2F: the resolved wind-transmission tier for this breakable cell,
+   * threaded from the originating custom block's `properties.windResponse`
+   * when it is 'dampen' or 'block' (never 'passThrough' — see
+   * isEligibleForWindTransmission in customBlockProperties.ts). Used ONLY to
+   * invalidate this cell's native-pixel wind-mask region when it is destroyed
+   * (see destroyBreakableBlockCell in sim/hazards.ts) — the initial mask
+   * itself is built once at room-load time from `RoomDef.windTransmissionBlocks`,
+   * independently of this per-cell field. Omitted for pre-Phase-2F data and
+   * for built-in (non-custom-block) breakable blocks, matching every other
+   * per-cell optional field above.
+   */
+  windResponse?: 'dampen' | 'block';
+}
+
+/**
+ * Phase 2F: a solid custom-block placement that dampens or blocks
+ * pixel-material wind transmission (sand/water/sandstone wind — see
+ * PixelMaterialSystem.applyWindForce and sim/pixelMaterials/customBlockWindMask.ts).
+ * Registered ONCE PER PLACEMENT (not per cell, unlike RoomBreakableBlockDef/
+ * RoomContactDamageBlockDef) — the wind mask is a static native-pixel region
+ * marked at room-load time from the placement's full footprint, not a
+ * per-tick runtime detection array, so there is no need to decompose a 2x2
+ * placement into 4 cell entries sharing a group id. Present for BOTH fragile
+ * and indestructible solid blocks — breakability is unrelated to whether a
+ * block modifies wind transmission.
+ */
+export interface RoomWindTransmissionBlockDef {
+  /** Left edge of the placement's footprint (block units). */
+  xBlock: number;
+  /** Top edge of the placement's footprint (block units). */
+  yBlock: number;
+  /** Footprint width (block units) — 1 or 2. */
+  wBlock: number;
+  /** Footprint height (block units) — 1 or 2. */
+  hBlock: number;
+  /** Which engine-owned wind-transmission tier this placement applies. */
+  tier: 'dampen' | 'block';
 }
 
 /**

@@ -427,11 +427,11 @@ describe('Phase 2B: backward compatibility', () => {
 
   test('24. all existing Phase 2A property tests keep passing (spot check: solid/oneWay/nonSolid unaffected)', () => {
     assert.equal(checkCustomBlockPropertyCompatibility(
-      { collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none' }, 1, 1).length, 0);
+      { collision: 'solid', friction: 'default', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough' }, 1, 1).length, 0);
     assert.equal(checkCustomBlockPropertyCompatibility(
-      { collision: 'oneWay', friction: 'slippery', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none' }, 2, 2).length, 0);
+      { collision: 'oneWay', friction: 'slippery', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough' }, 2, 2).length, 0);
     assert.ok(checkCustomBlockPropertyCompatibility(
-      { collision: 'nonSolid', friction: 'slippery', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none' }, 1, 1)
+      { collision: 'nonSolid', friction: 'slippery', breakability: 'indestructible', materialResponse: 'stone', contactDamage: 'none', breakResistance: 'standard', windResponse: 'passThrough' }, 1, 1)
       .some(i => i.rule === 'nonSolidNoFriction'));
   });
 });

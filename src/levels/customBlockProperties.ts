@@ -22,8 +22,11 @@
  * Presets implemented in Phase 2E:
  *   - Break resistance: weak | standard | reinforced (fragile-block momentum threshold)
  *
+ * Presets implemented in Phase 2F:
+ *   - Wind response: passThrough | dampen | block (pixel-material wind transmission)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (wind, liquids, triggers).
+ * deferred categories (liquids, triggers).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -36,6 +39,17 @@ export type BreakabilityPreset = 'indestructible' | 'fragile';
 export type MaterialResponsePreset = 'stone' | 'wood' | 'metal';
 export type ContactDamagePreset = 'none' | 'low' | 'high';
 export type BreakResistancePreset = 'weak' | 'standard' | 'reinforced';
+/**
+ * Phase 2F: how much a solid custom block attenuates PIXEL-MATERIAL wind
+ * transmission (sand/water/sandstone wind, via PixelMaterialSystem.applyWindForce).
+ * Named distinctly (not "WindResponsePreset") because DustWeaver already has an
+ * UNRELATED per-pixel-material "wind response" concept
+ * (getMaterialWindResponse in pixelMaterialTypes.ts — how reactive a material
+ * itself is to wind). This property controls only the TRANSMISSION term (how
+ * much force reaches a material through this block), never the material's own
+ * response multiplier — see CustomBlockSpriteSystem.md for the full formula.
+ */
+export type CustomBlockWindResponsePreset = 'passThrough' | 'dampen' | 'block';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
@@ -43,6 +57,7 @@ export const BREAKABILITY_PRESET_IDS: readonly BreakabilityPreset[] = ['indestru
 export const MATERIAL_RESPONSE_PRESET_IDS: readonly MaterialResponsePreset[] = ['stone', 'wood', 'metal'];
 export const CONTACT_DAMAGE_PRESET_IDS: readonly ContactDamagePreset[] = ['none', 'low', 'high'];
 export const BREAK_RESISTANCE_PRESET_IDS: readonly BreakResistancePreset[] = ['weak', 'standard', 'reinforced'];
+export const CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS: readonly CustomBlockWindResponsePreset[] = ['passThrough', 'dampen', 'block'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -61,6 +76,9 @@ export function isContactDamagePreset(v: unknown): v is ContactDamagePreset {
 }
 export function isBreakResistancePreset(v: unknown): v is BreakResistancePreset {
   return typeof v === 'string' && (BREAK_RESISTANCE_PRESET_IDS as readonly string[]).includes(v);
+}
+export function isCustomBlockWindResponsePreset(v: unknown): v is CustomBlockWindResponsePreset {
+  return typeof v === 'string' && (CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS as readonly string[]).includes(v);
 }
 
 // ── Validated property bundle ─────────────────────────────────────────────────
@@ -95,13 +113,23 @@ export interface CustomBlockProperties {
    * is byte-identical to the pre-Phase-2E global threshold.
    */
   readonly breakResistance: BreakResistancePreset;
+  /**
+   * Phase 2F: selects how much this solid block attenuates pixel-material
+   * wind transmission (sand/water/sandstone). 'passThrough' (the default)
+   * is a complete no-op — matches all pre-Phase-2F behavior exactly.
+   * Meaningful only when `collision: 'solid'` — see
+   * `windResponseRequiresSolid` below.
+   */
+  readonly windResponse: CustomBlockWindResponsePreset;
 }
 
 /**
  * Defaults equivalent to Phase-1 behavior (always solid, no friction/breakability),
  * with 'stone' as the safe Phase 2C material-response default, 'none' as the
- * safe Phase 2D contact-damage default, and 'standard' as the safe Phase 2E
- * break-resistance default (preserves the original global threshold exactly).
+ * safe Phase 2D contact-damage default, 'standard' as the safe Phase 2E
+ * break-resistance default (preserves the original global threshold exactly),
+ * and 'passThrough' as the safe Phase 2F wind-response default (a complete
+ * no-op on the existing wind system).
  */
 export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   collision: 'solid',
@@ -110,6 +138,7 @@ export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   materialResponse: 'stone',
   contactDamage: 'none',
   breakResistance: 'standard',
+  windResponse: 'passThrough',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -219,6 +248,24 @@ export const BREAK_RESISTANCE_PRESET_REGISTRY: Readonly<Record<BreakResistancePr
   },
 };
 
+export const CUSTOM_BLOCK_WIND_RESPONSE_PRESET_REGISTRY: Readonly<Record<CustomBlockWindResponsePreset, PresetMeta<CustomBlockWindResponsePreset>>> = {
+  passThrough: {
+    id: 'passThrough',
+    label: 'Pass-through',
+    description: 'Wind reaches pixel materials normally.',
+  },
+  dampen: {
+    id: 'dampen',
+    label: 'Dampen',
+    description: 'Reduces wind reaching pixel materials behind this block.',
+  },
+  block: {
+    id: 'block',
+    label: 'Windbreak',
+    description: 'Blocks wind reaching pixel materials behind this block.',
+  },
+};
+
 // ── Numeric packing (WorldState typed arrays never store strings) ───────────
 
 /** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
@@ -272,11 +319,27 @@ export function indexToBreakResistance(index: number): BreakResistancePreset {
   }
 }
 
+/**
+ * Packs an active CustomBlockWindResponsePreset ('dampen'|'block') into a
+ * compact index for Uint8Array storage. 'passThrough' is never stored — a
+ * block with pass-through wind response has no entry in the runtime wind-
+ * transmission mask at all (see isEligibleForWindTransmission), mirroring the
+ * contactDamage 'none'-is-never-stored convention above.
+ */
+export function windResponseTierToIndex(tier: 'dampen' | 'block'): number {
+  return tier === 'block' ? 1 : 0;
+}
+
+/** Unpacks a Uint8Array index back into the active wind-response tier. Unknown indices default to 'dampen'. */
+export function indexToWindResponseTier(index: number): 'dampen' | 'block' {
+  return index === 1 ? 'block' : 'dampen';
+}
+
 // ── Compatibility rules ───────────────────────────────────────────────────────
 
 export interface CustomBlockCompatibilityIssue {
   /** Which combination rule was violated. */
-  rule: 'nonSolidNoFriction' | 'fragileRequiresSolid' | 'fragileRequiresSupportedFootprint' | 'contactDamageRequiresSolid';
+  rule: 'nonSolidNoFriction' | 'fragileRequiresSolid' | 'fragileRequiresSupportedFootprint' | 'contactDamageRequiresSolid' | 'windResponseRequiresSolid';
   message: string;
 }
 
@@ -334,6 +397,18 @@ export function checkCustomBlockPropertyCompatibility(
     });
   }
 
+  // Phase 2F: wind transmission requires solid collision — a one-way or
+  // non-solid block has no continuous native-pixel footprint for the wind
+  // ray-trace to treat as an occluder, and this phase deliberately reuses the
+  // existing solid-wall footprint rather than adding a separate volume shape.
+  if (properties.windResponse !== 'passThrough' && properties.collision !== 'solid') {
+    issues.push({
+      rule: 'windResponseRequiresSolid',
+      message: 'Wind response requires Solid collision — one-way and non-solid blocks have no footprint for ' +
+        'the wind transmission mask. Set Wind response to Pass-through.',
+    });
+  }
+
   return issues;
 }
 
@@ -382,16 +457,17 @@ export function validateAndResolveCustomBlockProperties(
   let materialResponse: MaterialResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.materialResponse;
   let contactDamage: ContactDamagePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.contactDamage;
   let breakResistance: BreakResistancePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakResistance;
+  let windResponse: CustomBlockWindResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.windResponse;
 
   if (raw === undefined || raw === null) {
     // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
-    // block saved before Phase 2C/2D/2E) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance }, errors, fallbackUsed: false };
+    // block saved before Phase 2C/2D/2E/2F) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -454,15 +530,27 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // windResponse is optional even on schemaVersion-2 blocks saved before
+  // Phase 2F — absence is not an error, it just resolves to the 'passThrough'
+  // default already assigned above (a complete no-op on the existing wind
+  // system).
+  if ('windResponse' in r) {
+    if (isCustomBlockWindResponsePreset(r['windResponse'])) {
+      windResponse = r['windResponse'];
+    } else {
+      pushError('properties.windResponse', CUSTOM_BLOCK_WIND_RESPONSE_PRESET_IDS.join(' | '), String(r['windResponse']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage', 'breakResistance', 'windResponse']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage, breakResistance, windResponse };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.
@@ -484,6 +572,9 @@ export function validateAndResolveCustomBlockProperties(
     }
     if (properties.contactDamage !== 'none' && properties.collision !== 'solid') {
       properties = { ...properties, contactDamage: 'none' };
+    }
+    if (properties.windResponse !== 'passThrough' && properties.collision !== 'solid') {
+      properties = { ...properties, windResponse: 'passThrough' };
     }
   }
 
@@ -545,4 +636,18 @@ export function isEligibleForBreakablePathway(
  */
 export function isEligibleForContactDamage(properties: CustomBlockProperties): boolean {
   return properties.contactDamage !== 'none' && properties.collision === 'solid';
+}
+
+/**
+ * Returns true if this block should be registered with the Phase 2F wind-
+ * transmission mask (customBlockWindMask). Independent of breakability and
+ * contactDamage — a fragile, damaging, or reinforced solid block may also be
+ * a windbreak. Requires `collision: 'solid'` (see `windResponseRequiresSolid`
+ * in the compatibility rules) — one-way and non-solid blocks are never
+ * eligible. 'passThrough' blocks are never eligible either: they have no
+ * runtime effect, so they are simply absent from the mask (see
+ * windResponseTierToIndex — 'passThrough' has no packed index).
+ */
+export function isEligibleForWindTransmission(properties: CustomBlockProperties): boolean {
+  return properties.windResponse !== 'passThrough' && properties.collision === 'solid';
 }

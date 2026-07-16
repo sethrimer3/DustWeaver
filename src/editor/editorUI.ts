@@ -813,8 +813,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const resistanceBadge = def.properties.breakability === 'fragile'
                 ? { weak: ' · Weak', standard: '', reinforced: ' · Reinforced' }[def.properties.breakResistance]
                 : '';
-              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}`;
-              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance properties for this block.';
+              // 'passThrough' is the silent default (matches pre-Phase-2F behavior) so it gets no badge.
+              const windBadge = { passThrough: '', dampen: ' · Dampens wind', block: ' · Windbreak' }[def.properties.windResponse];
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}${resistanceBadge}${windBadge}`;
+              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage/break-resistance/wind-response properties for this block.';
 
               info.appendChild(nameEl);
               info.appendChild(sizeEl);
