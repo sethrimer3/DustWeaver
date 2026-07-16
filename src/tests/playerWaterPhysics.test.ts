@@ -4,7 +4,14 @@ import { describe, test } from 'node:test';
 import { PLAYER_JUMP_SPEED_WORLD, NORMAL_GRAVITY_WORLD_PER_SEC2 } from '../sim/clusters/movementConstants';
 import { createClusterState } from '../sim/clusters/state';
 import { applyPlayerGravityAndJump } from '../sim/clusters/playerVerticalMovement';
-import { computePlayerWaterState } from '../sim/hazards';
+import {
+  applyPlayerWaterHorizontalDrag,
+  applyPlayerWaterVerticalForces,
+  getWaterJumpSpeedWorld,
+  PLAYER_WATER_STATE_SUBMERGED,
+  PLAYER_WATER_STATE_SURFACE,
+} from '../sim/clusters/playerWaterPhysics';
+import { applyHazards, computePlayerWaterState } from '../sim/hazards';
 import { createWorldState, type WorldState } from '../sim/world';
 
 const DT_MS = 1000 / 60;
@@ -74,5 +81,207 @@ describe('movement behavior outside water characterization', () => {
     assert.equal(player.velocityYWorld, -PLAYER_JUMP_SPEED_WORLD);
     assert.equal(player.isGroundedFlag, 0);
     assert.equal(world.playerJumpTriggeredFlag, 0);
+  });
+});
+
+describe('configured submerged velocity model', () => {
+  test('a stationary submerged player gradually begins moving upward', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    applyPlayerWaterVerticalForces(player, world, DT_MS / 1000);
+
+    assert.ok(player.velocityYWorld < 0);
+    assert.ok(player.velocityYWorld > -10, 'one tick should begin a gradual rise, not launch the player');
+  });
+
+  test('normal submerged forces do not accelerate a stationary player downward', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    for (let i = 0; i < 30; i++) {
+      applyPlayerWaterVerticalForces(player, world, DT_MS / 1000);
+    }
+
+    assert.ok(player.velocityYWorld < 0);
+  });
+
+  test('downward entry momentum is softened progressively instead of stopped', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    player.velocityYWorld = 240;
+    computePlayerWaterState(world);
+
+    applyPlayerWaterVerticalForces(player, world, DT_MS / 1000);
+
+    assert.ok(player.velocityYWorld > 0);
+    assert.ok(player.velocityYWorld < 240);
+  });
+
+  test('horizontal velocity decays while submerged', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    player.velocityXWorld = 180;
+
+    applyPlayerWaterHorizontalDrag(player, DT_MS / 1000);
+
+    assert.ok(player.velocityXWorld > 0);
+    assert.ok(player.velocityXWorld < 180);
+  });
+
+  test('fast upward velocity also experiences vertical resistance', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    player.velocityYWorld = -300;
+    computePlayerWaterState(world);
+
+    applyPlayerWaterVerticalForces(player, world, DT_MS / 1000);
+
+    assert.ok(player.velocityYWorld > -300);
+  });
+
+  test('drag and buoyancy are consistent across timestep subdivision', () => {
+    const wholeStepWorld = createPlayerWorld(120);
+    const splitStepWorld = createPlayerWorld(120);
+    const wholeStepPlayer = wholeStepWorld.clusters[0];
+    const splitStepPlayer = splitStepWorld.clusters[0];
+    wholeStepPlayer.velocityYWorld = splitStepPlayer.velocityYWorld = 175;
+    wholeStepPlayer.velocityXWorld = splitStepPlayer.velocityXWorld = -140;
+    computePlayerWaterState(wholeStepWorld);
+    computePlayerWaterState(splitStepWorld);
+
+    applyPlayerWaterVerticalForces(wholeStepPlayer, wholeStepWorld, DT_MS / 1000);
+    applyPlayerWaterHorizontalDrag(wholeStepPlayer, DT_MS / 1000);
+    applyPlayerWaterVerticalForces(splitStepPlayer, splitStepWorld, DT_MS / 2000);
+    applyPlayerWaterHorizontalDrag(splitStepPlayer, DT_MS / 2000);
+    applyPlayerWaterVerticalForces(splitStepPlayer, splitStepWorld, DT_MS / 2000);
+    applyPlayerWaterHorizontalDrag(splitStepPlayer, DT_MS / 2000);
+
+    assert.ok(Math.abs(wholeStepPlayer.velocityXWorld - splitStepPlayer.velocityXWorld) < 1e-9);
+    assert.ok(Math.abs(wholeStepPlayer.velocityYWorld - splitStepPlayer.velocityYWorld) < 1e-9);
+  });
+});
+
+describe('non-additive repeated water jumps', () => {
+  test('a water jump restores half normal jump speed from slower upward motion', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    world.playerJumpTriggeredFlag = 1;
+    computePlayerWaterState(world);
+
+    applyPlayerGravityAndJump(player, world, DT_MS / 1000);
+
+    assert.equal(player.velocityYWorld, -getWaterJumpSpeedWorld());
+  });
+
+  test('a water jump adds nothing when already moving upward faster than the threshold', () => {
+    const jumpedWorld = createPlayerWorld(120);
+    const controlWorld = createPlayerWorld(120);
+    jumpedWorld.clusters[0].velocityYWorld = -220;
+    controlWorld.clusters[0].velocityYWorld = -220;
+    jumpedWorld.playerJumpTriggeredFlag = 1;
+    computePlayerWaterState(jumpedWorld);
+    computePlayerWaterState(controlWorld);
+
+    applyPlayerGravityAndJump(jumpedWorld.clusters[0], jumpedWorld, DT_MS / 1000);
+    applyPlayerGravityAndJump(controlWorld.clusters[0], controlWorld, DT_MS / 1000);
+
+    assert.ok(Math.abs(
+      jumpedWorld.clusters[0].velocityYWorld - controlWorld.clusters[0].velocityYWorld,
+    ) < 1e-9);
+  });
+
+  test('repeated water jumps restore but never stack the half-strength velocity', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    for (let i = 0; i < 5; i++) {
+      world.playerJumpTriggeredFlag = 1;
+      applyPlayerGravityAndJump(player, world, DT_MS / 1000);
+      assert.equal(player.velocityYWorld, -getWaterJumpSpeedWorld());
+    }
+  });
+
+  test('water jumping does not require grounded or coyote state', () => {
+    const world = createPlayerWorld(120);
+    const player = world.clusters[0];
+    player.isGroundedFlag = 0;
+    player.coyoteTimeTicks = 0;
+    world.playerJumpTriggeredFlag = 1;
+    computePlayerWaterState(world);
+
+    applyPlayerGravityAndJump(player, world, DT_MS / 1000);
+
+    assert.equal(player.velocityYWorld, -PLAYER_JUMP_SPEED_WORLD * 0.5);
+  });
+});
+
+describe('stable surface classification and float equilibrium', () => {
+  test('submerged and surface states use hysteresis instead of alternating near one threshold', () => {
+    const world = createPlayerWorld(102); // 60% submerged
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SUBMERGED);
+
+    world.clusters[0].positionYWorld = 98; // 40%, above exit threshold
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SUBMERGED);
+
+    world.clusters[0].positionYWorld = 97; // 35%, still at exit boundary
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SUBMERGED);
+
+    world.clusters[0].positionYWorld = 96; // 30%, leaves submerged state
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SURFACE);
+
+    world.clusters[0].positionYWorld = 100; // 50%, below re-entry threshold
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SURFACE);
+  });
+
+  test('upper-surface entry and exit publish one deterministic visual event each', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+    assert.equal(world.playerWaterState, 0);
+
+    player.velocityYWorld = 90;
+    player.positionYWorld = 92;
+    applyHazards(world);
+    assert.equal(world.playerWaterSurfaceEventSequence, 1);
+    assert.equal(world.playerWaterSurfaceEventKind, 1);
+    assert.equal(world.playerWaterSurfaceEventYWorld, 100);
+
+    computePlayerWaterState(world);
+    player.velocityYWorld = -120;
+    player.positionYWorld = 88;
+    applyHazards(world);
+    assert.equal(world.playerWaterSurfaceEventSequence, 2);
+    assert.equal(world.playerWaterSurfaceEventKind, 2);
+    assert.equal(world.playerWaterSurfaceEventYWorld, 100);
+  });
+
+  test('passive buoyancy reaches a stable exposed surface position without trapping below it', () => {
+    const world = createPlayerWorld(145);
+    const player = world.clusters[0];
+    let outsideTransitions = 0;
+    let previousInWater = 1;
+
+    for (let i = 0; i < 600; i++) {
+      computePlayerWaterState(world);
+      applyPlayerGravityAndJump(player, world, DT_MS / 1000);
+      player.positionYWorld += player.velocityYWorld * DT_MS / 1000;
+      computePlayerWaterState(world);
+      if (previousInWater === 1 && world.isPlayerInWaterFlag === 0) outsideTransitions += 1;
+      previousInWater = world.isPlayerInWaterFlag;
+    }
+
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_SURFACE);
+    assert.ok(player.positionYWorld - player.halfHeightWorld < 100, 'the player upper body should clear the surface');
+    assert.ok(Math.abs(player.velocityYWorld) < 0.5, 'surface equilibrium should settle without jitter');
+    assert.ok(outsideTransitions <= 1, 'passive buoyancy should not repeatedly bounce across the surface');
   });
 });

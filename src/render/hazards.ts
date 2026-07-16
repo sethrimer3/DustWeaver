@@ -249,11 +249,12 @@ export function renderHazards(
   tick: number,
   vpW = 480,
   vpH = 270,
+  rippleEffectsEnabled = true,
 ): void {
   ctx.save();
 
   // ── Water zones (neighbor-aware rounded corners + wave surface) ──────────
-  renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
+  renderWaterZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH, rippleEffectsEnabled);
 
   // ── Ice Mote aura — frost overlay on temporarily frozen water zones ────────
   renderIceMoteAuraOverlay(ctx, world, offsetXPx, offsetYPx, zoom, vpW, vpH);

@@ -27,6 +27,7 @@ import {
   LIQUID_BUBBLE_RISE_SPEED,
   LIQUID_BUBBLE_DRIFT_AMOUNT,
 } from './liquidBodyBuilder';
+import { resetWaterSurfaceRipples } from './waterSplashSystem';
 
 // Re-export types and constants so existing importers need no changes.
 export type { MergedRect, TopEdgeRun, LiquidBubble, LiquidBody } from './liquidBodyBuilder';
@@ -80,6 +81,7 @@ let _lastBubbleTick = -1;
  */
 export function markLiquidBodiesDirty(): void {
   _isDirty = true;
+  resetWaterSurfaceRipples();
 }
 
 /**

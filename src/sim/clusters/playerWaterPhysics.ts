@@ -32,6 +32,8 @@ export const WATER_BUOYANCY_SUBMERSION_ACCEL_WORLD_PER_SEC2 = 280;
 export const WATER_HORIZONTAL_DRAG_PER_SEC = 2.8;
 /** Vertical exponential damping rate in 1/s. */
 export const WATER_VERTICAL_DRAG_PER_SEC = 3.0;
+/** Extra vertical damping near the surface, preventing buoyancy overshoot/jitter. */
+export const WATER_SURFACE_VERTICAL_DRAG_BOOST_PER_SEC = 4.5;
 /** Downward acceleration added while the player deliberately holds down (wu/s²). */
 export const WATER_DIVE_ACCEL_WORLD_PER_SEC2 = 260;
 /** Water strokes restore half of the configured normal jump speed. */
@@ -81,11 +83,13 @@ export function applyPlayerWaterVerticalForces(
   const isDiving = world.playerMoveInputDyWorld > 0 || world.playerCrouchHeldFlag === 1;
   const diveAccel = isDiving ? WATER_DIVE_ACCEL_WORLD_PER_SEC2 : 0;
   const netAcceleration = gravityAccel - buoyancyAccel + diveAccel;
+  const verticalDragPerSec = WATER_VERTICAL_DRAG_PER_SEC
+    + WATER_SURFACE_VERTICAL_DRAG_BOOST_PER_SEC * (1 - submersion);
 
   cluster.velocityYWorld = integrateVelocityWithLinearDrag(
     cluster.velocityYWorld,
     netAcceleration,
-    WATER_VERTICAL_DRAG_PER_SEC,
+    verticalDragPerSec,
     dtSec,
   );
 }

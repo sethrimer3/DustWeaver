@@ -485,7 +485,17 @@ export function renderFrame(r: RenderFrameContext): void {
     world.bouncePadCount > 0 || world.kineticBlockCount > 0 ||
     world.dustBoostJarCount > 0 || world.fireflyJarCount > 0 || world.fireflyCount > 0
   ) {
-    renderHazards(ctx, world, ox, oy, zoom, world.tick, virtualWidthPx, virtualHeightPx);
+    renderHazards(
+      ctx,
+      world,
+      ox,
+      oy,
+      zoom,
+      world.tick,
+      virtualWidthPx,
+      virtualHeightPx,
+      graphicsQuality !== 'low' && !isAdaptiveReductionActive,
+    );
   }
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());

@@ -31,9 +31,10 @@ import {
   type LiquidBubble,
 } from './liquidBodyCache';
 import {
-  spawnWaterSplash,
-  tickWaterSplash,
+  drawWaterRippleHighlights,
   getDisturbanceOffsetAt,
+  resetWaterSurfaceRipples,
+  updateWaterSurfaceRipples,
 } from './waterSplashSystem';
 import {
   tickPlayerWaterBubbles,
@@ -79,24 +80,36 @@ export function renderWaterZones(
   tick: number,
   vpW = 480,
   vpH = 270,
+  rippleEffectsEnabled = true,
 ): void {
-  if (world.waterZoneCount === 0) return;
+  if (world.waterZoneCount === 0) {
+    resetWaterSurfaceRipples();
+    return;
+  }
   tickLiquidBubbles(tick);
-  tickWaterSplash();
   const bodies = getLiquidBodies(world);
 
   // Retrieve player cluster once for this frame
   const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
   const playerAlive = player !== undefined && player.isAliveFlag === 1;
 
-  // Detect player water entry and spawn splash
-  if (
-    world.isPlayerWasInWaterLastTickFlag === 0
-    && world.isPlayerInWaterFlag === 1
-    && playerAlive
-  ) {
-    spawnWaterSplash(bodies, player!.positionXWorld, world.playerWaterEntrySpeedWorld);
-  }
+  updateWaterSurfaceRipples(
+    bodies,
+    tick,
+    world.dtMs / 1000,
+    rippleEffectsEnabled,
+    world.playerWaterSurfaceEventSequence,
+    world.playerWaterSurfaceEventKind,
+    world.playerWaterSurfaceEventXWorld,
+    world.playerWaterSurfaceEventYWorld,
+    world.playerWaterSurfaceEventVelocityXWorld,
+    world.playerWaterSurfaceEventVelocityYWorld,
+    world.playerWaterState,
+    playerAlive ? player!.positionXWorld : 0,
+    world.playerBuoyancySurfaceYWorld,
+    playerAlive ? player!.velocityXWorld : 0,
+    playerAlive ? player!.velocityYWorld : 0,
+  );
 
   // Tick and render player movement bubbles
   {
@@ -120,6 +133,10 @@ export function renderWaterZones(
     if (bodyLeftPx + bodyWidthPx + waveMarginPx < 0 || bodyLeftPx - waveMarginPx > vpW) continue;
     if (bodyTopPx + bodyHeightPx + waveMarginPx < 0 || bodyTopPx - waveMarginPx > vpH) continue;
     renderWaterBody(ctx, body, bi, offsetXPx, offsetYPx, zoom, tick);
+  }
+
+  if (rippleEffectsEnabled) {
+    drawWaterRippleHighlights(ctx, offsetXPx, offsetYPx, zoom);
   }
 
   // Draw player movement bubbles on top of water (cosmetic overlay)

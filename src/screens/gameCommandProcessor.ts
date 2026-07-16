@@ -34,6 +34,7 @@ const DUST_SWARM_COLLECT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
 
 function canJumpInputBecomeGrapple(ctx: GameCommandContext): boolean {
   if (!getDoubleJumpToGrappleEnabled()) return false;
+  if (ctx.world.isPlayerInWaterFlag === 1) return false;
 
   const player = ctx.world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return false;
