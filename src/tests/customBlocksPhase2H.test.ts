@@ -471,7 +471,10 @@ describe('Phase 2H: interaction with sand, water, and sandstone', () => {
     world.pixelMaterialSystem.place(26, 14, MATERIAL_SAND);
     applyCustomBlockWindVents(world);
     const p = world.pixelMaterialSystem.getParticleAtCell(26, 14)!;
-    assert.ok(Math.abs(p.windVelX - CUSTOM_BLOCK_WIND_VENT_FORCE * getMaterialWindResponse(MATERIAL_SAND)) < 1e-6);
+    // Source sits at the right face (x=18) + offset (0.5) = 18.5; target at x=26 -> dist=7.5.
+    const dist = 26 - (18 + CUSTOM_BLOCK_WIND_VENT_SOURCE_OFFSET_PX);
+    const expected = CUSTOM_BLOCK_WIND_VENT_FORCE * ventStrengthAtDistance(dist) * getMaterialWindResponse(MATERIAL_SAND);
+    assert.ok(Math.abs(p.windVelX - expected) < 1e-6, `expected ${expected}, got ${p.windVelX}`);
   });
 
   test('18. water retains its existing higher material response', () => {
@@ -553,7 +556,9 @@ describe('Phase 2H: vent output passes through the existing wind-transmission ma
     world.pixelMaterialSystem.place(26, 14, MATERIAL_SAND);
     applyCustomBlockWindVents(world);
     const p = world.pixelMaterialSystem.getParticleAtCell(26, 14)!;
-    assert.ok(Math.abs(p.windVelX - CUSTOM_BLOCK_WIND_VENT_FORCE * getMaterialWindResponse(MATERIAL_SAND)) < 1e-6, 'an unrelated blocker beside the path must not occlude it');
+    const dist = 26 - (18 + CUSTOM_BLOCK_WIND_VENT_SOURCE_OFFSET_PX);
+    const expected = CUSTOM_BLOCK_WIND_VENT_FORCE * ventStrengthAtDistance(dist) * getMaterialWindResponse(MATERIAL_SAND);
+    assert.ok(Math.abs(p.windVelX - expected) < 1e-6, 'an unrelated blocker beside the path must not occlude it');
   });
 });
 

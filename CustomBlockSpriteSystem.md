@@ -2215,41 +2215,395 @@ tests in the full suite pass (968 pre-Phase-2G + 65 new).
    author who genuinely wants two different tiers to coexist across a
    shared cell cannot express that.
 
-## Proposed Phase 2H: Water-Zone Liquid Interaction, Directional Wind Vents, or Trigger Behavior (Not Implemented)
+## Phase 2H: Directional Wind-Vent Presets
 
-Recommendation: **directional custom-block wind vents** are the best next
-phase, ahead of a water-zone interaction phase or generic trigger behavior.
+### The New Property and Defaults
 
-- **Directional wind vents** (a custom block that EMITS wind, rather than
-  merely attenuating it) is the most natural extension of Phase 2F — it
-  would reuse `CustomBlockWindMask`'s footprint data and `applyWindForce`'s
-  existing force-application primitive, needing only a new emitter call
-  site (analogous to `pixelMaterialMovementWind.ts`) rather than new sim
-  architecture. It is a small, tightly-scoped phase with a clear precedent
-  (Phase 2C-2G's "map a bounded enum onto an existing subsystem" pattern)
-  and no new physics engine.
+A fifth engine-owned property, `windEmission`, selects which face (if any) a
+custom block continuously emits pixel-material wind from:
+
+```ts
+type CustomBlockWindEmissionPreset = 'none' | 'left' | 'right' | 'up' | 'down';
+```
+
+- **`'none'`** (the default) — emits no wind; a complete no-op.
+- **`'left'` / `'right'` / `'up'` / `'down'`** — continuously emits wind from
+  the corresponding outer face of the placement's footprint, every fixed
+  step, for as long as the placement is active.
+
+Deliberately named `windEmission`, distinct from the Phase 2F `windResponse`
+property: `windResponse` controls how much of an EXTERNAL force is
+transmitted THROUGH a block; `windEmission` makes the block itself a wind
+SOURCE. The two are unrelated enums and may be set independently (see
+Self-Occlusion below for the case where they interact).
+
+Schema version stays **2**. Schema-v1 blocks and schema-v2 blocks saved
+before Phase 2H both resolve `windEmission` to `'none'` via the same "field
+absent → default, not an error" path used by every property since Phase 2C.
+An unrecognized string value produces a structured `CustomBlockValidationError`
+(`field: 'properties.windEmission'`) and falls back to `'none'`.
+
+### Compatibility
+
+Like `liquidInteraction` (Phase 2G), `windEmission` has **no collision
+requirement** — `isEligibleForWindVent` checks only `windEmission !== 'none'`.
+All fifteen `(collision × windEmission)` combinations are valid, and no new
+`checkCustomBlockPropertyCompatibility` rule was added:
+
+- A **non-solid** vent is a purely visible emitter the player walks through.
+- A **one-way** vent emits while its one-way collision is untouched.
+- A **solid** vent may simultaneously use `windResponse: 'block'` (making it
+  its own windbreak from every OTHER source's perspective) while still
+  emitting its own wind outward — see Self-Occlusion below.
+
+### Engine-Owned Vent Constants and Tuning Rationale
+
+All four directions share one fixed strength — no weak/standard/strong
+tiers in this phase, deliberately (see Remaining Limitations). Constants
+live in `src/sim/pixelMaterials/customBlockWindVents.ts`:
+
+| Constant | Value | Rationale |
+|---|---|---|
+| `CUSTOM_BLOCK_WIND_VENT_FORCE` | 90 | Movement wind's own scale (`pixelMaterialMovementWind.ts`) ranges `MIN_FORCE=24` to `MAX_FORCE=130` (a grapple-zip player at full speed). 90 sits clearly above `MIN_FORCE` and above the sandstone erosion floor (`SANDSTONE_MIN_EROSION_WIND_SPEED=40`, post-material-response) — visibly strong and erosion-capable — while staying below `MAX_FORCE`, so a vent is never stronger than the most extreme player-generated gust. |
+| `CUSTOM_BLOCK_WIND_VENT_RANGE_PX` | 24 | Reused directly as `applyWindForce`'s `radiusPx`. Larger than movement wind's `MAX_RADIUS_PX` (11) since a vent is a persistent beam meant to visibly affect a stretch of material, not a brief local disturbance, but still bounded — cost stays `O(range²)`, not room-spanning. |
+| `CUSTOM_BLOCK_WIND_VENT_FALLOFF` | 1 | Full linear falloff to 0 at the edge of the range — matches every other wind source's default (movement wind, direct `applyWindForce` callers). |
+| `CUSTOM_BLOCK_WIND_VENT_HALF_FAN_DEG` (→ `CUSTOM_BLOCK_WIND_VENT_COS_HALF_FAN_ANGLE`) | 40° | Narrow enough to read as clearly directional (not an omnidirectional gust with a favored side), wide enough to visibly affect a fan of cells directly in front of the face rather than a single-pixel ray. Precomputed once via `Math.cos` at module load — never recomputed per tick. |
+| `CUSTOM_BLOCK_WIND_VENT_SOURCE_OFFSET_PX` | 0.5 | Defensive margin placing the emission source just outside the footprint (see Self-Occlusion). |
+
+Stability under continuous per-tick application is inherited for free from
+the EXISTING `WIND_MOMENTUM_DAMPING` (0.85/step) already governing every
+wind source: steady-state peak velocity from a constant 90 px/s impulse is
+bounded at `90/(1-0.85) ≈ 600` px/s — the same order of magnitude Phase 2F's
+docs already derived for continuous movement-wind/erosion application, so no
+new damping or clamping logic was needed.
+
+### Directional Geometry
+
+"Forward range" and "lateral fan width" are expressed as **one cone**, not
+two independent rectangle dimensions: the existing circular
+`radiusPx`/falloff region (forward reach) intersected with an angular
+half-plane test relative to the direction vector (lateral spread). This
+keeps the geometry exactly cardinal-direction symmetric — rotating the
+direction 90° at a time produces the identical cone shape, just rotated —
+and needs no new region primitive.
+
+For a placement with footprint `(xBlock, yBlock, wBlock, hBlock)` (world
+units), the face center and outward unit vector per direction:
+
+| Direction | Face center | Unit vector |
+|---|---|---|
+| `left`  | `(x, y + h/2)` | `(-1, 0)` |
+| `right` | `(x + w, y + h/2)` | `(1, 0)` |
+| `up`    | `(x + w/2, y)` | `(0, -1)` |
+| `down`  | `(x + w/2, y + h)` | `(0, 1)` |
+
+The emission source is the face center nudged `CUSTOM_BLOCK_WIND_VENT_SOURCE_OFFSET_PX`
+further outward along the unit vector. A 2×2 placement uses its COMPLETE
+two-tile-wide/tall face (`w`/`h` already reflect the full footprint) and
+emits exactly once — never once per occupied tile.
+
+### Reusing the Wind Pathway: the `applyWindForce` Directional Gate
+
+Rather than a second wind engine, `WindForceParams` gained three optional
+fields — `dirX`, `dirY`, `cosHalfFanAngle` — and `applyWindForce` gained ONE
+new conditional inside its existing per-cell loop:
+
+```ts
+if (dirX !== undefined && dirY !== undefined && dist > 0) {
+  const cosAngle = (dx * dirX + dy * dirY) / dist; // dist already computed for falloff
+  if (cosAngle < cosHalfFanAngle) continue;
+}
+```
+
+This is Option 1 from the phase's own design menu ("extend the existing
+params with an optional deterministic directional gate") — the smallest
+possible change: no new function, no duplicated transmission/material-
+response/dedup/wake logic, and `dist` is the SAME value already computed for
+the falloff calculation (no extra `sqrt`). Every existing caller (movement
+wind, direct test calls, the Phase 2F/2G test suites) omits `dirX`/`dirY`,
+so the gate is a single `undefined` check for them — behaviorally identical
+to pre-Phase-2H `applyWindForce`, verified directly by a regression test
+comparing a call with and without an irrelevant `cosHalfFanAngle` when
+`dirX`/`dirY` are omitted.
+
+`customBlockWindVents.ts`'s `applyCustomBlockWindVents(world)` is the sole
+production caller that sets these fields — mirroring
+`pixelMaterialMovementWind.ts`'s role exactly, a caller that decides WHEN,
+WHERE, and in which DIRECTION to invoke the unchanged primitive. It reuses,
+untouched: `CustomBlockWindMask`/`resolveCustomBlockWindTransmission`
+(Phase 2F transmission), `getMaterialWindResponse` (per-material response),
+and `applyWindForce`'s existing particle dedup (`windAffectedScratch`),
+momentum accumulation/damping, and wake behavior.
+
+### Self-Occlusion
+
+A block with `windResponse: 'block'` AND `windEmission: 'right'` still
+emits rightward — solved geometrically, not by excluding mask cells.
+`CustomBlockWindMask.markRect` marks a placement's OWN footprint as the
+half-open range `[xBlock, xBlock+wBlock) × [yBlock, yBlock+hBlock)`. The
+emission source sits at the face boundary plus a small outward offset —
+strictly outside that half-open range — and the emission direction points
+strictly away from the footprint. The Bresenham ray `traceMaxWindTransmissionTier`
+walks from source to any forward target can therefore never re-enter the
+block's own mask region: self-occlusion is structurally impossible, with
+zero ownership/exclusion bookkeeping. An independent block placed further
+along the emission path is NOT excluded by anything here and still occludes
+normally — verified by two separate tests (self-windbreak-still-emits vs.
+adjacent-independent-windbreak-still-blocks).
+
+### Runtime Vent Storage
+
+Mirroring `RoomWindTransmissionBlockDef`/`RoomLiquidInteractionBlockDef`,
+`RoomCustomBlockWindVentDef` registers **one entry per logical placement**
+(never per cell) into `RoomDef.windVentBlocks`, built by
+`editorRoomDataToRoomDef` BEFORE the `!behavior.generateWall` early-continue
+(no collision requirement, exactly like liquid interaction). No
+overlap-rejection is needed here, unlike the liquid mask: each vent is an
+independent point-source registration, not a shared single-byte-per-cell
+mask, so overlapping vent footprints simply both emit independently with no
+ambiguity.
+
+`WorldState` gained bounded typed-array storage
+(`MAX_CUSTOM_BLOCK_WIND_VENTS = 32`, matching the existing
+`MAX_BREAKABLE_BLOCKS`/`MAX_CONTACT_DAMAGE_BLOCKS` scale):
+`windVentCount`, `windVentXWorld/YWorld/WWorld/HWorld` (Float32Array
+footprint), `windVentDirection` (Uint8Array, packed 0-3 via
+`windEmissionDirectionToIndex`), and `windVentActiveFlag` (Uint8Array).
+`loadRoomHazards` (gameRoomHazards.ts) populates these once at room-load
+time from `RoomDef.windVentBlocks` — no JSON string is ever read during the
+fixed-step simulation loop; the loop only ever touches pre-resolved typed
+arrays.
+
+### Fragile Vent Deactivation
+
+An explicit runtime OWNERSHIP LINK, not a scan: `editorRoomDataToRoomDef`
+assigns each registered vent its position in `windVentBlocks` as a
+room-local index, and threads that SAME index onto every one of the
+placement's breakable-block cells as `RoomBreakableBlockDef.windVentIndex`
+(optional, mirroring `windResponse`/`liquidInteraction`'s per-cell
+threading). `gameRoomHazards.ts` copies this into
+`WorldState.breakableBlockWindVentIndex` (`Int16Array`, `-1` default).
+`destroyBreakableBlockCell` (sim/hazards.ts) reads this index and sets
+`windVentActiveFlag[index] = 0` — idempotent (setting an already-0 flag to 0
+is a no-op), and because all four cells of a grouped 2×2 fragile vent share
+the SAME index, contacting/destroying any of them deactivates the one
+shared logical vent exactly once, never four times. Adjacent placements
+have distinct indices and stay fully independent. An indestructible vent
+never enters the breakable pathway at all, so nothing can ever deactivate
+it. Room reload calls `loadRoomHazards`/`loadRoomPixelMaterials` fresh,
+which resets `windVentActiveFlag` to `1` for every registered vent — the
+same respawn semantics `isBreakableBlockActiveFlag` already has.
+
+This runs inside `applyHazards`, called AFTER `applyCustomBlockWindVents`
+in the tick pipeline (see Fixed-Step Integration below) — so a vent that
+breaks this tick still emitted its impulse this tick, and stops starting
+the NEXT tick. Same one-tick lag already accepted for the Phase 2F/2G
+mask clears.
+
+### Fixed-Step Integration
+
+`applyCustomBlockWindVents(world)` is called in `tick.ts` immediately after
+`applyMovementWindToPixelMaterials(world)` — the same fixed-step wind phase,
+before `tickPixelMaterials(world)` — so vent-driven disturbance and
+sand/water/sandstone settling happen in the same visual frame, exactly like
+movement wind. Deterministic: ascending vent-index iteration order, no
+`Math.random()`, no wall-clock timers, no per-tick string construction (the
+vent caller does not pass a `sourceId` at all — that field is otherwise
+unused by `applyWindForce`, so constructing one per vent per tick would be
+pure waste). `windVentCount === 0` returns before touching anything else —
+the required fast path.
+
+### Interaction with Pixel Materials
+
+- **Sand** receives the vent impulse through its existing `getMaterialWindResponse`
+  multiplier and accumulates/damps momentum via the unchanged existing
+  pathway.
+- **Water** retains its existing higher response multiplier (verified: water
+  ends up with strictly more momentum than sand from the identical vent).
+- **Sandstone** accumulates erosion through the EXISTING erosion pathway
+  (`erosionDamage += windSpeed × SANDSTONE_EROSION_RATE`) — no new rate or
+  threshold; impact fracture (`applyPlayerImpactFracture`) is completely
+  unaffected by vents, verified directly.
+- **2×2 particles** receive at most ONE impulse per vent per fixed step —
+  `applyWindForce`'s existing `windAffectedScratch` dedup (unchanged from
+  Phase 3) already guarantees this; the vent caller does nothing special.
+
+### Interaction with Other Custom-Block Properties
+
+`windEmission` is fully independent of collision, friction, breakability,
+material response, contact damage, break resistance, liquid interaction,
+and wind response — verified directly: a fragile, reinforced,
+high-contact-damage, metal, windbreak, drain, right-facing vent exercises
+every one of those systems on its own existing pathway, untouched by this
+phase (contact damage still applies below the break threshold, the block
+still doesn't break below its reinforced threshold, the drain mask still
+registers, and the vent keeps emitting until the block actually breaks).
+
+### Editor Integration
+
+A "Wind emission" dropdown (None/Left/Right/Up/Down) was added to
+`editorCustomBlockDialog.ts` following the exact `makePropertyRow` pattern
+used for every prior preset — dirty-tracking, undo/redo, and Save/Discard/
+Keep-Editing all participate automatically since it's part of the same
+`properties` object. A note beneath the dropdown clarifies the distinction
+from "Wind response" above it. The palette summary in `editorUI.ts` gains a
+concise directional-arrow badge (`Vent ←`/`Vent →`/`Vent ↑`/`Vent ↓`, silent
+for the `'none'` default). Rename/duplicate preserve the property
+automatically (verified via `serializeCustomBlock`/`parseCustomBlockSource`
+round trips), and `updateCustomBlockProperties` changing only
+`windEmission` does not rebuild the cached sprite canvas (same object
+identity before and after).
+
+### Backward Compatibility
+
+- Schema-v1 blocks and schema-v2 blocks saved before Phase 2H load exactly
+  as before — `windEmission` resolves to `'none'`, zero runtime effect (no
+  vent registered, no fixed-step behavior change).
+- Rooms/campaigns with no custom blocks, or no vent-emitting blocks, build a
+  `windVentCount === 0` world — `applyCustomBlockWindVents`'s fast path
+  makes this byte-identical to pre-Phase-2H fixed-step behavior.
+- Movement-generated wind, wind transmission, pixel-liquid seal/drain, sand/
+  water/sandstone behavior, water-zone buoyancy, and every other
+  Phase 2A-2G behavior are completely unaffected — verified directly by
+  tests placing a vent alongside each of those systems and confirming no
+  change, plus a direct regression test proving `applyWindForce` without
+  `dirX`/`dirY` is unaffected by the new optional fields.
+- A hand-authored `RoomBreakableBlockDef` with no `windVentIndex` field
+  (pre-Phase-2H shape) resolves to index `-1` and is never treated as a
+  vent-owning cell.
+
+### Performance Considerations
+
+- `applyCustomBlockWindVents` returns immediately when `windVentCount === 0`
+  — the required fast path, verified with 1000 consecutive zero-vent calls
+  completing well under the test's time budget.
+- One iteration over active vents per fixed tick, ascending index order — no
+  full-room scan, no scan of all custom-block placements.
+- Every value read in the hot loop is a pre-resolved typed-array entry — no
+  JSON parsing, no registry lookup, no string construction (including no
+  `sourceId`) during simulation.
+- `applyWindForce`'s directional gate adds exactly one extra numeric
+  comparison per already-scanned candidate cell (reusing the existing `dist`
+  value) — no new allocation, no recursion, no new scan bounds.
+- `CUSTOM_BLOCK_WIND_VENT_COS_HALF_FAN_ANGLE` is computed once via `Math.cos`
+  at module load, never per tick or per vent.
+- Deactivation (`windVentActiveFlag[index] = 0`) is an O(1) idempotent write.
+
+### Tests (Phase 2H)
+
+New file `src/tests/customBlocksPhase2H.test.ts` (62 tests) exercises the
+real pipeline end to end: schema-v1/v2 defaults, all five presets
+round-tripping, unknown-value fallback with a structured diagnostic, numeric
+packing round trip, the (deliberate lack of a) collision-compatibility rule
+for `windEmission`, real room-builder wiring (one `windVentBlocks` entry per
+placement, none for `'none'`, non-solid placements still register,
+`loadRoomHazards`/`loadRoomPixelMaterials` populating `world.windVentCount`),
+direct directional geometry for all four directions (on-axis effect,
+off-axis/behind exclusion, out-of-range exclusion, rotational-symmetry
+equivalence across all four directions), pixel-material interaction (sand's
+material response including falloff-aware exact-value assertions, water's
+higher response, sandstone erosion accumulation, impact-fracture
+non-interference, 2×2 single-impulse dedup), wind-transmission interaction
+(dampening attenuates, full block zeroes, an unrelated beside-the-path
+blocker has no effect), self-occlusion (a self-windbreak vent still emits,
+an independent adjacent windbreak still blocks it normally), multi-vent
+additive combination, the zero-vent fast path, fragile-vent deactivation
+through the real `applyHazards` destruction pathway (1×1 and grouped 2×2,
+adjacent independence, indestructible permanence, room-reload respawn),
+interaction preservation with liquid interaction/contact damage/break
+resistance/material-response break feedback (including a
+fragile-reinforced-damaging-metal-windbreak-drain-vent exercising every
+system at once), editor dirty-tracking/undo-redo/rename/duplicate/
+properties-only-update at the data-model level, export/relocation and
+campaign-switch isolation, a direct regression proving `applyWindForce`
+without `dirX`/`dirY` is unaffected by the Phase 2H extension, and
+backward-compatibility spot checks. One pre-existing fixture in
+`customBlockProperties.test.ts` that hardcoded a full property-object
+literal was extended with `windEmission: 'none'` to match the new required
+field. All 1095 tests in the full suite pass (1033 pre-Phase-2H + 62 new).
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (1095/1095
+  passing), and `npm run build` were all actually run for this phase.
+  `customBlocksPhase2H.test.ts`, `customBlocksPhase2F.test.ts`,
+  `customBlocksPhase2G.test.ts`, the pixel-material test files, and the full
+  custom-block test suite were additionally run directly and pass.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session — this environment has no interactive
+  browser/editor session available for this task. All verification here is
+  through the automated test suite exercising the real
+  `PixelMaterialSystem.applyWindForce`, `applyCustomBlockWindVents`,
+  `editorRoomDataToRoomDef`, `loadRoomHazards`/`loadRoomPixelMaterials`, and
+  `applyHazards` code paths (not mocks) — but no actual frame was rendered,
+  no vent visual was observed by a human or automated UI driver, and no
+  actual player-driven vent placement, break, or drain interaction was
+  triggered through real input.
+- Anyone relying on this phase for a real campaign should manually create
+  left/right/up/down vents (1×1 and 2×2), place sand/water/sandstone in
+  front of each, confirm material behind/beside stays unaffected, combine a
+  vent with a dampening and a blocking wall, confirm a self-windbreak vent
+  still emits outward, break fragile vents (weak and reinforced) and
+  confirm emission stops, test a vent combined with a drain, and confirm
+  older campaigns (with no `windEmission` field at all) are visually and
+  behaviorally unchanged, prior to shipping.
+
+### Remaining Limitations
+
+1. **One fixed strength tier only** — no weak/standard/strong vent-strength
+   presets in this phase, deliberately (see the phase brief's explicit
+   scope limit); every active vent uses the same
+   `CUSTOM_BLOCK_WIND_VENT_FORCE`/`RANGE_PX`/`HALF_FAN_DEG`.
+2. **No emission toward water-zone buoyancy** — a vent affects only
+   pixel-material particles; it has zero effect on a player standing in an
+   authored water zone or on `playerWaterSubmersionRatio`/
+   `playerBuoyancyDepthFactor`.
+3. **No pulsing, interval, or trigger-gated emission** — a vent with a
+   non-`'none'` direction always emits every fixed step it's active; there
+   is no on/off cycling or player-triggered activation.
+4. **Cone-shaped fan, not a rectangular volume** — the lateral spread is a
+   fixed-angle cone intersected with the circular range, not an
+   independently-sized rectangle; a very wide, short-range vent or a very
+   narrow, long-range vent (independently tunable width vs. range) is not
+   expressible in this phase's single-cone geometry.
+
+## Proposed Phase 2I: Multi-Tier Wind-Vent Strength, Water-Zone Liquid Interaction, or Engine-Defined Triggers (Not Implemented)
+
+Recommendation: **multiple fixed wind-vent strength tiers** (e.g.
+weak/standard/strong, analogous to Phase 2E's break-resistance tiers) are
+the best next phase, ahead of a water-zone interaction phase or generic
+trigger behavior.
+
+- **Multi-tier wind-vent strength** is the smallest, most precedent-following
+  extension of Phase 2H itself — it would add a second bounded enum
+  (`windEmissionStrength: 'weak' | 'standard' | 'strong'`, mirroring
+  `BreakResistancePreset`'s exact shape) mapped to a small centralized table
+  of `CUSTOM_BLOCK_WIND_VENT_FORCE`/`RANGE_PX` multipliers, reusing
+  `applyCustomBlockWindVents` and the directional-gate `applyWindForce`
+  extension wholesale — no new sim architecture, no new mask, no new
+  fixed-step caller. This is the lowest-risk remaining candidate with a
+  shape Phase 2E already validated end-to-end.
 - **A later water-zone interaction phase** (extending `'seal'`/`'drain'`, or
   a parallel property, to authored water zones and player buoyancy/
-  submersion) is a reasonable second choice, but carries a real
-  architectural caveat this phase's own Remaining Limitations flags:
-  unlike the pixel-material liquid system (a pure per-cell simulation layer
-  Phase 2G could integrate into at one gate function), the water-zone
-  system directly drives player movement physics
-  (`playerWaterSubmersionRatio`/`playerBuoyancyDepthFactor` in
-  `worldHazardState.ts`), so a "seal" preset there touches player-facing
-  physics more directly than any phase so far. It should start with the
-  same investigation-first approach used for every phase in this series
-  (locate the exact buoyancy integration point, confirm it can be gated
-  without touching the buoyancy math itself) before committing to a
-  property shape.
-- **Trigger behavior** (a custom block that fires a room event — a
-  dialogue trigger, a transition, a one-shot switch — on player contact)
-  remains a materially different kind of phase: every phase so far has
-  mapped a preset to an EXISTING deterministic subsystem, whereas triggers
-  would need a new event-dispatch concept even if built from existing
-  primitives (`RoomDialogueTriggerDef` already exists as a non-custom-block
-  zone). This is likely more design work than a single bounded phase, and a
-  poor fit for the "reuse an existing pathway" pattern that has kept every
-  phase in this series low-risk.
+  submersion) remains a reasonable second choice, but carries the same
+  architectural caveat flagged in Phase 2G's own Remaining Limitations:
+  unlike the pixel-material liquid/wind systems (pure per-cell/per-particle
+  simulation layers this custom-block system has repeatedly integrated into
+  at one gate function), the water-zone system directly drives player
+  movement physics (`playerWaterSubmersionRatio`/`playerBuoyancyDepthFactor`
+  in `worldHazardState.ts`), so a "seal" preset there touches player-facing
+  physics more directly than any phase so far. It should start with the same
+  investigation-first approach used throughout this series (locate the
+  exact buoyancy integration point, confirm it can be gated without
+  touching the buoyancy math itself) before committing to a property shape.
+- **Engine-defined trigger behavior** (a custom block that fires a room
+  event — a dialogue trigger, a transition, a one-shot switch — on player
+  contact) remains a materially different kind of phase: every phase so far
+  (2C through 2H) has mapped a bounded preset onto an EXISTING deterministic
+  subsystem, whereas triggers would need a new event-dispatch concept even
+  if built from existing primitives (`RoomDialogueTriggerDef` already exists
+  as a non-custom-block zone). This is likely more design work than a
+  single bounded phase, and a poor fit for the "reuse an existing pathway"
+  pattern that has kept every phase in this series low-risk.
 
 Not implemented in this phase — no code changes were made toward it.
