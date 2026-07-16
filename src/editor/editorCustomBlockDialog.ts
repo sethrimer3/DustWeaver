@@ -26,6 +26,7 @@ import type {
   FrictionPreset,
   BreakabilityPreset,
   MaterialResponsePreset,
+  ContactDamagePreset,
 } from '../levels/customBlockProperties';
 import {
   DEFAULT_CUSTOM_BLOCK_PROPERTIES,
@@ -33,6 +34,7 @@ import {
   FRICTION_PRESET_REGISTRY,
   BREAKABILITY_PRESET_REGISTRY,
   MATERIAL_RESPONSE_PRESET_REGISTRY,
+  CONTACT_DAMAGE_PRESET_REGISTRY,
   checkCustomBlockPropertyCompatibility,
 } from '../levels/customBlockProperties';
 
@@ -76,7 +78,7 @@ export function openCustomBlockDialog(
 
   function propertiesEqual(a: CustomBlockProperties, b: CustomBlockProperties): boolean {
     return a.collision === b.collision && a.friction === b.friction && a.breakability === b.breakability &&
-      a.materialResponse === b.materialResponse;
+      a.materialResponse === b.materialResponse && a.contactDamage === b.contactDamage;
   }
 
   function isDirty(): boolean {
@@ -251,10 +253,16 @@ export function openCustomBlockDialog(
     () => properties.materialResponse,
     (v) => { properties = { ...properties, materialResponse: v }; },
   );
+  const contactDamageCtl = makePropertyRow<ContactDamagePreset>(
+    'Contact damage', CONTACT_DAMAGE_PRESET_REGISTRY,
+    () => properties.contactDamage,
+    (v) => { properties = { ...properties, contactDamage: v }; },
+  );
   propsSection.appendChild(collisionCtl.row);
   propsSection.appendChild(frictionCtl.row);
   propsSection.appendChild(breakabilityCtl.row);
   propsSection.appendChild(materialResponseCtl.row);
+  propsSection.appendChild(contactDamageCtl.row);
 
   const compatMsg = document.createElement('div');
   compatMsg.style.cssText = 'font-size:10px;color:#ff8844;min-height:14px;';
@@ -274,6 +282,8 @@ export function openCustomBlockDialog(
     breakabilityCtl.desc.textContent = BREAKABILITY_PRESET_REGISTRY[properties.breakability].description;
     materialResponseCtl.select.value = properties.materialResponse;
     materialResponseCtl.desc.textContent = MATERIAL_RESPONSE_PRESET_REGISTRY[properties.materialResponse].description;
+    contactDamageCtl.select.value = properties.contactDamage;
+    contactDamageCtl.desc.textContent = CONTACT_DAMAGE_PRESET_REGISTRY[properties.contactDamage].description;
     refreshCompatibilityMessage();
   }
 

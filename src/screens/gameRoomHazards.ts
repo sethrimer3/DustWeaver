@@ -27,7 +27,7 @@ import {
   blockThemeToIndex,
   WALL_THEME_DEFAULT_INDEX,
 } from '../levels/roomDef';
-import { materialResponseToIndex } from '../levels/customBlockProperties';
+import { materialResponseToIndex, contactDamageTierToIndex } from '../levels/customBlockProperties';
 import {
   SPIKE_DIR_UP,
   SPIKE_DIR_DOWN,
@@ -69,6 +69,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaInvulnTicks = 0;
   world.breakableBlockCount = 0;
   world.breakEventCount = 0;
+  world.contactDamageBlockCount = 0;
   world.crumbleBlockCount = 0;
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
@@ -180,6 +181,26 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     // materialResponse field and default to 'stone' — a cosmetic-only choice
     // that does not change their existing collision/destruction semantics.
     world.breakableBlockMaterial[bi] = materialResponseToIndex(b.materialResponse ?? 'stone');
+  }
+
+  // ── Custom block contact damage (Phase 2D) ───────────────────────────────
+  // Purely a damage-detection zone layered over a cell that is ALREADY solid
+  // (via the walls loop above or the breakable-block loop above) — no
+  // separate wall is created here, matching how spikes/lava zones detect
+  // contact without owning their own collision wall.
+  const contactDamageDefs = room.contactDamageBlocks ?? [];
+  for (
+    let i = 0;
+    i < contactDamageDefs.length && world.contactDamageBlockCount < world.contactDamageBlockXWorld.length;
+    i++
+  ) {
+    const d = contactDamageDefs[i];
+    const di = world.contactDamageBlockCount++;
+    world.contactDamageBlockXWorld[di] = (d.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.contactDamageBlockYWorld[di] = (d.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    world.contactDamageBlockTier[di] = contactDamageTierToIndex(d.tier);
+    world.contactDamageBlockGroupId[di] = d.groupId ?? -1;
+    world.isContactDamageBlockActiveFlag[di] = 1;
   }
 
   // ── Crumble blocks ────────────────────────────────────────────────────────

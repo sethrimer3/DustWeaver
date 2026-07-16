@@ -28,6 +28,12 @@ export const MAX_BREAKABLE_BLOCKS = 32;
  * dropped (cosmetic-only, never affects collision or destruction state).
  */
 export const MAX_BREAK_EVENTS = 8;
+/**
+ * Maximum number of contact-damage cells per room (Phase 2D). Only cells
+ * belonging to a solid custom block with `contactDamage !== 'none'` occupy a
+ * slot — a block with no contact damage never touches this array at all.
+ */
+export const MAX_CONTACT_DAMAGE_BLOCKS = 32;
 /** Maximum number of crumble blocks per room. */
 export const MAX_CRUMBLE_BLOCKS = 32;
 /** Maximum number of bounce pads per room. */
@@ -280,6 +286,37 @@ export interface HazardWorldState {
   breakEventGroupId: Int16Array;
   /** 1 if this event represents a multi-cell grouped placement, 0 for a plain 1x1. */
   breakEventIsGroupedFlag: Uint8Array;
+
+  // ── Custom block contact damage (Phase 2D) ──────────────────────────────────
+  /**
+   * Number of contact-damage cells loaded for the current room. Only cells
+   * belonging to a solid custom block with `contactDamage !== 'none'` are
+   * present — populated once at hazard-load time from
+   * `RoomDef.contactDamageBlocks`, never re-parsed during the simulation loop.
+   */
+  contactDamageBlockCount: number;
+  /** Center X of each contact-damage cell (world units). */
+  contactDamageBlockXWorld: Float32Array;
+  /** Center Y of each contact-damage cell (world units). */
+  contactDamageBlockYWorld: Float32Array;
+  /** Packed damage tier index per cell: 0=low, 1=high (see contactDamageTierToIndex). */
+  contactDamageBlockTier: Uint8Array;
+  /**
+   * Logical placement group id, analogous to breakableBlockGroupId. Cells
+   * sharing the same non-negative group id belong to one multi-cell (2x2)
+   * damaging placement and are treated as a single logical damage owner
+   * (struck at most once per simulation update). -1 means an ungrouped 1x1
+   * placement. Independent id space from breakableBlockGroupId.
+   */
+  contactDamageBlockGroupId: Int16Array;
+  /**
+   * 1 if this cell's placement is still present (has not been destroyed by
+   * the atomic fragile-block transaction), 0 if the underlying fragile block
+   * was broken and no longer damages the player. Indestructible damaging
+   * blocks stay at 1 for the lifetime of the room. Always 1 for cells that
+   * were never eligible for the breakable pathway in the first place.
+   */
+  isContactDamageBlockActiveFlag: Uint8Array;
 
   // ── Crumble blocks ─────────────────────────────────────────────────────────
   /** Number of crumble blocks (active + broken). */
@@ -757,6 +794,12 @@ export function createHazardWorldState(): HazardWorldState {
     breakEventMaterial:            new Uint8Array(MAX_BREAK_EVENTS),
     breakEventGroupId:             new Int16Array(MAX_BREAK_EVENTS).fill(-1),
     breakEventIsGroupedFlag:       new Uint8Array(MAX_BREAK_EVENTS),
+    contactDamageBlockCount:       0,
+    contactDamageBlockXWorld:      new Float32Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockYWorld:      new Float32Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockTier:        new Uint8Array(MAX_CONTACT_DAMAGE_BLOCKS),
+    contactDamageBlockGroupId:     new Int16Array(MAX_CONTACT_DAMAGE_BLOCKS).fill(-1),
+    isContactDamageBlockActiveFlag: new Uint8Array(MAX_CONTACT_DAMAGE_BLOCKS),
     crumbleBlockCount:             0,
     crumbleBlockXWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),

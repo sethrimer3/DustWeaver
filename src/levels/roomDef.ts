@@ -31,6 +31,7 @@ import type {
   RoomSpringboardDef,
   RoomZoneDef,
   RoomBreakableBlockDef,
+  RoomContactDamageBlockDef,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
   RoomKineticBlockDef,
@@ -506,6 +507,7 @@ export type {
   RoomSpringboardDef,
   RoomZoneDef,
   RoomBreakableBlockDef,
+  RoomContactDamageBlockDef,
   CrumbleVariant,
   RoomCrumbleBlockDef,
   RoomBouncePadDef,
@@ -739,6 +741,8 @@ export interface RoomDef {
   lavaZones?: readonly RoomZoneDef[];
   /** Breakable blocks that shatter from high-momentum player impact. */
   breakableBlocks?: readonly RoomBreakableBlockDef[];
+  /** Solid custom-block cells that damage the player on contact (Phase 2D). */
+  contactDamageBlocks?: readonly RoomContactDamageBlockDef[];
   /** Crumble blocks that collapse on first player contact. */
   crumbleBlocks?: readonly RoomCrumbleBlockDef[];
   /** Bounce pad blocks that reflect the player's velocity on contact. */

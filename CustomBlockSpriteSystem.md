@@ -807,30 +807,396 @@ Phase 2A/2B test was touched, and all 848 tests in the suite pass.
    unlikely to be hit by a single player-sized AABB, but overflow events are
    silently dropped rather than queued.
 
-## Proposed Phase 2D: Contact-Damage Presets (Not Implemented)
+## Phase 2D: Contact-Damage Presets
 
-Recommendation: **contact-damage presets** should be the next phase, ahead of
-break resistance tiers, wind response, or liquid interaction. Rationale:
+Phase 2D adds an engine-defined `contactDamage` property so a solid custom
+block can damage the player on contact, reusing the existing hazard damage
+pathway verbatim rather than building a second health/damage system.
 
-- It reuses the same registry/enum pattern established across Phases 2A–2C
-  (`CustomBlockCompatibilityIssue`-style validation, `PresetMeta<T>` registry,
-  packed `Uint8Array` runtime resolution) with no new engine machinery — the
-  existing `applyPlayerDamageWithKnockback` pathway (already used by
-  spikes/lava) is the natural reuse target, exactly as `materialResponse`
-  reused `PlayerSfxManager` and a `CrumbleDebrisRenderer`-shaped particle
-  pool.
-- It is the most bounded of the four remaining candidates: a small enum of
-  damage tiers (e.g. `none | light | heavy`) mapped to the existing damage
-  constants, with no new physics.
-- It composes naturally with `materialResponse` (a metal spike-like custom
-  block could plausibly want both a material-response break effect *and* a
-  contact-damage tier) without either property depending on the other.
-- By contrast, **break resistance tiers** would require touching the single
-  existing momentum-threshold constant this phase deliberately left alone
-  (risk of destabilizing already-tuned gameplay feel); **wind response** and
-  **liquid interaction** both require reaching into larger, more
-  interconnected systems (`environmentalDust`/wind-particle forces, and the
-  water-zone buoyancy system respectively) that are more architecturally
-  entangled than a straightforward damage-on-contact check.
+### The New Property and Defaults
+
+```json
+{
+  "properties": {
+    "collision": "solid",
+    "friction": "default",
+    "breakability": "indestructible",
+    "materialResponse": "metal",
+    "contactDamage": "low"
+  }
+}
+```
+
+`contactDamage` is a strict enum — `'none' | 'low' | 'high'` — added to
+`CustomBlockProperties` (`src/levels/customBlockProperties.ts`) alongside the
+three Phase 2A properties and Phase 2C's `materialResponse`. No schema
+version bump: `CUSTOM_BLOCK_SCHEMA_VERSION` stays `2`. Defaults to `'none'`:
+
+- Schema-v1 blocks (no `properties` object at all).
+- Schema-v2 blocks saved before Phase 2D (`properties` present, `contactDamage` absent).
+- Unregistered/missing custom block definitions (`DEFAULT_CUSTOM_BLOCK_PROPERTIES`).
+- Built-in (non-custom-block) breakable/solid blocks, which have no
+  `contactDamage` concept at all and are entirely unaffected — `none` is not
+  something authors ever see for them, it is simply the absence of the new
+  `RoomDef.contactDamageBlocks` mechanism.
+
+Unknown values (e.g. `"contactDamage": "extreme"`) never crash — they produce
+a structured `CustomBlockValidationError` (`field: 'properties.contactDamage'`)
+via `validateAndResolveCustomBlockProperties` and fall back to `'none'`,
+exactly mirroring how an unknown `materialResponse` or `breakability` value
+is handled. Saving through the editor always writes the resolved value
+explicitly. Room placements are unaffected: a room only ever references a
+custom block by its stable ID; `contactDamage` lives entirely in the block
+**definition**.
+
+### Registry and Compatibility Rules
+
+`CONTACT_DAMAGE_PRESET_REGISTRY` follows the exact `PresetMeta<T>` shape every
+other preset registry uses:
+
+| Preset | Label | Description |
+|---|---|---|
+| `none` | None | Does not damage the player. |
+| `low` | Low | Applies the engine's lower contact-damage preset. |
+| `high` | High | Applies the engine's stronger contact-damage preset. |
+
+`contactDamageTierToIndex` / `indexToContactDamageTier` pack the two
+*damaging* tiers (`'none'` is never stored — see Runtime Representation
+below) into a `0|1` index for `Uint8Array` storage, the same pattern
+`materialResponseToIndex` established in Phase 2C.
+
+**Compatibility rule — `contactDamageRequiresSolid`**: `contactDamage !==
+'none'` combined with `collision !== 'solid'` (i.e. `oneWay` or `nonSolid`)
+is rejected, added to `checkCustomBlockPropertyCompatibility` alongside the
+existing `fragileRequiresSolid`/`nonSolidNoFriction`/
+`fragileRequiresSupportedFootprint` rules. This keeps Phase 2D entirely on
+the existing solid-contact collision pathway rather than adding a new
+trigger-volume system for one-way/non-solid blocks. At **save time** the
+editor blocks saving and shows the exact issue message (the dialog's
+existing `checkCustomBlockPropertyCompatibility`-gated Save button needed no
+changes — the new rule flows through the same mechanism). At **load time**
+(untrusted/legacy JSON), the combination never crashes: `contactDamage`
+safely falls back to `'none'` while `collision` itself is left untouched, and
+a diagnostic is recorded.
+
+Both fragile and indestructible solid blocks may use contact damage — there
+is no rule linking `contactDamage` to `breakability` (see "Interaction with
+Fragile Blocks" below for how the two combine at runtime).
+
+### Editor Integration
+
+- A **Contact damage** dropdown was added to the custom-block dialog's
+  Properties section (`editorCustomBlockDialog.ts`), built with the same
+  generic `makePropertyRow` helper every other property uses.
+- `propertiesEqual` (drives dirty-state detection) now also compares
+  `contactDamage`, so a contactDamage-only change is correctly flagged dirty.
+- Undo/redo needed no new plumbing: each snapshot is already the full
+  `{ pixelData, properties }` object, so `contactDamage` is captured/restored
+  for free.
+- Rename and Duplicate both pass `def.properties` straight through
+  `serializeCustomBlock`, so `contactDamage` is preserved by rename and
+  copied (with a newly generated stable ID) by duplicate with zero
+  contactDamage-specific code.
+- The palette card badge (`editorUI.ts`) now appends ` · Dmg:Low` /
+  ` · Dmg:High` (nothing for `none`) alongside the existing badges.
+- Invalid combinations (`oneWay`/`nonSolid` + damage) show the exact
+  `contactDamageRequiresSolid` message via the dialog's existing
+  `refreshCompatibilityMessage`/Save-blocking mechanism — no new UI code.
+- No raw damage, knockback, cooldown, or invulnerability number is ever
+  exposed in the UI — only the three-value enum dropdown.
+
+### Runtime Representation
+
+`contactDamage` is resolved and validated exactly once, in the same place as
+every other property — inside `validateAndResolveCustomBlockProperties`,
+called from `parseCustomBlockSource` at block-registration time (campaign
+load, block create, block edit). The simulation loop never parses or
+re-validates properties; `src/sim/hazards.ts` only ever reads a packed
+`Uint8Array` tier index resolved ahead of time by `gameRoomHazards.ts` at
+room-load time.
+
+A contactDamage-only edit does not rebuild the pixel sprite: it reuses the
+exact `updateCustomBlockProperties` fast path Phase 2C introduced for
+materialResponse-only edits — `editorController.ts`'s `onEditCustomBlock`
+byte-compares saved pixel data against the previous definition and, if
+unchanged, updates only the cached `properties` field, leaving the
+`OffscreenCanvas`/`HTMLCanvasElement` untouched. Renaming already skipped
+sprite invalidation before Phase 2C/2D — unchanged.
+
+Campaign switching clears damage profiles exactly as it already cleared the
+other three properties: `clearCustomBlockSpriteCache()` empties the whole
+property cache, and `world.contactDamageBlockCount`/arrays are fully
+repopulated by `loadRoomHazards` on the next room load — no cross-campaign
+leakage is possible. Missing/unregistered definitions fall back to
+`DEFAULT_CUSTOM_BLOCK_PROPERTIES.contactDamage = 'none'` via
+`getCustomBlockProperties`.
+
+Because `editorRoomDataToRoomDef` re-resolves each placement's properties
+fresh from the sprite cache every time it runs (on export, on resident-room
+rebuild, on reopening a room), changing a block definition's `contactDamage`
+tier and re-running that conversion automatically updates every placement of
+that block — no placement coordinates are rewritten, and no per-placement
+cache invalidation is needed.
+
+### Contact-Detection Architecture
+
+Contact damage is **not** derived from a per-frame scan of custom block
+placements, and it does not hook into the physics wall-collision resolver
+(which does not retain a "which walls were touched this tick" list to begin
+with — see the Phase 2D investigation notes below). Instead it follows the
+exact same shape every other hazard in `src/sim/hazards.ts` already uses:
+`RoomDef.contactDamageBlocks` (`RoomContactDamageBlockDef[]`) is a small,
+room-scoped, pre-resolved array — built once by `editorRoomBuilder.ts` from
+solid custom-block placements with `contactDamage !== 'none'`
+(`isEligibleForContactDamage`), independent of whether the placement is also
+fragile — and loaded into bounded `WorldState` arrays
+(`MAX_CONTACT_DAMAGE_BLOCKS = 32`) by `gameRoomHazards.ts`. `applyHazards`
+then does a plain AABB-overlap check against this small array, exactly like
+the existing spike/lava-zone loops: no momentum requirement, no wall-index
+lookup, no dependency on sprite pixel data (see "Transparent Pixels" below).
+
+**Investigation findings** (`src/sim/clusters/movementAxisResolvers.ts`,
+`movementCollision.ts`): the collision resolver iterates the wall array and
+resolves position/velocity per wall every tick, but only records two
+booleans (`isTouchingWallLeftFlag`/`isTouchingWallRightFlag`, used for wall
+jumps) — it does not retain "which wall index was touched this tick"
+anywhere. Reusing that layer directly was not viable without adding new
+resolver-side bookkeeping, which risks touching the collision engine itself
+(explicitly out of scope). The bounded-array-plus-AABB-check pattern already
+used by every other hazard type *is* "the existing collision info" pathway
+in this codebase's architecture — it avoids scanning custom block placements
+or the full wall array, scanning only the small, pre-resolved
+`contactDamageBlockCount` (≤ 32) array instead.
+
+**Damage and knockback mapping** — reuses `applyPlayerDamageWithKnockback`
+(`src/sim/playerDamage.ts`) verbatim, the same function every hazard in the
+game already calls:
+
+| Tier | Damage points | Existing constant matched | Knockback | Invulnerability |
+|---|---|---|---|---|
+| `none` | — | — (no array entry created at all) | — | — |
+| `low` | 1 | `LAVA_ZONE_DAMAGE` | `applyPlayerDamageWithKnockback`'s existing linear formula (`MIN_DAMAGE_KNOCKBACK_SPEED_WORLD + damage × DAMAGE_KNOCKBACK_SPEED_PER_DAMAGE_WORLD`) | `INVULNERABILITY_DURATION_TICKS` (90 ticks), same as every hazard |
+| `high` | 2 | `SPIKE_DAMAGE` | Same formula, proportionally stronger from the higher damage input | Same 90-tick window |
+
+`CUSTOM_BLOCK_CONTACT_DAMAGE_LOW = 1` / `CUSTOM_BLOCK_CONTACT_DAMAGE_HIGH = 2`
+(`src/sim/hazards.ts`) are new named constants, but their *values* are not
+new — they match the dominant 1/2 damage scale already used by
+`LAVA_ZONE_DAMAGE`, `SPIKE_DAMAGE`, and the large majority of enemy
+contact-damage constants across `src/sim/clusters/*Config.ts` (surveyed
+before choosing these values). No separate knockback or invulnerability
+constant was introduced — both come free from `applyPlayerDamageWithKnockback`
+simply being called with a damage amount of 1 or 2, identical to how spikes
+and lava already produce their own knockback/invulnerability behavior.
+
+**Knockback direction** follows the contacted surface: the source point
+passed to `applyPlayerDamageWithKnockback` is the nearest point on the
+block's (or, for a grouped placement, the full union) AABB to the player
+center — the exact same nearest-point-on-AABB pattern the existing lava-zone
+code already uses. This means knockback is never a fixed one-way push; it
+reflects whichever side of the block the player is actually touching.
+
+### Logical Placement Ownership and 2×2 Deduplication
+
+`RoomContactDamageBlockDef.groupId` is a new, independent id space
+(`src/levels/roomElementDefs.ts`), directly analogous to
+`RoomBreakableBlockDef.groupId` from Phase 2B — minted by its own counter in
+`editorRoomBuilder.ts` (`nextContactDamageGroupId`), separate from the
+breakable-block group counter, since the two arrays are never compared
+against each other. A 1×1 damaging placement gets one ungrouped
+(`groupId: -1`) entry; a 2×2 damaging placement gets four entries (one per
+occupied cell) sharing one group id — **never** inferred by matching
+adjacent cells with the same custom block ID, which would incorrectly merge
+two separate touching placements of the same definition.
+
+At contact time (`src/sim/hazards.ts`), when the player overlaps any cell of
+a grouped placement, the handler scans every cell sharing that `groupId`
+(only counting cells still active — see below) to compute the union AABB
+*before* deciding on the damage source point, then calls
+`applyPlayerDamageWithKnockback` **once** and `break`s out of the scan. This
+guarantees:
+
+- Contacting two or more cells of the same 2×2 placement in one simulation
+  update still produces exactly one damage attempt, with a source point
+  derived from the whole placement's footprint (not whichever single cell
+  happened to be scanned first).
+- Two adjacent, distinct placements (even of the same underlying block
+  definition) never have their cells merged — each keeps its own `groupId`
+  and its own damage tier.
+- `applyPlayerDamageWithKnockback`'s own `invulnerabilityTicks` gate is the
+  ultimate backstop: even if two *different* placements were both contacted
+  in the same tick, at most one produces a real effect, since the first
+  successful call sets `invulnerabilityTicks` for the rest of the tick (and
+  well beyond it) and the scan `break`s after the first overlapping cell
+  regardless.
+
+`isContactDamageBlockActiveFlag` deactivates contact-damage cells when their
+underlying fragile block is destroyed (see below) — indestructible damaging
+blocks simply stay active for the room's lifetime.
+
+### Interaction with Fragile Blocks
+
+A block may combine `breakability: fragile` with `contactDamage: low | high`.
+The two properties are independent axes checked by two separate,
+uncorrelated array-driven loops in `applyHazards`, run in this order every
+tick:
+
+1. **Custom block contact damage** runs first. It is a plain solid-contact
+   check with no momentum requirement — the player takes damage on contact
+   regardless of speed, exactly like touching a spike.
+2. **Breakable blocks** runs second, applying its own unchanged momentum
+   threshold (`BREAKABLE_MOMENTUM_THRESHOLD_WORLD`, untouched by this phase)
+   to decide whether to perform the existing atomic destruction transaction.
+
+**A real ordering bug was found and fixed while writing this phase's
+tests**: `applyPlayerDamageWithKnockback` mutates the player's velocity as
+part of its knockback blend. Since the breakable-block section originally
+recomputed the player's speed from *current* velocity, a fragile+damaging
+block's own knockback could sap enough momentum to make the very same hit
+fail the momentum threshold immediately afterward — silently preventing
+fragile+damaging blocks from ever breaking on the hit that damaged the
+player. The fix: the player's speed is now captured once, immediately before
+the contact-damage section runs (`playerSpeedBeforeContactDamage`), and the
+breakable-block section uses that captured value instead of recomputing it
+post-knockback. This preserves every pre-existing hazard interaction
+(spikes/springboards/water/lava still run, and can still affect this
+captured speed, exactly as before) while decoupling the momentum check from
+contact-damage's own velocity mutation.
+
+With this fix, a fragile+damaging block that is struck fast enough to break
+applies its damage **and** breaks in the same tick — one damage attempt, one
+atomic destruction, never four damage attempts from a 2×2 group's four
+cells. Duplicate/re-entrant calls to `applyHazards` on an already-broken
+placement produce neither additional damage nor additional destruction (the
+same active-flag and invulnerability guards apply).
+
+### Transparent Pixels
+
+Contact detection is purely position-based (cell center ± half the block
+size) — it never reads `pixelData` or alpha values. A fully transparent
+custom block (as every registry test in this phase uses, via
+`makeBlankPixelData`) damages the player identically to an opaque one;
+transparent pixels never create a "safe" hole in the collision/damage
+surface.
+
+### Backward Compatibility
+
+- Schema-v1 blocks, and schema-v2 blocks saved before Phase 2D, load exactly
+  as before and resolve `contactDamage` to `'none'` with zero validation
+  errors.
+- All existing stable IDs, room references, collision/friction presets,
+  1×1/2×2 fragile behavior, material-response sounds/particles, built-in
+  hazards and damage, and export/campaign relocation are unchanged.
+- The break momentum threshold is unchanged; no resistance tiers were added.
+- Room reload semantics are unchanged: contact-damage cells (like breakable
+  cells) are transient `WorldState` arrays rebuilt from `RoomDef` on every
+  room load — nothing about "has this block already damaged the player"
+  persists across a reload.
+- Campaigns with no custom blocks at all are entirely unaffected —
+  `room.contactDamageBlocks` is simply `undefined`/absent.
+
+### Tests (Phase 2D)
+
+New file `src/tests/customBlocksPhase2D.test.ts` (33 tests) exercises the
+real pipeline (`editorRoomDataToRoomDef` → `loadRoomHazards` → `applyHazards`)
+for every damage-application scenario rather than only asserting registry
+mappings — schema-v1/v2 defaults, all three presets round-tripping,
+unknown-value fallback with a structured diagnostic, the
+`contactDamageRequiresSolid` compatibility rule (both directions: editor-save
+rejection data and load-time safe fallback), real low/high damage
+application via `applyHazards`, proximity-without-collision producing no
+damage, sustained multi-tick contact producing only one hit while
+invulnerable, grouped 2×2 ownership/deduplication (including adjacent
+distinct placements), knockback direction following the contacted side,
+transparent-pixel independence, the fragile+damage interaction order (including
+the ordering bug fix above), indestructible damaging blocks remaining
+present, dirty-tracking/undo-redo/rename/duplicate at the data-model level,
+the sprite-cache properties-only update (asserting the cached canvas object
+reference is unchanged), and export/relocation and campaign-switch
+isolation. Three pre-existing round-trip-equality assertions
+(`customBlockProperties.test.ts` tests 2 and 17, and
+`customBlocksPhase2B.test.ts` test 24) were updated to include
+`contactDamage: 'none'` in their expected literals, since the resolved
+property bundle now legitimately has one more field — no other Phase
+2A/2B/2C test was touched, and all 881 tests in the suite pass.
+
+### Manual Validation (Honest Status)
+
+- **Automated**: `npx tsc --noEmit`, `npm run lint`, `npm test` (881/881
+  passing), and `npm run build` were all actually run for this phase.
+- **Not performed**: no manual verification was done in an actual running
+  game or editor session for this phase either. As documented in the Phase
+  2C section above, this environment's headless Chromium reproducibly stalls
+  or crashes on this project's editor/campaign-loading flows — confirmed
+  again to be a pre-existing, base-branch-reproducible limitation, not
+  something introduced by this phase (see Phase 2C's "Manual Validation"
+  section for the investigation). All verification here was done through
+  the automated test suite exercising the real `editorRoomDataToRoomDef`,
+  `loadRoomHazards`, and `applyHazards` code paths (not mocks) — but no
+  actual frame was rendered, no actual collision was observed visually, and
+  no actual knockback/damage feedback was seen by a human or an automated UI
+  driver.
+- Anyone relying on this phase for a real campaign should manually create
+  low- and high-damage solid blocks (both 1×1 and 2×2, fragile and
+  indestructible), touch each side and the top surface, confirm normal
+  invulnerability behavior on sustained contact, place two identical
+  damaging blocks beside each other, and confirm material-specific break
+  feedback still fires correctly for a fragile+damaging block, before
+  shipping.
+
+### Remaining Limitations
+
+1. **No trigger-volume system** — contact damage only applies to solid
+   blocks; a future phase could add a genuinely non-blocking damage/trigger
+   zone, but that is explicitly out of scope here.
+2. **Two fixed tiers only** — no resistance tiers, no per-block numeric
+   tuning, no damage-over-time; `low`/`high` map to fixed constants.
+3. **Contact-damage cells are transient, room-scoped state** — like
+   breakable-block state, nothing persists across a room reload (matches
+   existing behavior, not a regression).
+4. **`MAX_CONTACT_DAMAGE_BLOCKS = 32`** is a hard per-room ceiling on
+   damaging cells, mirroring `MAX_BREAKABLE_BLOCKS`.
+5. **The ordering-bug fix (`playerSpeedBeforeContactDamage`) is scoped
+   narrowly** — it only changes what velocity the breakable-block section
+   reads for its momentum check; it does not change how spikes, springboards,
+   water, or lava zones interact with each other or with breakable blocks,
+   preserving all pre-existing hazard-ordering behavior.
+
+## Proposed Phase 2E: Wind-Response Presets (Not Implemented)
+
+Recommendation: **wind-response presets**, ahead of break-resistance tiers
+and liquid-interaction presets, should be the next phase — with a caveat
+(see below).
+
+- **Break-resistance tiers** were the natural next step after Phase 2C but
+  are now largely covered in spirit by this phase's damage tiers; a true
+  resistance-tier phase would mean multiple momentum thresholds instead of
+  the single existing constant. This is well-defined and low-risk (still a
+  fixed enum, no raw numbers), but is the least visually interesting of the
+  three remaining candidates and would mostly matter for advanced level
+  design (blocks that need a running start vs. a sprint-dash to break) —
+  reasonable, but not obviously more valuable than wind response.
+- **Wind response** reuses the existing wind-particle force system
+  (`pixelMaterialMovementWind.ts`, `environmentalDust`) the same way
+  `materialResponse` reused `PlayerSfxManager`/`CrumbleDebrisRenderer` and
+  `contactDamage` reused `applyPlayerDamageWithKnockback` — a bounded enum of
+  wind-interaction presets (e.g. `none | blocksWind | deflects`) mapped to
+  existing force/occlusion behavior, with no new physics engine. It is
+  purely cosmetic/environmental (does not touch player health or collision),
+  making it a lower-risk phase than a damage-adjacent one.
+- **Liquid interaction** (`'seal' | 'drain' | 'none'`) reaches into the
+  water-zone buoyancy system, which is more architecturally entangled (it
+  drives player movement physics directly, not just a cosmetic layer or a
+  contact-damage check), and is more likely to interact unexpectedly with
+  the existing water-zone/frozen-zone mechanics than wind response would.
+
+Caveat: unlike Phase 2A→2D, none of these three remaining candidates has as
+clean and obvious a reuse target as `applyPlayerDamageWithKnockback` was for
+this phase — whichever is chosen next should start with the same
+investigation-first approach (locate the existing wind/liquid system,
+document its constants and integration points) before committing to a
+property shape, since the "right" existing pathway to reuse is less
+obvious for wind/liquid than it was for damage.
+
+Not implemented in this phase — no code changes were made toward it.
 
 Not implemented in this phase — no code changes were made toward it.

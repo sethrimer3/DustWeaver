@@ -94,6 +94,17 @@ const LAVA_ZONE_INVULN_TICKS = 30;
 const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
 
 /**
+ * Phase 2D custom-block contact-damage tiers, matched to the existing
+ * low(1)/high(2) damage scale already used throughout the hazard/enemy
+ * roster (LAVA_ZONE_DAMAGE = 1, SPIKE_DAMAGE = 2, and the majority of enemy
+ * contact-damage constants across src/sim/clusters/*Config.ts). No new
+ * damage scale is introduced — these two constants simply give the existing
+ * 1/2 tiers stable, engine-owned names for the contact-damage property.
+ */
+const CUSTOM_BLOCK_CONTACT_DAMAGE_LOW = 1;
+const CUSTOM_BLOCK_CONTACT_DAMAGE_HIGH = 2;
+
+/**
  * Destroys one breakable-block cell: deactivates its flag and zeroes its
  * corresponding wall's dimensions (removing collision). Idempotent — calling
  * this on an already-inactive cell would double-clear an already-cleared
@@ -108,6 +119,23 @@ function destroyBreakableBlockCell(world: WorldState, index: number): void {
   if (wi >= 0 && wi < world.wallCount) {
     world.wallWWorld[wi] = 0;
     world.wallHWorld[wi] = 0;
+  }
+  // Phase 2D: a fragile+damaging block that is destroyed must stop damaging
+  // the player — deactivate any contact-damage cell at the same world
+  // position. Matched by position (like customBlockGameplayRenderer.ts's
+  // isFragilePlacementBroken) rather than a shared index, since the
+  // breakable and contact-damage arrays are independently populated and
+  // sized. A tiny epsilon guards against float accumulation; cell centers
+  // are computed identically in gameRoomHazards.ts so an exact match is
+  // the common case.
+  const xWorld = world.breakableBlockXWorld[index];
+  const yWorld = world.breakableBlockYWorld[index];
+  for (let ci = 0; ci < world.contactDamageBlockCount; ci++) {
+    if (world.isContactDamageBlockActiveFlag[ci] === 0) continue;
+    if (Math.abs(world.contactDamageBlockXWorld[ci] - xWorld) < 0.5 &&
+        Math.abs(world.contactDamageBlockYWorld[ci] - yWorld) < 0.5) {
+      world.isContactDamageBlockActiveFlag[ci] = 0;
+    }
   }
 }
 
@@ -436,12 +464,97 @@ export function applyHazards(world: WorldState): void {
     }
   }
 
+  // Captured BEFORE the contact-damage section below so the breakable-block
+  // momentum-threshold check (further down) reflects the player's actual
+  // incoming speed, not the post-knockback velocity that
+  // applyPlayerDamageWithKnockback may have just blended in. Without this, a
+  // fragile+damaging block's own contact-damage knockback could sap enough
+  // momentum to make the SAME hit fail the break threshold immediately
+  // afterward, silently preventing fragile+damaging blocks from ever
+  // breaking. Spikes/springboards/water/lava run before this point and can
+  // still affect this captured speed — that ordering is unchanged from
+  // pre-Phase-2D behavior.
+  const playerSpeedBeforeContactDamage = Math.sqrt(
+    player.velocityXWorld * player.velocityXWorld +
+    player.velocityYWorld * player.velocityYWorld,
+  );
+
+  // ── Custom block contact damage (Phase 2D) ──────────────────────────────
+  // Runs BEFORE the breakable-block section below so a fragile+damaging
+  // block applies its contact damage first, then (independently, subject to
+  // its own momentum threshold) is destroyed in the same tick — matching the
+  // documented ordering. Damage itself does not depend on player momentum;
+  // it is a plain solid-contact check, exactly like spikes/lava above.
+  //
+  // Every occupied cell of a grouped (2x2) placement shares one logical
+  // damage owner (contactDamageBlockGroupId) so contacting two of its cells
+  // in the same tick still produces at most one applyPlayerDamageWithKnockback
+  // call — the knockback source point is the nearest point on the FULL
+  // placement's union AABB, not just the one cell found first, so multi-cell
+  // contact always resolves to the same result regardless of scan order.
+  // Reuses the existing damage/knockback/invulnerability function verbatim
+  // (see src/sim/playerDamage.ts) — no parallel damage system is introduced.
+  {
+    const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
+    for (let i = 0; i < world.contactDamageBlockCount; i++) {
+      if (world.isContactDamageBlockActiveFlag[i] === 0) continue;
+
+      const bx = world.contactDamageBlockXWorld[i];
+      const by = world.contactDamageBlockYWorld[i];
+      const bLeft = bx - bHalf;
+      const bRight = bx + bHalf;
+      const bTop = by - bHalf;
+      const bBottom = by + bHalf;
+
+      if (!overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom)) continue;
+
+      const groupId = world.contactDamageBlockGroupId[i];
+      let srcLeft = bLeft, srcRight = bRight, srcTop = bTop, srcBottom = bBottom;
+
+      if (groupId >= 0) {
+        let minXWorld = bx, maxXWorld = bx;
+        let minYWorld = by, maxYWorld = by;
+        for (let j = 0; j < world.contactDamageBlockCount; j++) {
+          if (world.contactDamageBlockGroupId[j] !== groupId) continue;
+          if (world.isContactDamageBlockActiveFlag[j] === 0) continue;
+          const jx = world.contactDamageBlockXWorld[j];
+          const jy = world.contactDamageBlockYWorld[j];
+          if (jx < minXWorld) minXWorld = jx;
+          if (jx > maxXWorld) maxXWorld = jx;
+          if (jy < minYWorld) minYWorld = jy;
+          if (jy > maxYWorld) maxYWorld = jy;
+        }
+        srcLeft = minXWorld - bHalf;
+        srcRight = maxXWorld + bHalf;
+        srcTop = minYWorld - bHalf;
+        srcBottom = maxYWorld + bHalf;
+      }
+
+      // Nearest point on the (possibly grouped) footprint to the player
+      // center — identical pattern to the lava-zone source point above, so
+      // knockback direction follows whichever side the player is actually
+      // touching rather than always pointing one fixed way.
+      const sourceXWorld = Math.max(srcLeft, Math.min(px, srcRight));
+      const sourceYWorld = Math.max(srcTop, Math.min(py, srcBottom));
+      const damagePoints = world.contactDamageBlockTier[i] === 1
+        ? CUSTOM_BLOCK_CONTACT_DAMAGE_HIGH
+        : CUSTOM_BLOCK_CONTACT_DAMAGE_LOW;
+
+      // applyPlayerDamageWithKnockback itself no-ops while the player is
+      // still invulnerable from a previous hit this tick or a recent one,
+      // so even if two DISTINCT damaging placements are both contacted this
+      // tick, at most one ever produces a real effect — no separate
+      // per-block cooldown bookkeeping is needed here.
+      applyPlayerDamageWithKnockback(player, damagePoints, sourceXWorld, sourceYWorld);
+      break; // one damage attempt per tick, mirrors the spike/lava pattern above.
+    }
+  }
+
   // ── Breakable blocks ─────────────────────────────────────────────────────
   {
-    const playerSpeed = Math.sqrt(
-      player.velocityXWorld * player.velocityXWorld +
-      player.velocityYWorld * player.velocityYWorld,
-    );
+    // Uses the speed captured BEFORE the contact-damage section above ran —
+    // see playerSpeedBeforeContactDamage's doc comment.
+    const playerSpeed = playerSpeedBeforeContactDamage;
 
     for (let i = 0; i < world.breakableBlockCount; i++) {
       if (world.isBreakableBlockActiveFlag[i] === 0) continue;

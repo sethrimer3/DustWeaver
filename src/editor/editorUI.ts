@@ -807,8 +807,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
               const frictionBadge = def.properties.friction === 'slippery' ? ' · Slippery' : '';
               const breakBadge = def.properties.breakability === 'fragile' ? ' · Fragile' : '';
               const materialBadge = { stone: ' · Stone', wood: ' · Wood', metal: ' · Metal' }[def.properties.materialResponse];
-              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}`;
-              propsEl.title = 'Collision/friction/breakability/material-response properties for this block.';
+              const damageBadge = { none: '', low: ' · Dmg:Low', high: ' · Dmg:High' }[def.properties.contactDamage];
+              propsEl.textContent = `${collisionBadge}${frictionBadge}${breakBadge}${materialBadge}${damageBadge}`;
+              propsEl.title = 'Collision/friction/breakability/material-response/contact-damage properties for this block.';
 
               info.appendChild(nameEl);
               info.appendChild(sizeEl);

@@ -16,8 +16,11 @@
  * Presets implemented in Phase 2C:
  *   - Material response: stone | wood | metal (break sound + particle feedback)
  *
+ * Presets implemented in Phase 2D:
+ *   - Contact damage: none | low | high (player-damage feedback on solid contact)
+ *
  * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
- * deferred categories (hazards, wind, liquids, triggers, damage/resistance).
+ * deferred categories (break resistance, wind, liquids, triggers).
  */
 
 import type { CustomBlockValidationError } from './customBlocks';
@@ -28,11 +31,13 @@ export type CollisionPreset = 'solid' | 'oneWay' | 'nonSolid';
 export type FrictionPreset = 'default' | 'slippery';
 export type BreakabilityPreset = 'indestructible' | 'fragile';
 export type MaterialResponsePreset = 'stone' | 'wood' | 'metal';
+export type ContactDamagePreset = 'none' | 'low' | 'high';
 
 export const COLLISION_PRESET_IDS: readonly CollisionPreset[] = ['solid', 'oneWay', 'nonSolid'];
 export const FRICTION_PRESET_IDS: readonly FrictionPreset[] = ['default', 'slippery'];
 export const BREAKABILITY_PRESET_IDS: readonly BreakabilityPreset[] = ['indestructible', 'fragile'];
 export const MATERIAL_RESPONSE_PRESET_IDS: readonly MaterialResponsePreset[] = ['stone', 'wood', 'metal'];
+export const CONTACT_DAMAGE_PRESET_IDS: readonly ContactDamagePreset[] = ['none', 'low', 'high'];
 
 export function isCollisionPreset(v: unknown): v is CollisionPreset {
   return typeof v === 'string' && (COLLISION_PRESET_IDS as readonly string[]).includes(v);
@@ -45,6 +50,9 @@ export function isBreakabilityPreset(v: unknown): v is BreakabilityPreset {
 }
 export function isMaterialResponsePreset(v: unknown): v is MaterialResponsePreset {
   return typeof v === 'string' && (MATERIAL_RESPONSE_PRESET_IDS as readonly string[]).includes(v);
+}
+export function isContactDamagePreset(v: unknown): v is ContactDamagePreset {
+  return typeof v === 'string' && (CONTACT_DAMAGE_PRESET_IDS as readonly string[]).includes(v);
 }
 
 // ── Validated property bundle ─────────────────────────────────────────────────
@@ -63,17 +71,26 @@ export interface CustomBlockProperties {
    * src/sim/hazards.ts).
    */
   readonly materialResponse: MaterialResponsePreset;
+  /**
+   * Phase 2D: selects the engine-owned contact-damage tier applied to the
+   * player when they collide with this block's solid surface. 'none' means
+   * the block never damages the player (matches all pre-Phase-2D behavior).
+   * Requires `collision: 'solid'` — see `contactDamageRequiresSolid` below.
+   */
+  readonly contactDamage: ContactDamagePreset;
 }
 
 /**
  * Defaults equivalent to Phase-1 behavior (always solid, no friction/breakability),
- * with 'stone' as the safe Phase 2C material-response default.
+ * with 'stone' as the safe Phase 2C material-response default and 'none' as
+ * the safe Phase 2D contact-damage default.
  */
 export const DEFAULT_CUSTOM_BLOCK_PROPERTIES: CustomBlockProperties = {
   collision: 'solid',
   friction: 'default',
   breakability: 'indestructible',
   materialResponse: 'stone',
+  contactDamage: 'none',
 };
 
 // ── Registry metadata (drives both validation and editor UI) ────────────────
@@ -147,6 +164,24 @@ export const MATERIAL_RESPONSE_PRESET_REGISTRY: Readonly<Record<MaterialResponse
   },
 };
 
+export const CONTACT_DAMAGE_PRESET_REGISTRY: Readonly<Record<ContactDamagePreset, PresetMeta<ContactDamagePreset>>> = {
+  none: {
+    id: 'none',
+    label: 'None',
+    description: 'Does not damage the player.',
+  },
+  low: {
+    id: 'low',
+    label: 'Low',
+    description: "Applies the engine's lower contact-damage preset.",
+  },
+  high: {
+    id: 'high',
+    label: 'High',
+    description: "Applies the engine's stronger contact-damage preset.",
+  },
+};
+
 // ── Numeric packing (WorldState typed arrays never store strings) ───────────
 
 /** Packs a MaterialResponsePreset into a compact index for Uint8Array storage. */
@@ -167,11 +202,26 @@ export function indexToMaterialResponse(index: number): MaterialResponsePreset {
   }
 }
 
+/**
+ * Packs a damaging ContactDamagePreset ('low'|'high') into a compact index
+ * for Uint8Array storage. 'none' is never stored — blocks with no contact
+ * damage simply have no entry in the runtime contact-damage arrays at all
+ * (see isEligibleForContactDamage), so there is no index for 'none'.
+ */
+export function contactDamageTierToIndex(tier: 'low' | 'high'): number {
+  return tier === 'high' ? 1 : 0;
+}
+
+/** Unpacks a Uint8Array index back into the damaging tier. Unknown indices default to 'low'. */
+export function indexToContactDamageTier(index: number): 'low' | 'high' {
+  return index === 1 ? 'high' : 'low';
+}
+
 // ── Compatibility rules ───────────────────────────────────────────────────────
 
 export interface CustomBlockCompatibilityIssue {
   /** Which combination rule was violated. */
-  rule: 'nonSolidNoFriction' | 'fragileRequiresSolid' | 'fragileRequiresSupportedFootprint';
+  rule: 'nonSolidNoFriction' | 'fragileRequiresSolid' | 'fragileRequiresSupportedFootprint' | 'contactDamageRequiresSolid';
   message: string;
 }
 
@@ -214,6 +264,18 @@ export function checkCustomBlockPropertyCompatibility(
       rule: 'fragileRequiresSupportedFootprint',
       message: 'Fragile is only available for 1×1 or 2×2 blocks — this footprint is not supported by the ' +
         'breakable-block pathway.',
+    });
+  }
+
+  // Phase 2D: contact damage requires solid collision — a one-way or
+  // non-solid block has no continuously-blocking surface for the player to
+  // be damaged by, and this phase deliberately stays on the existing solid-
+  // contact pathway rather than adding a separate trigger-volume system.
+  if (properties.contactDamage !== 'none' && properties.collision !== 'solid') {
+    issues.push({
+      rule: 'contactDamageRequiresSolid',
+      message: 'Contact damage requires Solid collision — one-way and non-solid blocks have no blocking ' +
+        'surface for the player to be damaged by. Set Contact damage to None.',
     });
   }
 
@@ -263,16 +325,17 @@ export function validateAndResolveCustomBlockProperties(
   let friction: FrictionPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.friction;
   let breakability: BreakabilityPreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.breakability;
   let materialResponse: MaterialResponsePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.materialResponse;
+  let contactDamage: ContactDamagePreset = DEFAULT_CUSTOM_BLOCK_PROPERTIES.contactDamage;
 
   if (raw === undefined || raw === null) {
     // No properties object at all (e.g. schemaVersion 1, or a schemaVersion 2
-    // block saved before Phase 2C) — pure defaults, not an error.
-    return { properties: { collision, friction, breakability, materialResponse }, errors, fallbackUsed: false };
+    // block saved before Phase 2C/2D) — pure defaults, not an error.
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage }, errors, fallbackUsed: false };
   }
 
   if (typeof raw !== 'object') {
     pushError('properties', 'object', String(typeof raw));
-    return { properties: { collision, friction, breakability, materialResponse }, errors, fallbackUsed };
+    return { properties: { collision, friction, breakability, materialResponse, contactDamage }, errors, fallbackUsed };
   }
 
   const r = raw as Record<string, unknown>;
@@ -312,15 +375,26 @@ export function validateAndResolveCustomBlockProperties(
     }
   }
 
+  // contactDamage is optional even on schemaVersion-2 blocks saved before
+  // Phase 2D — absence is not an error, it just resolves to the 'none' default
+  // already assigned above.
+  if ('contactDamage' in r) {
+    if (isContactDamagePreset(r['contactDamage'])) {
+      contactDamage = r['contactDamage'];
+    } else {
+      pushError('properties.contactDamage', CONTACT_DAMAGE_PRESET_IDS.join(' | '), String(r['contactDamage']));
+    }
+  }
+
   // Reject unknown extra keys (no arbitrary additional values / no object injection).
-  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse']);
+  const knownKeys = new Set(['collision', 'friction', 'breakability', 'materialResponse', 'contactDamage']);
   for (const key of Object.keys(r)) {
     if (!knownKeys.has(key)) {
       pushError(`properties.${key}`, '(not a supported property key)', JSON.stringify(r[key]));
     }
   }
 
-  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse };
+  let properties: CustomBlockProperties = { collision, friction, breakability, materialResponse, contactDamage };
 
   // Compatibility fallback: at LOAD time we never reject the block outright —
   // an incompatible combination falls back to a safe default and is reported.
@@ -330,7 +404,8 @@ export function validateAndResolveCustomBlockProperties(
       pushError(`properties.compatibility.${issue.rule}`, 'compatible combination', issue.message);
     }
     // Safe fallback: force breakability off if fragile was incompatible; force
-    // friction to default if nonSolid was combined with slippery.
+    // friction to default if nonSolid was combined with slippery; force
+    // contactDamage off if it was combined with non-solid collision.
     if (properties.breakability === 'fragile' &&
         (properties.collision !== 'solid' ||
          !((tileWidth === 1 && tileHeight === 1) || (tileWidth === 2 && tileHeight === 2)))) {
@@ -338,6 +413,9 @@ export function validateAndResolveCustomBlockProperties(
     }
     if (properties.collision === 'nonSolid' && properties.friction !== 'default') {
       properties = { ...properties, friction: 'default' };
+    }
+    if (properties.contactDamage !== 'none' && properties.collision !== 'solid') {
+      properties = { ...properties, contactDamage: 'none' };
     }
   }
 
@@ -387,4 +465,16 @@ export function isEligibleForBreakablePathway(
   return properties.breakability === 'fragile' &&
     properties.collision === 'solid' &&
     ((tileWidth === 1 && tileHeight === 1) || (tileWidth === 2 && tileHeight === 2));
+}
+
+/**
+ * Returns true if this block should be registered with the Phase 2D contact-
+ * damage pathway (RoomDef.contactDamageBlocks). Independent of breakability —
+ * both fragile and indestructible solid blocks may damage the player on
+ * contact. Requires `collision: 'solid'` (see `contactDamageRequiresSolid` in
+ * the compatibility rules) — one-way and non-solid blocks are never eligible
+ * regardless of footprint.
+ */
+export function isEligibleForContactDamage(properties: CustomBlockProperties): boolean {
+  return properties.contactDamage !== 'none' && properties.collision === 'solid';
 }

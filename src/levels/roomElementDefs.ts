@@ -80,6 +80,31 @@ export interface RoomBreakableBlockDef {
 }
 
 /**
+ * Phase 2D: a solid custom-block cell that damages the player on contact.
+ * Independent of `RoomBreakableBlockDef` — a placement may appear in neither,
+ * either, or both arrays (a fragile+damaging block appears in both). Purely a
+ * damage-tier selector: never a raw damage number, callback, or asset path.
+ */
+export interface RoomContactDamageBlockDef {
+  xBlock: number;
+  yBlock: number;
+  /** Which engine-owned contact-damage tier this cell applies. */
+  tier: 'low' | 'high';
+  /**
+   * Logical placement group id, analogous to `RoomBreakableBlockDef.groupId`.
+   * Cells sharing the same `groupId` belong to one multi-cell (2x2) damaging
+   * placement and must be treated as a single logical damage owner — struck
+   * once per simulation update regardless of how many of its cells the player
+   * overlaps. Omitted (undefined) for ordinary single-cell (1x1) placements.
+   * This id space is independent of `RoomBreakableBlockDef.groupId` — a
+   * fragile+damaging 2x2 block gets its own damage groupId separate from its
+   * breakable groupId, since the two arrays are unrelated and compared only
+   * against their own entries.
+   */
+  groupId?: number;
+}
+
+/**
  * Which elemental substance a crumble block is specifically weak to.
  * - `'normal'`    — standard crumble block (no elemental weakness).
  * - `'fire'`      — weak to fire.
