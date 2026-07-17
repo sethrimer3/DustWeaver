@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, protocol, session } = require("electron");
+const { app, BrowserWindow, ipcMain, protocol, session, shell } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const {
@@ -21,6 +21,19 @@ protocol.registerSchemesAsPrivileged([
     },
   },
 ]);
+
+ipcMain.handle("dw:open-external", async (_event, url) => {
+  if (typeof url !== "string") return false;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:") return false;
+    await shell.openExternal(parsedUrl.toString());
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 // ── Safety constants ──────────────────────────────────────────────────────────
 

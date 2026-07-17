@@ -24,6 +24,7 @@ import { createMusicManager } from '../audio/musicManager';
 
 /** Vite base URL so public assets resolve correctly. */
 const BASE = import.meta.env.BASE_URL;
+const DISCORD_INVITE_URL = 'https://discord.gg/dSwR3Fj7du';
 
 // ─── Callbacks ───────────────────────────────────────────────────────────────
 
@@ -133,6 +134,35 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   `;
   container.appendChild(buildBadgeEl);
 
+  const discordBtn = document.createElement('button');
+  discordBtn.type = 'button';
+  discordBtn.textContent = 'Discord';
+  discordBtn.setAttribute('aria-label', 'Join the DustWeaver Discord server');
+  discordBtn.style.cssText = `
+    display: none; position: absolute; right: 1rem; bottom: 1rem;
+    background: rgba(88,101,242,0.82); border: 1px solid rgba(255,255,255,0.28);
+    color: #fff; padding: 0.65rem 1rem; font: 600 0.85rem 'Cinzel', serif;
+    letter-spacing: 0.08em; border-radius: 4px; cursor: pointer;
+    text-transform: uppercase; transition: background 0.2s, transform 0.2s;
+  `;
+  discordBtn.addEventListener('mouseenter', () => {
+    discordBtn.style.background = 'rgba(88,101,242,1)';
+    discordBtn.style.transform = 'translateY(-2px)';
+  });
+  discordBtn.addEventListener('mouseleave', () => {
+    discordBtn.style.background = 'rgba(88,101,242,0.82)';
+    discordBtn.style.transform = 'none';
+  });
+  discordBtn.addEventListener('click', () => {
+    const openExternal = window.dustweaverElectron?.openExternal;
+    if (openExternal !== undefined) {
+      void openExternal(DISCORD_INVITE_URL);
+      return;
+    }
+    window.open(DISCORD_INVITE_URL, '_blank', 'noopener,noreferrer');
+  });
+  container.appendChild(discordBtn);
+
   // ── Build menu buttons ───────────────────────────────────────────────────
   function createMenuButton(label: string, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
@@ -195,6 +225,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     setTimeout(() => {
       titleEl.style.display = 'none';
       menuEl.style.display = 'flex';
+      discordBtn.style.display = 'block';
       requestAnimationFrame(() => {
         menuEl.style.opacity = '1';
       });

@@ -30,6 +30,9 @@ const { contextBridge, ipcRenderer } = require('electron');
  * still current.
  */
 contextBridge.exposeInMainWorld('dustweaverElectron', {
+  /** Opens a trusted HTTPS URL in the user's default browser. */
+  openExternal: (url) => ipcRenderer.invoke('dw:open-external', url),
+
   /** Legacy: writes official campaign only.  Retained for backward compatibility. */
   saveOfficialCampaignToProject: (campaign) =>
     ipcRenderer.invoke('dw:save-official-campaign', campaign),

@@ -81,6 +81,9 @@ export interface ValidateRoomCacheFilesResult {
 
 /** Narrow IPC API exposed by the Electron preload script. */
 export interface DustWeaverElectronAPI {
+  /** Opens an HTTPS URL in the user's default browser. */
+  openExternal?(url: string): Promise<boolean>;
+
   /**
    * Legacy: writes the official DustWeaver campaign directly to the project's
    * ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN directory.
