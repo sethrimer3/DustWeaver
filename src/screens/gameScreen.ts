@@ -27,6 +27,7 @@ import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
+import { interactWithNearbyChallengeTotem, updateRoomChallengeElements } from './gameRoomChallenge';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
@@ -1302,6 +1303,7 @@ export function startGameScreen(
 
     if (interactInputPulseTrigger) {
       interactInputPulseMs = 150;
+      interactWithNearbyChallengeTotem(world);
     }
 
     if (openPause) {
@@ -1457,6 +1459,7 @@ export function startGameScreen(
       const shouldSprint = !isDialogueBlockingInput && (getManualSprintEnabled() ? inputState.isSprintHeldFlag : moveDx !== 0);
       world.playerSprintHeldFlag = shouldSprint ? 1 : 0;
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
+      updateRoomChallengeElements(world);
       tick(world);
       _simTickCount++;
       // If the player died during this tick, stop processing further ticks in
@@ -1631,7 +1634,7 @@ export function startGameScreen(
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
-      world, currentRoom,
+      world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,
       cachedDecorationCenterX,

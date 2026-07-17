@@ -142,6 +142,25 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
     }
   }
 
+  for (const [elements, isPoint] of [
+    [room.challengeFields ?? [], false],
+    [room.challengeGates ?? [], false],
+    [room.challengeTotems ?? [], true],
+  ] as const) {
+    for (let i = 0; i < elements.length; i++) {
+      const element = elements[i];
+      const hit = isPoint
+        ? hitTestPoint(element.xBlock, element.yBlock, bx, by)
+        : hitTestZone(element as BlockRect, bx, by);
+      if (hit) {
+        const removedUid = element.uid;
+        elements.splice(i, 1);
+        state.selectedElements = state.selectedElements.filter(selected => selected.uid !== removedUid);
+        return;
+      }
+    }
+  }
+
   // Check dust containers
   const dustContainers = room.dustContainers ?? [];
   for (let i = 0; i < dustContainers.length; i++) {

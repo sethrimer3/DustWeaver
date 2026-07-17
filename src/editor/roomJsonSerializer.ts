@@ -153,6 +153,15 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       weaveId: s.weaveId,
     }));
   }
+  if ((data.challengeFields ?? []).length > 0) {
+    json.challengeFields = data.challengeFields!.map(element => ({ ...element }));
+  }
+  if ((data.challengeGates ?? []).length > 0) {
+    json.challengeGates = data.challengeGates!.map(element => ({ ...element }));
+  }
+  if ((data.challengeTotems ?? []).length > 0) {
+    json.challengeTotems = data.challengeTotems!.map(element => ({ ...element }));
+  }
   if ((data.dustContainers ?? []).length > 0) {
     json.dustContainers = data.dustContainers.map(c => ({
       xBlock: c.xBlock,

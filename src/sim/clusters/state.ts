@@ -1,7 +1,11 @@
 import { PLAYER_HALF_WIDTH_WORLD, PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
 import { MAX_CW_METEOR_SCHEDULE } from './crimsonWizardConfig';
+import type { ChallengeModeState } from '../challengeMode';
 
 export interface ClusterState {
+  /** World-local challenge state reference, assigned only on the active player. */
+  challengeMode: ChallengeModeState | null;
+  challengeReturnGuard: 0 | 1;
   entityId: number;
   positionXWorld: number;
   positionYWorld: number;
@@ -975,6 +979,8 @@ export function createClusterState(
   maxHealthPoints: number,
 ): ClusterState {
   return {
+    challengeMode: null,
+    challengeReturnGuard: 0,
     entityId,
     positionXWorld,
     positionYWorld,

@@ -512,6 +512,18 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       targetSpawnBlock: [3, 3],
       positionBlock,
     });
+  } else if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
+    const wBlock = Math.min(item.defaultWidthBlocks ?? 1, room.widthBlocks - bx);
+    const hBlock = Math.min(item.defaultHeightBlocks ?? 1, room.heightBlocks - by);
+    if (wBlock < 1 || hBlock < 1) return;
+    const target = item.id === 'challenge_field'
+      ? (room.challengeFields ??= [])
+      : (room.challengeGates ??= []);
+    target.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+  } else if (item.id === 'challenge_totem') {
+    const target = (room.challengeTotems ??= []);
+    if (target.some(t => t.xBlock === bx && t.yBlock === by)) return;
+    target.push({ uid: allocateUid(state), xBlock: bx, yBlock: by });
   } else if (item.id === 'save_tomb') {
     // Dedup: no duplicate at same position.
     if (room.saveTombs.some(t => t.xBlock === bx && t.yBlock === by)) return;

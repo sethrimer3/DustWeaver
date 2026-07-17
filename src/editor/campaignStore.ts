@@ -54,6 +54,9 @@ function computeMaxUidPlusOne(roomData: EditorRoomData, startUid: number): numbe
   for (const t of roomData.transitions) track(t.uid);
   for (const s of roomData.saveTombs) track(s.uid);
   for (const s of roomData.skillTombs) track(s.uid);
+  for (const s of roomData.challengeFields ?? []) track(s.uid);
+  for (const s of roomData.challengeGates ?? []) track(s.uid);
+  for (const s of roomData.challengeTotems ?? []) track(s.uid);
   for (const d of roomData.dustPiles) track(d.uid);
   for (const d of (roomData.decorations ?? [])) track(d.uid);
   for (const z of (roomData.waterZones ?? [])) track(z.uid);

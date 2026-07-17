@@ -40,6 +40,8 @@ export interface PlayerDamageTarget {
   isHighVelocityAttacking?: 0 | 1;
   halfWidthWorld?: number;
   halfHeightWorld?: number;
+  challengeMode?: ChallengeModeState | null;
+  challengeReturnGuard?: 0 | 1;
 }
 
 export interface PlayerDamageOptions {
@@ -57,11 +59,12 @@ export function applyPlayerDamageWithKnockback(
   if (player.isAliveFlag === 0) return false;
   if (player.invulnerabilityTicks > 0) return false;
   if (player.isHighVelocityAttacking === 1) return false; // momentum combat invulnerability
+  if (player.challengeReturnGuard === 1) return false;
 
   const damageToApply = Math.max(0, damagePoints);
   if (damageToApply <= 0) return false;
 
-  const challenge = options?.challengeState;
+  const challenge = options?.challengeState ?? player.challengeMode ?? undefined;
   if (challenge?.isActive) {
     const anchorXWorld = challenge.anchorXWorld;
     const anchorYWorld = challenge.anchorYWorld;
@@ -71,6 +74,7 @@ export function applyPlayerDamageWithKnockback(
     player.velocityXWorld = 0;
     player.velocityYWorld = 0;
     player.isGroundedFlag = 0;
+    player.challengeReturnGuard = 1;
     options?.clearTransientMovement?.();
     return true;
   }

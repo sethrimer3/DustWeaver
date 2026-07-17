@@ -33,6 +33,7 @@ export interface ChallengeModeState {
   anchorYWorld: number;
   activationSequence: number;
   returnSequence: number;
+  reconciledReturnSequence: number;
   fields: ChallengeRuntimeField[];
   gates: ChallengeRuntimeGate[];
   totems: ChallengePointDef[];
@@ -60,6 +61,7 @@ export function createChallengeModeState(
     anchorYWorld: 0,
     activationSequence: 0,
     returnSequence: 0,
+    reconciledReturnSequence: 0,
     fields: fields.map(field => ({ ...field, visualState: 'armed', wasPlayerOverlapping: false })),
     gates: gates.map(gate => ({ ...gate, wallIndex: -1 })),
     totems: totems.map(totem => ({ ...totem })),

@@ -29,6 +29,7 @@ import {
 } from './editorInput';
 import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
 import { hitTestTransitionResizeEdge } from './editorHitTest';
+import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { createEditorUI, EditorUI } from './editorUI';
@@ -181,6 +182,7 @@ export function createEditorController(
 
   // Edge-resize: original zone geometry of the transition being resized, captured at drag start.
   let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number } | null = null;
+  let challengeResize: { type: 'challengeField' | 'challengeGate'; uid: number; edge: RectResizeEdge; original: { xBlock: number; yBlock: number; wBlock: number; hBlock: number } } | null = null;
 
   // ── Pending-edits persistence for multi-room editing ────────────────────
   // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
@@ -949,6 +951,9 @@ export function createEditorController(
       for (const t of state.roomData.transitions)    maxUid = Math.max(maxUid, t.uid + 1);
       for (const s of state.roomData.saveTombs)      maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
+      for (const s of state.roomData.challengeFields ?? []) maxUid = Math.max(maxUid, s.uid + 1);
+      for (const s of state.roomData.challengeGates ?? []) maxUid = Math.max(maxUid, s.uid + 1);
+      for (const s of state.roomData.challengeTotems ?? []) maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
       for (const d of (state.roomData.decorations ?? [])) maxUid = Math.max(maxUid, d.uid + 1);
       // Ensure nextUid never regresses below its current value (other rooms may
@@ -1277,6 +1282,18 @@ export function createEditorController(
             }
           }
         } else if (state.activeTool === EditorTool.Select) {
+          const soleChallenge = state.selectedElements.length === 1 &&
+            (state.selectedElements[0].type === 'challengeField' || state.selectedElements[0].type === 'challengeGate')
+            ? state.selectedElements[0] : null;
+          const challengeElements = soleChallenge?.type === 'challengeField'
+            ? state.roomData.challengeFields : state.roomData.challengeGates;
+          const challengeRect = soleChallenge ? (challengeElements ?? []).find(element => element.uid === soleChallenge.uid) : undefined;
+          const challengeEdge = challengeRect
+            ? hitTestRectResizeEdge(challengeRect, state.cursorWorldX, state.cursorWorldY) : null;
+          if (challengeRect && soleChallenge && challengeEdge) {
+            challengeResize = { type: soleChallenge.type as 'challengeField' | 'challengeGate', uid: soleChallenge.uid, edge: challengeEdge, original: { ...challengeRect } };
+            pushSnapshot(history, state.roomData);
+          }
           // If exactly one transition is already selected, check whether the
           // click landed on one of its (non-trigger) zone edges — if so,
           // begin an edge-resize drag instead of re-selecting/deselecting.
@@ -1286,7 +1303,9 @@ export function createEditorController(
           const grabbedEdge = soleSelectedTrans !== null
             ? hitTestTransitionResizeEdge(soleSelectedTrans, state.cursorWorldX, state.cursorWorldY, 0.4)
             : null;
-          if (soleSelectedTrans !== null && grabbedEdge !== null) {
+          if (challengeResize !== null) {
+            // Generic rectangle resize owns this drag.
+          } else if (soleSelectedTrans !== null && grabbedEdge !== null) {
             state.isResizingTransition = true;
             state.resizeTransitionUid = soleSelectedTrans.uid;
             state.resizeEdge = grabbedEdge;
@@ -1476,6 +1495,20 @@ export function createEditorController(
       }
     }
 
+    if (challengeResize && inputState.isMouseDown && state.roomData) {
+      const elements = challengeResize.type === 'challengeField'
+        ? state.roomData.challengeFields : state.roomData.challengeGates;
+      const rect = (elements ?? []).find(element => element.uid === challengeResize!.uid);
+      if (rect) Object.assign(rect, resizeBlockRect(
+        challengeResize.original,
+        challengeResize.edge,
+        state.cursorBlockX,
+        state.cursorBlockY,
+        state.roomData.widthBlocks,
+        state.roomData.heightBlocks,
+      ));
+    }
+
     // Edge-resize for a selected transition
     if (state.isResizingTransition && inputState.isMouseDown && state.roomData && resizeOriginalGeometry) {
       const trans = state.roomData.transitions.find((t: EditorTransition) => t.uid === state.resizeTransitionUid);
@@ -1559,6 +1592,10 @@ export function createEditorController(
         state.resizeTransitionUid = -1;
         state.resizeEdge = null;
         resizeOriginalGeometry = null;
+        applyEdits('metadata');
+      }
+      if (challengeResize) {
+        challengeResize = null;
         applyEdits('metadata');
       }
       if (state.isSelectionBoxActive) {

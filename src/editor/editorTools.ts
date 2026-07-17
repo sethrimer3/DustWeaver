@@ -60,6 +60,15 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
       return { type: 'skillTomb', uid: s.uid };
     }
   }
+  for (const field of room.challengeFields ?? []) {
+    if (hitTestZone(field, bx, by)) return { type: 'challengeField', uid: field.uid };
+  }
+  for (const gate of room.challengeGates ?? []) {
+    if (hitTestZone(gate, bx, by)) return { type: 'challengeGate', uid: gate.uid };
+  }
+  for (const totem of room.challengeTotems ?? []) {
+    if (hitTestPoint(totem.xBlock, totem.yBlock, bx, by)) return { type: 'challengeTotem', uid: totem.uid };
+  }
 
   // Check dust containers
   for (const c of (room.dustContainers ?? [])) {

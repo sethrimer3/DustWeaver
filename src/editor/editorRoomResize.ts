@@ -69,6 +69,13 @@ export function applyRoomDimensionChange(
     tomb.xBlock = Math.min(Math.max(0, tomb.xBlock), maxX);
     tomb.yBlock = Math.min(Math.max(0, tomb.yBlock), maxY);
   }
+  for (const totem of room.challengeTotems ?? []) {
+    totem.xBlock = Math.min(Math.max(0, totem.xBlock), maxX);
+    totem.yBlock = Math.min(Math.max(0, totem.yBlock), maxY);
+  }
+  for (const rect of [...(room.challengeFields ?? []), ...(room.challengeGates ?? [])]) {
+    clampZoneToDimensions(rect, room.widthBlocks, room.heightBlocks);
+  }
 
   for (const pile of room.dustPiles) {
     pile.xBlock = Math.min(Math.max(0, pile.xBlock), maxX);
@@ -220,6 +227,14 @@ export function applyEdgeResize(
     for (const tomb of room.skillTombs) {
       tomb.xBlock += shiftX;
       tomb.yBlock += shiftY;
+    }
+    for (const element of [
+      ...(room.challengeFields ?? []),
+      ...(room.challengeGates ?? []),
+      ...(room.challengeTotems ?? []),
+    ]) {
+      element.xBlock += shiftX;
+      element.yBlock += shiftY;
     }
 
     // Shift dust piles

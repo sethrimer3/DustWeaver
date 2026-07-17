@@ -20,6 +20,7 @@ import {
   MOTE_REGEN_FLASH_TICKS,
 } from '../sim/motes/orderedMoteQueue';
 import { formatRunTimer } from '../progression/saveSlots';
+import { drawChallengeHudShield } from '../render/challengeElementRenderer';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -63,6 +64,7 @@ const MOTE_ROW_GAP_PX  = 3;
 export interface HudRenderContext {
   ctx: CanvasRenderingContext2D;
   world: WorldState;
+  isChallengeModeActive: boolean;
   ox: number;
   oy: number;
   zoom: number;
@@ -142,7 +144,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     const playerForHealth = world.clusters[0];
     if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
       const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
-      const healthBarAlpha = getHealthBarAlpha(
+      const healthBarAlpha = r.isChallengeModeActive ? 1 : getHealthBarAlpha(
         playerForHealth.entityId,
         healthFraction,
         world.tick,
@@ -219,6 +221,10 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
       ctx.strokeStyle = 'rgba(0,0,0,0.55)';
       ctx.lineWidth   = 0.5;
       ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
+
+      if (r.isChallengeModeActive) {
+        drawChallengeHudShield(ctx, barX + barW * 0.5, barY + barH * 0.5);
+      }
 
       ctx.fillStyle = '#0066ff';
       ctx.fillRect(barX + barW + 3, barY, 1, 1);

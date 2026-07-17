@@ -149,6 +149,20 @@ export interface RoomJsonSkillTomb {
   yBlock: number;
 }
 
+export interface RoomJsonChallengeRect {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+export interface RoomJsonChallengeTotem {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
 /** Skill Tomb — grants a specific dust skill/weave when interacted with. */
 export interface RoomJsonDustSkillTomb {
   xBlock: number;
@@ -448,6 +462,9 @@ export interface RoomJsonDef {
   transitions: RoomJsonTransition[];
   /** Save Tombs (stored as "skillTombs" for backward compatibility with existing room files). */
   skillTombs: RoomJsonSkillTomb[];
+  challengeFields?: RoomJsonChallengeRect[];
+  challengeGates?: RoomJsonChallengeRect[];
+  challengeTotems?: RoomJsonChallengeTotem[];
   /** Skill Tombs — grant dust skills/weaves when interacted with. */
   dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */
