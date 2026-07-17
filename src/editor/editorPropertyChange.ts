@@ -137,7 +137,14 @@ export function applyPropertyToElement(
         trans.longTransition = numVal === 1;
       }
       if (prop === 'transition.gradientWidthBlocks' && !isNaN(numVal)) {
-        trans.gradientWidthBlocks = Math.max(0, numVal);
+        const newGw = Math.max(0, numVal);
+        const oldGw = trans.gradientWidthBlocks ?? 0;
+        // Keep the trigger edge (the transition's actual crossing line) fixed
+        // in place; grow the zone into the room from the far side instead of
+        // pushing the trigger edge further out.
+        if (trans.direction === 'right') trans.xBlock += oldGw - newGw;
+        if (trans.direction === 'down') trans.yBlock += oldGw - newGw;
+        trans.gradientWidthBlocks = newGw;
       }
     }
   } else if (el.type === 'waterZone') {

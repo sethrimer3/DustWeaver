@@ -201,6 +201,7 @@ export type ExportProgressStep =
   | 'writing-manifest'
   | 'cleaning-stale'
   | 'complete'
+  | 'cancelled'
   | 'error';
 
 /**

@@ -9,7 +9,7 @@
 
 /** Subset of `ExportProgressEvent` that `resolveExportOutcomeEvent` can produce. */
 export interface ExportOutcomeEvent {
-  step: 'complete' | 'error';
+  step: 'complete' | 'error' | 'cancelled';
   message: string;
   writtenRooms?: number;
   skippedRooms?: number;
@@ -19,6 +19,7 @@ export interface ExportOutcomeEvent {
 export interface ExportOutcomeResult {
   ok: boolean;
   error?: string;
+  cancelled?: boolean;
   writtenRooms?: number;
   skippedRooms?: number;
   removedCount?: number;
@@ -54,6 +55,10 @@ export function resolveExportOutcomeEvent(
     const message = `Export complete — ${written} room(s) written, ${skipped} unchanged` +
       (removed > 0 ? `, ${removed} stale file(s) removed` : '');
     return { step: 'complete', message, writtenRooms: written, skippedRooms: skipped };
+  }
+
+  if (result.cancelled) {
+    return { step: 'cancelled', message: result.error ?? 'Export cancelled' };
   }
 
   return { step: 'error', message: `Export failed: ${result.error ?? 'Unknown error'}` };

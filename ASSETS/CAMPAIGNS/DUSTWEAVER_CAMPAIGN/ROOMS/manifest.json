@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "ab70b179dc6f177d",
-  "campaignVersion": 5,
+  "campaignHash": "19039129868cf374",
+  "campaignVersion": 6,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-12T06:25:17.263Z",
+  "exportedAt": "2026-07-17T04:33:06.255Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -19,17 +19,23 @@
       "hash": "441ede6993231ece",
       "updatedAt": "2026-07-12T06:25:17.263Z"
     },
+    "overgrown_shaft": {
+      "roomId": "overgrown_shaft",
+      "file": "overgrown_shaft_room.json",
+      "hash": "db4389bbefe5d773",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
+    },
     "boss_radiant_tether": {
       "roomId": "boss_radiant_tether",
       "file": "boss_radiant_tether_room.json",
       "hash": "a9d671b14b5fe14e",
       "updatedAt": "2026-07-12T06:25:17.263Z"
     },
-    "overgrown_shaft": {
-      "roomId": "overgrown_shaft",
-      "file": "overgrown_shaft_room.json",
-      "hash": "4f2e4125718eec47",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+    "underwater_lake": {
+      "roomId": "underwater_lake",
+      "file": "underwater_lake_room.json",
+      "hash": "faf805cf99b1fbe2",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "seal_chamber": {
       "roomId": "seal_chamber",
@@ -40,8 +46,8 @@
     "overgrown_chasm": {
       "roomId": "overgrown_chasm",
       "file": "overgrown_chasm_room.json",
-      "hash": "b9fbcd88663f1384",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "14ee02d55474431b",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "interesting_room": {
       "roomId": "interesting_room",
@@ -52,14 +58,14 @@
     "dark_tunnel": {
       "roomId": "dark_tunnel",
       "file": "dark_tunnel_room.json",
-      "hash": "e8351e64f3f8cba9",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "30e8ff17488352b1",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "long_hall": {
       "roomId": "long_hall",
       "file": "long_hall_room.json",
-      "hash": "b8cd82cea308eeff",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "946f4909eb732f09",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "Cozy_Chamber": {
       "roomId": "Cozy_Chamber",
@@ -70,38 +76,32 @@
     "bend": {
       "roomId": "bend",
       "file": "bend_room.json",
-      "hash": "4dd6e1279d5e6f8a",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "67b1df09da250b64",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "the_fall": {
       "roomId": "the_fall",
       "file": "the_fall_room.json",
-      "hash": "661f09cb324ebfa1",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "8db07d798ae095bf",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "tall_shaft": {
       "roomId": "tall_shaft",
       "file": "tall_shaft_room.json",
-      "hash": "5073cbdde2485fe0",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "bf4be0817d1d8b29",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "chasm": {
       "roomId": "chasm",
       "file": "chasm_room.json",
-      "hash": "8e312786cfb663ad",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
-    },
-    "underwater_lake": {
-      "roomId": "underwater_lake",
-      "file": "underwater_lake_room.json",
-      "hash": "9934802d409a4a61",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "31e75eec1c094526",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "magma_corridor": {
       "roomId": "magma_corridor",
       "file": "magma_corridor_room.json",
-      "hash": "a1c3c8e0bcba38b4",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "a84c0ec72b6cde5b",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "a_big_ask": {
       "roomId": "a_big_ask",
@@ -118,14 +118,14 @@
     "crimson_throne": {
       "roomId": "crimson_throne",
       "file": "crimson_throne_room.json",
-      "hash": "9bef7e4018bd1b16",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "64e0cb124d0e20ea",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     },
     "pipe": {
       "roomId": "pipe",
       "file": "pipe_room.json",
-      "hash": "b76ecaa84af6ed19",
-      "updatedAt": "2026-07-12T06:25:17.263Z"
+      "hash": "abe839e9d555fa99",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
     }
   },
   "adjacency": {
@@ -143,6 +143,13 @@
         "boss_radiant_tether"
       ]
     },
+    "overgrown_shaft": {
+      "roomId": "overgrown_shaft",
+      "targets": [
+        "lobby",
+        "underwater_lake"
+      ]
+    },
     "boss_radiant_tether": {
       "roomId": "boss_radiant_tether",
       "targets": [
@@ -150,11 +157,11 @@
         "seal_chamber"
       ]
     },
-    "overgrown_shaft": {
-      "roomId": "overgrown_shaft",
+    "underwater_lake": {
+      "roomId": "underwater_lake",
       "targets": [
-        "lobby",
-        "underwater_lake"
+        "overgrown_shaft",
+        "pipe"
       ]
     },
     "seal_chamber": {
@@ -225,13 +232,6 @@
       "targets": [
         "dark_tunnel",
         "bend"
-      ]
-    },
-    "underwater_lake": {
-      "roomId": "underwater_lake",
-      "targets": [
-        "overgrown_shaft",
-        "pipe"
       ]
     },
     "magma_corridor": {

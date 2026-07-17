@@ -15,6 +15,8 @@ export interface ElectronSaveResult {
   ok: boolean;
   /** Present when ok is false. Human-readable error description. */
   error?: string;
+  /** Present when ok is false, from `exportCampaignWithProgress`: true if the export was cancelled via `cancelExport`. */
+  cancelled?: boolean;
   /** Present when ok is true. Absolute path of the directory that was written. */
   campaignDir?: string;
   /** Present when ok is true, from `exportCampaignWithProgress`: rooms written or updated. */
@@ -33,6 +35,12 @@ export interface ExportCampaignOptions {
    * When false (default), the campaign is written to userData/CUSTOM_CAMPAIGNS/<id>/.
    */
   isOfficialCampaign?: boolean;
+  /**
+   * Opaque ID identifying this export for cancellation. When provided,
+   * `cancelExport(exportId)` can be used to request the export stop between
+   * room writes.
+   */
+  exportId?: string;
 }
 
 /** Result returned by `readRoomCacheManifest`. */
@@ -125,6 +133,15 @@ export interface DustWeaverElectronAPI {
    * Must be called after the export promise resolves to avoid listener leaks.
    */
   offExportProgress(): void;
+
+  /**
+   * Requests cancellation of an in-progress export started with
+   * `exportCampaignWithProgress({ ..., exportId })`. Cancellation is checked
+   * between room writes in the main process, so it takes effect shortly
+   * after the request (not instantly), and never leaves the on-disk campaign
+   * in a corrupted or incomplete state.
+   */
+  cancelExport(exportId: string): Promise<{ ok: boolean }>;
 
   /**
    * Reads the room cache manifest for a campaign from the ROOMS/manifest.json.

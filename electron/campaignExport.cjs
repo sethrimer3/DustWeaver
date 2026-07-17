@@ -393,11 +393,27 @@ function validateRoomCacheOnDisk(roomsDir, manifest, expectedRoomIds) {
  * `onProgress(event)` is called for each step (optional — pass a no-op for
  * callers that don't need streaming progress, e.g. the legacy handler).
  *
- * @returns {{ok:true, campaignDir:string, writtenRooms:number, skippedRooms:number, removedCount:number} |
- *           {ok:false, error:string}}
+ * `isCancelled()` is polled between room writes (optional — defaults to never
+ * cancelled). When it returns true, the loop stops *before* starting the next
+ * room's write and the function returns `{ ok: false, cancelled: true }`
+ * without writing the manifest or cleaning stale files. This leaves the
+ * on-disk cache in a safe, consistent state: every room file written so far
+ * used an atomic rename, and the manifest (still referencing the previous
+ * export's files/hashes) is untouched, so nothing is corrupted or missing —
+ * the next export simply re-checks hashes and finishes the job.
+ *
+ * This function is async and yields to the event loop (via `setImmediate`)
+ * between room writes specifically so a cancellation request arriving over
+ * IPC while this loop is running gets a chance to be processed — Node/Electron
+ * is single-threaded, so a purely synchronous loop would never observe it.
+ *
+ * @returns {Promise<{ok:true, campaignDir:string, writtenRooms:number, skippedRooms:number, removedCount:number} |
+ *           {ok:false, error:string, cancelled?:boolean}>}
  */
-function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomIdFirstIndex, isOfficialCampaign, campaignDir, onProgress }) {
+async function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomIdFirstIndex, isOfficialCampaign, campaignDir, onProgress, isCancelled }) {
   const notify = typeof onProgress === "function" ? onProgress : () => {};
+  const checkCancelled = typeof isCancelled === "function" ? isCancelled : () => false;
+  const yieldToEventLoop = () => new Promise((resolve) => setImmediate(resolve));
 
   const roomsDir = path.join(campaignDir, "ROOMS");
   const backupsDir = path.join(campaignDir, "BACKUPS");
@@ -466,6 +482,15 @@ function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms, roomI
   const totalRooms = rooms.length;
 
   for (let i = 0; i < rooms.length; i++) {
+    // Yield before each room so a pending 'dw:cancel-export' IPC message gets
+    // a chance to run and flip the cancellation flag this loop polls.
+    await yieldToEventLoop();
+    if (checkCancelled()) {
+      const message = `Export cancelled — ${writtenRooms} room(s) written, ${skippedRooms} unchanged so far`;
+      notify({ step: "cancelled", message });
+      return { ok: false, cancelled: true, error: message };
+    }
+
     const room = rooms[i];
     const roomId = room.id;
     const roomFilename = `${roomId}${ROOM_FILE_SUFFIX}`;

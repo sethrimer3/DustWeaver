@@ -65,7 +65,7 @@ type RoomCacheValidationResult =
   | { ok: false; error: string };
 
 type CampaignExportModule = {
-  exportCampaignToDisk(args: ExportCampaignArgs): ExportCampaignResult;
+  exportCampaignToDisk(args: ExportCampaignArgs): Promise<ExportCampaignResult>;
   validateRoomCacheOnDisk(
     roomsDir: string,
     manifest: Record<string, unknown>,
@@ -111,7 +111,7 @@ function baseArgs(campaignDir: string, roomIds: string[]) {
   };
 }
 
-test('room write failure fails the whole export', () => {
+test('room write failure fails the whole export', async () => {
   const campaignDir = makeTmpDir();
   const roomsDir = path.join(campaignDir, 'ROOMS');
   fs.mkdirSync(roomsDir, { recursive: true });
@@ -120,7 +120,7 @@ test('room write failure fails the whole export', () => {
   fs.mkdirSync(path.join(roomsDir, 'roomA_room.json'));
 
   const events: CampaignProgressEvent[] = [];
-  const result = exportCampaignToDisk({
+  const result = await exportCampaignToDisk({
     ...baseArgs(campaignDir, ['roomA']),
     onProgress: (e) => events.push(e),
   });
@@ -133,7 +133,7 @@ test('room write failure fails the whole export', () => {
   assert.equal(fs.existsSync(path.join(roomsDir, 'manifest.json')), false);
 });
 
-test('manifest write failure fails the whole export', () => {
+test('manifest write failure fails the whole export', async () => {
   const campaignDir = makeTmpDir();
   const roomsDir = path.join(campaignDir, 'ROOMS');
   fs.mkdirSync(roomsDir, { recursive: true });
@@ -142,7 +142,7 @@ test('manifest write failure fails the whole export', () => {
   fs.mkdirSync(path.join(roomsDir, 'manifest.json'));
 
   const events: CampaignProgressEvent[] = [];
-  const result = exportCampaignToDisk({
+  const result = await exportCampaignToDisk({
     ...baseArgs(campaignDir, ['roomA']),
     onProgress: (e) => events.push(e),
   });
@@ -152,11 +152,11 @@ test('manifest write failure fails the whole export', () => {
   assert.ok(!events.some((e) => e.step === 'complete'));
 });
 
-test('hash match with a missing room file forces a rewrite instead of a skip', () => {
+test('hash match with a missing room file forces a rewrite instead of a skip', async () => {
   const campaignDir = makeTmpDir();
 
   // First export writes roomA normally.
-  const first = exportCampaignToDisk(baseArgs(campaignDir, ['roomA']));
+  const first = await exportCampaignToDisk(baseArgs(campaignDir, ['roomA']));
   assert.equal(first.ok, true);
   assert.equal(first.writtenRooms, 1);
 
@@ -167,7 +167,7 @@ test('hash match with a missing room file forces a rewrite instead of a skip', (
   // Delete the room file on disk but leave the manifest (with matching hash) intact.
   fs.unlinkSync(roomPath);
 
-  const second = exportCampaignToDisk(baseArgs(campaignDir, ['roomA']));
+  const second = await exportCampaignToDisk(baseArgs(campaignDir, ['roomA']));
   assert.equal(second.ok, true);
   // Because the file was missing, it must be rewritten, not skipped.
   assert.equal(second.writtenRooms, 1);
@@ -209,7 +209,7 @@ test('validateRoomCacheOnDisk rejects a file path that escapes ROOMS/', () => {
   assert.match(result.error, /escapes ROOMS directory/);
 });
 
-test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes normally', () => {
+test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes normally', async () => {
   // Regression test for the "export stuck at room 19/20: Crimson Throne"
   // report. The room's boss enemy object and dialogueTriggers data were
   // suspected (but not confirmed) as the cause — this exercises the real
@@ -240,7 +240,7 @@ test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes nor
   };
 
   const events: CampaignProgressEvent[] = [];
-  const result = exportCampaignToDisk({
+  const result = await exportCampaignToDisk({
     campaign,
     campaignMeta: campaign.campaign,
     campaignId: campaign.campaign.id,
@@ -272,13 +272,13 @@ test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes nor
   assert.ok('dialogueTriggers' in written, 'dialogue trigger data must survive the write');
 });
 
-test('rolling backups are pruned to MAX_BACKUPS after repeated exports', () => {
+test('rolling backups are pruned to MAX_BACKUPS after repeated exports', async () => {
   const campaignDir = makeTmpDir();
 
   // Export MAX_BACKUPS + 3 times with slightly different content each time so
   // each export overwrites the previous packed file (triggering a backup).
   for (let i = 0; i < MAX_BACKUPS + 3; i++) {
-    const result = exportCampaignToDisk(baseArgs(campaignDir, [`room${i}`]));
+    const result = await exportCampaignToDisk(baseArgs(campaignDir, [`room${i}`]));
     assert.equal(result.ok, true, `export ${i} should succeed`);
   }
 

@@ -221,16 +221,14 @@
       255,
       255,
       255,
-      5,
-      5,
-      5,
-      5,
-      5,
-      5
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
     ],
     "themeNames": [
-      "overgrowth",
-      "waterStone",
       "darkStone"
     ],
     "soundHardnessIndex": [

@@ -253,7 +253,7 @@ function registerElectronAppProtocol() {
  *
  * Returns { ok: true } on success or { ok: false, error: string } on failure.
  */
-ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
+ipcMain.handle("dw:save-official-campaign", async (_event, campaign) => {
   try {
     // ── Validate top-level shape ───────────────────────────────────────────
     if (
@@ -311,7 +311,7 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
     // ── Delegate to the shared write routine (fails hard on any room or
     // manifest write error — see exportCampaignToDisk in campaignExport.cjs) ──
     const campaignDir = resolveCampaignDir();
-    const result = exportCampaignToDisk({
+    const result = await exportCampaignToDisk({
       campaign,
       campaignMeta,
       campaignId: campaignMeta.id,
@@ -362,11 +362,26 @@ ipcMain.handle("dw:save-official-campaign", (_event, campaign) => {
  *   { step: 'writing-manifest', message }
  *   { step: 'cleaning-stale', message }
  *   { step: 'complete', message, writtenRooms, skippedRooms }
+ *   { step: 'cancelled', message }
  *   { step: 'error', message }
  *
- * Returns { ok: true, campaignDir } on success or { ok: false, error } on failure.
+ * `opts.exportId`, if provided, registers a cancellation flag that
+ * 'dw:cancel-export' can flip. The write loop in exportCampaignToDisk polls
+ * it between rooms; see that function's docstring for why a mid-export
+ * cancellation is safe (atomic per-room writes, manifest untouched).
+ *
+ * Returns { ok: true, campaignDir } on success, { ok: false, cancelled: true }
+ * if cancelled, or { ok: false, error } on failure.
  */
-ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
+const activeExportCancelFlags = new Map();
+
+ipcMain.handle("dw:cancel-export", (_event, exportId) => {
+  const flag = activeExportCancelFlags.get(exportId);
+  if (flag) flag.cancelled = true;
+  return { ok: true };
+});
+
+ipcMain.handle("dw:export-campaign-with-progress", async (event, campaign, opts) => {
   const sendProgress = (data) => {
     try {
       event.sender.send("dw:export-progress", data);
@@ -374,6 +389,12 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
       // Renderer may have been destroyed; ignore.
     }
   };
+
+  const exportId = opts && opts.exportId;
+  const cancelFlag = { cancelled: false };
+  if (typeof exportId === "string" && exportId.length > 0) {
+    activeExportCancelFlags.set(exportId, cancelFlag);
+  }
 
   try {
     // ── Validate top-level shape ───────────────────────────────────────────
@@ -444,7 +465,7 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
     // ── Delegate to the shared write routine (fails hard on any room or
     // manifest write error, and validates the cache before reporting success —
     // see exportCampaignToDisk in campaignExport.cjs) ──────────────────────
-    const result = exportCampaignToDisk({
+    const result = await exportCampaignToDisk({
       campaign,
       campaignMeta,
       campaignId,
@@ -453,10 +474,11 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
       isOfficialCampaign,
       campaignDir,
       onProgress: sendProgress,
+      isCancelled: () => cancelFlag.cancelled,
     });
     if (!result.ok) {
-      // exportCampaignToDisk already sent an 'error' progress event.
-      return { ok: false, error: result.error };
+      // exportCampaignToDisk already sent an 'error' or 'cancelled' progress event.
+      return { ok: false, error: result.error, cancelled: !!result.cancelled };
     }
 
     const { writtenRooms, skippedRooms, removedCount } = result;
@@ -476,6 +498,10 @@ ipcMain.handle("dw:export-campaign-with-progress", (event, campaign, opts) => {
     console.error("[dw:export-campaign-with-progress] Write failed:", message);
     sendProgress({ step: "error", message: `Export failed: ${message}` });
     return { ok: false, error: message };
+  } finally {
+    if (typeof exportId === "string" && exportId.length > 0) {
+      activeExportCancelFlags.delete(exportId);
+    }
   }
 });
 

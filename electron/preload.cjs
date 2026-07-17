@@ -41,12 +41,26 @@ contextBridge.exposeInMainWorld('dustweaverElectron', {
    * Exports a campaign (official or custom) with streaming progress events.
    *
    * @param campaign  A SavedCampaignV1 object.
-   * @param opts      `{ isOfficialCampaign?: boolean }` — when true the official
-   *                  project path is used; otherwise userData/CUSTOM_CAMPAIGNS/.
-   * @returns         Promise<{ ok: true, campaignDir } | { ok: false, error }>.
+   * @param opts      `{ isOfficialCampaign?: boolean, exportId?: string }` — when
+   *                  `isOfficialCampaign` is true the official project path is
+   *                  used; otherwise userData/CUSTOM_CAMPAIGNS/. Pass `exportId`
+   *                  to allow this export to be cancelled via `cancelExport`.
+   * @returns         Promise<{ ok: true, campaignDir } | { ok: false, error, cancelled? }>.
    */
   exportCampaignWithProgress: (campaign, opts) =>
     ipcRenderer.invoke('dw:export-campaign-with-progress', campaign, opts),
+
+  /**
+   * Requests cancellation of an in-progress export started with
+   * `exportCampaignWithProgress({ ..., exportId })`. The main process checks
+   * this flag between room writes, so cancellation takes effect shortly after
+   * (not instantly) and never corrupts on-disk state — see the docstring on
+   * `exportCampaignToDisk` in campaignExport.cjs for why that's safe.
+   *
+   * @param exportId  The same `exportId` passed to `exportCampaignWithProgress`.
+   * @returns         Promise<{ ok: true }>.
+   */
+  cancelExport: (exportId) => ipcRenderer.invoke('dw:cancel-export', exportId),
 
   /**
    * Registers a callback that receives ExportProgressEvent objects while

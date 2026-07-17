@@ -11,7 +11,7 @@
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import type { EditorState, EditorRoomData, EditorWall } from './editorState';
+import type { EditorState, EditorRoomData, EditorWall, EditorTransition } from './editorState';
 import { EditorTool } from './editorState';
 import { getPlacementPreview } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
@@ -27,6 +27,7 @@ import {
   getDirectionVector, buildElementTooltipId, buildElementTypeName,
   drawHoverTooltip, drawBlockRect, drawRampTriangle, drawStairsShape,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
+  drawTransitionZone,
 } from './editorRendererHelpers';
 import { loadImg, isSpriteReady } from '../render/imageCache';
 import { THEME_BLOCK_SPRITE_URL } from './editorUIHelpers';
@@ -497,6 +498,37 @@ export function drawPlacementPreview(
       offsetXPx, offsetYPx, zoom, 'rgba(200,100,255,0.25)', 2);
     drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom,
       'rgba(200,100,255,0.45)', '⬡');
+    return;
+  }
+
+  if (item.id === 'room_transition') {
+    const directionMap: ('right' | 'down' | 'left' | 'up')[] = ['right', 'down', 'left', 'up'];
+    const direction = directionMap[state.placementRotationSteps % 4];
+    const isHoriz = direction === 'left' || direction === 'right';
+
+    const DEFAULT_WIDTH = 6;
+    const openingSizeBlocks = isHoriz
+      ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))
+      : Math.max(1, Math.min(DEFAULT_WIDTH, room.widthBlocks - 2));
+
+    const gw = 0;
+    const zoneW = isHoriz ? gw : openingSizeBlocks;
+    const zoneH = isHoriz ? openingSizeBlocks : gw;
+    const xBlock = Math.min(Math.max(0, state.cursorBlockX), room.widthBlocks - zoneW);
+    const yBlock = Math.min(Math.max(0, state.cursorBlockY), room.heightBlocks - zoneH);
+
+    const previewTransition: EditorTransition = {
+      uid: -1,
+      direction,
+      xBlock,
+      yBlock,
+      openingSizeBlocks,
+      gradientWidthBlocks: gw,
+      targetRoomId: '',
+      targetSpawnBlock: [3, 3],
+      positionBlock: isHoriz ? yBlock : xBlock,
+    };
+    drawTransitionZone(ctx, previewTransition, room, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 0, true);
     return;
   }
 

@@ -279,7 +279,13 @@ async function runElectronProgressExport(
   const electronApi = window.dustweaverElectron;
   if (!electronApi) return;
 
-  const modal = createExportProgressModal(progressRoot);
+  // Random per-export ID so the Cancel button can target this specific
+  // export via 'dw:cancel-export' without disturbing a concurrent one.
+  const exportId = `export-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const modal = createExportProgressModal(progressRoot, undefined, () => {
+    void electronApi.cancelExport(exportId);
+  });
   modal.update({ step: 'serializing', message: 'Serializing campaign…' });
 
   // The final 'complete'/'error' progress event and the resolved IPC result
@@ -294,11 +300,11 @@ async function runElectronProgressExport(
   // a concurrent export's listener can't be torn down by this one.
   const unsubscribe = electronApi.onExportProgress((event) => {
     modal.update(event);
-    if (event.step === 'complete' || event.step === 'error') settled = true;
+    if (event.step === 'complete' || event.step === 'error' || event.step === 'cancelled') settled = true;
   });
 
   try {
-    const result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign });
+    const result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign, exportId });
 
     // The invoke result is authoritative: if the final progress event was
     // delayed or missed, drive the modal to its terminal state directly
