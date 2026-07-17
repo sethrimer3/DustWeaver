@@ -25,7 +25,6 @@ test('zip move direction mapping covers all toward and away sides', () => {
   assert.deepEqual(directionForZipSide('away', 'bottom'), { x: 0, y: -1 });
   assert.deepEqual(directionForZipSide('away', 'left'), { x: 1, y: 0 });
 });
-
 test('activation locks side and ignores redirection while moving', () => {
   const b = block();
   assert.equal(tryActivateZipMoveBlock(b, 'right'), true);
@@ -72,4 +71,3 @@ test('sandstone in the swept footprint converts to sand without stopping the blo
   assert.equal(world.pixelMaterialSystem.getMaterialAt(35, 20), 1);
   assert.notEqual(b.state, 'dormant');
 });
-

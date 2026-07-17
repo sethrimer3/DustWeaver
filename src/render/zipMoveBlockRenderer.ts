@@ -14,7 +14,6 @@ function drawTriangle(ctx: CanvasRenderingContext2D, x: number, y: number, size:
   ctx.fill();
   ctx.restore();
 }
-
 export function renderZipMoveBlocks(
   ctx: CanvasRenderingContext2D,
   world: WorldState,
@@ -57,4 +56,3 @@ export function renderZipMoveBlocks(
     ctx.restore();
   }
 }
-
