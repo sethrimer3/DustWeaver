@@ -54,6 +54,7 @@ export {
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
+  drawEditorZipMoveBlocks,
   drawEditorPhantasmalTiles,
   drawEditorPixelMaterials,
   drawEditorEnvironmentItems,

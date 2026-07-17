@@ -448,6 +448,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Managed by fallingBlockSim.ts; populated by loadRoomFallingBlocks().
    */
   fallingBlockGroups: import('./fallingBlocks/fallingBlockTypes').FallingBlockGroup[];
+  /** Runtime zip-activated moving rectangles for the current room. */
+  zipMoveBlocks: import('./zipMoveBlocks/zipMoveBlockTypes').ZipMoveBlockRuntime[];
 
   /**
    * Player's downward velocity from the END of the previous tick, before this
@@ -639,6 +641,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isMoteSourceOrbitFlag:         1,
     // ── Falling blocks ────────────────────────────────────────────────────
     fallingBlockGroups:            [],
+    zipMoveBlocks:                  [],
     playerPrevVelocityYWorld:      0,
     // ── Web Spider fading web ring buffer ────────────────────────────────
     webSpiderFadingWebMaxCount:          MAX_FADING_WEBS,

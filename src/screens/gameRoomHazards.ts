@@ -74,6 +74,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
   world.grappleCarryBlockCount = 0;
+  world.zipMoveBlocks = [];
   world.phantasmalTileCount = 0;
   world.dustBoostJarCount = 0;
   world.fireflyJarCount = 0;
@@ -100,6 +101,41 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.playerWaterSkipEventVelocityYWorld = 0;
   world.dustPileCount = 0;
   world.windVentCount = 0;
+
+  // Zip-move blocks own ordinary wall slots so every existing collision and
+  // grapple raycast sees the same solid rectangle. Transient motion is reset
+  // by rebuilding these records on every room activation.
+  for (const def of room.zipMoveBlocks ?? []) {
+    if (world.wallCount >= MAX_WALLS) break;
+    const wi = world.wallCount++;
+    const wBlock = Math.max(3, Math.floor(def.wBlock));
+    const hBlock = Math.max(3, Math.floor(def.hBlock));
+    world.wallXWorld[wi] = def.xBlock * BLOCK_SIZE_MEDIUM;
+    world.wallYWorld[wi] = def.yBlock * BLOCK_SIZE_MEDIUM;
+    world.wallWWorld[wi] = wBlock * BLOCK_SIZE_MEDIUM;
+    world.wallHWorld[wi] = hBlock * BLOCK_SIZE_MEDIUM;
+    world.wallThemeIndex[wi] = WALL_THEME_DEFAULT_INDEX;
+    world.wallSoundHardnessIndex[wi] = resolveWallSoundHardnessIndex(room, undefined);
+    world.wallIsInvisibleFlag[wi] = 0;
+    world.wallIsPlatformFlag[wi] = 0;
+    world.wallPlatformEdge[wi] = 0;
+    world.wallRampOrientationIndex[wi] = 255;
+    world.wallIsPillarHalfWidthFlag[wi] = 0;
+    world.wallIsBouncePadFlag[wi] = 0;
+    world.wallBouncePadSpeedFactorIndex[wi] = 0;
+    world.wallIsKineticBlockFlag[wi] = 0;
+    world.wallKineticBlockIndex[wi] = -1;
+    world.wallIsIceFlag[wi] = 0;
+    world.wallIsUltraIceFlag[wi] = 0;
+    world.zipMoveBlocks.push({
+      uid: def.uid,
+      variant: def.variant === 'away' ? 'away' : 'toward',
+      xWorld: world.wallXWorld[wi], yWorld: world.wallYWorld[wi],
+      wWorld: world.wallWWorld[wi], hWorld: world.wallHWorld[wi],
+      velocityXWorld: 0, velocityYWorld: 0, state: 'dormant',
+      activationSide: null, activeAmount: 0, wallIndex: wi, zipImpactLatched: false,
+    });
+  }
 
   // ── Spikes ────────────────────────────────────────────────────────────────
   const spikeDefs = room.spikes ?? [];

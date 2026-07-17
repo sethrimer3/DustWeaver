@@ -26,6 +26,25 @@ import {
 /** Helper type: function that returns whether a room element is selected. */
 export type IsElementSelected = (type: string, uid: number) => boolean;
 
+export function drawEditorZipMoveBlocks(
+  ctx: CanvasRenderingContext2D, room: EditorRoomData, isSelected: IsElementSelected,
+  offsetXPx: number, offsetYPx: number, zoom: number,
+): void {
+  for (const block of room.zipMoveBlocks ?? []) {
+    const selected = isSelected('zipMoveBlock', block.uid);
+    const x = block.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const y = block.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const w = block.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const h = block.hBlock * BLOCK_SIZE_SMALL * zoom;
+    const color = block.variant === 'toward' ? '#63eaff' : '#ff75d8';
+    ctx.fillStyle = 'rgba(15,20,29,0.88)'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = selected ? '#ffffff' : color; ctx.lineWidth = selected ? 2 : 1; ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = color; ctx.font = `${Math.max(7, Math.min(w, h) * 0.16)}px monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(block.variant === 'toward' ? '↑ → ↓ ←' : '↓ ← ↑ →', x + w / 2, y + h / 2);
+  }
+}
+
 // ============================================================================
 // Liquid zones: water and lava
 // ============================================================================

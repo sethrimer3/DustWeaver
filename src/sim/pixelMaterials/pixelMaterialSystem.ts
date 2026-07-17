@@ -845,6 +845,14 @@ export class PixelMaterialSystem {
     this.wakeAround(p.x, p.y, 1);
   }
 
+  /** Canonical one-cell sandstone fracture used by moving solid interactions. */
+  fractureSandstoneAtCell(x: number, y: number): boolean {
+    const particle = this.getParticleAtCell(x, y);
+    if (particle === undefined || particle.material !== MATERIAL_SANDSTONE) return false;
+    this.convertMaterialTo(particle, MATERIAL_SAND);
+    return true;
+  }
+
   /**
    * Checks the player cluster's AABB against nearby sandstone pixels and
    * fractures any that the player is moving INTO with enough speed.

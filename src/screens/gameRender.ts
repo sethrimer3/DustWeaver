@@ -52,6 +52,7 @@ import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDus
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
+import { renderZipMoveBlocks } from '../render/zipMoveBlockRenderer';
 import { renderPixelMaterials } from '../render/pixelMaterials/pixelMaterialRenderer';
 import { renderPixelMaterialDebug } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
 import { renderAirCurrentsDebug } from '../render/pixelMaterials/airCurrentsDebugRenderer';
@@ -560,6 +561,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (world.fallingBlockGroups.length > 0) {
     renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial(), r.renderAlpha, r.prevFallingBlockOffsetY);
   }
+  renderZipMoveBlocks(ctx, world, ox, oy, zoom, qc.isBloomEnabled);
   // Pixel-material particles (falling sand) — crisp one-native-pixel squares.
   renderPixelMaterials(ctx, world, ox, oy, zoom);
   // Dev-only diagnostics: occupied/active/sleeping counters + wind-impulse
