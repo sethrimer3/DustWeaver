@@ -17,7 +17,7 @@ import { getPlacementPreview } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
 import { anchorForMaterial } from './editorPixelMaterialTool';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
-import { getRectBrushPreview } from './editorBrush';
+import { getRectBrushPreview, getSquareBrushPreview } from './editorBrush';
 import {
   PREVIEW_COLOR, PREVIEW_RAMP_COLOR, PREVIEW_STAIRS_COLOR, PREVIEW_PLATFORM_COLOR, PREVIEW_PILLAR_HALF_COLOR,
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,

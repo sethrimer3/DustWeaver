@@ -28,14 +28,28 @@ export interface BrushCell {
   y: number;
 }
 
+/** Half-extent (in item-footprint steps) of each square brush mode, e.g. '3x3' → 1 means offsets -1..1. */
+const SQUARE_BRUSH_HALF_EXTENT: Partial<Record<BrushMode, number>> = {
+  '3x3': 1,
+  '5x5': 2,
+};
+
 /**
  * Returns all grid cells that should be painted/deleted for the current brush.
+ *
+ * For the square brushes ('3x3'/'5x5'), cells are stepped by the placed
+ * item's own footprint (`itemWBlock`/`itemHBlock`) rather than by a single
+ * block, so a 3x3 brush always paints a 3x3 grid of *items* — e.g. a 2x2
+ * block on a 3x3 brush tiles a 6x6 area of nine non-overlapping 2x2 blocks,
+ * not nine overlapping single-cell-offset copies.
  *
  * @param mode        Active brush mode.
  * @param cursorX     Current cursor block X.
  * @param cursorY     Current cursor block Y.
  * @param rectStartX  Rect-brush drag start X (only used when mode === 'rect').
  * @param rectStartY  Rect-brush drag start Y (only used when mode === 'rect').
+ * @param itemWBlock  Footprint width of the item being painted (default 1).
+ * @param itemHBlock  Footprint height of the item being painted (default 1).
  */
 export function getBrushCells(
   mode: BrushMode,
@@ -43,30 +57,23 @@ export function getBrushCells(
   cursorY: number,
   rectStartX?: number | null,
   rectStartY?: number | null,
+  itemWBlock = 1,
+  itemHBlock = 1,
 ): BrushCell[] {
+  const squareHalfExtent = SQUARE_BRUSH_HALF_EXTENT[mode];
+  if (squareHalfExtent !== undefined) {
+    const cells: BrushCell[] = [];
+    for (let dy = -squareHalfExtent; dy <= squareHalfExtent; dy++) {
+      for (let dx = -squareHalfExtent; dx <= squareHalfExtent; dx++) {
+        cells.push({ x: cursorX + dx * itemWBlock, y: cursorY + dy * itemHBlock });
+      }
+    }
+    return cells;
+  }
+
   switch (mode) {
     case 'single':
       return [{ x: cursorX, y: cursorY }];
-
-    case '3x3': {
-      const cells: BrushCell[] = [];
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          cells.push({ x: cursorX + dx, y: cursorY + dy });
-        }
-      }
-      return cells;
-    }
-
-    case '5x5': {
-      const cells: BrushCell[] = [];
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          cells.push({ x: cursorX + dx, y: cursorY + dy });
-        }
-      }
-      return cells;
-    }
 
     case 'fill':
       // Fill brush requires room data to flood-fill — see getFillBrushCells().
@@ -173,4 +180,29 @@ export function getRectBrushPreview(
   const y0 = Math.min(rectStartY, cursorY);
   const y1 = Math.max(rectStartY, cursorY);
   return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+}
+
+/**
+ * Returns the bounding box of a square brush ('3x3'/'5x5') for preview
+ * outline rendering, in block units. Scales with the placed item's own
+ * footprint — e.g. a 2x2 item on a 3x3 brush yields a 6x6 box — since the
+ * brush paints a NxN grid of items, not an NxN grid of single cells.
+ * Returns null for non-square brush modes.
+ */
+export function getSquareBrushPreview(
+  mode: BrushMode,
+  cursorX: number,
+  cursorY: number,
+  itemWBlock = 1,
+  itemHBlock = 1,
+): { x: number; y: number; w: number; h: number } | null {
+  const halfExtent = SQUARE_BRUSH_HALF_EXTENT[mode];
+  if (halfExtent === undefined) return null;
+  const span = halfExtent * 2 + 1;
+  return {
+    x: cursorX - halfExtent * itemWBlock,
+    y: cursorY - halfExtent * itemHBlock,
+    w: span * itemWBlock,
+    h: span * itemHBlock,
+  };
 }

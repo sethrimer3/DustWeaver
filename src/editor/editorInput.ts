@@ -36,6 +36,8 @@ export interface EditorInputState {
   isRightClickFired: boolean;
   rightClickScreenXPx: number;
   rightClickScreenYPx: number;
+  /** Right mouse button currently held down (persistent, not one-shot). */
+  isRightMouseDown: boolean;
   /** Ctrl+Z pressed (one-shot). */
   isUndoPressed: boolean;
   /** Ctrl+Y pressed (one-shot). */
@@ -80,6 +82,7 @@ export function createEditorInputState(): EditorInputState {
     isRightClickFired: false,
     rightClickScreenXPx: 0,
     rightClickScreenYPx: 0,
+    isRightMouseDown: false,
     isUndoPressed: false,
     isRedoPressed: false,
     isCopyPressed: false,
@@ -168,6 +171,7 @@ export function attachEditorInputListeners(
       state.clickScreenYPx = e.clientY;
     } else if (e.button === 2) {
       state.isRightClickFired = true;
+      state.isRightMouseDown = true;
       state.rightClickScreenXPx = e.clientX;
       state.rightClickScreenYPx = e.clientY;
     }
@@ -176,6 +180,8 @@ export function attachEditorInputListeners(
   function onMouseUp(e: MouseEvent): void {
     if (e.button === 0) {
       state.isMouseDown = false;
+    } else if (e.button === 2) {
+      state.isRightMouseDown = false;
     }
   }
 

@@ -27,7 +27,7 @@ import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, deleteAtCursor, getAllElementsInRect } from './editorTools';
+import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { createEditorUI, EditorUI } from './editorUI';
@@ -1402,7 +1402,7 @@ export function createEditorController(
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
           pushSnapshot(history, state.roomData);
-          deleteAtCursor(state);
+          deleteAtCursorBrushed(state);
           syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
           applyEdits('placement');
           lastDragBlockX = state.cursorBlockX;
@@ -1411,13 +1411,9 @@ export function createEditorController(
       }
     }
 
-    // Right-click delete (one-shot).
-    // NOTE: `EditorInputState` only tracks a one-shot `isRightClickFired` flag,
-    // not a persistent "right mouse button held" state (unlike `isMouseDown`
-    // for the left button) — there is currently no drag-paint/erase support
-    // for a held right-click. Gap-free erase-while-dragging is available via
-    // the Delete tool (left-click drag), which already reuses the same
-    // Bresenham `paintPixelMaterialLine` path as Place.
+    // Right-click delete (one-shot). Works regardless of active tool, and
+    // respects the active brush mode (single/3x3/5x5/rect/fill) the same way
+    // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
       if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
         pushSnapshot(history, state.roomData);
@@ -1430,10 +1426,12 @@ export function createEditorController(
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else {
-          deleteAtCursor(state);
+          deleteAtCursorBrushed(state);
           syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
         }
         applyEdits('placement');
+        lastDragBlockX = state.cursorBlockX;
+        lastDragBlockY = state.cursorBlockY;
       }
     }
 
@@ -1532,12 +1530,48 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Delete) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
-          deleteAtCursor(state);
+          deleteAtCursorBrushed(state);
           applyEdits('placement');
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
         }
+      }
+    }
+
+    // Drag-erase: right mouse button held erases as the cursor moves to a new
+    // block, regardless of active tool — mirrors left-click drag-paint above
+    // but always deletes, and respects the active brush mode.
+    const canRightDragPaint =
+      !inputState.isRightClickFired &&
+      inputState.isRightMouseDown &&
+      state.roomData !== null &&
+      !state.isLinkingTransition &&
+      !state.isDragging &&
+      !state.isSelectionBoxActive &&
+      state.brushMode !== 'rect' &&
+      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX;
+
+    if (canRightDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
+      const px = pixelFromCursor(state);
+      if (px.x !== lastDragPixelX || px.y !== lastDragPixelY) {
+        const fromX = lastDragPixelX === INVALID_DRAG_BLOCK ? px.x : lastDragPixelX;
+        const fromY = lastDragPixelY === INVALID_DRAG_BLOCK ? px.y : lastDragPixelY;
+        paintPixelMaterialLine(
+          state, fromX, fromY, px.x, px.y,
+          state.selectedPaletteItem.pixelMaterialId ?? 1,
+          true,
+        );
+        lastDragPixelX = px.x;
+        lastDragPixelY = px.y;
+        applyEdits('placement');
+      }
+    } else if (canRightDragPaint) {
+      if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
+        lastDragBlockX = state.cursorBlockX;
+        lastDragBlockY = state.cursorBlockY;
+        deleteAtCursorBrushed(state);
+        applyEdits('placement');
       }
     }
 

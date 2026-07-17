@@ -14,6 +14,7 @@ import {
   hitTestTransition,
 } from './editorHitTest';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
 
@@ -48,11 +49,50 @@ function splitZoneAroundCell(zone: BlockRect, cellX: number, cellY: number): Blo
  * Deletes the element at the cursor location.
  */
 export function deleteAtCursor(state: EditorState): void {
+  deleteAt(state, state.cursorBlockX, state.cursorBlockY);
+}
+
+/**
+ * Deletes the element(s) under the cursor, respecting the active brush mode
+ * (single/3x3/5x5/rect/fill) the same way `placeAtCursor` does for placement.
+ * Used for right-click delete and right-drag erase so all brush tools can
+ * also be used to remove elements, not just place them.
+ */
+export function deleteAtCursorBrushed(state: EditorState): void {
   const room = state.roomData;
   if (room === null) return;
 
-  const bx = state.cursorBlockX;
-  const by = state.cursorBlockY;
+  if (state.brushMode === 'fill') {
+    const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, 'tile' as FillKind);
+    for (const cell of cells) {
+      deleteAt(state, cell.x, cell.y);
+    }
+    return;
+  }
+
+  if (state.brushMode !== 'single') {
+    const cells = getBrushCells(
+      state.brushMode,
+      state.cursorBlockX,
+      state.cursorBlockY,
+      state.brushRectStartBlockX,
+      state.brushRectStartBlockY,
+    );
+    for (const cell of cells) {
+      deleteAt(state, cell.x, cell.y);
+    }
+    return;
+  }
+
+  deleteAt(state, state.cursorBlockX, state.cursorBlockY);
+}
+
+/**
+ * Deletes the element at the given block coordinates.
+ */
+function deleteAt(state: EditorState, bx: number, by: number): void {
+  const room = state.roomData;
+  if (room === null) return;
 
   // Check campaign spawn first (campaign-level singleton marker)
   if (state.campaignSpawnBlock !== null &&

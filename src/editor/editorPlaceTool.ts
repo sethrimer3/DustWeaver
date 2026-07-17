@@ -116,12 +116,16 @@ export function placeAtCursor(state: EditorState): void {
   }
 
   if (isBrushable && state.brushMode !== 'single') {
+    const itemWBlock = getPlacementWidth(item, state.placementRotationSteps);
+    const itemHBlock = getPlacementHeight(item, state.placementRotationSteps);
     const cells = getBrushCells(
       state.brushMode,
       state.cursorBlockX,
       state.cursorBlockY,
       state.brushRectStartBlockX,
       state.brushRectStartBlockY,
+      itemWBlock,
+      itemHBlock,
     );
     for (const cell of cells) {
       placeAt(state, cell.x, cell.y);

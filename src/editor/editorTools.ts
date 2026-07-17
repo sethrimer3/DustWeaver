@@ -18,7 +18,7 @@ import {
   hitTestTransition,
   hitTestTransitionRect,
 } from './editorHitTest';
-export { deleteAtCursor } from './editorDeleteTool';
+export { deleteAtCursor, deleteAtCursorBrushed } from './editorDeleteTool';
 
 // ── Select tool ──────────────────────────────────────────────────────────────
 

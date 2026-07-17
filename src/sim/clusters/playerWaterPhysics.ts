@@ -34,8 +34,6 @@ export const WATER_HORIZONTAL_DRAG_PER_SEC = 2.8;
 export const WATER_VERTICAL_DRAG_PER_SEC = 3.0;
 /** Extra vertical damping near the surface, preventing buoyancy overshoot/jitter. */
 export const WATER_SURFACE_VERTICAL_DRAG_BOOST_PER_SEC = 4.5;
-/** Downward acceleration added while the player deliberately holds down (wu/s²). */
-export const WATER_DIVE_ACCEL_WORLD_PER_SEC2 = 260;
 /** Water strokes restore half of the configured normal jump speed. */
 export const WATER_JUMP_STRENGTH_MULTIPLIER = 0.5;
 /** Surface separation retained during exit hysteresis (world units). */
@@ -80,9 +78,7 @@ export function applyPlayerWaterVerticalForces(
   const gravityAccel = baseGravity * WATER_GRAVITY_MULTIPLIER;
   const buoyancyAccel = WATER_BUOYANCY_BASE_ACCEL_WORLD_PER_SEC2
     + WATER_BUOYANCY_SUBMERSION_ACCEL_WORLD_PER_SEC2 * submersion;
-  const isDiving = world.playerMoveInputDyWorld > 0 || world.playerCrouchHeldFlag === 1;
-  const diveAccel = isDiving ? WATER_DIVE_ACCEL_WORLD_PER_SEC2 : 0;
-  const netAcceleration = gravityAccel - buoyancyAccel + diveAccel;
+  const netAcceleration = gravityAccel - buoyancyAccel;
   const verticalDragPerSec = WATER_VERTICAL_DRAG_PER_SEC
     + WATER_SURFACE_VERTICAL_DRAG_BOOST_PER_SEC * (1 - submersion);
 
