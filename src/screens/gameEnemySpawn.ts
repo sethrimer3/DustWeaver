@@ -149,6 +149,7 @@ export function spawnEnemyClusters(
     const ey = enemyDef.yBlock * BLOCK_SIZE_MEDIUM;
     const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
     const enemyCluster = createClusterState(nextEntityId++, ex, ey, 0, hp);
+    enemyCluster.countsTowardRoomCompletionFlag = enemyDef.countsTowardRoomCompletionFlag ?? 1;
 
     if (enemyDef.isFlyingEyeFlag === 1) {
       enemyCluster.isFlyingEyeFlag     = 1;

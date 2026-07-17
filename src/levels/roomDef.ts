@@ -22,6 +22,8 @@
  */
 
 import { ParticleKind } from '../sim/particles/kinds';
+import type { RoomGateDef } from './gateDefs';
+export type { RoomGateDef, GateKind, GateOpenVisualMode, GateOpenPersistence } from './gateDefs';
 import type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTypes';
 export type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTypes';
 import type { RoomSongId } from '../audio/musicManager';
@@ -246,6 +248,7 @@ export interface RoomEnemyDef {
   particleCount: number;
   /** 1 if boss, 0 otherwise. */
   isBossFlag: 0 | 1;
+  countsTowardRoomCompletionFlag?: 0 | 1;
   /**
    * 1 if this enemy is a flying eye — floats in the air, moves in 2D,
    * and is rendered as 4 concentric diamond outlines.
@@ -719,6 +722,7 @@ export interface RoomDef {
   skillTombs?: readonly { xBlock: number; yBlock: number; weaveId: string }[];
   challengeFields?: readonly { uid: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }[];
   challengeGates?: readonly { uid: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }[];
+  gates?: readonly RoomGateDef[];
   challengeTotems?: readonly { uid: number; xBlock: number; yBlock: number }[];
   /**
    * Collectible dust container positions (block units).
