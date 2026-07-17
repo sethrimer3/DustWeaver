@@ -437,7 +437,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DARK_BLOCKER);
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
-  renderChallengeFieldsAndGates(ctx, world.challengeMode, ox, oy, zoom, nowMs);
+  renderChallengeFieldsAndGates(ctx, world.challengeMode, ox, oy, zoom, nowMs, world.clusters[0]?.positionXWorld ?? 0, world.clusters[0]?.positionYWorld ?? 0);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom, world);
   renderChallengeTotems(ctx, world.challengeMode, world.clusters[0]?.positionXWorld ?? 0, world.clusters[0]?.positionYWorld ?? 0, ox, oy, zoom, nowMs);

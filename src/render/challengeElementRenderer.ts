@@ -24,6 +24,8 @@ export function renderChallengeFieldsAndGates(
   oy: number,
   zoom: number,
   nowMs: number,
+  playerXWorld: number,
+  playerYWorld: number,
 ): void {
   ctx.save();
   for (const field of state.fields) {
@@ -45,6 +47,23 @@ export function renderChallengeFieldsAndGates(
         const py = y + (0.1 + 0.8 * ((Math.cos(phase) + 1) * 0.5)) * h;
         ctx.fillStyle = `rgba(${color},0.7)`;
         ctx.fillRect(Math.round(px), Math.round(py), Math.max(1, zoom), Math.max(1, zoom));
+      }
+    }
+    if (field.visualState === 'active' && state.activationAgeTicks < 50) {
+      const progress = Math.min(1, state.activationAgeTicks / 50);
+      const startX = (field.xBlock + field.wBlock * 0.5) * BLOCK_SIZE_MEDIUM;
+      const startY = (field.yBlock + field.hBlock * 0.5) * BLOCK_SIZE_MEDIUM;
+      for (let i = 0; i < 12; i++) {
+        const delayed = Math.max(0, Math.min(1, progress * 1.35 - i * 0.025));
+        const bend = Math.sin(i * 2.17 + field.uid) * 14 * (1 - delayed);
+        const px = startX + (playerXWorld - startX) * delayed + bend * Math.sin(delayed * Math.PI);
+        const py = startY + (playerYWorld - startY) * delayed - bend * Math.cos(delayed * Math.PI);
+        ctx.strokeStyle = `rgba(176,92,255,${0.55 * (1 - delayed)})`;
+        ctx.lineWidth = Math.max(1, zoom);
+        ctx.beginPath();
+        ctx.moveTo((px - (playerXWorld - startX) * 0.04) * zoom + ox, (py - (playerYWorld - startY) * 0.04) * zoom + oy);
+        ctx.lineTo(px * zoom + ox, py * zoom + oy);
+        ctx.stroke();
       }
     }
   }
@@ -78,6 +97,19 @@ export function renderChallengeTotems(
     ctx.fillStyle = active ? '#d9a92f' : '#6d2e9d';
     ctx.fillRect(x - 3 * zoom, y - 7 * zoom, 6 * zoom, 14 * zoom);
     drawShield(ctx, x, y - 2 * zoom, Math.max(0.45, zoom * 0.55), active ? '#ffd85a' : '#d39aff');
+    if (active && state.activationAgeTicks < 50) {
+      const progress = Math.min(1, state.activationAgeTicks / 50);
+      for (let i = 0; i < 10; i++) {
+        const delayed = Math.max(0, Math.min(1, progress * 1.4 - i * 0.03));
+        const sx = totem.xBlock * BLOCK_SIZE_MEDIUM;
+        const sy = totem.yBlock * BLOCK_SIZE_MEDIUM;
+        const bend = Math.sin(i * 1.91 + totem.uid) * 12 * (1 - delayed);
+        const px = sx + (playerXWorld - sx) * delayed + bend * Math.sin(delayed * Math.PI);
+        const py = sy + (playerYWorld - sy) * delayed - bend * Math.cos(delayed * Math.PI);
+        ctx.fillStyle = `rgba(192,105,255,${0.8 * (1 - delayed)})`;
+        ctx.fillRect(Math.round(px * zoom + ox), Math.round(py * zoom + oy), Math.max(1, zoom), Math.max(1, zoom));
+      }
+    }
     const nearby = Math.hypot(playerXWorld - totem.xBlock * BLOCK_SIZE_MEDIUM, playerYWorld - totem.yBlock * BLOCK_SIZE_MEDIUM) <= 24;
     if (nearby) {
       ctx.shadowBlur = 0;

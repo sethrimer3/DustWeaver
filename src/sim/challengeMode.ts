@@ -32,6 +32,7 @@ export interface ChallengeModeState {
   anchorXWorld: number;
   anchorYWorld: number;
   activationSequence: number;
+  activationAgeTicks: number;
   returnSequence: number;
   reconciledReturnSequence: number;
   fields: ChallengeRuntimeField[];
@@ -60,6 +61,7 @@ export function createChallengeModeState(
     anchorXWorld: 0,
     anchorYWorld: 0,
     activationSequence: 0,
+    activationAgeTicks: 0,
     returnSequence: 0,
     reconciledReturnSequence: 0,
     fields: fields.map(field => ({ ...field, visualState: 'armed', wasPlayerOverlapping: false })),
@@ -93,6 +95,7 @@ export function activateChallengeField(state: ChallengeModeState, uid: number, b
   state.anchorXWorld = (field.xBlock + field.wBlock * 0.5) * blockSizeWorld;
   state.anchorYWorld = (field.yBlock + field.hBlock * 0.5) * blockSizeWorld;
   state.activationSequence++;
+  state.activationAgeTicks = 0;
   return true;
 }
 
@@ -114,6 +117,7 @@ export function toggleChallengeTotem(state: ChallengeModeState, uid: number, blo
   state.anchorXWorld = totem.xBlock * blockSizeWorld;
   state.anchorYWorld = totem.yBlock * blockSizeWorld;
   state.activationSequence++;
+  state.activationAgeTicks = 0;
   return true;
 }
 

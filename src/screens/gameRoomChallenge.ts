@@ -43,6 +43,9 @@ export function updateRoomChallengeElements(world: WorldState): void {
   player.challengeReturnGuard = 0;
   player.challengeMode = world.challengeMode;
   updateChallengeFields(world.challengeMode, player, BLOCK_SIZE_MEDIUM);
+  if (world.challengeMode.isActive && world.challengeMode.activationAgeTicks < 90) {
+    world.challengeMode.activationAgeTicks++;
+  }
   if (world.challengeMode.returnSequence !== world.challengeMode.reconciledReturnSequence) {
     world.challengeMode.reconciledReturnSequence = world.challengeMode.returnSequence;
     world.isGrappleActiveFlag = 0;
