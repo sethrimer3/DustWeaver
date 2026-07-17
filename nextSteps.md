@@ -204,6 +204,10 @@ Important correction: entry-area wall/background chunk prewarming is no longer d
    - Background blocks also use chunk canvases.
    - Dirty chunks rebuild under a per-frame cap to avoid freezes.
    - Visible chunks plus a small safety margin are blitted each frame.
+   - BUILD 453: active caches now have explicit room/render-state/scale ownership.
+     Room activation clears outgoing canvases before partial prewarm adoption,
+     and budget-skipped dirty chunks use a neutral placeholder instead of
+     presenting old room, old scale, or pre-mutation artwork.
 
 3. **Idle-time render-chunk prewarming**
    - `roomRenderChunkWarmScheduler.ts` schedules speculative wall/background chunk builds during idle time.
@@ -922,6 +926,7 @@ The goal was to eliminate the brief loading overlay on first-time room entry by 
 - BUILD 411: `roomRenderCacheStore.ts` unified snapshot store; `renderStateKey` for invalidation; velocity-direction queue ordering in `scheduleChunkPrewarms`.
 - BUILD 412: `prewarmWallChunksForRoom` ordering fix; `adoptPrewarmedWallChunks`/`Bg` accept optional `currentRenderStateKey`; DEV warning for cache-without-layout.
 - BUILD 413: Resident Room Runtime (see below).
+- BUILD 453: wall/background cache ownership boundary; cross-room and dirty-canvas blits rejected; partial adoption clears incompatible active entries.
 
 #### What is validated at adoption time (Phase A)
 
@@ -936,7 +941,7 @@ The goal was to eliminate the brief loading overlay on first-time room entry by 
 
 2. **Partial prewarm still causes `entryWarm`.** If the idle scheduler only completed the wall pass (not bg) before the player crossed, `bgPrewarmPresent: false` will show in the diagnostic and outcome will be `entryWarm`. The entry-warm path handles this correctly but the player sees a brief textless cover.
 
-3. **Stale cache invalidation on mid-session settings changes.** If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or related settings change mid-session via the pause menu, existing warmed snapshots will have a stale key. Eviction and re-key correction only fires at the next `scheduleChunkPrewarms` or at adoption time. Adding explicit cache-bust calls to settings-change handlers would close this gap.
+3. **Prewarm eviction on mid-session settings changes.** If `setActiveBlockLighting`, `setActiveBlockSpriteTheme`, or related settings change mid-session via the pause menu, existing warmed snapshots keep their stale key until the next `scheduleChunkPrewarms` or adoption attempt. Adoption rejects them, and active dirty canvases now render neutral placeholders, so this is a wasted-work/performance gap rather than a stale-artwork correctness gap. Explicit cache-bust calls would still reclaim the data earlier.
 
 4. **First-draw / GPU warm-up is browser-dependent.** Off-screen chunk canvases are built during the idle pass, but whether the GPU rasterizer uploads the texture at that point or defers until the first on-screen `drawImage` is browser-specific. A forced 1×1 offscreen warm-draw per chunk would ensure GPU upload, but the per-chunk cost is unknown. Deferred pending measurement.
 

@@ -469,6 +469,7 @@ export function activateWallChunkCacheOwnership(
 ): void {
   _chunkCache.activateContentOwnership(
     createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+    true,
   );
 }
 
@@ -729,7 +730,7 @@ export function prewarmWallChunksForRoom(
  *
  * @param roomId              Identifier of the room being entered.
  * @param scalePx             The camera zoom scale that will be used in the first render.
- * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
+ * @param currentRenderStateKey  Snapshot key must match or adoption is refused.
  * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
 export function adoptPrewarmedWallChunks(

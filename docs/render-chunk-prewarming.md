@@ -66,9 +66,20 @@ never disturbed.  Each room's warmed chunks are stored in a separate
 `RoomChunkCache` instance keyed by room ID.
 
 **Adopt** (`adoptPrewarmedChunksForRoom` in the scheduler, called from
-`gameScreen.ts` Phase A) injects the warmed caches into the live renderers at
-transition time.  This is a zero-copy hand-off: no chunk canvases are
-re-allocated.  Hit/miss counters are updated for the debug panel.
+`gameLoadRoomPhases.ts` Phase A) injects the warmed caches into the live
+renderers at transition time. Before staged wall/background adoption, both
+active caches atomically switch to an ownership key containing room ID,
+render-state key, and scale. Changing ownership clears all prior canvases, so
+partial adoption cannot leave untouched chunk coordinates from the outgoing
+room. The adopted canvases themselves are handed off without re-allocation.
+Hit/miss counters are updated for the debug panel.
+
+Every chunk canvas is also tagged with its cache content generation. Coverage
+and extraction reject dirty, fallback-built, or wrong-generation entries.
+When the gameplay rebuild budget is exhausted, dirty or missing chunks draw a
+deterministic dark placeholder and remain pending; an existing dirty canvas is
+never blitted. This same policy applies to same-room edits and settings changes
+because correctness is preferred over briefly presenting obsolete artwork.
 
 ### 5 — Sprite readiness gate
 
@@ -83,8 +94,8 @@ When `scheduleChunkPrewarms` is called again (e.g. the player changes rooms), it
 cancels any in-flight handle and starts fresh.  Warmed caches from a previous
 session are evicted for rooms that are no longer in the new work queue.
 Graphics-quality changes are handled because `scalePx` is baked into each cache;
-a zoom/quality change causes the `layoutRef` identity check to invalidate the
-cache on first use.
+a zoom/quality change clears incompatible canvases on first use rather than
+retaining prior-scale images as dirty fallbacks.
 
 ---
 

@@ -243,7 +243,7 @@ interface ChunkCanvas {
 // ── RoomChunkCache ─────────────────────────────────────────────────────────────
 
 /**
- * Manages a set of per-chunk offscreen canvases for the room wall layer.
+ * Manages a set of per-chunk offscreen canvases for a room render layer.
  *
  * Owned exclusively by blockSpriteRenderer.ts.  All public methods are
  * called from renderWallSprites() or the module-level invalidation helpers.
@@ -257,6 +257,9 @@ export class RoomChunkCache {
 
   /** Incremented whenever incompatible content ownership replaces the cache. */
   private _contentGeneration = 0;
+
+  /** One-shot DEV diagnostic guard for an otherwise-impossible stale entry. */
+  private _loggedForeignGenerationWarning = false;
 
   /**
    * When true, chunk build times are recorded as background-layer metrics
@@ -440,10 +443,12 @@ export class RoomChunkCache {
    * Makes this cache exclusively own one room/render-state/scale identity.
    * Switching identities atomically drops every prior canvas before any
    * partial prewarm data can be injected, so untouched chunk keys can never
-   * retain artwork from the previous room.
+   * retain artwork from the previous room. Real room activations pass
+   * `forceNewGeneration` so editor/playtest reloads of the same room identity
+   * also start from an empty active cache.
    */
-  activateContentOwnership(ownershipKey: string): boolean {
-    if (ownershipKey === this._contentOwnershipKey) return false;
+  activateContentOwnership(ownershipKey: string, forceNewGeneration = false): boolean {
+    if (!forceNewGeneration && ownershipKey === this._contentOwnershipKey) return false;
     this._contentOwnershipKey = ownershipKey;
     this._contentGeneration++;
     this._resetCachedContent();
@@ -461,7 +466,6 @@ export class RoomChunkCache {
       this._dirtyKeys.add(key);
     }
     this._layoutRef = null;
-    this._scalePx   = 0;
   }
 
   /**
@@ -505,6 +509,7 @@ export class RoomChunkCache {
    * @param layoutRef The same CachedWallLayout / RoomDef object that will be
    *                  passed as `layoutRef` on the first renderVisibleChunks call.
    * @param scalePx   Camera zoom scale used when building the chunks.
+   * @param ownershipKey Opaque room/render-state/scale identity for the data.
    */
   injectWarmedChunks(
     chunks: Map<string, HTMLCanvasElement>,
@@ -676,6 +681,7 @@ export class RoomChunkCache {
     this._lastBlockSizePx = 8;
     this._frame = 0;
     this._lastBakeUnlockGeneration = FP.getBakeUnlockGeneration();
+    this._loggedForeignGenerationWarning = false;
     this.stats.visibleChunkCount = 0;
     this.stats.totalChunkCount = 0;
     this.stats.dirtyChunkCount = 0;
@@ -790,6 +796,18 @@ export class RoomChunkCache {
         const hasForeignGeneration = chunk !== undefined && chunk.contentGeneration !== this._contentGeneration;
         const needsBuild = chunk === undefined || hasForeignGeneration || isDirty || chunk.hadFallbacksFlag;
         if (hasForeignGeneration) {
+          if (_isDevMode() && !this._loggedForeignGenerationWarning) {
+            this._loggedForeignGenerationWarning = true;
+            console.warn('[chunkRenderCache] rejected foreign-generation canvas.', {
+              ownershipKey: this._contentOwnershipKey,
+              chunkKey: key,
+              chunkGeneration: chunk?.contentGeneration,
+              activeGeneration: this._contentGeneration,
+              dirty: isDirty,
+              rebuildBudgetExhausted:
+                this._maxChunksPerFrame > 0 && rebuiltCount >= this._maxChunksPerFrame,
+            });
+          }
           this._chunks.delete(key);
           this._dirtyKeys.delete(key);
           this._lastVisibleFrame.delete(key);
@@ -810,14 +828,9 @@ export class RoomChunkCache {
             // Never present a dirty canvas. The same deterministic neutral
             // fallback is used whether a canvas exists or not, and no new
             // canvas is allocated until the real rebuild can run.
-            {
-              // No canvas yet — draw a cheap dark fallback so the area is not
-              // an invisible hole while the chunk warms up.  Do not allocate a
-              // canvas here; the real build happens on the next frame.
-              const side = Math.max(1, Math.ceil(chunkSizePx));
-              ctx.fillStyle = 'rgba(20,20,24,0.85)';
-              ctx.fillRect(screenX, screenY, side, side);
-            }
+            const side = Math.max(1, Math.ceil(chunkSizePx));
+            ctx.fillStyle = 'rgba(20,20,24,0.85)';
+            ctx.fillRect(screenX, screenY, side, side);
             continue;
           }
 

@@ -106,6 +106,7 @@ export function activateBgChunkCacheOwnership(
 ): void {
   _bgChunkCache.activateContentOwnership(
     createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+    true,
   );
   _bgCacheRoomRef = roomId;
 }
@@ -337,7 +338,7 @@ export function prewarmBgChunksForRoom(
  *
  * @param room                   Room definition for the room being entered.
  * @param zoom                   Camera zoom scale for the first render frame.
- * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
+ * @param currentRenderStateKey  Snapshot key must match or adoption is refused.
  * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
 export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey: string): PrewarmAdoptResult {

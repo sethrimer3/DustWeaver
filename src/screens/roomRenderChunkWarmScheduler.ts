@@ -837,9 +837,9 @@ export function addZoneEntryViewportTasks(
  * Call this in `_makeLoadRoomPhases` Phase A, after setting up lighting and
  * theme but BEFORE the first render frame.
  *
- * When `renderStateKey` is provided it is forwarded to the individual adoption
- * functions so they can refuse chunks whose snapshot key no longer matches the
- * active room render state (stale-key protection).
+ * `renderStateKey` is forwarded to the individual adoption functions so they
+ * can refuse chunks whose snapshot key no longer matches the active room
+ * render state (stale-key protection).
  *
  * Updates the prewarm stats with cache hit/miss information.
  *
