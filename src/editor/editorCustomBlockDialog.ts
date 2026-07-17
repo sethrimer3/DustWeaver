@@ -60,18 +60,44 @@ export interface CustomBlockDialogResult {
 const SCALE = 24; // Editor canvas: each pixel displayed at 24×24 px
 const PREVIEW_SCALE = 4; // Preview at 4× (matches game's default zoom)
 
+/**
+ * Pure helper: resolves the initial tileWidth/tileHeight the dialog opens
+ * with. Extracted from openCustomBlockDialog so this specific piece of logic
+ * — which previously seeded a "2×2" request as 2×1 because only tileWidth
+ * read the caller's requested size and tileHeight was hardcoded to 1 — can
+ * be unit-tested without a DOM (openCustomBlockDialog itself builds a modal
+ * and is impractical to exercise in a Node test environment).
+ */
+export function resolveInitialCustomBlockFootprint(
+  existingDef: CustomBlockDef | undefined,
+  defaultTileSize: 1 | 2,
+): { tileWidth: 1 | 2; tileHeight: 1 | 2 } {
+  return {
+    tileWidth: existingDef?.tileWidth ?? defaultTileSize,
+    tileHeight: existingDef?.tileHeight ?? defaultTileSize,
+  };
+}
+
 export function openCustomBlockDialog(
   options: {
     existingDef?: CustomBlockDef;
-    defaultTileWidth?: 1 | 2;
+    /**
+     * Square footprint (in tiles) to seed a brand-new block with — e.g. the
+     * "+2×2" palette button passes 2 so BOTH tileWidth and tileHeight start
+     * at 2 (previously only tileWidth picked this up and tileHeight was
+     * hardcoded to 1, silently creating a 2×1 block until the user manually
+     * clicked a footprint button). Ignored when editing an existing def.
+     */
+    defaultTileSize?: 1 | 2;
     existingIds?: ReadonlySet<string>;
   },
   onResult: (result: CustomBlockDialogResult) => void,
 ): void {
-  const { existingDef, defaultTileWidth = 1, existingIds = new Set() } = options;
+  const { existingDef, defaultTileSize = 1, existingIds = new Set() } = options;
 
-  let tileWidth: 1 | 2 = existingDef?.tileWidth ?? defaultTileWidth;
-  let tileHeight: 1 | 2 = existingDef?.tileHeight ?? 1;
+  const initialFootprint = resolveInitialCustomBlockFootprint(existingDef, defaultTileSize);
+  let tileWidth: 1 | 2 = initialFootprint.tileWidth;
+  let tileHeight: 1 | 2 = initialFootprint.tileHeight;
   let pw = tileWidth * CUSTOM_BLOCK_PIXELS_PER_TILE;
   let ph = tileHeight * CUSTOM_BLOCK_PIXELS_PER_TILE;
   let pixelData = existingDef

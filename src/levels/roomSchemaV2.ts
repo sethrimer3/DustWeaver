@@ -607,7 +607,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   }
 
   if (json.customBlockPlacements && json.customBlockPlacements.length > 0) {
-    out.customBlockPlacements = json.customBlockPlacements.slice() as [number, number, string][];
+    out.customBlockPlacements = json.customBlockPlacements.slice();
   }
 
   if (json.bakedWallTemplate !== undefined) {

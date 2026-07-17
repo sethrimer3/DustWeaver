@@ -446,7 +446,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   // ── Custom block placements ──────────────────────────────────────────────
   if ((data.customBlockPlacements ?? []).length > 0) {
     json.customBlockPlacements = (data.customBlockPlacements ?? []).map(
-      p => [p.xBlock, p.yBlock, p.blockId] as [number, number, string],
+      p => [p.xBlock, p.yBlock, p.blockId, p.tileWidth, p.tileHeight] as [number, number, string, number, number],
     );
   }
 

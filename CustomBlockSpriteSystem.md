@@ -2607,3 +2607,127 @@ trigger behavior.
   pattern that has kept every phase in this series low-risk.
 
 Not implemented in this phase — no code changes were made toward it.
+
+---
+
+## Playtest-Lifecycle Fix: Confirm/Playtest No Longer Loses Custom Sprites
+
+A bug report described placing multiple custom 2×2 blocks in the editor: the
+collision footprint was correctly 2×2, but after pressing confirm/playtest
+the artwork rendered as plain blackRock wall tiles instead of one unified
+2×2 sprite. Two independent defects combined to cause this, plus two smaller
+related defects were found and fixed in the same pass.
+
+### Root Cause 1 (primary): `editorRoomDataToRoomDef` dropped `customBlockPlacements`
+
+`editorRoomDataToRoomDef` (`src/editor/editorRoomBuilder.ts`) read
+`data.customBlockPlacements` to build collision walls (and breakable/contact-
+damage/wind/liquid entries) but never copied the placements themselves onto
+the `RoomDef` object it returns. `renderCustomBlockSprites`
+(`src/render/customBlockGameplayRenderer.ts`) early-returns when
+`room.customBlockPlacements` is `undefined` — so for any room built via this
+path (which is exactly what confirm/playtest does), custom sprites were
+never drawn at all; only the baked blackRock collision walls were visible.
+Rooms loaded from JSON (via `roomJsonDefToRoomDef`) were unaffected, since
+that path already copied the field — which is why this only manifested on
+the confirm/playtest transition, not on a normal campaign load.
+
+**Fix:** `editorRoomDataToRoomDef` now also sets
+`customBlockPlacements: [xBlock, yBlock, namespacedId, tileWidth, tileHeight][]`
+on the returned `RoomDef`, sourced from the same `EditorCustomBlockPlacement`
+data (which already carries `tileWidth`/`tileHeight` resolved from the
+registry).
+
+### Root Cause 2: `closeEditor()` cleared the runtime sprite cache
+
+`closeEditor()` (`src/editor/editorController.ts`) unconditionally called
+`clearCustomBlockSpriteCache()`. `closeEditor()` is invoked only from
+`confirmEdits()` and `cancelEdits()` — both transitions back to gameplay of
+the SAME active campaign (playtest, or resuming the room that was open
+before entering the editor). It is never used to unload or switch
+campaigns. Clearing the sprite cache on this boundary meant that even after
+fixing Root Cause 1, any block created/edited during the just-closed editor
+session (or any block at all, since the cache was wiped) would have no
+cached sprite for gameplay to draw — `getOrFallbackSprite` would render the
+missing-texture placeholder instead.
+
+**Fix:** `closeEditor()` no longer calls `clearCustomBlockSpriteCache()`.
+`state.customBlockRegistry`/`state.customBlockUsage` (editor-session-only
+bookkeeping, never read by gameplay) are still cleared there, since they are
+fully rebuilt from the campaign's committed `customBlockDefs` the next time
+`toggle()` opens the editor. Ownership of the sprite cache's
+clear-and-repopulate lifecycle is now cleanly two boundaries only:
+- **Entering the editor** (`toggle()` in `editorController.ts`): clears +
+  re-registers from `campaignSession.campaign.customBlockDefs`.
+- **Loading/switching a campaign for real gameplay** (`game.ts`): clears +
+  re-registers from the packed campaign's `customBlockDefs`.
+
+Neither confirm nor cancel is a campaign-teardown boundary, so neither
+should clear the cache.
+
+### Hardening: missing-definition fallback now preserves the authored footprint
+
+Previously `RoomDef.customBlockPlacements` had no footprint field at all, so
+`renderCustomBlockSprites` always called `getOrFallbackSprite(rawId, 1, 1)` —
+a missing/unregistered 2×2 definition would silently render a 1×1
+placeholder under a 2×2 collision wall. `RoomDef.customBlockPlacements`
+(and the corresponding JSON schema types in `roomJsonSchema.ts`,
+`roomSavedTypes.ts`) now accept an optional trailing
+`[..., tileWidth, tileHeight]` pair. `renderCustomBlockSprites` reads it and
+passes it through to `getOrFallbackSprite` so a missing 2×2 definition still
+renders a conspicuous 2×2 checkerboard placeholder. Older placement tuples
+with no trailing footprint (pre-existing room JSON, or any 3-element tuple)
+default to 1×1 exactly as before — fully backward compatible.
+
+### Creation-dialog defect: "+2×2" silently created a 2×1 block
+
+`openCustomBlockDialog` (`src/editor/editorCustomBlockDialog.ts`) took a
+single `defaultTileWidth` option; `tileWidth` read it but `tileHeight` was
+hardcoded to `1` for any newly-created block, so clicking the palette's
+"+2×2" button actually created a 2×1 block until the user manually clicked
+a footprint button in the dialog. The option was renamed to
+`defaultTileSize` (a single square seed size, matching what the two
+existing "+1×1"/"+2×2" buttons actually pass — `onCreateCustomBlock(tileWidth:
+1 | 2)` never passes an asymmetric footprint) and now seeds BOTH
+`tileWidth` and `tileHeight`. Editing an existing definition is unaffected —
+`existingDef.tileWidth`/`tileHeight` still take priority over the seed.
+
+The footprint-initialization logic was extracted into a small pure function,
+`resolveInitialCustomBlockFootprint(existingDef, defaultTileSize)`, so it
+can be unit-tested without a DOM (the dialog itself builds a modal and is
+impractical to exercise in the Node test environment used by this repo's
+test suite).
+
+### Tests
+
+New file `src/tests/customBlocksPlaytestLifecycle.test.ts` (13 tests):
+1. A registered 2×2 block renders with a 2×2 destination rectangle.
+2. `editorRoomDataToRoomDef`'s output `RoomDef` carries `customBlockPlacements`.
+3. The exact confirm/playtest sequence (build RoomDef, render — no
+   intervening cache clear) still finds and draws the 2×2 sprite.
+4. `clearCustomBlockSpriteCache()` (simulating a real campaign switch) still
+   empties the cache; a subsequently-missing id gets a fresh fallback, not
+   stale data.
+5. A 2×2 placement with no registered definition falls back to a 2×2 (not
+   1×1) placeholder; a legacy 3-element tuple (no footprint recorded) still
+   defaults to 1×1.
+6. `resolveInitialCustomBlockFootprint` seeds both width and height to 2 for
+   a "+2×2" request, both to 1 for "+1×1", and preserves an existing def's
+   own (possibly asymmetric) footprint when editing.
+7. Existing 1×1 rendering behavior is unchanged.
+8. Multiple placements of the same 2×2 definition share one cached sprite
+   object.
+9. A broken fragile 2×2 placement (anchor cell inactive) still draws
+   nothing, now that placements are preserved on the built `RoomDef`.
+10. The `editorRoomDataToJson` → `roomJsonDefToRoomDef` round trip preserves
+    `tileWidth`/`tileHeight` through serialization and reload.
+
+### Known Gap Found But Not Fixed In This Pass
+
+`game.ts`'s `loadFolderCampaign` branch (used for folder-based campaigns)
+never calls `clearCustomBlockSpriteCache()` / `registerCustomBlockSprite()`
+at all when loading straight into gameplay — only the packed-campaign load
+path does. This predates this fix and is a separate, narrower gap (folder
+campaigns loaded directly into gameplay, bypassing the editor) than the
+confirm/playtest bug this pass addresses; it was not in scope here and was
+flagged separately rather than folded into this change.

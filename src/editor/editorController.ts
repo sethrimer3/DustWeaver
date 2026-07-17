@@ -657,7 +657,7 @@ export function createEditorController(
         },
         onCreateCustomBlock: (tileWidth: 1 | 2) => {
           const existingIds = new Set(state.customBlockRegistry.keys());
-          openCustomBlockDialog({ defaultTileWidth: tileWidth, existingIds }, (result) => {
+          openCustomBlockDialog({ defaultTileSize: tileWidth, existingIds }, (result) => {
             if (result.action !== 'save' || !result.sourceDef) return;
             const parsed = parseCustomBlockSource(result.sourceDef, { blockId: result.sourceDef.id });
             if (!parsed.ok) {
@@ -795,9 +795,24 @@ export function createEditorController(
     isWorldMapDirty = false;
     isCurrentRoomDirty = false;
     clearHistory(history);
+    // NOTE: do NOT call clearCustomBlockSpriteCache() here. closeEditor() is
+    // only ever invoked to return to gameplay of the SAME active campaign
+    // (confirm/playtest, or cancel back to the room that was open before
+    // entering the editor) — never to unload/switch campaigns. Gameplay
+    // rendering (renderCustomBlockSprites) reads the module-level sprite
+    // cache, not state.customBlockRegistry, so clearing it here would strand
+    // gameplay with no sprites for any custom block placed/edited this
+    // session even though the collision walls were already baked into the
+    // room. Ownership of the sprite cache's clear-and-repopulate lifecycle
+    // belongs to exactly two boundaries: entering the editor (toggle(), which
+    // clears + re-registers from the campaign's committed customBlockDefs)
+    // and loading/switching a campaign for real gameplay (game.ts, which also
+    // clears + re-registers from the packed campaign's customBlockDefs).
+    // state.customBlockRegistry/customBlockUsage ARE editor-session-only
+    // bookkeeping (never read by gameplay) and are safely cleared here; they
+    // are rebuilt from scratch the next time the editor is opened.
     state.customBlockRegistry.clear();
     state.customBlockUsage.clear();
-    clearCustomBlockSpriteCache();
     onEditorClose?.();
   }
 

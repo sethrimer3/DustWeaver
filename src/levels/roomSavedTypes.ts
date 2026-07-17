@@ -411,9 +411,10 @@ export interface SavedRoomV2 {
    */
   bakedWallTemplate?: RoomJsonBakedWallTemplate;
   /**
-   * Custom block placements as [xBlock, yBlock, namespacedId].
+   * Custom block placements as [xBlock, yBlock, namespacedId, tileWidth?, tileHeight?].
    * namespacedId is "custom:<id>". Absent when no custom blocks are placed.
    * Absent in rooms without custom blocks — older rooms load unchanged.
+   * tileWidth/tileHeight preserve the authored footprint; absent means 1x1.
    */
-  customBlockPlacements?: [number, number, string][];
+  customBlockPlacements?: ([number, number, string] | [number, number, string, number, number])[];
 }

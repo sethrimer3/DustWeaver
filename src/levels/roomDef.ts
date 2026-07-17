@@ -817,7 +817,13 @@ export interface RoomDef {
    * instead of the default blackRock wall tiles.
    * Absent when no custom blocks are placed in the room.
    */
-  customBlockPlacements?: readonly [number, number, string][];
+  /**
+   * Custom block placements as [xBlock, yBlock, namespacedId, tileWidth?, tileHeight?].
+   * tileWidth/tileHeight preserve the placement's authored footprint through
+   * to gameplay rendering even if the block definition is missing/unregistered
+   * at render time (see getOrFallbackSprite). Absent (older data) defaults to 1x1.
+   */
+  customBlockPlacements?: readonly (readonly [number, number, string] | readonly [number, number, string, number, number])[];
   /**
    * Background music for this room.
    * '_continue' = keep playing the previous room's song (default / undefined).

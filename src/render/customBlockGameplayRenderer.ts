@@ -73,14 +73,21 @@ export function renderCustomBlockSprites(
   const tileSize = BLOCK_SIZE_SMALL * zoom;
   const worldTileSize = BLOCK_SIZE_SMALL; // breakable-block world coords use unzoomed block size
 
-  for (const [xBlock, yBlock, namespacedId] of placements) {
+  for (const placement of placements) {
+    const [xBlock, yBlock, namespacedId, placementTileWidth, placementTileHeight] = placement;
     const rawId = rawIdFromNamespaced(namespacedId);
     if (rawId === null) continue;
 
     // If the block is registered the cached sprite already has the correct
-    // tileWidth/tileHeight.  If it is missing, getOrFallbackSprite returns a
-    // 1×1 magenta/black checkerboard; passing 1, 1 is the safe default.
-    const sprite = getOrFallbackSprite(rawId, 1, 1);
+    // tileWidth/tileHeight. If it is missing, getOrFallbackSprite falls back
+    // to a magenta/black checkerboard sized to the placement's AUTHORED
+    // footprint (preserved on the placement tuple itself) so a missing 2×2
+    // definition still renders a conspicuous 2×2 placeholder rather than
+    // collapsing to a 1×1 texture under a 2×2 collision wall. Older data
+    // with no footprint recorded on the tuple defaults to 1×1.
+    const fallbackTileWidth = (placementTileWidth === 2 ? 2 : 1) as 1 | 2;
+    const fallbackTileHeight = (placementTileHeight === 2 ? 2 : 1) as 1 | 2;
+    const sprite = getOrFallbackSprite(rawId, fallbackTileWidth, fallbackTileHeight);
 
     if (world !== undefined && sprite.properties.breakability === 'fragile' &&
         isFragilePlacementBroken(world, xBlock, yBlock, worldTileSize)) {

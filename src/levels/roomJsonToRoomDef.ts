@@ -359,7 +359,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   }
 
   if (json.customBlockPlacements && json.customBlockPlacements.length > 0) {
-    room.customBlockPlacements = json.customBlockPlacements.slice() as [number, number, string][];
+    room.customBlockPlacements = json.customBlockPlacements.slice();
   }
 
   return room;

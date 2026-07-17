@@ -497,10 +497,12 @@ export interface RoomJsonDef {
    */
   bakedWallTemplate?: RoomJsonBakedWallTemplate;
   /**
-   * Custom block placements as [xBlock, yBlock, namespacedId].
+   * Custom block placements as [xBlock, yBlock, namespacedId, tileWidth?, tileHeight?].
    * namespacedId is "custom:<id>". Absent when no custom blocks are placed.
+   * tileWidth/tileHeight preserve the authored footprint; absent means 1x1
+   * (older data written before this field existed).
    */
-  customBlockPlacements?: [number, number, string][];
+  customBlockPlacements?: ([number, number, string] | [number, number, string, number, number])[];
 }
 
 // ── Background blocks ────────────────────────────────────────────────────────

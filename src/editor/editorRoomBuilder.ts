@@ -343,6 +343,11 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
     dustContainers: (data.dustContainers ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     dustContainerPieces: (data.dustContainerPieces ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
+    customBlockPlacements: (data.customBlockPlacements ?? []).length > 0
+      ? (data.customBlockPlacements ?? []).map(p =>
+          [p.xBlock, p.yBlock, p.blockId, p.tileWidth, p.tileHeight] as [number, number, string, number, number],
+        )
+      : undefined,
     dustBoostJars: (data.dustBoostJars ?? []).map(j => {
       const kind = stringToParticleKind(j.dustKind);
       return {
