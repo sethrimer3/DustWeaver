@@ -41,6 +41,10 @@ import {
   drawPlayerWaterBubbles,
 } from './playerWaterBubbles';
 import {
+  tickPlayerWaterSkipSpray,
+  drawPlayerWaterSkipSpray,
+} from './playerWaterSkipSpray';
+import {
   SPARK_SPEED_MAX,
   SPARK_LIFETIME_TICKS,
   tickLavaSparks,
@@ -120,6 +124,17 @@ export function renderWaterZones(
     tickPlayerWaterBubbles(px, py, vx, vy, world.isPlayerInWaterFlag);
   }
 
+  // Tick skip-bounce droplet spray (independent of current water contact —
+  // the burst continues arcing after the player has already bounced clear).
+  tickPlayerWaterSkipSpray(
+    world.playerWaterSkipEventSequence,
+    world.playerWaterSkipEventXWorld,
+    world.playerWaterSkipEventYWorld,
+    world.playerWaterSkipEventVelocityXWorld,
+    world.playerWaterSkipEventVelocityYWorld,
+    world.dtMs / 1000,
+  );
+
   for (let bi = 0; bi < bodies.length; bi++) {
     const body = bodies[bi];
     if (body.kind !== 'water') continue;
@@ -143,6 +158,10 @@ export function renderWaterZones(
   if (world.isPlayerInWaterFlag === 1 && playerAlive) {
     drawPlayerWaterBubbles(ctx, offsetXPx, offsetYPx, zoom);
   }
+
+  // Skip-bounce droplet spray draws regardless of current water contact —
+  // the burst is already arcing away from the surface by the time it's visible.
+  drawPlayerWaterSkipSpray(ctx, offsetXPx, offsetYPx, zoom);
 }
 
 /**

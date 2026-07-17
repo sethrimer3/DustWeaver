@@ -93,6 +93,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.playerWaterSurfaceEventYWorld = 0;
   world.playerWaterSurfaceEventVelocityXWorld = 0;
   world.playerWaterSurfaceEventVelocityYWorld = 0;
+  world.playerWaterSkipEventSequence = 0;
+  world.playerWaterSkipEventXWorld = 0;
+  world.playerWaterSkipEventYWorld = 0;
+  world.playerWaterSkipEventVelocityXWorld = 0;
+  world.playerWaterSkipEventVelocityYWorld = 0;
   world.dustPileCount = 0;
   world.windVentCount = 0;
 

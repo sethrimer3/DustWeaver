@@ -125,6 +125,8 @@ export function showPauseMenu(
     padding: 36px 30px 24px 30px;
     min-width: 320px;
     max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
     text-align: center;
   `;
 

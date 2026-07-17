@@ -528,6 +528,16 @@ export interface HazardWorldState {
   playerWaterSurfaceEventYWorld: number;
   playerWaterSurfaceEventVelocityXWorld: number;
   playerWaterSurfaceEventVelocityYWorld: number;
+  /**
+   * Monotonic cosmetic event sequence incremented whenever the player skips
+   * off a water surface (stone-skip bounce). Drives the droplet-spray burst.
+   */
+  playerWaterSkipEventSequence: number;
+  playerWaterSkipEventXWorld: number;
+  playerWaterSkipEventYWorld: number;
+  /** Incoming velocity at the moment of the skip (before the bounce flip). */
+  playerWaterSkipEventVelocityXWorld: number;
+  playerWaterSkipEventVelocityYWorld: number;
 
   // ── Dust piles ────────────────────────────────────────────────────────────
   /** Number of dust piles loaded in the current room. */
@@ -956,6 +966,11 @@ export function createHazardWorldState(): HazardWorldState {
     playerWaterSurfaceEventYWorld: 0,
     playerWaterSurfaceEventVelocityXWorld: 0,
     playerWaterSurfaceEventVelocityYWorld: 0,
+    playerWaterSkipEventSequence:  0,
+    playerWaterSkipEventXWorld:    0,
+    playerWaterSkipEventYWorld:    0,
+    playerWaterSkipEventVelocityXWorld: 0,
+    playerWaterSkipEventVelocityYWorld: 0,
     dustPileCount:                 0,
     dustPileXWorld:                new Float32Array(MAX_DUST_PILES),
     dustPileYWorld:                new Float32Array(MAX_DUST_PILES),

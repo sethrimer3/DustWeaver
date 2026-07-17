@@ -43,6 +43,14 @@ export const WATER_SUBMERGED_ENTER_RATIO = 0.55;
 /** Lower ratio required to leave substantially-submerged state. */
 export const WATER_SUBMERGED_EXIT_RATIO = 0.35;
 
+/**
+ * Maximum entry angle (degrees, measured from the horizontal water surface)
+ * for a water impact to skip like a thrown stone instead of submerging.
+ */
+export const WATER_SKIP_MAX_ENTRY_ANGLE_DEG = 45;
+/** Minimum launch angle (degrees above horizontal) guaranteed on a skip bounce. */
+export const WATER_SKIP_MIN_LAUNCH_ANGLE_DEG = 5;
+
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
@@ -98,6 +106,34 @@ export function applyPlayerWaterHorizontalDrag(cluster: ClusterState, dtSec: num
     WATER_HORIZONTAL_DRAG_PER_SEC,
     dtSec,
   );
+}
+
+/**
+ * Determines whether a downward water impact should skip off the surface
+ * (like a thrown stone) instead of submerging, and returns the resulting
+ * vertical velocity when it does.
+ *
+ * Requires a shallow entry angle (< WATER_SKIP_MAX_ENTRY_ANGLE_DEG from the
+ * horizontal surface) and at least `minSpeedWorld` total incoming speed.
+ * The incoming vy is mirrored upward; if that would produce a launch angle
+ * shallower than WATER_SKIP_MIN_LAUNCH_ANGLE_DEG, the vertical component is
+ * steepened to the minimum so the bounce is always visibly upward.
+ */
+export function computeWaterSkipBounce(
+  velocityXWorld: number,
+  velocityYWorld: number,
+  minSpeedWorld: number,
+): { skip: boolean; velocityYWorld: number } {
+  if (velocityYWorld <= 0) return { skip: false, velocityYWorld };
+  const speed = Math.hypot(velocityXWorld, velocityYWorld);
+  if (speed < minSpeedWorld) return { skip: false, velocityYWorld };
+  const entryAngleDeg = Math.atan2(velocityYWorld, Math.abs(velocityXWorld)) * (180 / Math.PI);
+  if (entryAngleDeg >= WATER_SKIP_MAX_ENTRY_ANGLE_DEG) return { skip: false, velocityYWorld };
+
+  let bouncedVy = -velocityYWorld;
+  const minVyMag = Math.abs(velocityXWorld) * Math.tan(WATER_SKIP_MIN_LAUNCH_ANGLE_DEG * (Math.PI / 180));
+  if (Math.abs(bouncedVy) < minVyMag) bouncedVy = -minVyMag;
+  return { skip: true, velocityYWorld: bouncedVy };
 }
 
 /** Positive magnitude of the half-strength water-jump speed. */

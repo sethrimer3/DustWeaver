@@ -8,9 +8,11 @@ import {
   applyPlayerWaterHorizontalDrag,
   applyPlayerWaterVerticalForces,
   getWaterJumpSpeedWorld,
+  PLAYER_WATER_STATE_OUTSIDE,
   PLAYER_WATER_STATE_SUBMERGED,
   PLAYER_WATER_STATE_SURFACE,
 } from '../sim/clusters/playerWaterPhysics';
+import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from '../sim/momentumCombatConfig';
 import { applyHazards, computePlayerWaterState } from '../sim/hazards';
 import { createWorldState, type WorldState } from '../sim/world';
 
@@ -283,5 +285,87 @@ describe('stable surface classification and float equilibrium', () => {
     assert.ok(player.positionYWorld - player.halfHeightWorld < 100, 'the player upper body should clear the surface');
     assert.ok(Math.abs(player.velocityYWorld) < 0.5, 'surface equilibrium should settle without jitter');
     assert.ok(outsideTransitions <= 1, 'passive buoyancy should not repeatedly bounce across the surface');
+  });
+});
+
+describe('stone-skip water bounce', () => {
+  test('a shallow, fast impact skips off the surface instead of submerging', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    player.velocityXWorld = 300;
+    player.velocityYWorld = 100; // atan2(100, 300) ≈ 18.4° — shallow
+    player.positionYWorld = 92;
+    applyHazards(world);
+
+    assert.equal(world.playerWaterSkipEventSequence, 1);
+    assert.ok(player.velocityYWorld < 0, 'vertical velocity should flip upward');
+    assert.ok(Math.abs(player.velocityYWorld + 100) < 1e-9, 'incoming vy should mirror exactly (no steepening needed)');
+    assert.equal(world.isPlayerInWaterFlag, 0, 'the player should not actually enter the water');
+    assert.equal(world.playerWaterState, PLAYER_WATER_STATE_OUTSIDE);
+  });
+
+  test('a steep impact (>= 45 degrees) submerges normally instead of skipping', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    player.velocityXWorld = 50;
+    player.velocityYWorld = 300; // atan2(300, 50) ≈ 80.5° — steep
+    player.positionYWorld = 92;
+    applyHazards(world);
+
+    assert.equal(world.playerWaterSkipEventSequence, 0, 'no skip event should fire');
+    assert.equal(player.velocityYWorld, 300, 'velocity should be untouched by the skip logic');
+    assert.equal(world.isPlayerInWaterFlag, 1);
+  });
+
+  test('a shallow but slow impact (below invulnerability speed) submerges normally', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    const belowThreshold = MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED - 50;
+    player.velocityXWorld = belowThreshold;
+    player.velocityYWorld = 20; // shallow angle, but total speed is below the skip threshold
+    assert.ok(Math.hypot(player.velocityXWorld, player.velocityYWorld) < MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED);
+    player.positionYWorld = 92;
+    applyHazards(world);
+
+    assert.equal(world.playerWaterSkipEventSequence, 0, 'no skip event should fire below the speed threshold');
+    assert.equal(player.velocityYWorld, 20);
+    assert.equal(world.isPlayerInWaterFlag, 1);
+  });
+
+  test('a near-flat impact is steepened to the minimum 5 degree launch angle', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    player.velocityXWorld = 500;
+    player.velocityYWorld = 10; // atan2(10, 500) ≈ 1.1° — almost flat
+    player.positionYWorld = 92;
+    applyHazards(world);
+
+    assert.equal(world.playerWaterSkipEventSequence, 1);
+    const expectedMinVy = -500 * Math.tan((5 * Math.PI) / 180);
+    assert.ok(Math.abs(player.velocityYWorld - expectedMinVy) < 1e-6, 'launch should be steepened to the 5° minimum');
+    assert.ok(player.velocityYWorld < -10, 'the steepened launch should exceed the raw mirrored vy');
+  });
+
+  test('the skip event carries the incoming impact velocity for the droplet spray', () => {
+    const world = createPlayerWorld(89);
+    const player = world.clusters[0];
+    computePlayerWaterState(world);
+
+    player.velocityXWorld = 300;
+    player.velocityYWorld = 100;
+    player.positionYWorld = 92;
+    applyHazards(world);
+
+    assert.equal(world.playerWaterSkipEventVelocityXWorld, 300);
+    assert.equal(world.playerWaterSkipEventVelocityYWorld, 100);
+    assert.equal(world.playerWaterSkipEventXWorld, player.positionXWorld);
   });
 });

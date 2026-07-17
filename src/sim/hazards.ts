@@ -29,8 +29,10 @@ import {
   WATER_SUBMERGED_ENTER_RATIO,
   WATER_SUBMERGED_EXIT_RATIO,
   WATER_SURFACE_STATE_TOLERANCE_WORLD,
+  computeWaterSkipBounce,
   type PlayerWaterState,
 } from './clusters/playerWaterPhysics';
+import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from './momentumCombatConfig';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -38,6 +40,13 @@ import {
 const SPIKE_DAMAGE = 2;
 /** Invulnerability ticks after taking spike damage (60 ticks ≈ 1 second). */
 const SPIKE_INVULN_TICKS = 60;
+
+/**
+ * Minimum total speed (wu/s) required for a shallow water impact to skip off
+ * the surface instead of submerging. Reuses the momentum-combat "invulnerability
+ * speed" threshold so a stone-skip always requires attack-grade momentum.
+ */
+const WATER_SKIP_MIN_SPEED_WORLD = MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED;
 
 /** Upward launch speed when bouncing off a springboard (world units/s). */
 const SPRINGBOARD_LAUNCH_SPEED_WORLD = 420.0;
@@ -485,6 +494,11 @@ export function applyHazards(world: WorldState): void {
     && currentBottomYWorld < preMovementSurfaceYWorld
       + WATER_SURFACE_STATE_TOLERANCE_WORLD;
 
+  // Capture the impact velocity before any skip bounce rewrites it, so the
+  // splash event and entry-speed readout always reflect the actual impact.
+  const entryVelocityXWorld = player.velocityXWorld;
+  const entryVelocityYWorld = player.velocityYWorld;
+
   if (enteredThroughTop || exitedThroughTop) {
     world.playerWaterSurfaceEventSequence += 1;
     world.playerWaterSurfaceEventKind = enteredThroughTop ? 1 : 2;
@@ -492,14 +506,40 @@ export function applyHazards(world: WorldState): void {
     world.playerWaterSurfaceEventYWorld = enteredThroughTop
       ? world.playerBuoyancySurfaceYWorld
       : preMovementSurfaceYWorld;
-    world.playerWaterSurfaceEventVelocityXWorld = player.velocityXWorld;
-    world.playerWaterSurfaceEventVelocityYWorld = player.velocityYWorld;
+    world.playerWaterSurfaceEventVelocityXWorld = entryVelocityXWorld;
+    world.playerWaterSurfaceEventVelocityYWorld = entryVelocityYWorld;
+  }
+
+  world.playerWaterEntrySpeedWorld = enteredThroughTop
+    ? Math.hypot(entryVelocityXWorld, entryVelocityYWorld)
+    : 0;
+
+  // ── Water skip (stone-skip bounce) ─────────────────────────────────────
+  // A shallow, fast impact skips off the surface like a thrown stone rather
+  // than submerging: the vertical velocity flips upward and the player never
+  // actually enters the water this tick.
+  if (enteredThroughTop) {
+    const bounce = computeWaterSkipBounce(
+      entryVelocityXWorld,
+      entryVelocityYWorld,
+      WATER_SKIP_MIN_SPEED_WORLD,
+    );
+    if (bounce.skip) {
+      player.velocityYWorld = bounce.velocityYWorld;
+      world.isPlayerInWaterFlag = 0;
+      world.playerWaterState = PLAYER_WATER_STATE_OUTSIDE;
+      world.playerWaterZoneIndex = -1;
+      world.playerWaterSubmersionRatio = 0;
+
+      world.playerWaterSkipEventSequence += 1;
+      world.playerWaterSkipEventXWorld = player.positionXWorld;
+      world.playerWaterSkipEventYWorld = world.playerWaterSurfaceEventYWorld;
+      world.playerWaterSkipEventVelocityXWorld = entryVelocityXWorld;
+      world.playerWaterSkipEventVelocityYWorld = entryVelocityYWorld;
+    }
   }
 
   world.isPlayerWasInWaterLastTickFlag = world.isPlayerInWaterFlag;
-  world.playerWaterEntrySpeedWorld = enteredThroughTop
-    ? Math.hypot(player.velocityXWorld, player.velocityYWorld)
-    : 0;
 
   // ── Lava zones ───────────────────────────────────────────────────────────
   if (world.lavaInvulnTicks === 0) {
