@@ -376,6 +376,8 @@ export interface SavedRoomV2 {
   bounces?: SavedBounce[];
   /** Kinetic blocks. */
   kineticBlocks?: SavedKineticBlock[];
+  /** Zip moving blocks: [uid, x, y, width, height, variant char]. */
+  zipMoveBlocks?: [number, number, number, number, number, 't' | 'a'][];
   /** Ropes. */
   ropes?: SavedRoomRope[];
   /** Dialogue triggers. */

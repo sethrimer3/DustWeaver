@@ -473,6 +473,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       xBlock: b.xBlock,
       yBlock: b.yBlock,
     })),
+    zipMoveBlocks: (data.zipMoveBlocks ?? []).map(b => ({
+      ...b,
+      wBlock: Math.max(3, Number.isFinite(b.wBlock) ? Math.floor(b.wBlock) : 3),
+      hBlock: Math.max(3, Number.isFinite(b.hBlock) ? Math.floor(b.hBlock) : 3),
+      variant: b.variant === 'away' ? 'away' as const : 'toward' as const,
+    })),
     phantasmalTiles: (data.phantasmalTiles ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,

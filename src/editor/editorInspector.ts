@@ -637,6 +637,12 @@ export function updateInspector(
         });
       }
     }
+  } else if (el.type === 'zipMoveBlock') {
+    const rect = (room.zipMoveBlocks ?? []).find(candidate => candidate.uid === el.uid);
+    if (rect) {
+      addField(div, 'Width (blocks)', String(rect.wBlock), value => callbacks?.onPropertyChange('zipMoveBlock.wBlock', parseInt(value)));
+      addField(div, 'Height (blocks)', String(rect.hBlock), value => callbacks?.onPropertyChange('zipMoveBlock.hBlock', parseInt(value)));
+    }
   } else if (el.type === 'challengeField' || el.type === 'challengeGate') {
     const prefix = el.type;
     const elements = el.type === 'challengeField' ? room.challengeFields : room.challengeGates;

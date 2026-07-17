@@ -512,6 +512,19 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       targetSpawnBlock: [3, 3],
       positionBlock,
     });
+  } else if (item.zipMoveBlockVariant !== undefined) {
+    const startX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
+    const startY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
+    const xBlock = startX === null ? bx : Math.min(startX, bx);
+    const yBlock = startY === null ? by : Math.min(startY, by);
+    const requestedW = startX === null ? 3 : Math.abs(bx - startX) + 1;
+    const requestedH = startY === null ? 3 : Math.abs(by - startY) + 1;
+    const wBlock = Math.min(Math.max(3, requestedW), room.widthBlocks - xBlock);
+    const hBlock = Math.min(Math.max(3, requestedH), room.heightBlocks - yBlock);
+    if (wBlock < 3 || hBlock < 3) return;
+    (room.zipMoveBlocks ??= []).push({
+      uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock, variant: item.zipMoveBlockVariant,
+    });
   } else if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
     const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
     const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;

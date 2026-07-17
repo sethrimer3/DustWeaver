@@ -159,6 +159,12 @@ export function applyPropertyToElement(
       if (prop === 'waterZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
       if (prop === 'waterZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
     }
+  } else if (el.type === 'zipMoveBlock') {
+    const rect = (room.zipMoveBlocks ?? []).find(candidate => candidate.uid === el.uid);
+    if (rect && Number.isFinite(numVal)) {
+      if (prop === 'zipMoveBlock.wBlock') rect.wBlock = Math.max(3, Math.min(room.widthBlocks - rect.xBlock, Math.floor(numVal)));
+      if (prop === 'zipMoveBlock.hBlock') rect.hBlock = Math.max(3, Math.min(room.heightBlocks - rect.yBlock, Math.floor(numVal)));
+    }
   } else if (el.type === 'challengeField' || el.type === 'challengeGate') {
     const prefix = el.type;
     const elements = el.type === 'challengeField' ? room.challengeFields : room.challengeGates;

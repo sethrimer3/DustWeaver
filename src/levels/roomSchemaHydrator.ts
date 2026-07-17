@@ -368,6 +368,16 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       variant: code === 's' ? 'sensitive' : code === 'c' ? 'crumbling' : 'tough',
     }));
   }
+  if (saved.zipMoveBlocks?.length) {
+    json.zipMoveBlocks = saved.zipMoveBlocks.map(([uid, x, y, w, h, variant]) => ({
+      uid: Number.isFinite(uid) ? Math.max(0, Math.floor(uid)) : 0,
+      xBlock: Number.isFinite(x) ? Math.max(0, Math.floor(x)) : 0,
+      yBlock: Number.isFinite(y) ? Math.max(0, Math.floor(y)) : 0,
+      wBlock: Number.isFinite(w) ? Math.max(3, Math.floor(w)) : 3,
+      hBlock: Number.isFinite(h) ? Math.max(3, Math.floor(h)) : 3,
+      variant: variant === 'a' ? 'away' as const : 'toward' as const,
+    }));
+  }
   if (saved.crumbles && saved.crumbles.length > 0) {
     json.crumbleBlocks = saved.crumbles.map(c => {
       const entry: RoomJsonCrumbleBlock = {

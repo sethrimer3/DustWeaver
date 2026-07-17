@@ -36,6 +36,8 @@ export function resizeBlockRect(
   cursorYBlock: number,
   roomWidthBlocks: number,
   roomHeightBlocks: number,
+  minWidthBlocks = 1,
+  minHeightBlocks = 1,
 ): EditableBlockRect {
   const right = original.xBlock + original.wBlock;
   const bottom = original.yBlock + original.hBlock;
@@ -44,16 +46,16 @@ export function resizeBlockRect(
   let wBlock = original.wBlock;
   let hBlock = original.hBlock;
   if (edge === 'left' || edge === 'topLeft' || edge === 'bottomLeft') {
-    xBlock = Math.max(0, Math.min(Math.floor(cursorXBlock), right - 1));
+    xBlock = Math.max(0, Math.min(Math.floor(cursorXBlock), right - minWidthBlocks));
     wBlock = right - xBlock;
   } else if (edge === 'right' || edge === 'topRight' || edge === 'bottomRight') {
-    wBlock = Math.max(1, Math.min(roomWidthBlocks, Math.floor(cursorXBlock)) - xBlock);
+    wBlock = Math.max(minWidthBlocks, Math.min(roomWidthBlocks, Math.floor(cursorXBlock)) - xBlock);
   }
   if (edge === 'top' || edge === 'topLeft' || edge === 'topRight') {
-    yBlock = Math.max(0, Math.min(Math.floor(cursorYBlock), bottom - 1));
+    yBlock = Math.max(0, Math.min(Math.floor(cursorYBlock), bottom - minHeightBlocks));
     hBlock = bottom - yBlock;
   } else if (edge === 'bottom' || edge === 'bottomLeft' || edge === 'bottomRight') {
-    hBlock = Math.max(1, Math.min(roomHeightBlocks, Math.floor(cursorYBlock)) - yBlock);
+    hBlock = Math.max(minHeightBlocks, Math.min(roomHeightBlocks, Math.floor(cursorYBlock)) - yBlock);
   }
   return { xBlock, yBlock, wBlock, hBlock };
 }

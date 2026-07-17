@@ -781,6 +781,8 @@ export interface RoomDef {
   kineticBlocks?: readonly RoomKineticBlockDef[];
   /** Movable 1x1 grapple-carry physics blocks. */
   grappleCarryBlocks?: readonly RoomGrappleCarryBlockDef[];
+  /** Zip-activated, editor-resizable moving solid rectangles. */
+  zipMoveBlocks?: readonly import('./roomElementDefs').RoomZipMoveBlockDef[];
   /** 1x1 ghost tiles that block grapple-carry blocks but not the player or grapple raycasts. */
   phantasmalTiles?: readonly RoomPhantasmalTileDef[];
   /** Ropes hanging between anchor points in the room. */

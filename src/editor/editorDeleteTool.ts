@@ -143,6 +143,7 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
   }
 
   for (const [elements, isPoint] of [
+    [room.zipMoveBlocks ?? [], false],
     [room.challengeFields ?? [], false],
     [room.challengeGates ?? [], false],
     [room.gates ?? [], false],

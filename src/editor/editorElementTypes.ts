@@ -305,6 +305,15 @@ export interface EditorGrappleCarryBlock {
   yBlock: number;
 }
 
+export interface EditorZipMoveBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  variant: 'toward' | 'away';
+}
+
 export interface EditorPhantasmalTile {
   uid: number;
   xBlock: number;
@@ -620,6 +629,7 @@ export interface EditorRoomData {
   bouncePads?: EditorBouncePad[];
   kineticBlocks?: EditorKineticBlock[];
   grappleCarryBlocks?: EditorGrappleCarryBlock[];
+  zipMoveBlocks?: EditorZipMoveBlock[];
   phantasmalTiles?: EditorPhantasmalTile[];
   /** Authored 1x1 pixel-material placements (currently: sand). */
   pixelMaterials?: EditorPixelMaterial[];
@@ -645,7 +655,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

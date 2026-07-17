@@ -23,7 +23,7 @@ export type {
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
   EditorChallengeRect, EditorChallengeTotem,
   EditorGate,
-  EditorGrappleCarryBlock, EditorPhantasmalTile, EditorPixelMaterial,
+  EditorGrappleCarryBlock, EditorZipMoveBlock, EditorPhantasmalTile, EditorPixelMaterial,
   EditorSaveTomb, EditorSkillTomb, EditorDustContainer, EditorDustContainerPiece,
   EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,

@@ -545,6 +545,11 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       return [fb.xBlock, fb.yBlock, code] as [number, number, string];
     });
   }
+  if (json.zipMoveBlocks?.length) {
+    out.zipMoveBlocks = json.zipMoveBlocks.map(b => [
+      b.uid, b.xBlock, b.yBlock, Math.max(3, b.wBlock), Math.max(3, b.hBlock), b.variant === 'away' ? 'a' : 't',
+    ]);
+  }
   if (json.crumbleBlocks && json.crumbleBlocks.length > 0) {
     out.crumbles = json.crumbleBlocks.map(c => {
       const entry: SavedCrumble = { r: [c.xBlock, c.yBlock, c.wBlock ?? 1, c.hBlock ?? 1] };

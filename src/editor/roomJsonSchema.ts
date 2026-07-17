@@ -164,6 +164,7 @@ export interface RoomJsonChallengeTotem {
   yBlock: number;
 }
 export type RoomJsonGate = import('../levels/gateDefs').RoomGateDef;
+export type RoomJsonZipMoveBlock = import('../levels/roomElementDefs').RoomZipMoveBlockDef;
 
 /** Skill Tomb — grants a specific dust skill/weave when interacted with. */
 export interface RoomJsonDustSkillTomb {
@@ -486,6 +487,7 @@ export interface RoomJsonDef {
   bouncePads?: RoomJsonBouncePad[];
   kineticBlocks?: RoomJsonKineticBlock[];
   grappleCarryBlocks?: RoomJsonGrappleCarryBlock[];
+  zipMoveBlocks?: RoomJsonZipMoveBlock[];
   phantasmalTiles?: RoomJsonPhantasmalTile[];
   pixelMaterials?: RoomJsonPixelMaterial[];
   ropes?: RoomJsonRope[];
