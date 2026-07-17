@@ -47,7 +47,7 @@ export function renderGates(ctx: CanvasRenderingContext2D, gates: readonly Runti
     const y = gate.yBlock * BLOCK_SIZE_MEDIUM * zoom + oy;
     const w = gate.wBlock * BLOCK_SIZE_MEDIUM * zoom;
     const h = gate.hBlock * BLOCK_SIZE_MEDIUM * zoom;
-    if (opacity > 0 && gate.openVisualMode !== 'darkRecessed') {
+    if (opacity > 0 && (gate.openVisualMode !== 'darkRecessed' || gate.phase === 'closed')) {
       ctx.globalAlpha = opacity;
       ctx.fillStyle = COLORS[gate.kind]; ctx.fillRect(x, y, w, h);
       ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(x, y, w, Math.max(1, zoom));

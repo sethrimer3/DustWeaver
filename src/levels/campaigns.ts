@@ -9,8 +9,7 @@ export interface CampaignMeta {
 }
 
 const BASE = import.meta.env.BASE_URL;
-export const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
-let activeCampaignId = MAIN_CAMPAIGN_ID;
+export { MAIN_CAMPAIGN_ID, getActiveCampaignId, setActiveCampaignId } from './campaignIdentity';
 
 function normalizeCampaignMeta(folderName: string, rawInfo: string): CampaignMeta {
   const lines = rawInfo.split(/\r?\n/);
@@ -66,14 +65,6 @@ export async function loadCampaignManifest(): Promise<CampaignMeta[]> {
   } catch {
     return [];
   }
-}
-
-export function getActiveCampaignId(): string {
-  return activeCampaignId;
-}
-
-export function setActiveCampaignId(campaignId: string): void {
-  activeCampaignId = campaignId;
 }
 
 export async function getCampaignById(campaignId: string): Promise<CampaignMeta | null> {

@@ -527,7 +527,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     } else {
       const kind = item.id.slice(0, -5) as import('../levels/gateDefs').GateKind;
       (room.gates ??= []).push({
-        uid: allocateUid(state), kind, xBlock, yBlock, wBlock, hBlock,
+        schemaVersion: 1, uid: allocateUid(state), kind, xBlock, yBlock, wBlock, hBlock,
         openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom',
         ...(kind === 'speed' ? { requiredSpeed: 180 } : {}),
       });

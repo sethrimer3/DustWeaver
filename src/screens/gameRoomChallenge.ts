@@ -1,6 +1,6 @@
 import { BLOCK_SIZE_MEDIUM, type RoomDef } from '../levels/roomDef';
 import { legacyChallengeGateToRoomGate, gatePersistenceKey } from '../levels/gateDefs';
-import { getActiveCampaignId } from '../levels/campaigns';
+import { getActiveCampaignId } from '../levels/campaignIdentity';
 import type { PlayerProgress } from '../progression/playerProgress';
 import { MAX_WALLS, type WorldState } from '../sim/world';
 import { createChallengeModeState, toggleChallengeTotem, updateChallengeFields } from '../sim/challengeMode';

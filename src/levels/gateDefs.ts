@@ -7,6 +7,7 @@ export const MIN_GATE_REQUIRED_SPEED_WORLD = 0;
 export const MAX_GATE_REQUIRED_SPEED_WORLD = 5000;
 
 export interface RoomGateDef {
+  schemaVersion: 1;
   uid: number;
   kind: GateKind;
   xBlock: number;
@@ -52,6 +53,7 @@ export function normalizeRoomGateDef(value: Partial<RoomGateDef>, context: GateN
   context.usedUids?.add(uid);
   const kind = enumOrDefault(value.kind, GATE_KINDS, 'challenge');
   const gate: RoomGateDef = {
+    schemaVersion: 1,
     uid,
     kind,
     xBlock,
@@ -67,6 +69,7 @@ export function normalizeRoomGateDef(value: Partial<RoomGateDef>, context: GateN
 
 export function legacyChallengeGateToRoomGate(value: { uid: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }): RoomGateDef {
   return {
+    schemaVersion: 1,
     ...value,
     kind: 'challenge',
     openVisualMode: 'fadeAway',

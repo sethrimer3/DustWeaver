@@ -47,6 +47,7 @@ export function stringToParticleKind(name: string): ParticleKind | null {
 // ── JSON schema types ────────────────────────────────────────────────────────
 
 export interface RoomJsonEnemy {
+  countsTowardRoomCompletion?: boolean;
   xBlock: number;
   yBlock: number;
   kinds: string[];

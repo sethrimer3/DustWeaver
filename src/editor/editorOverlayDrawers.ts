@@ -291,6 +291,13 @@ export function drawEditorSpawnAndTombs(
     ctx.strokeStyle = selected ? '#fff' : '#eef4f5';
     ctx.lineWidth = selected ? 2 : 1;
     ctx.strokeRect(x, y, w, h);
+    if (selected) {
+      ctx.fillStyle = '#fff';
+      const size = Math.max(3, 4 * zoom);
+      for (const [hx, hy] of [[x, y], [x + w * 0.5, y], [x + w, y], [x, y + h * 0.5], [x + w, y + h * 0.5], [x, y + h], [x + w * 0.5, y + h], [x + w, y + h]]) {
+        ctx.fillRect(hx - size * 0.5, hy - size * 0.5, size, size);
+      }
+    }
     ctx.fillStyle = '#272b31';
     ctx.font = `bold ${Math.max(8, Math.round(Math.min(14, 10 * zoom)))}px monospace`;
     ctx.textAlign = 'center';

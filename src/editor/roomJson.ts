@@ -226,6 +226,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: e.yBlock,
     kinds: e.kinds,
     particleCount: e.particleCount,
+    countsTowardRoomCompletionFlag: e.countsTowardRoomCompletion === false ? 0 : 1,
     isBossFlag: e.isBoss ? 1 : 0,
     isFlyingEyeFlag: e.isFlyingEye ? 1 : 0,
     isRollingEnemyFlag: e.isRollingEnemy ? 1 : 0,

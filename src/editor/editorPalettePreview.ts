@@ -197,10 +197,13 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     glyph: 'C',
   },
   challenge_gate: {
-    bg: '#25103d',
+    bg: '#bfae72',
     extraCss: `border: 3px double rgba(255,215,90,0.9); box-sizing: border-box;`,
     glyph: 'S',
   },
+  enemy_gate: { bg: '#b98288', extraCss: `border: 3px double #e9d9da; box-sizing: border-box;`, glyph: 'X' },
+  heart_gate: { bg: '#d5a2ae', extraCss: `border: 3px double #f6e0e6; box-sizing: border-box;`, glyph: 'H' },
+  speed_gate: { bg: '#8fc6d2', extraCss: `border: 3px double #d9f2f6; box-sizing: border-box;`, glyph: '>' },
   challenge_totem: {
     bg: '#42126e',
     extraCss: `border-radius: 5px 5px 1px 1px; border: 2px solid rgba(210,145,255,0.9); box-sizing: border-box;`,

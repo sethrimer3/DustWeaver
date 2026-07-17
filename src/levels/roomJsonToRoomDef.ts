@@ -77,6 +77,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       yBlock: e.yBlock,
       kinds,
       particleCount: e.particleCount,
+      countsTowardRoomCompletionFlag: e.countsTowardRoomCompletion === false ? 0 : 1,
       isBossFlag: e.isBoss ? 1 as const : 0 as const,
       isFlyingEyeFlag: e.isFlyingEye ? 1 as const : 0 as const,
       isRollingEnemyFlag: e.isRollingEnemy ? 1 as const : 0 as const,
@@ -177,6 +178,19 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     yBlock: j.yBlock,
   }));
 
+  const usedGateUids = new Set<number>();
+  let nextGateUid = 0;
+  const gates = [...(json.gates ?? []), ...(json.challengeGates ?? []).map(legacyChallengeGateToRoomGate)].map(gate =>
+    normalizeRoomGateDef(gate, {
+      widthBlocks: json.widthBlocks,
+      heightBlocks: json.heightBlocks,
+      usedUids: usedGateUids,
+      allocateUid: () => {
+        while (usedGateUids.has(nextGateUid)) nextGateUid++;
+        return nextGateUid++;
+      },
+    }));
+
   const room: RoomDef = {
     id: json.id,
     name: json.name,
@@ -198,7 +212,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     challengeFields: (json.challengeFields ?? []).map(element => ({ ...element })),
     challengeGates: [],
     challengeTotems: (json.challengeTotems ?? []).map(element => ({ ...element })),
-    gates: [...(json.gates ?? []), ...(json.challengeGates ?? []).map(legacyChallengeGateToRoomGate)].map((gate, index) => normalizeRoomGateDef(gate, { widthBlocks: json.widthBlocks, heightBlocks: json.heightBlocks, allocateUid: () => index })),
+    gates,
   };
 
   // Propagate optional theme/background fields

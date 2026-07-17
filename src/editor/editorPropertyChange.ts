@@ -104,6 +104,9 @@ export function applyPropertyToElement(
       if (prop === 'enemy.isBossFlag') {
         enemy.isBossFlag = numVal ? 1 : 0;
       }
+      if (prop === 'enemy.countsTowardRoomCompletionFlag') {
+        enemy.countsTowardRoomCompletionFlag = numVal ? 1 : 0;
+      }
     }
   } else if (el.type === 'transition') {
     const trans = room.transitions.find((t: EditorTransition) => t.uid === el.uid);

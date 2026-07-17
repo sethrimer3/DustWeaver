@@ -132,6 +132,8 @@ export function updateInspector(
       }
       addCheckbox(div, 'isBoss', enemy.isBossFlag === 1,
         v => callbacks?.onPropertyChange('enemy.isBossFlag', v ? 1 : 0));
+      addCheckbox(div, 'Counts toward enemy gates', enemy.countsTowardRoomCompletionFlag !== 0,
+        v => callbacks?.onPropertyChange('enemy.countsTowardRoomCompletionFlag', v ? 1 : 0));
     }
   } else if (el.type === 'transition') {
     const trans = room.transitions.find(t => t.uid === el.uid);

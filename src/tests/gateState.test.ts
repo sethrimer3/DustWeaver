@@ -5,6 +5,7 @@ import {
   GATE_TRANSITION_DURATION_MS,
   SPEED_GATE_HYSTERESIS_WORLD,
   clearGateLatchForSave,
+  clearGateLatchForRoomExit,
   countQualifyingEnemies,
   createRuntimeGate,
   evaluateGateCondition,
@@ -15,13 +16,13 @@ import {
 } from '../sim/gates/gateState';
 import { createClusterState } from '../sim/clusters/state';
 
-const base = { uid: 1, xBlock: 2, yBlock: 3, wBlock: 2, hBlock: 4, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerSaves' } as const;
+const base = { schemaVersion: 1, uid: 1, xBlock: 2, yBlock: 3, wBlock: 2, hBlock: 4, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerSaves' } as const;
 const context = { challengeActive: false, playerHealth: 3, playerMaxHealth: 3, playerVelocityXWorld: 0, playerVelocityYWorld: 0, qualifyingEnemyCount: 0 };
 
 test('normalization validates enums, dimensions, duplicate IDs, and speed', () => {
   const used = new Set([4]);
   const gate = normalizeRoomGateDef({ uid: 4, kind: 'speed', xBlock: -3, yBlock: 9, wBlock: 0, hBlock: 99, requiredSpeed: Number.NaN, openVisualMode: 'bad' as never }, { widthBlocks: 10, heightBlocks: 10, usedUids: used, allocateUid: () => 8 });
-  assert.deepEqual(gate, { uid: 8, kind: 'speed', xBlock: 0, yBlock: 9, wBlock: 1, hBlock: 1, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom', requiredSpeed: 180 });
+  assert.deepEqual(gate, { schemaVersion: 1, uid: 8, kind: 'speed', xBlock: 0, yBlock: 9, wBlock: 1, hBlock: 1, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom', requiredSpeed: 180 });
 });
 
 test('enemy condition follows live qualifying enemy lifecycle', () => {
@@ -73,4 +74,20 @@ test('safe closing stays pending on player or enemy and closes only after clear'
 test('powder count is area based and capped', () => {
   assert.equal(powderParticleCount({ wBlock: 2, hBlock: 3 }), 18);
   assert.equal(powderParticleCount({ wBlock: 1000, hBlock: 1000 }), 160);
+});
+
+test('room-visit and permanent persistence follow explicit precedence', () => {
+  const visit = createRuntimeGate({ ...base, kind: 'enemy', openPersistence: 'untilPlayerLeavesRoom' });
+  updateGateState(visit, true, false, GATE_TRANSITION_DURATION_MS);
+  updateGateState(visit, false, false, 1);
+  assert.equal(visit.phase, 'open');
+  clearGateLatchForRoomExit(visit);
+  updateGateState(visit, false, false, 1);
+  assert.equal(visit.phase, 'closing');
+
+  const permanent = createRuntimeGate({ ...base, kind: 'enemy', openPersistence: 'forever' }, true);
+  clearGateLatchForRoomExit(permanent);
+  clearGateLatchForSave(permanent);
+  updateGateState(permanent, false, false, GATE_TRANSITION_DURATION_MS);
+  assert.equal(permanent.phase, 'open');
 });

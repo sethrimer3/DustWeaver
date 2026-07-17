@@ -71,6 +71,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: e.yBlock,
       kinds: [...e.kinds],
       particleCount: e.particleCount,
+      countsTowardRoomCompletion: e.countsTowardRoomCompletionFlag !== 0,
       isBoss: e.isBossFlag === 1,
       isFlyingEye: e.isFlyingEyeFlag === 1,
       isRollingEnemy: e.isRollingEnemyFlag === 1,

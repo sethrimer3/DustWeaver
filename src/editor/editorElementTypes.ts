@@ -106,6 +106,7 @@ export interface EditorWall {
 // ── Enemies ───────────────────────────────────────────────────────────────────
 
 export interface EditorEnemy {
+  countsTowardRoomCompletionFlag?: 0 | 1;
   uid: number;
   xBlock: number;
   yBlock: number;

@@ -18,7 +18,8 @@ Purpose: help agents choose the smallest useful file set before making changes. 
 | Wall template / boundary / transition geometry | `src/levels/roomBoundaryWalls.ts` | `src/screens/gameRoomWalls.ts`, `src/screens/gameTransitions.ts`, `src/screens/gameRoomTransitionOrchestrator.ts`, `src/screens/preparedRoomRuntime.ts` |
 | World map or room sketch artifacts | `src/render/mapSketchRenderer.ts` | Relevant map UI files and room boundary/wall data sources. Treat as regression-prone. |
 | Player movement, jump, grapple, ice behavior | `src/sim/clusters/movementConstants.ts` | `src/sim/clusters/`, `src/screens/gameCommandProcessor.ts`, relevant tests if present |
-| Room-scoped Challenge Mode, damage return, fields/gates/totems | `src/sim/challengeMode.ts` | `src/screens/gameRoomChallenge.ts`, `src/sim/playerDamage.ts`, `src/render/challengeElementRenderer.ts`, editor/schema modules |
+| Room-scoped Challenge Mode and damage return (fields/totems) | `src/sim/challengeMode.ts` | `src/screens/gameRoomChallenge.ts`, `src/sim/playerDamage.ts`, `src/render/challengeElementRenderer.ts`, editor/schema modules |
+| Shared enemy/challenge/heart/speed gates | `src/sim/gates/gateState.ts` | `src/levels/gateDefs.ts`, `src/screens/gameRoomChallenge.ts`, `src/render/gateRenderer.ts`, editor/schema/progression modules |
 | Enemy AI or pathing | `src/sim/clusters/` | `src/screens/gameEnemySpawn.ts`, room enemy definitions |
 | Editor palette / room authoring | `src/editor/editorController.ts` | `src/editor/editorDropdownData.ts`, `src/editor/editorPalettePreview.ts`, `src/editor/editorRoomBuilder.ts`, `src/editor/roomJsonSerializer.ts` |
 | Editor playtest room activation / edit invalidation | `src/screens/gameEditorRoomActivationCoordinator.ts` | `src/screens/gameScreen.ts`, `src/screens/residentBuildScheduler.ts`, `src/screens/residentRoomManager.ts`, `src/screens/roomRuntimeCache.ts`, `src/screens/zoneResidentLoader.ts` |
@@ -101,7 +102,8 @@ Do not change boundary holes/trigger geometry casually. Planning notes explicitl
 
 - `src/sim/world.ts`: `WorldState` and core buffers.
 - `src/sim/tick.ts`: fixed tick pipeline.
-- `src/sim/challengeMode.ts`: pure, instance-local challenge anchor transitions, field entry/cooldown geometry, and deterministic return events. `src/screens/gameRoomChallenge.ts` owns room loading, dynamic gate wall slots, totem interaction, and transient-movement reconciliation.
+- `src/sim/challengeMode.ts`: pure, instance-local challenge anchor transitions, field entry/cooldown geometry, and deterministic return events. `src/screens/gameRoomChallenge.ts` coordinates challenge elements with the shared gate runtime, dynamic collision slots, persistence lifecycle, totem interaction, and transient-movement reconciliation.
+- `src/sim/gates/gateState.ts`: deterministic shared gate condition/state/occupancy policy. `src/levels/gateDefs.ts` owns versioned authored normalization and stable persistence keys; `src/render/gateRenderer.ts` owns layered metallic gate visuals and bounded effects.
 - `src/sim/particles/`: particle forces, integration, lifetime, combat, wall interaction, element definitions.
 - `src/sim/clusters/`: player/enemy cluster behavior, movement, AI, pathing.
 - `src/sim/clusters/movementConstants.ts`: movement constants. Read for speed, jump, braking, wall slide, and related movement changes.
