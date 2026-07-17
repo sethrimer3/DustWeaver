@@ -207,13 +207,6 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     if (hasShownMenu) return;
     hasShownMenu = true;
 
-    // Enter fullscreen when the player dismisses the "Press any key" gate.
-    // This is invoked from keydown/click handlers, so it satisfies browser
-    // user-gesture requirements. Ignore failures (unsupported/blocked).
-    if (!document.fullscreenElement) {
-      void document.documentElement.requestFullscreen().catch(() => {});
-    }
-
     animatedBackground.showBlurred();
 
     // Try playing music on interaction

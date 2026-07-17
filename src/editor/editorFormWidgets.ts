@@ -99,7 +99,7 @@ export function addDimField(
   onChange: (v: number) => void,
 ): HTMLInputElement {
   const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px; min-width: 0;';
 
   const lbl = document.createElement('span');
   lbl.textContent = label;
@@ -110,9 +110,9 @@ export function addDimField(
   input.value = String(value);
   input.min = '10';
   input.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    flex: 1; min-width: 0; width: 0; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
+    border-radius: 2px; box-sizing: border-box;
   `;
   input.addEventListener('change', () => {
     const v = parseInt(input.value, 10);
