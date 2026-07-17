@@ -702,8 +702,10 @@ function createWindow() {
     }
   });
 
-  // Only open DevTools in development; packaged builds ship without them.
-  if (!app.isPackaged) {
+  // Only open DevTools when explicitly requested (e.g. `npm run electron:dev`),
+  // not on every unpackaged launch — otherwise the desktop shortcut (which also
+  // runs unpackaged via `npm run desktop`) would pop DevTools on every launch.
+  if (process.env.DUSTWEAVER_DEVTOOLS === "1") {
     win.webContents.openDevTools();
   }
 

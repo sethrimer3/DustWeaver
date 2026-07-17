@@ -9,6 +9,7 @@
     "lint": "eslint src/",
     "preview": "vite preview",
     "electron": "npm exec -- electron --no-sandbox .",
+    "electron:dev": "set DUSTWEAVER_DEVTOOLS=1&& npm exec -- electron --no-sandbox .",
     "desktop": "npm run build && npm exec -- electron --no-sandbox .",
     "test": "node --import tsx --test src/tests/**/*.test.ts",
     "build:atlases": "node scripts/build-sprite-atlases.mjs",
