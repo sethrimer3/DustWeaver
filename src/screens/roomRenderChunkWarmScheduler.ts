@@ -849,7 +849,7 @@ export function addZoneEntryViewportTasks(
 export function adoptPrewarmedChunksForRoom(
   room: RoomDef,
   scalePx: number,
-  renderStateKey?: string,
+  renderStateKey: string,
 ): { wall: PrewarmAdoptResult; bg: PrewarmAdoptResult } {
   const wallResult = adoptPrewarmedWallChunks(room.id, scalePx, renderStateKey);
   const bgResult   = adoptPrewarmedBgChunks(room, scalePx, renderStateKey);

@@ -52,7 +52,9 @@ import {
   setActiveBlockLighting,
   setActiveDarkAmbientBlockers,
   setActiveSeamBlending,
+  activateWallChunkCacheOwnership,
 } from '../render/walls/blockSpriteRenderer';
+import { activateBgChunkCacheOwnership } from '../render/walls/backgroundBlockRenderer';
 import { computeRoomRenderStateKey } from '../render/walls/roomRenderState';
 import { preloadTransitionSprites } from '../render/walls/seamBlending';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
@@ -314,7 +316,13 @@ function applyRoomPresentationState(
   // the active chunk caches are seeded with pre-built data.  The adoption key
   // is derived from the same canonical mapping the prewarm scheduler used
   // (roomRenderState.ts), so stale snapshots are detected and discarded.
-  adoptPrewarmedChunksForRoom(room, camera.zoom, computeRoomRenderStateKey(room, blockerKeys));
+  const renderStateKey = computeRoomRenderStateKey(room, blockerKeys);
+  // Establish exclusive cache ownership before staged/partial adoption. This
+  // clears every prior-room wall and background canvas, including offscreen
+  // chunk keys that the new room's prewarm snapshot did not cover.
+  activateWallChunkCacheOwnership(room.id, renderStateKey, camera.zoom);
+  activateBgChunkCacheOwnership(room.id, renderStateKey, camera.zoom);
+  adoptPrewarmedChunksForRoom(room, camera.zoom, renderStateKey);
   if (opts.recordPhaseSteps) {
     FP.recordLoadPhaseStep('A:blockers+lighting', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }

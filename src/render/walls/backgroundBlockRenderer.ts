@@ -29,7 +29,12 @@ import {
   getTheme1x1SpriteShaded,
 } from './folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
-import { RoomChunkCache, CHUNK_SIZE_BLOCKS, PrewarmChunkResult } from './chunkRenderCache';
+import {
+  RoomChunkCache,
+  CHUNK_SIZE_BLOCKS,
+  PrewarmChunkResult,
+  createChunkCacheOwnershipKey,
+} from './chunkRenderCache';
 import {
   getBgBlockLayout,
   getCellsForChunk,
@@ -87,6 +92,22 @@ export function invalidateBackgroundBlockChunkRect(
  */
 export function getBgChunkCacheStats() {
   return _bgChunkCache.stats;
+}
+
+/**
+ * Atomically assigns the active background cache to one room/render state.
+ * This runs even for rooms with no background blocks so the prior room's
+ * canvases cannot survive a partial or missing adoption.
+ */
+export function activateBgChunkCacheOwnership(
+  roomId: string,
+  renderStateKey: string,
+  scalePx: number,
+): void {
+  _bgChunkCache.activateContentOwnership(
+    createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+  );
+  _bgCacheRoomRef = roomId;
 }
 
 /** Diagnostic counts of background chunks currently marked hadFallbacksFlag / builtWithGameplayFallbackFlag. */
@@ -273,6 +294,9 @@ export function prewarmBgChunksForRoom(
     snap.bgCache = new _RCC(true);
   }
   const tempCache = snap.bgCache;
+  tempCache.activateContentOwnership(
+    createChunkCacheOwnershipKey(room.id, snap.renderStateKey, zoom),
+  );
   tempCache.setMaxChunksPerFrame(maxChunks);
 
   const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, room.worldNumber ?? 0, zoom);
@@ -316,12 +340,12 @@ export function prewarmBgChunksForRoom(
  * @param currentRenderStateKey  When provided, the snapshot key must match or adoption is refused.
  * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
-export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey?: string): PrewarmAdoptResult {
+export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey: string): PrewarmAdoptResult {
   const snap = getSnapshot(room.id);
   if (snap === undefined || snap.bgCache === null) return { status: 'missing' };
 
   // Adoption-time stale-key guard: refuse chunks built for a different render state.
-  if (currentRenderStateKey !== undefined && snap.renderStateKey !== currentRenderStateKey) {
+  if (snap.renderStateKey !== currentRenderStateKey) {
     if (import.meta.env.DEV) {
       console.warn(
         `[adoptPrewarmedBgChunks] stale renderStateKey for ${room.id} — discarding prewarm data.` +
@@ -334,7 +358,12 @@ export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRende
 
   const chunks = snap.bgCache.extractCleanChunks();
   if (chunks.size > 0) {
-    _bgChunkCache.injectWarmedChunks(chunks, room, zoom);
+    _bgChunkCache.injectWarmedChunks(
+      chunks,
+      room,
+      zoom,
+      createChunkCacheOwnershipKey(room.id, currentRenderStateKey, zoom),
+    );
     // Mark room ref so renderBackgroundBlocks skips its invalidation check.
     _bgCacheRoomRef = room.id;
   }
@@ -459,7 +488,9 @@ export function renderBackgroundBlocks(
 
   // Detect room changes and invalidate the cache when the room ID switches.
   if (_bgCacheRoomRef !== room.id) {
-    _bgChunkCache.invalidateAll();
+    _bgChunkCache.activateContentOwnership(
+      createChunkCacheOwnershipKey(room.id, 'runtime-room-mismatch', zoom),
+    );
     _bgCacheRoomRef = room.id;
   }
 

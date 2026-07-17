@@ -48,6 +48,20 @@ import { EDGE_SHADING_VERSION } from './blockEdgeShading';
 export const CHUNK_SIZE_BLOCKS = 32;
 
 /**
+ * Builds the opaque ownership key used by active and prewarmed chunk caches.
+ * Room identity prevents cross-room reuse, the render-state key covers theme
+ * and lighting, and scale prevents a canvas baked at one zoom from being
+ * presented at another.
+ */
+export function createChunkCacheOwnershipKey(
+  roomId: string,
+  renderStateKey: string,
+  scalePx: number,
+): string {
+  return JSON.stringify([roomId, renderStateKey, scalePx]);
+}
+
+/**
  * Extra chunks beyond the visible edge to keep cached.
  * 1 means one additional chunk outside each viewport edge, preventing pop-in
  * when the camera moves one tile at a time.
@@ -206,6 +220,8 @@ export interface ChunkCacheStats {
 
 interface ChunkCanvas {
   readonly canvas: HTMLCanvasElement;
+  /** Generation of cache content this canvas was built or injected for. */
+  readonly contentGeneration: number;
   /**
    * True when a sprite was unavailable (still loading) during the last build
    * pass.  The chunk will be rebuilt again next frame so the final image
@@ -235,6 +251,12 @@ interface ChunkCanvas {
 export class RoomChunkCache {
   private readonly _chunks = new Map<string, ChunkCanvas>();
   private readonly _dirtyKeys = new Set<string>();
+
+  /** Opaque room/render-state/scale identity currently owned by this cache. */
+  private _contentOwnershipKey: string | null = null;
+
+  /** Incremented whenever incompatible content ownership replaces the cache. */
+  private _contentGeneration = 0;
 
   /**
    * When true, chunk build times are recorded as background-layer metrics
@@ -404,6 +426,30 @@ export class RoomChunkCache {
     this._maxChunksPerFrame = n;
   }
 
+  /** Current opaque content owner, exposed for diagnostics and tests. */
+  get contentOwnershipKey(): string | null {
+    return this._contentOwnershipKey;
+  }
+
+  /** Current content generation, exposed for diagnostics and tests. */
+  get contentGeneration(): number {
+    return this._contentGeneration;
+  }
+
+  /**
+   * Makes this cache exclusively own one room/render-state/scale identity.
+   * Switching identities atomically drops every prior canvas before any
+   * partial prewarm data can be injected, so untouched chunk keys can never
+   * retain artwork from the previous room.
+   */
+  activateContentOwnership(ownershipKey: string): boolean {
+    if (ownershipKey === this._contentOwnershipKey) return false;
+    this._contentOwnershipKey = ownershipKey;
+    this._contentGeneration++;
+    this._resetCachedContent();
+    return true;
+  }
+
   // ── Invalidation ──────────────────────────────────────────────────────────
 
   /**
@@ -464,11 +510,18 @@ export class RoomChunkCache {
     chunks: Map<string, HTMLCanvasElement>,
     layoutRef: unknown,
     scalePx: number,
+    ownershipKey: string,
   ): void {
+    this.activateContentOwnership(ownershipKey);
     this._layoutRef = layoutRef;
     this._scalePx   = scalePx;
     for (const [key, canvas] of chunks) {
-      this._chunks.set(key, { canvas, hadFallbacksFlag: false, builtWithGameplayFallbackFlag: false });
+      this._chunks.set(key, {
+        canvas,
+        contentGeneration: this._contentGeneration,
+        hadFallbacksFlag: false,
+        builtWithGameplayFallbackFlag: false,
+      });
       this._dirtyKeys.delete(key);
     }
   }
@@ -481,13 +534,19 @@ export class RoomChunkCache {
    */
   extractCleanChunks(): Map<string, HTMLCanvasElement> {
     const result = new Map<string, HTMLCanvasElement>();
+    if (this._contentOwnershipKey === null) return result;
     for (const [key, entry] of this._chunks) {
       // A chunk built while gameplay baking was forbidden may be missing real
       // edge shading / lighting (it drew cheap unshaded sprites instead) —
       // it is visually "not ready" even though it isn't literally dirty or
       // hadFallbacksFlag. Never adopt/prewarm-promote such a chunk into
       // another room-entry path as if it were a finished, shaded bake.
-      if (!entry.hadFallbacksFlag && !entry.builtWithGameplayFallbackFlag && !this._dirtyKeys.has(key)) {
+      if (
+        entry.contentGeneration === this._contentGeneration &&
+        !entry.hadFallbacksFlag &&
+        !entry.builtWithGameplayFallbackFlag &&
+        !this._dirtyKeys.has(key)
+      ) {
         result.set(key, entry.canvas);
       }
     }
@@ -559,6 +618,7 @@ export class RoomChunkCache {
     margin: number,
   ): boolean {
     // Scale mismatch means all existing chunks are stale — not covered.
+    if (this._contentOwnershipKey === null) return false;
     if (this._scalePx === 0 || this._scalePx !== scalePx) return false;
 
     const chunkSizePx = CHUNK_SIZE_BLOCKS * blockSizePx * scalePx;
@@ -585,7 +645,13 @@ export class RoomChunkCache {
         // that were only ever built via the cheap fallback path, and it stays
         // that way until something (e.g. the editor) clears the bake-forbidden
         // state and triggers a retry.
-        if (!entry || entry.hadFallbacksFlag || entry.builtWithGameplayFallbackFlag || this._dirtyKeys.has(key)) {
+        if (
+          !entry ||
+          entry.contentGeneration !== this._contentGeneration ||
+          entry.hadFallbacksFlag ||
+          entry.builtWithGameplayFallbackFlag ||
+          this._dirtyKeys.has(key)
+        ) {
           return false;
         }
       }
@@ -594,10 +660,30 @@ export class RoomChunkCache {
   }
 
   dispose(): void {
+    this._contentOwnershipKey = null;
+    this._contentGeneration = 0;
+    this._resetCachedContent();
+  }
+
+  /** Clears content-derived state while preserving configured budgets. */
+  private _resetCachedContent(): void {
     this._chunks.clear();
     this._dirtyKeys.clear();
+    this._lastVisibleFrame.clear();
     this._layoutRef = null;
     this._scalePx   = 0;
+    this._shadingVersion = EDGE_SHADING_VERSION;
+    this._lastBlockSizePx = 8;
+    this._frame = 0;
+    this._lastBakeUnlockGeneration = FP.getBakeUnlockGeneration();
+    this.stats.visibleChunkCount = 0;
+    this.stats.totalChunkCount = 0;
+    this.stats.dirtyChunkCount = 0;
+    this.stats.rebuiltThisFrame = 0;
+    this.stats.memoryEstimateKB = 0;
+    this.stats.evictedTotal = 0;
+    this.stats.rebuildMsThisFrame = 0;
+    this.stats.skippedThisFrame = 0;
   }
 
   // ── Rendering ─────────────────────────────────────────────────────────────
@@ -663,12 +749,18 @@ export class RoomChunkCache {
     // may have become allowed again since the last call.
     this._retryGameplayFallbackChunks();
     // ── Layout / scale / shading-version change detection ───────────────────
-    if (layoutRef !== this._layoutRef || scalePx !== this._scalePx || this._shadingVersion !== EDGE_SHADING_VERSION) {
+    // Scale changes make retained bitmap dimensions categorically invalid.
+    // Drop those canvases instead of retaining them as dirty fallbacks.
+    if (this._scalePx !== 0 && scalePx !== this._scalePx) {
+      this._contentGeneration++;
+      this._resetCachedContent();
+    }
+    if (layoutRef !== this._layoutRef || this._shadingVersion !== EDGE_SHADING_VERSION) {
       this.invalidateAll();
       this._layoutRef = layoutRef;
-      this._scalePx   = scalePx;
       this._shadingVersion = EDGE_SHADING_VERSION;
     }
+    this._scalePx = scalePx;
 
     // ── Compute visible chunk range ──────────────────────────────────────────
     // Uses _fillChunkRange so the range matches isViewportCovered exactly.
@@ -694,26 +786,31 @@ export class RoomChunkCache {
         const key   = `${cx},${cy}`;
         let   chunk = this._chunks.get(key);
 
-        const isDirty    = this._dirtyKeys.has(key);
-        const needsBuild = chunk === undefined || isDirty || chunk.hadFallbacksFlag;
+        const isDirty = this._dirtyKeys.has(key);
+        const hasForeignGeneration = chunk !== undefined && chunk.contentGeneration !== this._contentGeneration;
+        const needsBuild = chunk === undefined || hasForeignGeneration || isDirty || chunk.hadFallbacksFlag;
+        if (hasForeignGeneration) {
+          this._chunks.delete(key);
+          this._dirtyKeys.delete(key);
+          this._lastVisibleFrame.delete(key);
+          chunk = undefined;
+        }
 
         if (needsBuild) {
           // ── Per-frame rebuild budget check ──────────────────────────────
           if (this._maxChunksPerFrame > 0 && rebuiltCount >= this._maxChunksPerFrame) {
             // Budget exhausted — skip this chunk for this frame.
             // Ensure it will be retried next frame.
-            if (chunk !== undefined) {
+            if (chunk !== undefined && !hasForeignGeneration) {
               chunk.hadFallbacksFlag = true;
             }
             skippedCount++;
             const screenX = Math.round(cx * chunkSizePx + offsetXPx);
             const screenY = Math.round(cy * chunkSizePx + offsetYPx);
-            if (chunk !== undefined) {
-              // Blit existing (possibly stale) canvas.
-              ctx.drawImage(chunk.canvas, screenX, screenY);
-              visibleCount++;
-              this._lastVisibleFrame.set(key, this._frame);
-            } else {
+            // Never present a dirty canvas. The same deterministic neutral
+            // fallback is used whether a canvas exists or not, and no new
+            // canvas is allocated until the real rebuild can run.
+            {
               // No canvas yet — draw a cheap dark fallback so the area is not
               // an invisible hole while the chunk warms up.  Do not allocate a
               // canvas here; the real build happens on the next frame.
@@ -730,13 +827,22 @@ export class RoomChunkCache {
             const c    = document.createElement('canvas');
             c.width    = side;
             c.height   = side;
-            chunk      = { canvas: c, hadFallbacksFlag: true, builtWithGameplayFallbackFlag: false };
+            chunk      = {
+              canvas: c,
+              contentGeneration: this._contentGeneration,
+              hadFallbacksFlag: true,
+              builtWithGameplayFallbackFlag: false,
+            };
             this._chunks.set(key, chunk);
           }
 
           // ── Build chunk ─────────────────────────────────────────────────
           const chunkCtx = chunk.canvas.getContext('2d');
           if (chunkCtx !== null) {
+            chunkCtx.setTransform(1, 0, 0, 1, 0, 0);
+            chunkCtx.globalAlpha = 1;
+            chunkCtx.globalCompositeOperation = 'source-over';
+            chunkCtx.imageSmoothingEnabled = false;
             chunkCtx.clearRect(0, 0, chunk.canvas.width, chunk.canvas.height);
 
             const colMin = cx * CHUNK_SIZE_BLOCKS;
@@ -753,7 +859,8 @@ export class RoomChunkCache {
             // once baking becomes allowed again (see _retryGameplayFallbackChunks).
             const wasBakeForbidden = FP.isBakeForbiddenInGameplay();
 
-            const _ct0 = import.meta.env.DEV ? performance.now() : 0;
+            const devMode = _isDevMode();
+            const _ct0 = devMode ? performance.now() : 0;
             chunk.hadFallbacksFlag = buildChunkFn(
               chunkCtx,
               chunkOffX,
@@ -766,7 +873,7 @@ export class RoomChunkCache {
               rowMax,
             );
             chunk.builtWithGameplayFallbackFlag = wasBakeForbidden;
-            if (import.meta.env.DEV) {
+            if (devMode) {
               const chunkMs = performance.now() - _ct0;
               rebuildTotalMs += chunkMs;
               if (this._isBgLayer) {
@@ -782,7 +889,7 @@ export class RoomChunkCache {
         }
 
         // ── Blit chunk to virtual canvas ────────────────────────────────────
-        if (chunk !== undefined) {
+        if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration) {
           const screenX = Math.round(cx * chunkSizePx + offsetXPx);
           const screenY = Math.round(cy * chunkSizePx + offsetYPx);
           ctx.drawImage(chunk.canvas, screenX, screenY);

@@ -498,8 +498,10 @@ function _finishWarm(
   // Pass the current render-state key so that adoptPrewarmedWallChunks and
   // adoptPrewarmedBgChunks can reject any snapshot whose key does not match
   // (e.g. if a lighting/theme change happened mid-warm).
-  adoptPrewarmedWallChunks(room.id, state.scalePx, currentRenderStateKey);
-  adoptPrewarmedBgChunks(room, state.scalePx, currentRenderStateKey);
+  if (currentRenderStateKey !== undefined) {
+    adoptPrewarmedWallChunks(room.id, state.scalePx, currentRenderStateKey);
+    adoptPrewarmedBgChunks(room, state.scalePx, currentRenderStateKey);
+  }
 
   state.phase              = timedOut ? 'timedOut' : 'ready';
   state.usedFallbackRelease = timedOut;

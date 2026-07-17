@@ -20,7 +20,11 @@
  */
 
 import { WallSnapshot } from '../snapshot';
-import { RoomChunkCache, PrewarmChunkResult } from './chunkRenderCache';
+import {
+  RoomChunkCache,
+  PrewarmChunkResult,
+  createChunkCacheOwnershipKey,
+} from './chunkRenderCache';
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 export type { ChunkCacheStats } from './chunkRenderCache';
 import {
@@ -454,6 +458,21 @@ export function getWallChunkFallbackCounts(): { hadFallbacksCount: number; gamep
 }
 
 /**
+ * Atomically assigns the active wall cache to one room/render state/scale.
+ * A changed owner clears all prior-room canvases before partial prewarm
+ * adoption or lazy gameplay rebuilding can begin.
+ */
+export function activateWallChunkCacheOwnership(
+  roomId: string,
+  renderStateKey: string,
+  scalePx: number,
+): void {
+  _chunkCache.activateContentOwnership(
+    createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+  );
+}
+
+/**
  * Marks every wall chunk currently built with the gameplay unshaded fallback
  * as dirty, so it rebuilds with real shading the next time it renders. Call
  * this at the start of any visual-refresh phase where baking is known to be
@@ -614,6 +633,9 @@ export function prewarmWallChunksForRoom(
     //   (b) any stale renderStateKey is evicted before we read the old layout
     //       — preventing an outdated layout from being restored.
     const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
+    tempCache.activateContentOwnership(
+      createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+    );
     tempCache.setMaxChunksPerFrame(maxChunks);
 
     // ── Build / restore wall layout for target room ─────────────────────────
@@ -713,10 +735,10 @@ export function prewarmWallChunksForRoom(
 export function adoptPrewarmedWallChunks(
   roomId: string,
   scalePx: number,
-  currentRenderStateKey?: string,
+  currentRenderStateKey: string,
 ): PrewarmAdoptResult {
   // Adoption-time stale-key guard: refuse chunks built for a different render state.
-  if (currentRenderStateKey !== undefined) {
+  {
     const snapKey = getPrewarmSnapshotRenderStateKey(roomId);
     if (snapKey !== undefined && snapKey !== currentRenderStateKey) {
       if (import.meta.env.DEV) {
@@ -752,7 +774,12 @@ export function adoptPrewarmedWallChunks(
   // Extract non-dirty canvases and inject into the active cache.
   const chunks = tempCache.extractCleanChunks();
   if (chunks.size > 0) {
-    _chunkCache.injectWarmedChunks(chunks, layout, scalePx);
+    _chunkCache.injectWarmedChunks(
+      chunks,
+      layout,
+      scalePx,
+      createChunkCacheOwnershipKey(roomId, currentRenderStateKey, scalePx),
+    );
   }
 
   // Clean up prewarm store for this room.

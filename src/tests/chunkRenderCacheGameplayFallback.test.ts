@@ -23,6 +23,7 @@ const BLOCK_SIZE = 8;
 // (margin=0) and single-chunk math below land on exactly chunk "0,0" with no
 // ambiguity from viewport-edge rounding pulling in a neighbouring chunk.
 const SINGLE_CHUNK_VP = BLOCK_SIZE * (CHUNK_SIZE_BLOCKS - 1);
+const TEST_OWNER = 'test-room|test-render-state|scale=1';
 
 interface PokableChunkCache {
   _chunks: Map<string, { canvas: HTMLCanvasElement; hadFallbacksFlag: boolean; builtWithGameplayFallbackFlag: boolean }>;
@@ -43,13 +44,13 @@ test('freshly-injected chunk is considered core-covered (sanity baseline)', () =
   // CHUNK_MARGIN safety ring) needs the surrounding chunks too; see the
   // dedicated margin test below, which populates the full 3x3 neighbourhood.
   const cache = new RoomChunkCache();
-  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1);
+  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1, TEST_OWNER);
   assert.equal(cache.isViewportCoreCovered(0, 0, SINGLE_CHUNK_VP, SINGLE_CHUNK_VP, 1, BLOCK_SIZE), true);
 });
 
 test('isViewportCoreCovered returns false when the required chunk has builtWithGameplayFallbackFlag', () => {
   const cache = new RoomChunkCache();
-  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1);
+  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1, TEST_OWNER);
   poke(cache, '0,0').builtWithGameplayFallbackFlag = true;
 
   assert.equal(
@@ -69,7 +70,7 @@ test('isViewportCovered (with safety margin) returns false when any covered chun
       chunks.set(`${cx},${cy}`, fakeCanvas());
     }
   }
-  cache.injectWarmedChunks(chunks, {}, 1);
+  cache.injectWarmedChunks(chunks, {}, 1, TEST_OWNER);
   assert.equal(cache.isViewportCovered(0, 0, SINGLE_CHUNK_VP, SINGLE_CHUNK_VP, 1, BLOCK_SIZE), true);
 
   poke(cache, '1,1').builtWithGameplayFallbackFlag = true; // a margin-ring chunk, not the core one
@@ -83,7 +84,7 @@ test('isViewportCovered (with safety margin) returns false when any covered chun
 
 test('extractCleanChunks excludes chunks with builtWithGameplayFallbackFlag', () => {
   const cache = new RoomChunkCache();
-  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()], ['1,0', fakeCanvas()]]), {}, 1);
+  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()], ['1,0', fakeCanvas()]]), {}, 1, TEST_OWNER);
   poke(cache, '1,0').builtWithGameplayFallbackFlag = true;
 
   const clean = cache.extractCleanChunks();
@@ -93,7 +94,7 @@ test('extractCleanChunks excludes chunks with builtWithGameplayFallbackFlag', ()
 
 test('retryGameplayFallbackChunksNow marks gameplay-fallback chunks dirty and clears the flag', () => {
   const cache = new RoomChunkCache();
-  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1);
+  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()]]), {}, 1, TEST_OWNER);
   poke(cache, '0,0').builtWithGameplayFallbackFlag = true;
 
   cache.retryGameplayFallbackChunksNow();
@@ -109,7 +110,7 @@ test('retryGameplayFallbackChunksNow marks gameplay-fallback chunks dirty and cl
 
 test('getFallbackDiagnosticCounts reports hadFallbacksFlag and builtWithGameplayFallbackFlag counts independently', () => {
   const cache = new RoomChunkCache();
-  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()], ['1,0', fakeCanvas()], ['2,0', fakeCanvas()]]), {}, 1);
+  cache.injectWarmedChunks(new Map([['0,0', fakeCanvas()], ['1,0', fakeCanvas()], ['2,0', fakeCanvas()]]), {}, 1, TEST_OWNER);
   poke(cache, '0,0').hadFallbacksFlag = true;
   poke(cache, '1,0').builtWithGameplayFallbackFlag = true;
   // '2,0' stays clean.
