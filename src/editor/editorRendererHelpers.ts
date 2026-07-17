@@ -519,6 +519,7 @@ export function drawTransitionZone(
   color: string,
   doorNumber: number,
   isHovered: boolean,
+  isSelected: boolean = false,
 ): void {
   const gw = t.gradientWidthBlocks ?? 3;
   const isHoriz = t.direction === 'left' || t.direction === 'right';
@@ -589,6 +590,11 @@ export function drawTransitionZone(
   // Draw hover arrow pointing outward in the transition's facing direction
   if (isHovered) {
     _drawTransitionHoverArrow(ctx, t, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom);
+  }
+
+  // Draw draggable resize handles on the zone's non-trigger edges when selected
+  if (isSelected) {
+    _drawTransitionResizeHandles(ctx, t, xBlock, yBlock, wBlock, hBlock, ox, oy, zoom);
   }
 
   // Draw label with door number
@@ -676,6 +682,40 @@ function _drawTransitionHoverArrow(
   ctx.moveTo(endX, endY);
   ctx.lineTo(h2X, h2Y);
   ctx.stroke();
+
+  ctx.restore();
+}
+
+/** Draws small draggable handles along the three edges of the zone rect that aren't the trigger edge. */
+function _drawTransitionResizeHandles(
+  ctx: CanvasRenderingContext2D,
+  t: EditorTransition,
+  xBlock: number,
+  yBlock: number,
+  wBlock: number,
+  hBlock: number,
+  ox: number,
+  oy: number,
+  zoom: number,
+): void {
+  const bs = BLOCK_SIZE_SMALL;
+  const triggerEdge = t.direction === 'right' ? 'right' : t.direction === 'left' ? 'left'
+    : t.direction === 'down' ? 'bottom' : 'top';
+
+  const x0 = xBlock * bs * zoom + ox;
+  const y0 = yBlock * bs * zoom + oy;
+  const x1 = (xBlock + wBlock) * bs * zoom + ox;
+  const y1 = (yBlock + hBlock) * bs * zoom + oy;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+  ctx.lineWidth = Math.max(2, 3 * zoom);
+  ctx.setLineDash([]);
+
+  if (triggerEdge !== 'left') { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x0, y1); ctx.stroke(); }
+  if (triggerEdge !== 'right') { ctx.beginPath(); ctx.moveTo(x1, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
+  if (triggerEdge !== 'top') { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y0); ctx.stroke(); }
+  if (triggerEdge !== 'bottom') { ctx.beginPath(); ctx.moveTo(x0, y1); ctx.lineTo(x1, y1); ctx.stroke(); }
 
   ctx.restore();
 }

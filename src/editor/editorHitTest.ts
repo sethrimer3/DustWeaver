@@ -533,3 +533,54 @@ export function getTransitionEditorHitbox(t: EditorTransition): {
   const hBlock = isHoriz ? t.openingSizeBlocks : gw;
   return { xBlock: t.xBlock, yBlock: t.yBlock, wBlock, hBlock };
 }
+
+/** Which side of a transition's zone rect an edge-resize handle belongs to. */
+export type TransitionResizeEdge = 'left' | 'right' | 'top' | 'bottom';
+
+/** The rect edge that corresponds to the transition's trigger line — not draggable. */
+export function getTransitionTriggerEdge(t: EditorTransition): TransitionResizeEdge {
+  switch (t.direction) {
+    case 'right': return 'right';
+    case 'left': return 'left';
+    case 'down': return 'bottom';
+    case 'up': return 'top';
+  }
+}
+
+/**
+ * Hit-tests the cursor against the three draggable edges of a transition's
+ * zone rect (all edges except the trigger edge, which never moves).  Returns
+ * the edge under the cursor within `marginBlocks`, or null.
+ */
+export function hitTestTransitionResizeEdge(
+  t: EditorTransition,
+  wx: number,
+  wy: number,
+  marginBlocks: number,
+): TransitionResizeEdge | null {
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isHoriz = t.direction === 'left' || t.direction === 'right';
+  const wBlock = isHoriz ? gw : t.openingSizeBlocks;
+  const hBlock = isHoriz ? t.openingSizeBlocks : gw;
+  const { xBlock, yBlock } = t;
+  const triggerEdge = getTransitionTriggerEdge(t);
+
+  const candidates: { edge: TransitionResizeEdge; dist: number; inSpan: boolean }[] = [
+    { edge: 'left', dist: Math.abs(wx - xBlock), inSpan: wy >= yBlock - marginBlocks && wy <= yBlock + hBlock + marginBlocks },
+    { edge: 'right', dist: Math.abs(wx - (xBlock + wBlock)), inSpan: wy >= yBlock - marginBlocks && wy <= yBlock + hBlock + marginBlocks },
+    { edge: 'top', dist: Math.abs(wy - yBlock), inSpan: wx >= xBlock - marginBlocks && wx <= xBlock + wBlock + marginBlocks },
+    { edge: 'bottom', dist: Math.abs(wy - (yBlock + hBlock)), inSpan: wx >= xBlock - marginBlocks && wx <= xBlock + wBlock + marginBlocks },
+  ];
+
+  let best: TransitionResizeEdge | null = null;
+  let bestDist = Infinity;
+  for (const c of candidates) {
+    if (c.edge === triggerEdge) continue;
+    if (!c.inSpan) continue;
+    if (c.dist <= marginBlocks && c.dist < bestDist) {
+      best = c.edge;
+      bestDist = c.dist;
+    }
+  }
+  return best;
+}

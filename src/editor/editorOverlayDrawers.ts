@@ -179,7 +179,7 @@ export function drawEditorTransitions(
     else if (isLinkCandidate) color = TRANSITION_LINK_CANDIDATE;
     else if (t.isSecretDoor) color = sel ? SECRET_DOOR_SELECTED : SECRET_DOOR_COLOR;
     else if (sel) color = TRANSITION_SELECTED;
-    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1, isHovered || sel);
+    drawTransitionZone(ctx, t, room, offsetXPx, offsetYPx, zoom, color, tIndex + 1, isHovered || sel, sel);
   }
 }
 

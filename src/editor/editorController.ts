@@ -28,6 +28,7 @@ import {
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
 import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
+import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { createEditorUI, EditorUI } from './editorUI';
@@ -177,6 +178,9 @@ export function createEditorController(
 
   // Drag-to-move: original positions of selected elements at drag start
   const dragOriginalPositions: Map<number | string, { xBlock: number; yBlock: number }> = new Map();
+
+  // Edge-resize: original zone geometry of the transition being resized, captured at drag start.
+  let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number } | null = null;
 
   // ── Pending-edits persistence for multi-room editing ────────────────────
   // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
@@ -1273,6 +1277,27 @@ export function createEditorController(
             }
           }
         } else if (state.activeTool === EditorTool.Select) {
+          // If exactly one transition is already selected, check whether the
+          // click landed on one of its (non-trigger) zone edges — if so,
+          // begin an edge-resize drag instead of re-selecting/deselecting.
+          const soleSelectedTrans = state.selectedElements.length === 1 && state.selectedElements[0].type === 'transition'
+            ? state.roomData.transitions.find((t: EditorTransition) => t.uid === state.selectedElements[0].uid) ?? null
+            : null;
+          const grabbedEdge = soleSelectedTrans !== null
+            ? hitTestTransitionResizeEdge(soleSelectedTrans, state.cursorWorldX, state.cursorWorldY, 0.4)
+            : null;
+          if (soleSelectedTrans !== null && grabbedEdge !== null) {
+            state.isResizingTransition = true;
+            state.resizeTransitionUid = soleSelectedTrans.uid;
+            state.resizeEdge = grabbedEdge;
+            resizeOriginalGeometry = {
+              xBlock: soleSelectedTrans.xBlock,
+              yBlock: soleSelectedTrans.yBlock,
+              gradientWidthBlocks: soleSelectedTrans.gradientWidthBlocks ?? 3,
+              openingSizeBlocks: soleSelectedTrans.openingSizeBlocks,
+            };
+            pushSnapshot(history, state.roomData);
+          } else {
           const clicked = selectAtCursor(state);
           if (clicked) {
             if (inputState.isShiftHeld) {
@@ -1300,6 +1325,7 @@ export function createEditorController(
             state.isSelectionBoxActive = true;
             state.selectionBoxStartBlockX = state.cursorBlockX;
             state.selectionBoxStartBlockY = state.cursorBlockY;
+          }
           }
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           pushSnapshot(history, state.roomData);
@@ -1450,8 +1476,54 @@ export function createEditorController(
       }
     }
 
+    // Edge-resize for a selected transition
+    if (state.isResizingTransition && inputState.isMouseDown && state.roomData && resizeOriginalGeometry) {
+      const trans = state.roomData.transitions.find((t: EditorTransition) => t.uid === state.resizeTransitionUid);
+      if (trans) {
+        const orig = resizeOriginalGeometry;
+        const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+        const cx = state.cursorBlockX;
+        const cy = state.cursorBlockY;
+        if (state.resizeEdge === 'left') {
+          const rightEdge = orig.xBlock + (isHoriz ? orig.gradientWidthBlocks : orig.openingSizeBlocks);
+          const newXBlock = Math.min(cx, rightEdge - (isHoriz ? 0 : 1));
+          if (isHoriz) {
+            trans.gradientWidthBlocks = Math.max(0, rightEdge - newXBlock);
+            trans.xBlock = rightEdge - trans.gradientWidthBlocks;
+          } else {
+            trans.openingSizeBlocks = Math.max(1, rightEdge - newXBlock);
+            trans.xBlock = rightEdge - trans.openingSizeBlocks;
+            trans.positionBlock = trans.xBlock;
+          }
+        } else if (state.resizeEdge === 'right') {
+          if (isHoriz) {
+            trans.gradientWidthBlocks = Math.max(0, cx - orig.xBlock);
+          } else {
+            trans.openingSizeBlocks = Math.max(1, cx - orig.xBlock);
+          }
+        } else if (state.resizeEdge === 'top') {
+          const bottomEdge = orig.yBlock + (isHoriz ? orig.openingSizeBlocks : orig.gradientWidthBlocks);
+          const newYBlock = Math.min(cy, bottomEdge - (isHoriz ? 1 : 0));
+          if (isHoriz) {
+            trans.openingSizeBlocks = Math.max(1, bottomEdge - newYBlock);
+            trans.yBlock = bottomEdge - trans.openingSizeBlocks;
+            trans.positionBlock = trans.yBlock;
+          } else {
+            trans.gradientWidthBlocks = Math.max(0, bottomEdge - newYBlock);
+            trans.yBlock = bottomEdge - trans.gradientWidthBlocks;
+          }
+        } else if (state.resizeEdge === 'bottom') {
+          if (isHoriz) {
+            trans.openingSizeBlocks = Math.max(1, cy - orig.yBlock);
+          } else {
+            trans.gradientWidthBlocks = Math.max(0, cy - orig.yBlock);
+          }
+        }
+      }
+    }
+
     // Drag-to-move for Select tool
-    if (state.activeTool === EditorTool.Select && inputState.isMouseDown && state.selectedElements.length > 0 && !state.isLinkingTransition && !state.isSelectionBoxActive) {
+    if (state.activeTool === EditorTool.Select && inputState.isMouseDown && state.selectedElements.length > 0 && !state.isLinkingTransition && !state.isSelectionBoxActive && !state.isResizingTransition) {
       if (!state.isDragging) {
         const dxPx = inputState.mouseScreenXPx - inputState.clickScreenXPx;
         const dyPx = inputState.mouseScreenYPx - inputState.clickScreenYPx;
@@ -1480,6 +1552,13 @@ export function createEditorController(
       if (state.isDragging) {
         state.isDragging = false;
         dragOriginalPositions.clear();
+        applyEdits('metadata');
+      }
+      if (state.isResizingTransition) {
+        state.isResizingTransition = false;
+        state.resizeTransitionUid = -1;
+        state.resizeEdge = null;
+        resizeOriginalGeometry = null;
         applyEdits('metadata');
       }
       if (state.isSelectionBoxActive) {

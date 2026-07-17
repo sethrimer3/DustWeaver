@@ -118,6 +118,12 @@ export interface EditorState {
   /** Block coordinates where selection box started. */
   selectionBoxStartBlockX: number;
   selectionBoxStartBlockY: number;
+  /** Whether the user is dragging a resize handle on a selected transition's zone edge. */
+  isResizingTransition: boolean;
+  /** uid of the transition being resized, or -1. */
+  resizeTransitionUid: number;
+  /** Which edge is being dragged, or null. */
+  resizeEdge: 'left' | 'right' | 'top' | 'bottom' | null;
   /** Serialized clipboard data for copy/paste. */
   clipboard: string | null;
   /**
@@ -230,6 +236,9 @@ export function createEditorState(): EditorState {
     isSelectionBoxActive: false,
     selectionBoxStartBlockX: 0,
     selectionBoxStartBlockY: 0,
+    isResizingTransition: false,
+    resizeTransitionUid: -1,
+    resizeEdge: null,
     clipboard: null,
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
     pendingCrumbleVariant: 'normal',
