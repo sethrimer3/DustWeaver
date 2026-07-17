@@ -167,13 +167,29 @@ export function drawPlacementPreview(
 
   // Rect brush: show the selection rectangle while first click is pending.
   if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null) {
+    // Brush-tiled items (blocks/specialBlocks/liquids/ambient-light-blockers)
+    // fill the rect with non-overlapping copies of their own footprint —
+    // snap the outline to that true tiled area, not the raw drag box, so a
+    // 2x2 block never shows a preview larger than what will actually place.
+    const item = state.selectedPaletteItem;
+    const isBrushable = item !== null && (
+      item.category === 'blocks' ||
+      item.category === 'specialBlocks' ||
+      item.category === 'liquids' ||
+      (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1)
+    );
+    const itemPreview = getPlacementPreview(state);
+    const itemWBlock = isBrushable ? (itemPreview?.wBlock ?? 1) : 1;
+    const itemHBlock = isBrushable ? (itemPreview?.hBlock ?? 1) : 1;
     const rectPreview = getRectBrushPreview(
       state.cursorBlockX,
       state.cursorBlockY,
       state.brushRectStartBlockX,
       state.brushRectStartBlockY,
+      itemWBlock,
+      itemHBlock,
     );
-    if (rectPreview !== null) {
+    if (rectPreview !== null && rectPreview.w > 0 && rectPreview.h > 0) {
       drawBlockRect(ctx, rectPreview.x, rectPreview.y, rectPreview.w, rectPreview.h,
         offsetXPx, offsetYPx, zoom, 'rgba(100,200,255,0.18)', 2);
       const rx = rectPreview.x * BLOCK_SIZE_SMALL * zoom + offsetXPx;
@@ -184,6 +200,34 @@ export function drawPlacementPreview(
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 3]);
       ctx.strokeRect(rx, ry, rw, rh);
+      ctx.setLineDash([]);
+    }
+  }
+
+  // Square brush (3x3/5x5): outline the full painted area, scaled to the
+  // selected item's own footprint — e.g. a 2x2 block on a 3x3 brush outlines
+  // a 6x6 area, since the brush paints a 3x3 grid of non-overlapping 2x2
+  // copies rather than nine single-cell-offset copies.
+  if (state.brushMode === '3x3' || state.brushMode === '5x5') {
+    const itemPreview = getPlacementPreview(state);
+    const squarePreview = getSquareBrushPreview(
+      state.brushMode,
+      state.cursorBlockX,
+      state.cursorBlockY,
+      itemPreview?.wBlock ?? 1,
+      itemPreview?.hBlock ?? 1,
+    );
+    if (squarePreview !== null) {
+      drawBlockRect(ctx, squarePreview.x, squarePreview.y, squarePreview.w, squarePreview.h,
+        offsetXPx, offsetYPx, zoom, 'rgba(100,200,255,0.12)', 1);
+      const sx = squarePreview.x * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+      const sy = squarePreview.y * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+      const sw = squarePreview.w * BLOCK_SIZE_SMALL * zoom;
+      const sh = squarePreview.h * BLOCK_SIZE_SMALL * zoom;
+      ctx.strokeStyle = 'rgba(100,200,255,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx, sy, sw, sh);
       ctx.setLineDash([]);
     }
   }
@@ -505,6 +549,26 @@ export function drawEditorUIOverlays(
   // Cursor highlight
   drawBlockRect(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
     offsetXPx, offsetYPx, zoom, CURSOR_COLOR, 1);
+
+  // Delete tool: outline the square brush's erase area (3x3/5x5 are always
+  // single-cell-stepped for delete, since deletion targets whatever occupies
+  // each cell rather than a fixed-size placed item).
+  if (state.activeTool === EditorTool.Delete && (state.brushMode === '3x3' || state.brushMode === '5x5')) {
+    const squarePreview = getSquareBrushPreview(state.brushMode, state.cursorBlockX, state.cursorBlockY, 1, 1);
+    if (squarePreview !== null) {
+      const sx = squarePreview.x * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+      const sy = squarePreview.y * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+      const sw = squarePreview.w * BLOCK_SIZE_SMALL * zoom;
+      const sh = squarePreview.h * BLOCK_SIZE_SMALL * zoom;
+      ctx.fillStyle = 'rgba(255,80,80,0.12)';
+      ctx.fillRect(sx, sy, sw, sh);
+      ctx.strokeStyle = 'rgba(255,80,80,0.7)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(sx, sy, sw, sh);
+      ctx.setLineDash([]);
+    }
+  }
 
   // Hover tooltip (Select tool only)
   if (state.activeTool === EditorTool.Select && state.hoverElement !== null) {

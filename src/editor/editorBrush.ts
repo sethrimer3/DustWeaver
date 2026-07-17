@@ -88,14 +88,22 @@ export function getBrushCells(
       const x1 = Math.max(rectStartX, cursorX);
       const y0 = Math.min(rectStartY, cursorY);
       const y1 = Math.max(rectStartY, cursorY);
+      // Tile by the item's own footprint from the rect's top-left corner
+      // (matching the top-left placement anchor) so a 2x2 item fills the
+      // dragged area with non-overlapping 2x2 copies instead of an
+      // overlapping copy anchored at every single cell.
       const cells: BrushCell[] = [];
-      for (let y = y0; y <= y1; y++) {
-        for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y + itemHBlock - 1 <= y1; y += itemHBlock) {
+        for (let x = x0; x + itemWBlock - 1 <= x1; x += itemWBlock) {
           cells.push({ x, y });
         }
       }
       return cells;
     }
+
+    default:
+      // '3x3'/'5x5' are handled above via SQUARE_BRUSH_HALF_EXTENT.
+      return [{ x: cursorX, y: cursorY }];
   }
 }
 
@@ -167,19 +175,31 @@ export function getFillBrushCells(
 /**
  * Returns the bounding box of a rect brush drag for preview rendering.
  * Returns null when no drag is active.
+ *
+ * `itemWBlock`/`itemHBlock` (default 1) snap the box down to the true
+ * tiled placement area — e.g. dragging a 5-cell-wide box with a 2x2 item
+ * only fits two 2x2 copies (4 cells), so the box shows 4 wide, not 5. This
+ * matches `getBrushCells`'s 'rect' tiling exactly, so the preview never
+ * overstates the area that will actually be filled.
  */
 export function getRectBrushPreview(
   cursorX: number,
   cursorY: number,
   rectStartX: number | null,
   rectStartY: number | null,
+  itemWBlock = 1,
+  itemHBlock = 1,
 ): { x: number; y: number; w: number; h: number } | null {
   if (rectStartX == null || rectStartY == null) return null;
   const x0 = Math.min(rectStartX, cursorX);
   const x1 = Math.max(rectStartX, cursorX);
   const y0 = Math.min(rectStartY, cursorY);
   const y1 = Math.max(rectStartY, cursorY);
-  return { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  const rawW = x1 - x0 + 1;
+  const rawH = y1 - y0 + 1;
+  const w = Math.floor(rawW / itemWBlock) * itemWBlock;
+  const h = Math.floor(rawH / itemHBlock) * itemHBlock;
+  return { x: x0, y: y0, w, h };
 }
 
 /**
