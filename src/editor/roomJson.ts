@@ -14,6 +14,7 @@
 import type { BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
 import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
+import { legacyChallengeGateToRoomGate, normalizeRoomGateDef } from '../levels/gateDefs';
 import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
@@ -319,11 +320,21 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     };
   };
   const challengeFields = (json.challengeFields ?? []).map(normalizeChallengeRect);
-  const challengeGates = (json.challengeGates ?? []).map(normalizeChallengeRect);
+  const challengeGates: ReturnType<typeof normalizeChallengeRect>[] = [];
   const challengeTotems = (json.challengeTotems ?? []).map(element => ({
     uid: takeChallengeUid(element.uid),
     xBlock: Math.max(0, Math.floor(Number.isFinite(element.xBlock) ? element.xBlock : 0)),
     yBlock: Math.max(0, Math.floor(Number.isFinite(element.yBlock) ? element.yBlock : 0)),
+  }));
+  const gateUidSet = new Set<number>();
+  const gates = [
+    ...(json.gates ?? []),
+    ...(json.challengeGates ?? []).map(legacyChallengeGateToRoomGate),
+  ].map(gate => normalizeRoomGateDef(gate, {
+    widthBlocks: json.widthBlocks,
+    heightBlocks: json.heightBlocks,
+    usedUids: gateUidSet,
+    allocateUid: () => uid++,
   }));
 
   const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(container => ({
@@ -599,6 +610,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       challengeFields,
       challengeGates,
       challengeTotems,
+      gates,
       dustContainers,
       dustContainerPieces,
       dustBoostJars,

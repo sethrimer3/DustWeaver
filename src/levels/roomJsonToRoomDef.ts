@@ -29,6 +29,7 @@ import {
 import type { RoomJsonDef } from '../editor/roomJson';
 import { savedToLightDef } from './lightingSchema';
 import { extractLegacySkillBookWeaves } from './legacySkillBookMigration';
+import { legacyChallengeGateToRoomGate, normalizeRoomGateDef } from './gateDefs';
 import { buildCompleteBoundaryWalls } from './roomBoundaryWalls';
 import { hydrateAndValidateBakedWallTemplate } from './roomWallTemplateHash';
 import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -195,8 +196,9 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       ...extractLegacySkillBookWeaves(json.skillBooks),
     ],
     challengeFields: (json.challengeFields ?? []).map(element => ({ ...element })),
-    challengeGates: (json.challengeGates ?? []).map(element => ({ ...element })),
+    challengeGates: [],
     challengeTotems: (json.challengeTotems ?? []).map(element => ({ ...element })),
+    gates: [...(json.gates ?? []), ...(json.challengeGates ?? []).map(legacyChallengeGateToRoomGate)].map((gate, index) => normalizeRoomGateDef(gate, { widthBlocks: json.widthBlocks, heightBlocks: json.heightBlocks, allocateUid: () => index })),
   };
 
   // Propagate optional theme/background fields

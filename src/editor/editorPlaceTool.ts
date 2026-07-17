@@ -512,7 +512,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       targetSpawnBlock: [3, 3],
       positionBlock,
     });
-  } else if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
+  } else if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
     const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
     const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
     const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
@@ -522,10 +522,16 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const wBlock = Math.min(requestedW, room.widthBlocks - xBlock);
     const hBlock = Math.min(requestedH, room.heightBlocks - yBlock);
     if (wBlock < 1 || hBlock < 1) return;
-    const target = item.id === 'challenge_field'
-      ? (room.challengeFields ??= [])
-      : (room.challengeGates ??= []);
-    target.push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
+    if (item.id === 'challenge_field') {
+      (room.challengeFields ??= []).push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
+    } else {
+      const kind = item.id.slice(0, -5) as import('../levels/gateDefs').GateKind;
+      (room.gates ??= []).push({
+        uid: allocateUid(state), kind, xBlock, yBlock, wBlock, hBlock,
+        openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom',
+        ...(kind === 'speed' ? { requiredSpeed: 180 } : {}),
+      });
+    }
   } else if (item.id === 'challenge_totem') {
     const target = (room.challengeTotems ??= []);
     if (target.some(t => t.xBlock === bx && t.yBlock === by)) return;

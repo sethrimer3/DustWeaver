@@ -434,6 +434,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.challengeTotems?.length) {
     out.challengeTotems = json.challengeTotems.map(element => [element.uid, element.xBlock, element.yBlock]);
   }
+  if (json.gates?.length) out.gates = json.gates.map(gate => ({ ...gate }));
   if (json.skillBooks && json.skillBooks.length > 0) {
     out.skillBooks = json.skillBooks.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }

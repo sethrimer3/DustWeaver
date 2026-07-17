@@ -19,6 +19,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     skillTomb:        'skill_tomb',
     challengeField:   'challenge_field',
     challengeGate:    'challenge_gate',
+    gate:             'gate',
     challengeTotem:   'challenge_totem',
     dustContainer:    'dust_container',
     dustContainerPiece: 'dust_container_piece',

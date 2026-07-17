@@ -73,7 +73,7 @@ export function applyRoomDimensionChange(
     totem.xBlock = Math.min(Math.max(0, totem.xBlock), maxX);
     totem.yBlock = Math.min(Math.max(0, totem.yBlock), maxY);
   }
-  for (const rect of [...(room.challengeFields ?? []), ...(room.challengeGates ?? [])]) {
+  for (const rect of [...(room.challengeFields ?? []), ...(room.challengeGates ?? []), ...(room.gates ?? [])]) {
     clampZoneToDimensions(rect, room.widthBlocks, room.heightBlocks);
   }
 
@@ -231,6 +231,7 @@ export function applyEdgeResize(
     for (const element of [
       ...(room.challengeFields ?? []),
       ...(room.challengeGates ?? []),
+      ...(room.gates ?? []),
       ...(room.challengeTotems ?? []),
     ]) {
       element.xBlock += shiftX;

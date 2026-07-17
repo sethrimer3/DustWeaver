@@ -99,6 +99,8 @@ export interface PlayerProgress {
    * save/load, or game restart.
    */
   collectedDustContainerKeys: string[];
+  /** Permanently opened gates keyed by campaign, room, and stable gate UID. */
+  permanentlyOpenGateKeys: string[];
   /**
    * Optional starting health override applied only on the very first room load
    * of a new campaign session (when no existing player cluster exists).
@@ -149,6 +151,7 @@ export function createDefaultProgress(): PlayerProgress {
     hasCompletedEarlyAutoAssignment: false,
     collectedDustSwarmKeys: [],
     collectedDustContainerKeys: [],
+    permanentlyOpenGateKeys: [],
   };
 }
 

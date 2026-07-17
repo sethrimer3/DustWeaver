@@ -275,6 +275,27 @@ export function drawEditorSpawnAndTombs(
     const selected = isSelected('challengeTotem', totem.uid);
     drawMarker(ctx, totem.xBlock, totem.yBlock, offsetXPx, offsetYPx, zoom, selected ? '#ffd85a' : '#b85cff', 'C');
   }
+  const gatePreview = {
+    enemy: ['rgba(194,145,151,0.78)', 'X'], challenge: ['rgba(220,196,125,0.78)', 'S'],
+    heart: ['rgba(227,174,186,0.78)', 'H'], speed: ['rgba(151,207,220,0.78)', '>'],
+  } as const;
+  for (const gate of room.gates ?? []) {
+    const selected = isSelected('gate', gate.uid);
+    const [fill, label] = gatePreview[gate.kind];
+    const x = gate.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const y = gate.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const w = gate.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const h = gate.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = selected ? '#fff' : '#eef4f5';
+    ctx.lineWidth = selected ? 2 : 1;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = '#272b31';
+    ctx.font = `bold ${Math.max(8, Math.round(Math.min(14, 10 * zoom)))}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(label, x + w * 0.5, y + h * 0.5 + 3 * zoom);
+  }
 }
 
 // ============================================================================

@@ -266,6 +266,7 @@ export interface SavedRoomV2 {
   challengeFields?: [number, number, number, number, number][];
   challengeGates?: [number, number, number, number, number][];
   challengeTotems?: [number, number, number][];
+  gates?: import('./gateDefs').RoomGateDef[];
   skillBooks?: SavedPoint[];
   dustContainers?: SavedPoint[];
   /**

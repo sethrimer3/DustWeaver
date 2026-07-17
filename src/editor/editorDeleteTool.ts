@@ -145,6 +145,7 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
   for (const [elements, isPoint] of [
     [room.challengeFields ?? [], false],
     [room.challengeGates ?? [], false],
+    [room.gates ?? [], false],
     [room.challengeTotems ?? [], true],
   ] as const) {
     for (let i = 0; i < elements.length; i++) {
@@ -158,6 +159,14 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
         state.selectedElements = state.selectedElements.filter(selected => selected.uid !== removedUid);
         return;
       }
+    }
+  }
+  for (let i = 0; i < (room.gates ?? []).length; i++) {
+    const gate = room.gates![i];
+    if (hitTestZone(gate, bx, by)) {
+      room.gates!.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(selected => selected.uid !== gate.uid);
+      return;
     }
   }
 

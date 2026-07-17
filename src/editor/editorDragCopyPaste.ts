@@ -13,7 +13,7 @@ import {
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   SelectedElement, allocateUid, EditorRoomData, EditorGuideDustPath,
-  EditorChallengeRect, EditorChallengeTotem,
+  EditorChallengeRect, EditorChallengeTotem, EditorGate,
 } from './editorState';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ export function storeDragStartPositions(
     } else if (el.type === 'skillTomb') {
       const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
       if (t) positions.set(key, { xBlock: t.xBlock, yBlock: t.yBlock });
-    } else if (el.type === 'challengeField' || el.type === 'challengeGate' || el.type === 'challengeTotem') {
+    } else if (el.type === 'challengeField' || el.type === 'challengeGate' || el.type === 'challengeTotem' || el.type === 'gate') {
       const elements = el.type === 'challengeField' ? s.roomData.challengeFields
-        : el.type === 'challengeGate' ? s.roomData.challengeGates : s.roomData.challengeTotems;
+        : el.type === 'challengeGate' ? s.roomData.challengeGates : el.type === 'gate' ? s.roomData.gates : s.roomData.challengeTotems;
       const element = (elements ?? []).find(candidate => candidate.uid === el.uid);
       if (element) positions.set(key, { xBlock: element.xBlock, yBlock: element.yBlock });
     } else if (el.type === 'dustContainer') {
@@ -145,9 +145,9 @@ export function moveSelectedElements(
     } else if (el.type === 'skillTomb') {
       const t = s.roomData.skillTombs.find(t2 => t2.uid === el.uid);
       if (t) { t.xBlock = orig.xBlock + deltaX; t.yBlock = orig.yBlock + deltaY; }
-    } else if (el.type === 'challengeField' || el.type === 'challengeGate' || el.type === 'challengeTotem') {
+    } else if (el.type === 'challengeField' || el.type === 'challengeGate' || el.type === 'challengeTotem' || el.type === 'gate') {
       const elements = el.type === 'challengeField' ? s.roomData.challengeFields
-        : el.type === 'challengeGate' ? s.roomData.challengeGates : s.roomData.challengeTotems;
+        : el.type === 'challengeGate' ? s.roomData.challengeGates : el.type === 'gate' ? s.roomData.gates : s.roomData.challengeTotems;
       const element = (elements ?? []).find(candidate => candidate.uid === el.uid);
       if (element) {
         const width = 'wBlock' in element ? Number(element.wBlock) : 1;
@@ -256,6 +256,7 @@ export function serializeSelectedElements(
     skillTombs: EditorSkillTomb[];
     challengeFields: EditorChallengeRect[];
     challengeGates: EditorChallengeRect[];
+    gates: EditorGate[];
     challengeTotems: EditorChallengeTotem[];
     dustContainers: EditorDustContainer[];
     dustContainerPieces: EditorDustContainerPiece[];
@@ -276,7 +277,7 @@ export function serializeSelectedElements(
     fallingBlocks: EditorFallingBlock[];
     guideDustPaths: EditorGuideDustPath[];
   } = {
-    walls: [], enemies: [], saveTombs: [], skillTombs: [], challengeFields: [], challengeGates: [], challengeTotems: [],
+    walls: [], enemies: [], saveTombs: [], skillTombs: [], challengeFields: [], challengeGates: [], gates: [], challengeTotems: [],
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
     dustSwarms: [],
     lambdaAnchors: [],
@@ -304,6 +305,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'challengeGate') {
       const element = (room.challengeGates ?? []).find(candidate => candidate.uid === el.uid);
       if (element) data.challengeGates.push({ ...element });
+    } else if (el.type === 'gate') {
+      const element = (room.gates ?? []).find(candidate => candidate.uid === el.uid);
+      if (element) data.gates.push({ ...element });
     } else if (el.type === 'challengeTotem') {
       const element = (room.challengeTotems ?? []).find(candidate => candidate.uid === el.uid);
       if (element) data.challengeTotems.push({ ...element });
@@ -379,6 +383,7 @@ export function pasteFromClipboard(s: EditorState): void {
     skillTombs: EditorSkillTomb[];
     challengeFields?: EditorChallengeRect[];
     challengeGates?: EditorChallengeRect[];
+    gates?: EditorGate[];
     challengeTotems?: EditorChallengeTotem[];
     dustContainers?: EditorDustContainer[];
     dustContainerPieces?: EditorDustContainerPiece[];
@@ -412,7 +417,7 @@ export function pasteFromClipboard(s: EditorState): void {
   const allEntities: Array<{ xBlock: number; yBlock: number }> = [
     ...data.walls, ...data.enemies,
     ...(data.saveTombs ?? []), ...(data.skillTombs ?? []),
-    ...(data.challengeFields ?? []), ...(data.challengeGates ?? []), ...(data.challengeTotems ?? []),
+    ...(data.challengeFields ?? []), ...(data.challengeGates ?? []), ...(data.gates ?? []), ...(data.challengeTotems ?? []),
     ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
     ...(data.dustSwarms ?? []),
     ...(data.lambdaAnchors ?? []),
@@ -480,6 +485,11 @@ export function pasteFromClipboard(s: EditorState): void {
       target.push({ ...element, uid: newUid, xBlock: element.xBlock - minX + offsetX, yBlock: element.yBlock - minY + offsetY });
       newElements.push({ type, uid: newUid });
     }
+  }
+  for (const element of data.gates ?? []) {
+    const newUid = allocateUid(s);
+    (s.roomData.gates ??= []).push({ ...element, uid: newUid, xBlock: element.xBlock - minX + offsetX, yBlock: element.yBlock - minY + offsetY });
+    newElements.push({ type: 'gate', uid: newUid });
   }
   for (const element of data.challengeTotems ?? []) {
     const newUid = allocateUid(s);

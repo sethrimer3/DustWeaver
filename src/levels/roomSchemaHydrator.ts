@@ -271,6 +271,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   if (saved.challengeFields) json.challengeFields = saved.challengeFields.map(([uid, xBlock, yBlock, wBlock, hBlock]) => ({ uid, xBlock, yBlock, wBlock, hBlock }));
   if (saved.challengeGates) json.challengeGates = saved.challengeGates.map(([uid, xBlock, yBlock, wBlock, hBlock]) => ({ uid, xBlock, yBlock, wBlock, hBlock }));
   if (saved.challengeTotems) json.challengeTotems = saved.challengeTotems.map(([uid, xBlock, yBlock]) => ({ uid, xBlock, yBlock }));
+  if (saved.gates) json.gates = saved.gates.map(gate => ({ ...gate }));
 
   if (saved.theme) {
     const roomTheme = blockThemeRefToTheme(saved.theme);

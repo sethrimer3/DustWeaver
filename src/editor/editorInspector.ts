@@ -645,6 +645,26 @@ export function updateInspector(
       addField(div, 'Width (blocks)', String(rect.wBlock), value => callbacks?.onPropertyChange(`${prefix}.wBlock`, parseInt(value)));
       addField(div, 'Height (blocks)', String(rect.hBlock), value => callbacks?.onPropertyChange(`${prefix}.hBlock`, parseInt(value)));
     }
+  } else if (el.type === 'gate') {
+    const gate = (room.gates ?? []).find(candidate => candidate.uid === el.uid);
+    if (gate) {
+      addSelect(div, 'type', [
+        { label: 'Enemy Gate', value: 'enemy' }, { label: 'Challenge Gate', value: 'challenge' },
+        { label: 'Heart Gate', value: 'heart' }, { label: 'Speed Gate', value: 'speed' },
+      ], gate.kind, value => callbacks?.onPropertyChange('gate.kind', value));
+      addField(div, 'xBlock', String(gate.xBlock), value => callbacks?.onPropertyChange('gate.xBlock', parseInt(value)));
+      addField(div, 'yBlock', String(gate.yBlock), value => callbacks?.onPropertyChange('gate.yBlock', parseInt(value)));
+      addField(div, 'Width (blocks)', String(gate.wBlock), value => callbacks?.onPropertyChange('gate.wBlock', parseInt(value)));
+      addField(div, 'Height (blocks)', String(gate.hBlock), value => callbacks?.onPropertyChange('gate.hBlock', parseInt(value)));
+      addSelect(div, 'Open visual mode', [
+        { label: 'Dark Recessed', value: 'darkRecessed' }, { label: 'Fade Away', value: 'fadeAway' }, { label: 'Powder', value: 'powder' },
+      ], gate.openVisualMode, value => callbacks?.onPropertyChange('gate.openVisualMode', value));
+      addSelect(div, 'Open persistence', [
+        { label: 'Forever', value: 'forever' }, { label: 'Until Player Saves', value: 'untilPlayerSaves' },
+        { label: 'Until Player Leaves Room', value: 'untilPlayerLeavesRoom' },
+      ], gate.openPersistence, value => callbacks?.onPropertyChange('gate.openPersistence', value));
+      if (gate.kind === 'speed') addNumberField(div, 'Required speed (world units/s)', gate.requiredSpeed ?? 180, 0, 5000, value => callbacks?.onPropertyChange('gate.requiredSpeed', value));
+    }
   } else if (el.type === 'challengeTotem') {
     const totem = (room.challengeTotems ?? []).find(candidate => candidate.uid === el.uid);
     if (totem) {

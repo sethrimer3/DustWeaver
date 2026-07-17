@@ -66,6 +66,9 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const gate of room.challengeGates ?? []) {
     if (hitTestZone(gate, bx, by)) return { type: 'challengeGate', uid: gate.uid };
   }
+  for (const gate of room.gates ?? []) {
+    if (hitTestZone(gate, bx, by)) return { type: 'gate', uid: gate.uid };
+  }
   for (const totem of room.challengeTotems ?? []) {
     if (hitTestPoint(totem.xBlock, totem.yBlock, bx, by)) return { type: 'challengeTotem', uid: totem.uid };
   }

@@ -344,6 +344,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     challengeFields: (data.challengeFields ?? []).map(element => ({ ...element })),
     challengeGates: (data.challengeGates ?? []).map(element => ({ ...element })),
     challengeTotems: (data.challengeTotems ?? []).map(element => ({ ...element })),
+    gates: (data.gates ?? []).map(gate => ({ ...gate })),
     dustContainers: (data.dustContainers ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     dustContainerPieces: (data.dustContainerPieces ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     customBlockPlacements: (data.customBlockPlacements ?? []).length > 0

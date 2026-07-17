@@ -16,6 +16,7 @@ import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, Dec
 import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { EditorCustomBlockPlacement } from '../levels/customBlocks';
+import type { RoomGateDef } from '../levels/gateDefs';
 export type { EditorCustomBlockPlacement } from '../levels/customBlocks';
 
 // ── Ropes ─────────────────────────────────────────────────────────────────────
@@ -227,6 +228,7 @@ export interface EditorChallengeTotem {
   xBlock: number;
   yBlock: number;
 }
+export type EditorGate = RoomGateDef;
 
 // ── Crumble blocks ────────────────────────────────────────────────────────────
 
@@ -587,6 +589,7 @@ export interface EditorRoomData {
   challengeFields?: EditorChallengeRect[];
   challengeGates?: EditorChallengeRect[];
   challengeTotems?: EditorChallengeTotem[];
+  gates?: EditorGate[];
   dustContainers: EditorDustContainer[];
   dustContainerPieces: EditorDustContainerPiece[];
   dustBoostJars: EditorDustBoostJar[];
@@ -641,7 +644,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

@@ -162,6 +162,7 @@ export interface RoomJsonChallengeTotem {
   xBlock: number;
   yBlock: number;
 }
+export type RoomJsonGate = import('../levels/gateDefs').RoomGateDef;
 
 /** Skill Tomb — grants a specific dust skill/weave when interacted with. */
 export interface RoomJsonDustSkillTomb {
@@ -465,6 +466,7 @@ export interface RoomJsonDef {
   challengeFields?: RoomJsonChallengeRect[];
   challengeGates?: RoomJsonChallengeRect[];
   challengeTotems?: RoomJsonChallengeTotem[];
+  gates?: RoomJsonGate[];
   /** Skill Tombs — grant dust skills/weaves when interacted with. */
   dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */

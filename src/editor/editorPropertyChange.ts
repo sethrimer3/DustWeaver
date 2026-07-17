@@ -38,6 +38,7 @@ import type {
   BlockTheme,
   RopeDestructibility,
 } from './editorState';
+import { normalizeRequiredSpeed } from '../levels/gateDefs';
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
@@ -164,6 +165,20 @@ export function applyPropertyToElement(
       if (prop === `${prefix}.yBlock`) rect.yBlock = Math.max(0, Math.min(room.heightBlocks - rect.hBlock, Math.floor(numVal)));
       if (prop === `${prefix}.wBlock`) rect.wBlock = Math.max(1, Math.min(room.widthBlocks - rect.xBlock, Math.floor(numVal)));
       if (prop === `${prefix}.hBlock`) rect.hBlock = Math.max(1, Math.min(room.heightBlocks - rect.yBlock, Math.floor(numVal)));
+    }
+  } else if (el.type === 'gate') {
+    const gate = (room.gates ?? []).find(candidate => candidate.uid === el.uid);
+    if (gate) {
+      if (prop === 'gate.kind' && (value === 'enemy' || value === 'challenge' || value === 'heart' || value === 'speed')) gate.kind = value;
+      if (prop === 'gate.openVisualMode' && (value === 'darkRecessed' || value === 'fadeAway' || value === 'powder')) gate.openVisualMode = value;
+      if (prop === 'gate.openPersistence' && (value === 'forever' || value === 'untilPlayerSaves' || value === 'untilPlayerLeavesRoom')) gate.openPersistence = value;
+      if (Number.isFinite(numVal)) {
+        if (prop === 'gate.xBlock') gate.xBlock = Math.max(0, Math.min(room.widthBlocks - gate.wBlock, Math.floor(numVal)));
+        if (prop === 'gate.yBlock') gate.yBlock = Math.max(0, Math.min(room.heightBlocks - gate.hBlock, Math.floor(numVal)));
+        if (prop === 'gate.wBlock') gate.wBlock = Math.max(1, Math.min(room.widthBlocks - gate.xBlock, Math.floor(numVal)));
+        if (prop === 'gate.hBlock') gate.hBlock = Math.max(1, Math.min(room.heightBlocks - gate.yBlock, Math.floor(numVal)));
+        if (prop === 'gate.requiredSpeed') gate.requiredSpeed = normalizeRequiredSpeed(numVal);
+      }
     }
   } else if (el.type === 'challengeTotem') {
     const totem = (room.challengeTotems ?? []).find(candidate => candidate.uid === el.uid);
