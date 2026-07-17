@@ -9,7 +9,7 @@
 
 import { WorldState } from '../world';
 import { ClusterState } from './state';
-import { getWallJumpCandidate } from './playerWallJump';
+import { attemptWallJump } from './playerWallJump';
 import {
   applyNonAdditiveWaterJump,
   applyPlayerWaterVerticalForces,
@@ -26,14 +26,7 @@ import {
   NORMAL_MAX_FALL_WORLD_PER_SEC,
   FAST_MAX_FALL_WORLD_PER_SEC,
   JUMP_BUFFER_TICKS,
-  WALL_JUMP_X_SPEED_WORLD,
-  WALL_JUMP_Y_SPEED_WORLD,
-  WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
-  WALL_JUMP_FORCE_TIME_TICKS,
-  WALL_JUMP_LOCKOUT_TICKS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
-  WALL_JUMP_SECOND_Y_MULTIPLIER,
-  WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER,
   SKID_JUMP_MULTIPLIER,
 } from './movementConstants';
 
@@ -190,79 +183,15 @@ export function applyPlayerGravityAndJump(
       cluster.varJumpSpeedWorld   = -jumpSpeed;
     } else {
       // ── Wall jump (intent-filtered — see playerWallJump.ts) ───────────────
-      // getWallJumpCandidate applies wall-face quality filtering (vertical overlap
+      // attemptWallJump applies wall-face quality filtering (vertical overlap
       // + ledge suppression) and intent checks (wall slide, away input, airborne
       // ticks) before allowing a wall jump.  This prevents accidental launches off
       // small ledges, stair steps, or block corners.
-      const wjCandidate = getWallJumpCandidate(cluster, world);
-      let canJumpFromLeft  = wjCandidate.canJumpFromLeft;
-      let canJumpFromRight = wjCandidate.canJumpFromRight;
-
-      // When both sides are eligible, prefer the nearer wall.
-      // If equidistant (e.g., touching both walls simultaneously), prefer the
-      // wall on the side the player is facing / moving toward so the launch
-      // direction feels intentional rather than always favouring the left wall.
-      if (canJumpFromLeft && canJumpFromRight) {
-        const leftDist  = wjCandidate.leftDistWorld;
-        const rightDist = wjCandidate.rightDistWorld;
-        if (leftDist < rightDist) {
-          canJumpFromRight = false;
-        } else if (rightDist < leftDist) {
-          canJumpFromLeft = false;
-        } else {
-          // Equal distances: prefer the side the player is moving toward (or right by default).
-          if (cluster.velocityXWorld < 0) {
-            canJumpFromRight = false; // moving left → prefer left wall
-          } else {
-            canJumpFromLeft = false;  // moving right or stationary → prefer right wall
-          }
-        }
-      }
-
-      if (canJumpFromLeft || canJumpFromRight) {
-        const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
-        const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
-        const isInitialWallJump = cluster.wallJumpCountSinceReset === 0;
-        const isSecondWallJump  = cluster.wallJumpCountSinceReset === 1;
-        const firstJumpY = wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD;
-        const wallJumpY = isInitialWallJump
-          ? firstJumpY
-          : isSecondWallJump
-            ? firstJumpY * WALL_JUMP_SECOND_Y_MULTIPLIER
-            : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
-        // wallDir = +1 if wall is to the right, -1 if wall is to the left
-        const wallDir = canJumpFromRight ? 1 : -1;
-        // Launch away: strong diagonal push prevents same-wall climbing.
-        cluster.velocityXWorld          = -wallDir * wallJumpX;
-        cluster.velocityYWorld          = -wallJumpY;
-        cluster.isFastFallModeFlag      = 0;
-        cluster.wallJumpLockoutTicks    = WALL_JUMP_LOCKOUT_TICKS;
-        cluster.wallJumpForceTimeTicks  = WALL_JUMP_FORCE_TIME_TICKS;
-        cluster.wallJumpDirX            = -wallDir; // outward direction
-        cluster.isWallSlidingFlag       = 0;
-        cluster.coyoteTimeTicks         = 0;
-        cluster.wallJumpGraceLeftTicks  = 0;
-        cluster.wallJumpGraceRightTicks = 0;
-        cluster.wallJumpCountSinceReset += 1;
-        if (isInitialWallJump) {
-          world.wallJumpSkidDebrisBurstFlag = 1;
-          world.skidDebrisXWorld = cluster.positionXWorld;
-          world.skidDebrisYWorld = cluster.positionYWorld + cluster.halfHeightWorld;
-        }
-        // Spawn heavy debris cascade on the 3rd+ consecutive wall jump (weak/slippery).
-        if (cluster.wallJumpCountSinceReset > 2) {
-          world.weakWallJumpCascadeFlag = 1;
-          // Spawn at the wall contact edge (player side facing the wall)
-          world.weakWallJumpCascadeXWorld = cluster.positionXWorld
-            + wallDir * cluster.halfWidthWorld;
-          world.weakWallJumpCascadeYWorld = cluster.positionYWorld;
-          world.weakWallJumpCascadeWallSideX = wallDir;
-        }
-        // Start variable jump sustain for wall jumps too.
-        cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
-        cluster.varJumpSpeedWorld       = -wallJumpY;
-      } else {
-        // Fully airborne and no usable wall — buffer the jump
+      const fired = attemptWallJump(cluster, world);
+      if (!fired) {
+        // Fully airborne and no usable wall — buffer the jump. The buffer is
+        // also consumed the instant a wall becomes touchable (movement.ts),
+        // mirroring landing-buffered ground jumps.
         cluster.jumpBufferTicks = JUMP_BUFFER_TICKS;
       }
     }

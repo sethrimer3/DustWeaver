@@ -27,6 +27,14 @@ import {
   WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD,
   WALL_JUMP_LEDGE_SUPPRESS_WORLD,
   WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT,
+  WALL_JUMP_X_SPEED_WORLD,
+  WALL_JUMP_Y_SPEED_WORLD,
+  WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
+  WALL_JUMP_FORCE_TIME_TICKS,
+  WALL_JUMP_LOCKOUT_TICKS,
+  WALL_JUMP_SECOND_Y_MULTIPLIER,
+  WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER,
+  VAR_JUMP_TIME_TICKS,
   debugSpeedOverrides,
   ov,
 } from './movementConstants';
@@ -475,4 +483,84 @@ export function getWallJumpCandidate(
     dbgExclusion,
     dbgActiveSide,
   };
+}
+
+/**
+ * Finds a wall-jump candidate and, if one exists, applies the wall-jump
+ * velocity/state immediately. Returns true if a wall jump fired.
+ *
+ * Shared by the direct jump-press trigger (playerVerticalMovement.ts) and
+ * the buffered-jump trigger (movement.ts, fired the instant a wall becomes
+ * touchable — the wall-jump equivalent of landing-buffered ground jumps).
+ */
+export function attemptWallJump(cluster: ClusterState, world: WorldState): boolean {
+  const wjCandidate = getWallJumpCandidate(cluster, world);
+  let canJumpFromLeft  = wjCandidate.canJumpFromLeft;
+  let canJumpFromRight = wjCandidate.canJumpFromRight;
+
+  if (!canJumpFromLeft && !canJumpFromRight) {
+    return false;
+  }
+
+  // When both sides are eligible, prefer the nearer wall (see getWallJumpCandidate
+  // doc comment for tie-break rationale).
+  if (canJumpFromLeft && canJumpFromRight) {
+    const leftDist  = wjCandidate.leftDistWorld;
+    const rightDist = wjCandidate.rightDistWorld;
+    if (leftDist < rightDist) {
+      canJumpFromRight = false;
+    } else if (rightDist < leftDist) {
+      canJumpFromLeft = false;
+    } else {
+      if (cluster.velocityXWorld < 0) {
+        canJumpFromRight = false; // moving left → prefer left wall
+      } else {
+        canJumpFromLeft = false;  // moving right or stationary → prefer right wall
+      }
+    }
+  }
+
+  const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
+  const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
+  const isInitialWallJump = cluster.wallJumpCountSinceReset === 0;
+  const isSecondWallJump  = cluster.wallJumpCountSinceReset === 1;
+  const firstJumpY = wallJumpYBase + WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD;
+  const wallJumpY = isInitialWallJump
+    ? firstJumpY
+    : isSecondWallJump
+      ? firstJumpY * WALL_JUMP_SECOND_Y_MULTIPLIER
+      : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
+  // wallDir = +1 if wall is to the right, -1 if wall is to the left
+  const wallDir = canJumpFromRight ? 1 : -1;
+  // Launch away: strong diagonal push prevents same-wall climbing.
+  cluster.velocityXWorld          = -wallDir * wallJumpX;
+  cluster.velocityYWorld          = -wallJumpY;
+  cluster.isFastFallModeFlag      = 0;
+  cluster.wallJumpLockoutTicks    = WALL_JUMP_LOCKOUT_TICKS;
+  cluster.wallJumpForceTimeTicks  = WALL_JUMP_FORCE_TIME_TICKS;
+  cluster.wallJumpDirX            = -wallDir; // outward direction
+  cluster.isWallSlidingFlag       = 0;
+  cluster.coyoteTimeTicks         = 0;
+  cluster.wallJumpGraceLeftTicks  = 0;
+  cluster.wallJumpGraceRightTicks = 0;
+  cluster.wallJumpCountSinceReset += 1;
+  if (isInitialWallJump) {
+    world.wallJumpSkidDebrisBurstFlag = 1;
+    world.skidDebrisXWorld = cluster.positionXWorld;
+    world.skidDebrisYWorld = cluster.positionYWorld + cluster.halfHeightWorld;
+  }
+  // Spawn heavy debris cascade on the 3rd+ consecutive wall jump (weak/slippery).
+  if (cluster.wallJumpCountSinceReset > 2) {
+    world.weakWallJumpCascadeFlag = 1;
+    // Spawn at the wall contact edge (player side facing the wall)
+    world.weakWallJumpCascadeXWorld = cluster.positionXWorld
+      + wallDir * cluster.halfWidthWorld;
+    world.weakWallJumpCascadeYWorld = cluster.positionYWorld;
+    world.weakWallJumpCascadeWallSideX = wallDir;
+  }
+  // Start variable jump sustain for wall jumps too.
+  cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
+  cluster.varJumpSpeedWorld       = -wallJumpY;
+
+  return true;
 }

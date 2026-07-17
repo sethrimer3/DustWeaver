@@ -92,16 +92,21 @@ export function renderAirCurrentsDebug(
     drawArrowhead(ctx, ex, ey, dirX, dirY, Math.max(2, length * 0.35));
   }
 
-  // ── Legend ──────────────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(
-    `air currents: samples=${sampler.count} spacing=${AIR_CURRENTS_SAMPLE_SPACING_PX}px ` +
-    `arrow len = |wind| (clamped ${AIR_CURRENTS_MAX_SPEED_PX_S}px/s), arrow dir = wind dir`,
-    4, 14,
-  );
-
   ctx.restore();
+}
+
+/**
+ * Text-only legend line for the Air Currents overlay, kept separate from
+ * `renderAirCurrentsDebug` so callers can draw it on the high-resolution
+ * device canvas (see `gameRenderDeviceOverlay.ts`) instead of the low-res
+ * virtual canvas, where 8px monospace text upscales blurry.
+ *
+ * Reads `sampler.count` cached from the most recent `renderAirCurrentsDebug`
+ * call this frame (that call always runs first, before the device overlay).
+ */
+export function getAirCurrentsDebugLegendText(): string {
+  return (
+    `air currents: samples=${sampler.count} spacing=${AIR_CURRENTS_SAMPLE_SPACING_PX}px ` +
+    `arrow len = |wind| (clamped ${AIR_CURRENTS_MAX_SPEED_PX_S}px/s), arrow dir = wind dir`
+  );
 }

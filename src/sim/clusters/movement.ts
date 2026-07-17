@@ -77,7 +77,7 @@ import {
 } from './movementCollision';
 import { resolveStairsSurfaces } from './movementStairsCollision';
 import { resolvePlayerRopeCollisions } from '../ropes/ropeCollision';
-import { getWallJumpCandidate } from './playerWallJump';
+import { getWallJumpCandidate, attemptWallJump } from './playerWallJump';
 
 export { debugSpeedOverrides, PLAYER_JUMP_SPEED_WORLD, VAR_JUMP_TIME_TICKS, GRAPPLE_SUPER_JUMP_MULTIPLIER };
 
@@ -297,6 +297,15 @@ export function applyClusterMovement(world: WorldState): void {
                 cluster.velocityYWorld = WALL_SLIDE_MAX_FALL_SPEED;
               }
             }
+          }
+        }
+
+        // Fire a buffered jump the instant a wall becomes usable — mirrors
+        // the landing-buffered ground jump so a jump press slightly before
+        // reaching a wall isn't dropped.
+        if (cluster.isGroundedFlag === 0 && cluster.jumpBufferTicks > 0) {
+          if (attemptWallJump(cluster, world)) {
+            cluster.jumpBufferTicks = 0;
           }
         }
 

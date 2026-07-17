@@ -23,6 +23,9 @@ import {
   MOTE_STATE_DEPLETED,
 } from '../sim/motes/orderedMoteQueue';
 import { debugPanelVisibility } from '../ui/debugPanelManager';
+import { getPixelMaterialDebugCounterText } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
+import { getAirCurrentsDebugLegendText } from '../render/pixelMaterials/airCurrentsDebugRenderer';
+import { getAirCurrentsDebugEnabled } from '../ui/renderSettings';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -83,6 +86,20 @@ export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayCo
     const roomLabel = currentRoom.name;
     const labelWidthPx = deviceCtx.measureText(roomLabel).width;
     deviceCtx.fillText(roomLabel, (virtualCanvas.width - labelWidthPx) * 0.5, 22);
+  }
+
+  // ── Sand / air-currents counter readout (gated behind "particles" panel) ─
+  // Drawn here on the device canvas (not the low-res virtual canvas) so the
+  // text stays crisp at native display resolution.
+  if (debugPanelVisibility.particles) {
+    deviceCtx.font = '8px monospace';
+    deviceCtx.textAlign = 'left';
+    deviceCtx.textBaseline = 'top';
+    deviceCtx.fillStyle = 'rgba(255,255,255,0.85)';
+    deviceCtx.fillText(getPixelMaterialDebugCounterText(world), 4, 4);
+    if (getAirCurrentsDebugEnabled()) {
+      deviceCtx.fillText(getAirCurrentsDebugLegendText(), 4, 14);
+    }
   }
 
   // ── Mote / particle stats (gated behind "particles" panel) ───────────────

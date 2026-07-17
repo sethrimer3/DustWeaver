@@ -57,17 +57,20 @@ export function renderPixelMaterialDebug(
     }
   }
 
-  // ── Counter readout ────────────────────────────────────────────────────
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = '8px monospace';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(
+  ctx.restore();
+}
+
+/**
+ * Text-only counter readout for the pixel-material debug overlay, kept
+ * separate from `renderPixelMaterialDebug` so callers can draw it on the
+ * high-resolution device canvas (see `gameRenderDeviceOverlay.ts`) instead of
+ * the low-res virtual canvas, where 8px monospace text upscales blurry.
+ */
+export function getPixelMaterialDebugCounterText(world: WorldState): string {
+  const system = world.pixelMaterialSystem;
+  return (
     `sand: particles=${system.particleCount} cells=${system.occupiedCount} ` +
     `active=${system.activeCount} sleep=${system.sleepingCount} ` +
-    `wind=${system.windImpulsesThisTick} hit=${system.windParticlesAffectedThisTick}`,
-    4, 4,
+    `wind=${system.windImpulsesThisTick} hit=${system.windParticlesAffectedThisTick}`
   );
-
-  ctx.restore();
 }
