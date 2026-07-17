@@ -191,6 +191,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
   { id: 'dialogue_trigger', label: 'Dialogue Trigger', category: 'triggers' },
+  { id: 'challenge_field', label: 'Challenge Field', category: 'triggers', defaultWidthBlocks: 4, defaultHeightBlocks: 4 },
+  { id: 'challenge_gate', label: 'Challenge Gate', category: 'triggers', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
+  { id: 'challenge_totem', label: 'Challenge Totem', category: 'objects' },
   // Collectables (items the player can pick up for permanent upgrades)
   { id: 'skill_tomb',            label: 'Skill Tomb',            category: 'collectables' },
   { id: 'dust_container',        label: 'Dust Container',        category: 'collectables', isDustContainerItem: 1 },
