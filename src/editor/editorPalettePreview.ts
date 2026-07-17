@@ -191,6 +191,21 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     extraCss: `border-radius: 6px 6px 6px 0px; border: 2px solid rgba(80,160,255,0.8); box-sizing: border-box;`,
     glyph: '…',
   },
+  challenge_field: {
+    bg: '#32105c',
+    extraCss: `border: 2px solid rgba(190,110,255,0.9); box-sizing: border-box;`,
+    glyph: 'C',
+  },
+  challenge_gate: {
+    bg: '#25103d',
+    extraCss: `border: 3px double rgba(255,215,90,0.9); box-sizing: border-box;`,
+    glyph: 'S',
+  },
+  challenge_totem: {
+    bg: '#42126e',
+    extraCss: `border-radius: 5px 5px 1px 1px; border: 2px solid rgba(210,145,255,0.9); box-sizing: border-box;`,
+    glyph: 'C',
+  },
 
   // ── Collectables ───────────────────────────────────────────────────────────
   dust_swarm: {

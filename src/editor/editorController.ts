@@ -1715,6 +1715,16 @@ export function createEditorController(
     } else {
       state.hoverElement = null;
     }
+    let resizeCursor = 'default';
+    const selectedForCursor = state.selectedElements.length === 1 ? state.selectedElements[0] : null;
+    if (selectedForCursor?.type === 'challengeField' || selectedForCursor?.type === 'challengeGate') {
+      const elements = selectedForCursor.type === 'challengeField' ? state.roomData?.challengeFields : state.roomData?.challengeGates;
+      const rect = (elements ?? []).find(element => element.uid === selectedForCursor.uid);
+      const edge = rect ? hitTestRectResizeEdge(rect, state.cursorWorldX, state.cursorWorldY) : null;
+      if (edge === 'left' || edge === 'right') resizeCursor = 'ew-resize';
+      if (edge === 'top' || edge === 'bottom') resizeCursor = 'ns-resize';
+    }
+    canvas.style.cursor = resizeCursor;
 
     // Room-complexity warning: check at most once per completed operation
     // (drag/paint/paste/fill/undo/redo), never mid-drag.

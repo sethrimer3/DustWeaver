@@ -7,6 +7,10 @@ import {
   updateChallengeFields,
 } from '../sim/challengeMode';
 import { applyPlayerDamageWithKnockback } from '../sim/playerDamage';
+import { createWorldState } from '../sim/world';
+import { createClusterState } from '../sim/clusters/state';
+import { loadRoomChallengeElements, updateRoomChallengeElements } from '../screens/gameRoomChallenge';
+import type { RoomDef } from '../levels/roomDef';
 
 const BLOCK = 8;
 const fields = [
@@ -82,4 +86,20 @@ test('field cooldown rearms at exact AABB separation and requires reentry', () =
   p.positionYWorld = 32;
   updateChallengeFields(state, p, BLOCK);
   assert.equal(state.isActive, true);
+});
+
+test('gate collision and visibility share active state and reset on room reload', () => {
+  const world = createWorldState(16.666);
+  world.clusters.push(createClusterState(1, 0, 0, 1, 3));
+  const room = { id: 'gates', challengeGates: [{ uid: 9, xBlock: 3, yBlock: 2, wBlock: 1, hBlock: 4 }] } as RoomDef;
+  loadRoomChallengeElements(world, room);
+  const wallIndex = world.challengeMode.gates[0].wallIndex;
+  assert.deepEqual([world.wallWWorld[wallIndex], world.wallIsInvisibleFlag[wallIndex]], [BLOCK, 0]);
+  world.challengeMode.isActive = true;
+  updateRoomChallengeElements(world);
+  assert.deepEqual([world.wallWWorld[wallIndex], world.wallIsInvisibleFlag[wallIndex]], [0, 1]);
+  world.wallCount = 0;
+  loadRoomChallengeElements(world, room);
+  const reloadedIndex = world.challengeMode.gates[0].wallIndex;
+  assert.deepEqual([world.wallWWorld[reloadedIndex], world.wallIsInvisibleFlag[reloadedIndex]], [BLOCK, 0]);
 });

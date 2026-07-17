@@ -257,6 +257,9 @@ export function countRoomDefCategories(room: RoomDef): RoomComplexityCategoryCou
       (room.ropes?.length ?? 0) +
       room.saveTombs.length +
       (room.skillTombs?.length ?? 0) +
+      (room.challengeFields?.length ?? 0) +
+      (room.challengeGates?.length ?? 0) +
+      (room.challengeTotems?.length ?? 0) +
       (room.springboards?.length ?? 0) +
       (room.bouncePads?.length ?? 0) +
       (room.kineticBlocks?.length ?? 0) +

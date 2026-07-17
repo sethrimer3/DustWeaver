@@ -513,13 +513,19 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       positionBlock,
     });
   } else if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
-    const wBlock = Math.min(item.defaultWidthBlocks ?? 1, room.widthBlocks - bx);
-    const hBlock = Math.min(item.defaultHeightBlocks ?? 1, room.heightBlocks - by);
+    const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
+    const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
+    const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
+    const yBlock = rectStartY === null ? by : Math.min(rectStartY, by);
+    const requestedW = rectStartX === null ? item.defaultWidthBlocks ?? 1 : Math.abs(bx - rectStartX) + 1;
+    const requestedH = rectStartY === null ? item.defaultHeightBlocks ?? 1 : Math.abs(by - rectStartY) + 1;
+    const wBlock = Math.min(requestedW, room.widthBlocks - xBlock);
+    const hBlock = Math.min(requestedH, room.heightBlocks - yBlock);
     if (wBlock < 1 || hBlock < 1) return;
     const target = item.id === 'challenge_field'
       ? (room.challengeFields ??= [])
       : (room.challengeGates ??= []);
-    target.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
+    target.push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
   } else if (item.id === 'challenge_totem') {
     const target = (room.challengeTotems ??= []);
     if (target.some(t => t.xBlock === bx && t.yBlock === by)) return;

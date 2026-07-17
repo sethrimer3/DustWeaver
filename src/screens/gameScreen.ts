@@ -1274,8 +1274,7 @@ export function startGameScreen(
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
-    const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger, grappleFireTriggered } =
-      processPlayerCommands({
+    const commandResult = processPlayerCommands({
         inputState, world, canvas,
         offsetXPx, offsetYPx, zoom,
         virtualWidthPx, virtualHeightPx,
@@ -1293,6 +1292,8 @@ export function startGameScreen(
         clearLambdaAnchorLink: lambdaAnchorState.clearLambdaAnchorLink,
         lambdaTeleportFlash: lambdaAnchorState.lambdaTeleportFlash,
       });
+    const { moveDx, jumpTriggered, openPause, interactInputPulseTrigger, grappleFireTriggered } = commandResult;
+    let { interactTriggered } = commandResult;
 
     let pendingGrappleFireSfx = grappleFireTriggered;
 
@@ -1303,7 +1304,7 @@ export function startGameScreen(
 
     if (interactInputPulseTrigger) {
       interactInputPulseMs = 150;
-      interactWithNearbyChallengeTotem(world);
+      if (interactWithNearbyChallengeTotem(world)) interactTriggered = false;
     }
 
     if (openPause) {
