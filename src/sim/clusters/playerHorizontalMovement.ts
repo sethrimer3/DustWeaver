@@ -20,10 +20,7 @@ import {
   AIR_ACCELERATION_PER_SEC2,
   TURN_ACCELERATION_PER_SEC2,
   WALL_JUMP_X_SPEED_WORLD,
-  SPRINT_SPEED_MULTIPLIER,
-  SPRINT_FRICTION_MULTIPLIER,
   SKID_FRICTION_MULTIPLIER,
-  SKID_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_HALF_WIDTH_WORLD,
   WALL_JUMP_AIR_ACCEL_MULTIPLIER,
@@ -61,7 +58,7 @@ export function applyPlayerHorizontalMovement(
   // When holding down (without shift), block horizontal acceleration.
   // When holding shift+down (sliding), allow normal input.
   const isHoldingDown = world.playerCrouchHeldFlag === 1;
-  if (isHoldingDown && world.playerSprintHeldFlag === 0 && isGrounded) {
+  if (isHoldingDown && isGrounded) {
     inputDx = 0;
   }
 
@@ -70,15 +67,24 @@ export function applyPlayerHorizontalMovement(
   // to the facing direction (changing direction while sprinting).
   // Ice surfaces suppress skidding — there is no traction to skid on.
   {
-    const isFacingLeft = cluster.isFacingLeftFlag === 1;
-    const isMovingRight = cluster.velocityXWorld > SKID_VELOCITY_THRESHOLD_WORLD;
-    const isMovingLeft = cluster.velocityXWorld < -SKID_VELOCITY_THRESHOLD_WORLD;
-    const isTravelingOppositeToFacing =
-      (isFacingLeft && isMovingRight) || (!isFacingLeft && isMovingLeft);
-    if (world.playerSprintHeldFlag === 1 && isGrounded && isTravelingOppositeToFacing && cluster.isGroundedOnIceFlag === 0) {
+    const speed = Math.abs(cluster.velocityXWorld);
+    const isReversing = inputDx !== 0 && inputDx * cluster.velocityXWorld < 0;
+    const canSkid = isGrounded && isReversing
+      && speed >= GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC
+      && cluster.isGroundedOnIceFlag === 0
+      && cluster.isOnUltraIceFlag === 0
+      && world.isPlayerInWaterFlag === 0
+      && world.isGrappleActiveFlag === 0
+      && world.isGrappleStuckFlag === 0;
+    if (canSkid) {
+      if (cluster.isSkiddingFlag === 0) {
+        cluster.skidEntrySpeedWorld = speed;
+        cluster.skidTravelDirectionX = cluster.velocityXWorld < 0 ? -1 : 1;
+      }
       cluster.isSkiddingFlag = 1;
     } else {
       cluster.isSkiddingFlag = 0;
+      if (!isGrounded) cluster.skidEntrySpeedWorld = 0;
     }
   }
 
@@ -100,7 +106,6 @@ export function applyPlayerHorizontalMovement(
 
   if (world.isGrappleActiveFlag === 0) {
     const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
-    const sprintMult = ov(debugSpeedOverrides.sprintMultiplier, SPRINT_SPEED_MULTIPLIER);
     const baseGroundAccel = ov(debugSpeedOverrides.groundAccelWorld, GROUND_ACCELERATION_PER_SEC2);
     const baseGroundDecel = ov(debugSpeedOverrides.groundDecelWorld, GROUND_DECELERATION_PER_SEC2);
     const baseAirAccel = ov(debugSpeedOverrides.airAccelWorld, AIR_ACCELERATION_PER_SEC2);
@@ -124,9 +129,7 @@ export function applyPlayerHorizontalMovement(
       if (isGrounded) {
         // ── Grounded, holding input ──────────────────────────────────────
         const isOnIce = cluster.isGroundedOnIceFlag === 1;
-        const groundCap = cluster.isSprintingFlag === 1
-          ? baseRunSpeed * sprintMult
-          : baseRunSpeed;
+        const groundCap = baseRunSpeed;
         const absVBefore = Math.abs(cluster.velocityXWorld);
         if (isOnIce) {
           // Ice traction: no turn boost, slow acceleration regardless of direction.
@@ -149,8 +152,6 @@ export function applyPlayerHorizontalMovement(
           let decel = baseGroundDecel;
           if (cluster.isSkiddingFlag === 1) {
             decel *= SKID_FRICTION_MULTIPLIER;
-          } else if (world.playerSprintHeldFlag === 1) {
-            decel *= SPRINT_FRICTION_MULTIPLIER;
           }
           const dv = decel * dtSec;
           if (cluster.velocityXWorld > 0) {

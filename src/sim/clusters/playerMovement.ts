@@ -105,21 +105,12 @@ export function tickPlayerMovement(
 
   // ── Sprint state ──────────────────────────────────────────────────
   {
-    if (world.playerSprintHeldFlag === 1 && cluster.isGroundedFlag === 1) {
-      cluster.isSprintingFlag = 1;
-    } else {
-      cluster.isSprintingFlag = 0;
-    }
+    cluster.isSprintingFlag = 0;
   }
 
   // ── Slide state (shift + down on ground) ──────────────────────────
   {
-    if (world.playerSprintHeldFlag === 1 && world.playerCrouchHeldFlag === 1
-      && cluster.isGroundedFlag === 1) {
-      cluster.isSlidingFlag = 1;
-    } else {
-      cluster.isSlidingFlag = 0;
-    }
+    cluster.isSlidingFlag = 0;
   }
 
   // ── Crouch state ──────────────────────────────────────────────────

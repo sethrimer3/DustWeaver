@@ -53,7 +53,7 @@ import {
   COYOTE_TIME_TICKS,
   WALL_SLIDE_MAX_FALL_SPEED,
   WALL_JUMP_GRACE_TICKS,
-  SKID_JUMP_MULTIPLIER,
+  getSkidJumpLaunchSpeedWorld,
   GRAPPLE_SUPER_JUMP_MULTIPLIER,
   ROLLING_ENEMY_SPRITE_RADIUS_WORLD,
   FLYING_EYE_VERTICAL_MARGIN_WORLD,
@@ -90,6 +90,8 @@ export function applyClusterMovement(world: WorldState): void {
 
   // Reset per-tick landing skid factor (set again below if player just landed at high speed).
   world.playerLandingSkidSpeedFactor = 0.0;
+  world.playerSkidEntrySpeedWorld = 0.0;
+  world.playerSkidTravelDirectionX = 0.0;
   // Reset per-tick weak wall jump cascade flag (set again below if a 3rd+ wall jump fires).
   world.weakWallJumpCascadeFlag = 0;
 
@@ -329,7 +331,7 @@ export function applyClusterMovement(world: WorldState): void {
           if (cluster.jumpBufferTicks > 0) {
             const baseJumpSpeedLand = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
             const landJumpSpeed = cluster.isSkiddingFlag === 1
-              ? baseJumpSpeedLand * SKID_JUMP_MULTIPLIER
+              ? getSkidJumpLaunchSpeedWorld(cluster.skidEntrySpeedWorld)
               : baseJumpSpeedLand;
             cluster.velocityYWorld      = -landJumpSpeed;
             cluster.isGroundedFlag      = 0;
@@ -459,6 +461,10 @@ export function applyClusterMovement(world: WorldState): void {
      || world.playerLandingSkidSpeedFactor > 0)
   ) {
     world.isPlayerSkiddingFlag = 1;
+    if (player.isSkiddingFlag === 1) {
+      world.playerSkidEntrySpeedWorld = player.skidEntrySpeedWorld;
+      world.playerSkidTravelDirectionX = player.skidTravelDirectionX;
+    }
     if (world.playerLandingSkidSpeedFactor > 0) {
       // Landing skid: center the debris on the player's feet, not just a front corner.
       world.skidDebrisXWorld = player.positionXWorld;

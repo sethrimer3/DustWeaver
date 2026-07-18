@@ -4,6 +4,7 @@
  */
 
 import { WorldState } from '../sim/world';
+import { getSkidParticleSpeedScale } from '../sim/clusters/movementConstants';
 
 const MAX_DEBRIS = 120;
 const DEBRIS_LIFETIME_MS = 400;
@@ -45,7 +46,10 @@ export class SkidDebrisRenderer {
       // (1 + landingFactor), so faster landings kick up more and farther dust.
       // Normal skid (no landing): effectMultiplier = 1.0 (no extra scale).
       const landFactor = world.playerLandingSkidSpeedFactor;
-      const effectMultiplier = 1.0 + landFactor;
+      const isLandingSkid = landFactor > 0;
+      const effectMultiplier = isLandingSkid
+        ? 1.0 + landFactor
+        : getSkidParticleSpeedScale(world.playerSkidEntrySpeedWorld);
 
       // Grapple-stuck skid uses its own multiplier (applied on top of effectMultiplier).
       const baseRate = world.isGrappleStuckFlag === 1
@@ -68,7 +72,10 @@ export class SkidDebrisRenderer {
         this.xWorld[i] = world.skidDebrisXWorld + (this.nextRandom() - 0.5) * spreadX;
         this.yWorld[i] = world.skidDebrisYWorld - this.nextRandom() * spreadY;
         // Debris flies upward and slightly outward
-        this.vxWorld[i] = (this.nextRandom() - 0.5) * vxVar;
+        const inheritedVx = isLandingSkid
+          ? 0
+          : world.playerSkidTravelDirectionX * world.playerSkidEntrySpeedWorld * 0.18;
+        this.vxWorld[i] = inheritedVx + (this.nextRandom() - 0.5) * vxVar;
         this.vyWorld[i] = -(this.nextRandom() * vyRange + vyMin);
         this.ageMs[i] = 0;
         this.colorIdx[i] = (this.nextRandom() * COLORS.length) | 0;

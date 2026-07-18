@@ -5,7 +5,7 @@ import {
   blockSoundHardnessIndexToName,
   type BlockSoundHardness,
 } from '../levels/roomDef';
-import { FAST_MAX_FALL_WORLD_PER_SEC, MAX_RUN_SPEED_WORLD_PER_SEC, SPRINT_SPEED_MULTIPLIER } from '../sim/clusters/movementConstants';
+import { FAST_MAX_FALL_WORLD_PER_SEC, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC } from '../sim/clusters/movementConstants';
 import { GRAPPLE_ZIP_SPEED_WORLD_PER_SEC } from '../sim/clusters/grappleZip';
 import { SWORD_STATE_GUARD_SLASHING, SWORD_STATE_SLASHING } from '../sim/weaves/swordWeave';
 
@@ -131,12 +131,10 @@ export function updatePlayerSfx(
 
   if (isGrounded === 1 && Math.abs(player.velocityXWorld) > 18 && world.playerMoveInputDxWorld !== 0) {
     if (state.stepTicksUntilNext <= 0) {
-      const sprintT = player.isSprintingFlag === 1
-        ? Math.min(1, Math.abs(player.velocityXWorld) / (MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER))
-        : Math.min(1, Math.abs(player.velocityXWorld) / MAX_RUN_SPEED_WORLD_PER_SEC);
-      const volume = player.isSprintingFlag === 1 ? 0.8 + sprintT * 0.35 : 0.55 + sprintT * 0.2;
+      const sprintT = Math.min(1, Math.abs(player.velocityXWorld) / GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
+      const volume = 0.55 + sprintT * 0.2;
       sfx.play(stepNameForHardness(hardness), volume);
-      state.stepTicksUntilNext = player.isSprintingFlag === 1 ? STEP_SPRINT_INTERVAL_TICKS : STEP_BASE_INTERVAL_TICKS;
+      state.stepTicksUntilNext = STEP_BASE_INTERVAL_TICKS;
     } else {
       state.stepTicksUntilNext -= 1;
     }

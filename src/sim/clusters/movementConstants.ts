@@ -20,14 +20,12 @@ export const debugSpeedOverrides = {
   gravityWorld: NaN,
   normalFallCapWorld: NaN,
   fastFallCapWorld: NaN,
-  sprintMultiplier: NaN,
   groundAccelWorld: NaN,
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
   airDecelWorld: NaN,
   wallJumpXWorld: NaN,
   wallJumpYWorld: NaN,
-  skidJumpMultiplier: NaN,
   grappleSuperJumpMultiplier: NaN,
   wallJumpAirAccelMultiplier: NaN,
   airMoveSpeedWorld: NaN,
@@ -508,19 +506,53 @@ export const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
 /** Sprint speed multiplier applied to MAX_RUN_SPEED when sprinting on ground.
  * Adds another 50% on top of the base run speed when holding shift.
  */
-export const SPRINT_SPEED_MULTIPLIER = 1.5;
+// Sprint was removed in Movement V2.
 
 /** Ground deceleration multiplier when holding shift (50% less friction). */
-export const SPRINT_FRICTION_MULTIPLIER = 0.5;
 
 /** Ground deceleration multiplier when skidding (50% more friction than default). */
 export const SKID_FRICTION_MULTIPLIER = 1.5;
 
 /** Jump speed multiplier when jumping out of a skid; targets ~6 small blocks of height. */
-export const SKID_JUMP_MULTIPLIER = 1.153;
+export const SKID_JUMP_BASE_BONUS_BLOCKS = 1.0;
+export const SKID_JUMP_SPEED_PER_BONUS_BLOCK_WORLD = 30.0;
 
-/** Velocity threshold (px/s) below which a player is considered "not moving" for skid detection. */
-export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
+export function getSkidJumpBonusBlocks(skidEntrySpeedWorld: number): number {
+  return SKID_JUMP_BASE_BONUS_BLOCKS
+    + Math.max(0, skidEntrySpeedWorld - GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC)
+      / SKID_JUMP_SPEED_PER_BONUS_BLOCK_WORLD;
+}
+
+/** Solve height = launchSpeed * sustainTime + launchSpeed^2 / (2 * gravity). */
+export function getJumpLaunchSpeedForTargetHeight(
+  targetHeightWorld: number,
+  gravityWorldPerSec2 = NORMAL_GRAVITY_WORLD_PER_SEC2,
+  sustainTimeSec = VAR_JUMP_TIME_SEC,
+): number {
+  return -gravityWorldPerSec2 * sustainTimeSec
+    + Math.sqrt(
+      gravityWorldPerSec2 * gravityWorldPerSec2 * sustainTimeSec * sustainTimeSec
+      + 2 * gravityWorldPerSec2 * Math.max(0, targetHeightWorld),
+    );
+}
+
+export function getSkidJumpLaunchSpeedWorld(skidEntrySpeedWorld: number): number {
+  const baseTargetHeight = PLAYER_JUMP_SPEED_WORLD * VAR_JUMP_TIME_SEC
+    + PLAYER_JUMP_SPEED_WORLD * PLAYER_JUMP_SPEED_WORLD
+      / (2 * NORMAL_GRAVITY_WORLD_PER_SEC2);
+  return getJumpLaunchSpeedForTargetHeight(
+    baseTargetHeight + getSkidJumpBonusBlocks(skidEntrySpeedWorld) * BLOCK_SIZE_SMALL,
+  );
+}
+
+/** Diminishing-returns particle scale: 1 + maxExtra * excess / (excess + knee). */
+export const SKID_PARTICLE_SOFT_KNEE_SPEED_WORLD = 120.0;
+export const SKID_PARTICLE_MAX_EXTRA_SCALE = 3.0;
+export function getSkidParticleSpeedScale(skidEntrySpeedWorld: number): number {
+  const excess = Math.max(0, skidEntrySpeedWorld - GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
+  return 1 + SKID_PARTICLE_MAX_EXTRA_SCALE
+    * excess / (excess + SKID_PARTICLE_SOFT_KNEE_SPEED_WORLD);
+}
 
 /**
  * Jump speed multiplier for the zip-jump (zip super jump).

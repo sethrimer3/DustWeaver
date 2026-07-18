@@ -292,6 +292,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Set per tick in applyClusterMovement; read by skidDebrisRenderer.
    */
   playerLandingSkidSpeedFactor: number;
+  playerSkidEntrySpeedWorld: number;
+  playerSkidTravelDirectionX: number;
 
   // ---- Weak wall jump cascade visual flags (read by renderer) ---------------
   /**
@@ -593,6 +595,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     skidDebrisYWorld: 0.0,
     wallJumpSkidDebrisBurstFlag: 0,
     playerLandingSkidSpeedFactor: 0.0,
+    playerSkidEntrySpeedWorld: 0.0,
+    playerSkidTravelDirectionX: 0.0,
     weakWallJumpCascadeFlag: 0,
     weakWallJumpCascadeXWorld: 0.0,
     weakWallJumpCascadeYWorld: 0.0,

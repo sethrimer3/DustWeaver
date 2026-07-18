@@ -27,7 +27,7 @@ import {
   FAST_MAX_FALL_WORLD_PER_SEC,
   JUMP_BUFFER_TICKS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
-  SKID_JUMP_MULTIPLIER,
+  getSkidJumpLaunchSpeedWorld,
 } from './movementConstants';
 
 /**
@@ -168,9 +168,8 @@ export function applyPlayerGravityAndJump(
     }
     const baseJumpSpeed = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
     // Skid jump boost: if jumping while skidding, increase jump height
-    const skidJumpMult = ov(debugSpeedOverrides.skidJumpMultiplier, SKID_JUMP_MULTIPLIER);
     const jumpSpeed = cluster.isSkiddingFlag === 1
-      ? baseJumpSpeed * skidJumpMult
+      ? getSkidJumpLaunchSpeedWorld(cluster.skidEntrySpeedWorld)
       : baseJumpSpeed;
     if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
       // ── Normal ground jump ─────────────────────────────────────────

@@ -464,6 +464,9 @@ export interface ClusterState {
   isSkiddingFlag: 0 | 1;
   /** 1 while the player is sliding (sprint + crouch/down on ground). */
   isSlidingFlag: 0 | 1;
+  /** Absolute horizontal velocity latched when a direction-reversal skid begins. */
+  skidEntrySpeedWorld: number;
+  skidTravelDirectionX: number;
 
   // ---- Momentum combat -------------------------------------------------------
   /**
@@ -1186,6 +1189,8 @@ export function createClusterState(
     playerIdleNextSwitchTicks: 0,
     isSkiddingFlag: 0,
     isSlidingFlag: 0,
+    skidEntrySpeedWorld: 0,
+    skidTravelDirectionX: 0,
     isHighVelocityAttacking: 0,
     momentumHitCooldownTicks: 0,
     invulnerabilityTicks: 0,
