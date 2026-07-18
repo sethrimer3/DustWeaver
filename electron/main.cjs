@@ -713,8 +713,8 @@ function createWindow() {
     console.error("FAILED TO LOAD:", errorCode, errorDescription, validatedURL);
   });
 
-  win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-    console.log(`[renderer] ${message} (${sourceId}:${line})`);
+  win.webContents.on("console-message", (event) => {
+    console.log(`[renderer] ${event.message} (${event.sourceId}:${event.lineNumber})`);
   });
 
   if (IS_ELECTRON_DEV_SERVER) {
