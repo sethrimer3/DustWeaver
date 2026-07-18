@@ -56,7 +56,16 @@ export function renderEditorBackdrop(
   renderProfiler: RenderProfiler,
   isDebugMode: boolean,
 ): void {
+<<<<<<< HEAD
   resetCanvasPass(ctx, virtualCanvas.width, virtualCanvas.height, false);
+=======
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
+
+>>>>>>> origin/pre-grid-block-enemy-revert
   bloomSystem.beginFrame();
 
   if (webglRenderer.isAvailable) {
@@ -112,7 +121,15 @@ export function renderEditorBackdrop(
 
   editorController.render(ctx, offsetXPx, offsetYPx, zoom, virtualWidthPx, virtualHeightPx);
 
+<<<<<<< HEAD
   resetCanvasPass(deviceCtx, canvas.width, canvas.height, false);
+=======
+  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
+  deviceCtx.globalAlpha = 1;
+  deviceCtx.globalCompositeOperation = 'source-over';
+  deviceCtx.imageSmoothingEnabled = false;
+  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
+>>>>>>> origin/pre-grid-block-enemy-revert
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   if (webglRenderer.isAvailable) {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);

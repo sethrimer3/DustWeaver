@@ -949,6 +949,15 @@ export class RoomChunkCache {
             // fallback as an ordinary build failure would rebuild it forever and
             // exhaust the per-frame budget, exposing the rectangular placeholder.
             chunk.hadFallbacksFlag = wasBakeForbidden ? false : hadFallbacks;
+            if (import.meta.env.DEV) {
+              const sample = chunkCtx.getImageData(0, 0, Math.min(4, chunk.canvas.width), Math.min(4, chunk.canvas.height)).data;
+              let nonZero = 0;
+              for (let i = 0; i < sample.length; i++) if (sample[i] !== 0) nonZero++;
+              console.log(
+                `[dwdebug-chunkbuild] key=${key} isBg=${this._isBgLayer} w=${chunk.canvas.width} h=${chunk.canvas.height} ` +
+                `hadFallbacks=${chunk.hadFallbacksFlag} nonZeroSamplePx=${nonZero}/${sample.length}`,
+              );
+            }
             if (devMode) {
               const chunkMs = performance.now() - _ct0;
               rebuildTotalMs += chunkMs;

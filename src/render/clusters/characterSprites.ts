@@ -58,8 +58,14 @@ export function getOrCreateOuterOutlineMask(sprite: HTMLImageElement): HTMLCanva
     return alphaCanvas;
   }
   alphaCtx.clearRect(0, 0, paddedWidthPx, paddedHeightPx);
-  alphaCtx.drawImage(sprite, 1, 1);
-  const alphaData = alphaCtx.getImageData(0, 0, paddedWidthPx, paddedHeightPx).data;
+  let alphaData: Uint8ClampedArray;
+  try {
+    alphaCtx.drawImage(sprite, 1, 1);
+    alphaData = alphaCtx.getImageData(0, 0, paddedWidthPx, paddedHeightPx).data;
+  } catch {
+    _playerOutlineMaskCache.set(sprite, alphaCanvas);
+    return alphaCanvas;
+  }
 
   const isOpaqueFlag = new Uint8Array(pixelCount);
   for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++) {

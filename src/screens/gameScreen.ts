@@ -77,6 +77,8 @@ import {
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
 import { RoomRuntimeCache, isEntryFullyPrepared } from './roomRuntimeCache';
+import { getSpriteAtlasDebugInfo, getSpriteAtlasStats, type SpriteAtlasBenchUnavailable } from '../render/atlases/spriteAtlasLoader';
+import type { SpriteAtlasStats } from '../render/atlases/spriteAtlasTypes';
 import { type PreloadScheduleHandle } from './roomPreloadScheduler';
 import {
   getPrewarmStats,
@@ -196,6 +198,7 @@ export function startGameScreen(
   runOptions?: GameScreenRunOptions,
 ): () => void {
   const webglRenderer = new WebGLParticleRenderer();
+  (webglRenderer as { isAvailable: boolean }).isAvailable = false; // DWDEBUG: force 2D-only compositing to test wall visibility
   const bloomSystem = new BloomSystem({ ...DEFAULT_BLOOM_CONFIG });
   const darkRoomOverlay = new DarkRoomOverlay();
   const renderProfiler = new RenderProfiler();
@@ -1046,7 +1049,23 @@ export function startGameScreen(
   }
   window.addEventListener('resize', onResize);
 
+  // Thin error boundary around the real per-frame work below. Without this,
+  // an uncaught exception anywhere in frameImpl() (sim tick, snapshot build,
+  // any renderer) propagates out of the rAF callback and the loop simply
+  // stops rescheduling itself — the game silently freezes on whatever was
+  // last drawn, in every room, with no console output pointing at the cause.
+  // Catching here logs the real stack trace and keeps the loop alive so a
+  // single bad frame degrades gracefully instead of permanently hanging.
   function frame(timestampMs: number): void {
+    try {
+      frameImpl(timestampMs);
+    } catch (err) {
+      console.error('[gameScreen] Uncaught error in frame(); loop continues.', err);
+      if (isRunning) rafHandle = requestAnimationFrame(frame);
+    }
+  }
+
+  function frameImpl(timestampMs: number): void {
     if (!isRunning) return;
     playerSpeedometerOverlay.hide();
     playerSpeedGraphOverlay.hide();
@@ -1646,10 +1665,17 @@ export function startGameScreen(
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
+<<<<<<< HEAD
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
+=======
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
+      world, currentRoom,
+>>>>>>> origin/pre-grid-block-enemy-revert
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,
       cachedDecorationCenterX,
@@ -1768,10 +1794,31 @@ export function startGameScreen(
       dir?:        TransitionDirection;
       vx?:         number;
       vy?:         number;
+      waitFrames?: number;
     };
+    type SpriteAtlasBenchSummary = {
+      ok: true;
+      roomId: string;
+      atlasEnabled: boolean;
+      transition: TP.TransitionProfile | null;
+      transitionTotalMs: number | null;
+      longestPhase: { name: string; ms: number } | null;
+      prewarm: TP.TransitionProfilePrewarm | null;
+      atlasBefore: SpriteAtlasStats;
+      atlasAfter: SpriteAtlasStats;
+      atlasDelta: {
+        lookups: number;
+        hits: number;
+        misses: number;
+        fallbacks: number;
+          unsupportedPaths: number;
+      };
+    };
+    type SpriteAtlasBenchResult = SpriteAtlasBenchSummary | SpriteAtlasBenchUnavailable;
     type DwWin = Window & {
       __dwBenchTransition?: (roomId: string, opts?: BenchOpts) => boolean;
       __dwBenchPingPong?: (roomIdA: string, roomIdB: string, iterations: number) => void;
+      __dwBenchSpriteAtlasRoom?: (roomId: string, opts?: BenchOpts) => Promise<SpriteAtlasBenchResult>;
     };
     const w = window as DwWin;
     w.__dwBenchTransition = (roomId: string, opts?: BenchOpts): boolean => {
@@ -1799,6 +1846,7 @@ export function startGameScreen(
       };
       requestAnimationFrame(tick);
     };
+<<<<<<< HEAD
 
     // ── DEV-only spawn hook for The Void Herald boss ─────────────────────
     // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns The Void Herald directly
@@ -1821,6 +1869,85 @@ export function startGameScreen(
         console.log(`[dev] spawned Ice Wizard (entityId=${entityId}) at block (${bx}, ${by})`);
         return entityId;
       };
+=======
+    const waitForFrames = (frames: number): Promise<void> => new Promise(resolve => {
+      let remaining = Math.max(1, Math.floor(frames));
+      const tick = (): void => {
+        remaining--;
+        if (remaining <= 0) {
+          resolve();
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    w.__dwBenchSpriteAtlasRoom = async (roomId: string, opts?: BenchOpts): Promise<SpriteAtlasBenchResult> => {
+      if (ROOM_REGISTRY.get(roomId) === undefined) {
+        return {
+          ok: false,
+          roomId,
+          error: `Unknown roomId: ${roomId}`,
+          prerequisite: 'Pass a room id that exists in ROOM_REGISTRY for the active campaign.',
+          debug: getSpriteAtlasDebugInfo(),
+        };
+      }
+      if (typeof w.__dwBenchTransition !== 'function') {
+        return {
+          ok: false,
+          roomId,
+          error: 'Transition benchmark helper is unavailable.',
+          prerequisite: 'window.__dwBenchTransition must be installed by startGameScreen.',
+          debug: getSpriteAtlasDebugInfo(),
+        };
+      }
+      const before = getSpriteAtlasStats();
+      const started = w.__dwBenchTransition?.(roomId, opts) ?? false;
+      if (!started) {
+        return {
+          ok: false,
+          roomId,
+          error: `Transition benchmark did not start for roomId: ${roomId}`,
+          prerequisite: 'The target room must exist and the game screen must be ready to start a synthetic transition.',
+          debug: getSpriteAtlasDebugInfo(),
+        };
+      }
+      await waitForFrames(opts?.waitFrames ?? 3);
+      const after = getSpriteAtlasStats();
+      const transition = TP.getLastTransition();
+      const summary: SpriteAtlasBenchSummary = {
+        ok: true,
+        roomId,
+        atlasEnabled: after.enabled,
+        transition: transition?.roomId === roomId ? transition : null,
+        transitionTotalMs: transition?.roomId === roomId ? transition.totalMs : null,
+        longestPhase: transition?.roomId === roomId ? transition.longestPhase : null,
+        prewarm: transition?.roomId === roomId ? transition.prewarm : null,
+        atlasBefore: before,
+        atlasAfter: after,
+        atlasDelta: {
+          lookups: after.lookups - before.lookups,
+          hits: after.hits - before.hits,
+          misses: after.misses - before.misses,
+          fallbacks: after.fallbacks - before.fallbacks,
+          unsupportedPaths: after.unsupportedPaths - before.unsupportedPaths,
+        },
+      };
+      console.table([{
+        room: summary.roomId,
+        atlas: summary.atlasEnabled ? 'on' : 'off',
+        totalMs: summary.transitionTotalMs !== null ? +summary.transitionTotalMs.toFixed(1) : null,
+        longest: summary.longestPhase !== null ? `${summary.longestPhase.name}=${summary.longestPhase.ms.toFixed(1)}ms` : '-',
+        lookups: summary.atlasDelta.lookups,
+        hits: summary.atlasDelta.hits,
+        misses: summary.atlasDelta.misses,
+        fallbacks: summary.atlasDelta.fallbacks,
+        unsupported: summary.atlasDelta.unsupportedPaths,
+        prewarmMiss: summary.prewarm?.missReason ?? null,
+      }]);
+      return summary;
+    };
+>>>>>>> origin/pre-grid-block-enemy-revert
   }
 
   rafHandle = requestAnimationFrame(frame);

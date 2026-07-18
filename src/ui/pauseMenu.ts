@@ -32,6 +32,11 @@ import {
   getAirCurrentsDebugEnabled,
   setAirCurrentsDebugEnabled,
 } from './renderSettings';
+import {
+  getSpriteAtlasConfigState,
+  getSpriteAtlasUseSetting,
+  setSpriteAtlasUseSetting,
+} from '../render/atlases/spriteAtlasConfig';
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, makeCheckboxRow, GOLD, PANEL_BORDER } from './helpers';
 import {
@@ -281,6 +286,7 @@ export function showPauseMenu(
       `;
       optionsPanel.appendChild(wvHint);
 
+<<<<<<< HEAD
       optionsPanel.appendChild(
         makeCheckboxRow('Always Center Camera', state.alwaysCenterCamera, (enabled) => {
           state.alwaysCenterCamera = enabled;
@@ -288,11 +294,18 @@ export function showPauseMenu(
         }),
       );
 
+=======
+      // Sprite atlases remain experimental and opt-in.
+>>>>>>> origin/pre-grid-block-enemy-revert
       const atlasEnabled = getSpriteAtlasUseSetting();
       const atlasRow = document.createElement('label');
       atlasRow.style.cssText = `
         display: flex; align-items: center; justify-content: center;
+<<<<<<< HEAD
         gap: 10px; margin: 16px 0 8px 0;
+=======
+        gap: 10px; margin: 16px 0 12px 0;
+>>>>>>> origin/pre-grid-block-enemy-revert
         padding: 10px 14px;
         background: rgba(212,168,75,${atlasEnabled ? '0.12' : '0.04'});
         border: 1px solid rgba(212,168,75,${atlasEnabled ? '0.55' : '0.25'});
@@ -311,11 +324,19 @@ export function showPauseMenu(
       `;
       const atlasHint = document.createElement('div');
       atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
+<<<<<<< HEAD
         ? 'Hard-disabled internally while legacy rendering remains active.'
         : 'Reload or re-enter the room after changing this.';
       atlasHint.style.cssText = `
         font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
         font-size: 0.72rem; text-align: center; margin: -2px 0 10px 0;
+=======
+        ? 'Hard-disabled internally while legacy rendering is restored.'
+        : 'Reload or re-enter the room after changing this.';
+      atlasHint.style.cssText = `
+        font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
+        font-size: 0.72rem; text-align: center; margin: -6px 0 10px 0;
+>>>>>>> origin/pre-grid-block-enemy-revert
       `;
       atlasCheckbox.addEventListener('change', () => {
         const enabled = atlasCheckbox.checked;
@@ -323,7 +344,11 @@ export function showPauseMenu(
         atlasRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
         atlasRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
         atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
+<<<<<<< HEAD
           ? 'Hard-disabled internally while legacy rendering remains active.'
+=======
+          ? 'Hard-disabled internally while legacy rendering is restored.'
+>>>>>>> origin/pre-grid-block-enemy-revert
           : 'Reload or re-enter the room after changing this.';
       });
       atlasRow.appendChild(atlasCheckbox);

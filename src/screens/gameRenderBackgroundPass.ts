@@ -64,40 +64,46 @@ export function renderBackgroundPass(r: BackgroundPassContext): void {
     const stagedOy = oy + stagedRoom.originYWorld * zoom;
 
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(stagedOx, stagedOy, stagedW * zoom, stagedH * zoom);
-    ctx.clip();
-    renderWorldBackground(
-      ctx,
-      stagedRoom.room.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      stagedOx,
-      stagedOy,
-      stagedW,
-      stagedH,
-      zoom,
-      stagedRoom.room.backgroundId,
-    );
-    ctx.restore();
+    try {
+      ctx.beginPath();
+      ctx.rect(stagedOx, stagedOy, stagedW * zoom, stagedH * zoom);
+      ctx.clip();
+      renderWorldBackground(
+        ctx,
+        stagedRoom.room.worldNumber,
+        virtualWidthPx,
+        virtualHeightPx,
+        stagedOx,
+        stagedOy,
+        stagedW,
+        stagedH,
+        zoom,
+        stagedRoom.room.backgroundId,
+      );
+    } finally {
+      ctx.restore();
+    }
 
     ctx.save();
-    ctx.beginPath();
-    ctx.rect(ox, oy, roomWidthWorld * zoom, roomHeightWorld * zoom);
-    ctx.clip();
-    renderWorldBackground(
-      ctx,
-      currentRoom.worldNumber,
-      virtualWidthPx,
-      virtualHeightPx,
-      ox,
-      oy,
-      roomWidthWorld,
-      roomHeightWorld,
-      zoom,
-      currentRoom.backgroundId,
-    );
-    ctx.restore();
+    try {
+      ctx.beginPath();
+      ctx.rect(ox, oy, roomWidthWorld * zoom, roomHeightWorld * zoom);
+      ctx.clip();
+      renderWorldBackground(
+        ctx,
+        currentRoom.worldNumber,
+        virtualWidthPx,
+        virtualHeightPx,
+        ox,
+        oy,
+        roomWidthWorld,
+        roomHeightWorld,
+        zoom,
+        currentRoom.backgroundId,
+      );
+    } finally {
+      ctx.restore();
+    }
   } else {
     renderWorldBackground(
       ctx,

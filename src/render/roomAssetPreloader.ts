@@ -25,6 +25,8 @@
 
 import { loadImg, decodeImg, isSpriteDecodeReady } from './imageCache';
 import { FOLDER_BLOCK_THEMES, isFolderBasedTheme } from './walls/folderBlockThemes';
+import { isSpriteAtlasEnabled } from './atlases/spriteAtlasConfig';
+import { decodeSpriteAtlasForTheme, preloadSpriteAtlasForTheme } from './atlases/spriteAtlasLoader';
 import type { RoomDef } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
 import { preloadRoomBackgroundDecoded, isRoomBackgroundDecodeReady as _isBgDecodeReady } from './backgroundRenderer';
@@ -86,6 +88,9 @@ export function preloadRoomThemeSprites(room: RoomDef): void {
   for (const themeId of themeIds) {
     const urls = _getSpriteUrls(themeId);
     if (urls === null) continue;
+    if (isSpriteAtlasEnabled()) {
+      preloadSpriteAtlasForTheme(themeId);
+    }
     for (let i = 0; i < urls.length; i++) {
       loadImg(urls[i]); // fire-and-forget; already cached if loaded before
     }
@@ -193,6 +198,10 @@ export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
   for (const themeId of themeIds) {
     const urls = _getSpriteUrls(themeId);
     if (urls === null) continue;
+    if (promises === null) promises = [];
+    if (isSpriteAtlasEnabled()) {
+      promises.push(decodeSpriteAtlasForTheme(themeId));
+    }
     for (let i = 0; i < urls.length; i++) {
       if (promises === null) promises = [];
       promises.push(decodeImg(urls[i]));

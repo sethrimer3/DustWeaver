@@ -341,6 +341,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
   // Always start from black so anything outside the room remains pure black.
+  ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   if (webglRenderer.isAvailable) {
@@ -372,7 +373,15 @@ export function renderFrame(r: RenderFrameContext): void {
   // areas remain black even when camera framing shows beyond room extents.
   // This applies in always-center mode too; the unclamped camera can expose
   // off-room pixels, and those should remain the black canvas clear.
+  // try/finally below guarantees this save() is always matched by the
+  // restore() further down, even if a renderer inside the clipped pass
+  // throws. Without it, an uncaught exception anywhere in this ~200-line
+  // block (walls, clusters, particles, effects) leaks the room-bounds clip
+  // onto the shared 2D context permanently — every subsequent frame's
+  // clear/fill gets constrained to the stale clip rect, producing a black
+  // screen with un-cleared trails in every room until reload.
   ctx.save();
+  try {
   ctx.beginPath();
   ctx.rect(clipScreenXPx, clipScreenYPx, clipScreenWPx, clipScreenHPx);
   ctx.clip();
@@ -400,19 +409,22 @@ export function renderFrame(r: RenderFrameContext): void {
   const bgSpill = getActiveBackgroundLightSpill();
   if (bgSpill > 0) {
     ctx.save();
-    // Clip to the current room so spill doesn't bleed into adjacent rooms.
-    const clipX = Math.round(ox);
-    const clipY = Math.round(oy);
-    const clipW = Math.round(roomWidthWorld * zoom);
-    const clipH = Math.round(roomHeightWorld * zoom);
-    ctx.beginPath();
-    ctx.rect(clipX, clipY, clipW, clipH);
-    ctx.clip();
-    // Warm amber tint — clamped to a subtle translucent fill.
-    const alpha = Math.min(bgSpill, 0.5);
-    ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
-    ctx.fillRect(clipX, clipY, clipW, clipH);
-    ctx.restore();
+    try {
+      // Clip to the current room so spill doesn't bleed into adjacent rooms.
+      const clipX = Math.round(ox);
+      const clipY = Math.round(oy);
+      const clipW = Math.round(roomWidthWorld * zoom);
+      const clipH = Math.round(roomHeightWorld * zoom);
+      ctx.beginPath();
+      ctx.rect(clipX, clipY, clipW, clipH);
+      ctx.clip();
+      // Warm amber tint — clamped to a subtle translucent fill.
+      const alpha = Math.min(bgSpill, 0.5);
+      ctx.fillStyle = `rgba(${BACKGROUND_SPILL_RGB},${alpha.toFixed(3)})`;
+      ctx.fillRect(clipX, clipY, clipW, clipH);
+    } finally {
+      ctx.restore();
+    }
   }
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
@@ -644,9 +656,11 @@ export function renderFrame(r: RenderFrameContext): void {
     applyVoidLensDistortion(ctx, voidSphereCircles, virtualWidthPx, virtualHeightPx);
     renderVoidSpheres(ctx, snapshot, ox, oy, zoom);
   }
-
-  // End room clip before any HUD/screen-space overlays are drawn.
-  ctx.restore();
+  } finally {
+    // End room clip before any HUD/screen-space overlays are drawn. Runs
+    // even on error so the clip never leaks into future frames.
+    ctx.restore();
+  }
 
   // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
   renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
@@ -658,7 +672,15 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
+<<<<<<< HEAD
   resetCanvasPass(deviceCtx, canvas.width, canvas.height, false);
+=======
+  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
+  deviceCtx.globalAlpha = 1;
+  deviceCtx.globalCompositeOperation = 'source-over';
+  deviceCtx.imageSmoothingEnabled = false;
+  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
+>>>>>>> origin/pre-grid-block-enemy-revert
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {

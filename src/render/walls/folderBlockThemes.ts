@@ -397,6 +397,20 @@ export function getFolderThemeBaseUrl(
   return entry.sprite16Urls[hash % entry.sprite16Urls.length];
 }
 
+/** Returns the atlas metadata sprite key matching the folder-theme variation for a tile. */
+export function getFolderThemeSpriteKey(
+  themeId: string,
+  col:     number,
+  row:     number,
+  seed:    number,
+): string | null {
+  const url = getFolderThemeBaseUrl(themeId, col, row, seed);
+  if (url === null) return null;
+  const slashIdx = url.lastIndexOf('/');
+  const filename = slashIdx >= 0 ? url.slice(slashIdx + 1) : url;
+  return filename.replace(/\.[^.]+$/, '');
+}
+
 // ── Derived-sprite prewarm helpers ────────────────────────────────────────────
 
 /**
