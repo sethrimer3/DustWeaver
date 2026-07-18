@@ -291,6 +291,13 @@ export interface ClusterSnapshot {
 
   // ── Grid Block Enemy ─────────────────────────────────────────────────────
   readonly isGridBlockEnemyFlag: 0 | 1;
+  readonly isMomentumTurretFlag: 0 | 1;
+  readonly momentumTurretFacingIndex: 0 | 1 | 2 | 3;
+  readonly momentumTurretTargetRadiusWorld: number;
+  readonly momentumTurretHasLineOfSightFlag: 0 | 1;
+  readonly momentumTurretFireGraceTicks: number;
+  readonly momentumTurretCooldownTicks: number;
+  readonly momentumTurretShotFlashTicks: number;
   readonly gridBlockSizeIndex: number;
   readonly gridBlockSpeedIndex: number;
   readonly gridBlockGlintPhase: number;

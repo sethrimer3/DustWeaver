@@ -19,6 +19,7 @@ import { RngState } from '../sim/rng';
 import type { RoomEnemyDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { createClusterState } from '../sim/clusters/state';
+import { MT_HALF_HEIGHT_WORLD, MT_HALF_WIDTH_WORLD, MT_HP, MT_MAX_RING_RADIUS_WORLD } from '../sim/clusters/momentumTurretConfig';
 import { SLIME_HALF_SIZE_WORLD, LARGE_SLIME_HALF_SIZE_WORLD } from '../sim/clusters/slimeAi';
 import { WHEEL_ENEMY_HALF_SIZE_WORLD } from '../sim/clusters/wheelEnemyAi';
 import { BEETLE_HALF_HEIGHT_WORLD, BEETLE_HALF_WIDTH_WORLD } from '../sim/clusters/beetleAi';
@@ -721,6 +722,16 @@ export function spawnEnemyClusters(
       enemyCluster.healthPoints = 6;
       enemyCluster.maxHealthPoints = 6;
       initializeGridSnakeSegments(enemyCluster, length);
+    } else if (enemyDef.isMomentumTurretFlag === 1) {
+      enemyCluster.isMomentumTurretFlag = 1;
+      enemyCluster.momentumTurretFacingIndex = enemyDef.momentumTurretFacingIndex ?? 0;
+      enemyCluster.momentumTurretTargetRadiusWorld = MT_MAX_RING_RADIUS_WORLD;
+      enemyCluster.halfWidthWorld = MT_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld = MT_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints = MT_HP;
+      enemyCluster.maxHealthPoints = MT_HP;
+      enemyCluster.velocityXWorld = 0;
+      enemyCluster.velocityYWorld = 0;
     } else if (enemyDef.isGridBlockEnemyFlag === 1) {
       const sizeIndex  = enemyDef.gridBlockSizeIndex === 1 ? 1 : 0;
       const speedIndex = enemyDef.gridBlockSpeedIndex === 1 ? 1 : enemyDef.gridBlockSpeedIndex === 2 ? 2 : 0;
@@ -775,7 +786,8 @@ export function spawnEnemyClusters(
       enemyCluster.isDustLeechFlag === 1 ||
       enemyCluster.isGridSnakeEnemyFlag === 1 ||
       enemyCluster.isGridBlockEnemyFlag === 1;
-    if (!skipParticleSpawn) {
+    const skipTurretParticleSpawn = enemyCluster.isMomentumTurretFlag === 1;
+    if (!skipParticleSpawn && !skipTurretParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }
 

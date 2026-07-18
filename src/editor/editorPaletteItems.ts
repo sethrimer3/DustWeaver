@@ -173,6 +173,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_void_singularity', label: 'Void Singularity', category: 'enemies' },
   { id: 'enemy_void_singularity_pair', label: 'Void Singularity Pair', category: 'enemies' },
   { id: 'enemy_dust_leech', label: 'Dust Leech', category: 'enemies' },
+  { id: 'enemy_momentum_turret', label: 'Momentum Turret', category: 'enemies' },
   { id: 'enemy_grid_snake', label: 'Snake', category: 'enemies' },
   { id: 'enemy_grid_block_1x1_slow',   label: 'Block 1×1 (Slow)',   category: 'enemies' },
   { id: 'enemy_grid_block_1x1_medium', label: 'Block 1×1 (Medium)', category: 'enemies' },

@@ -293,6 +293,11 @@ export function rotateSelectedElement(state: EditorState): void {
       const newDir = DIRS[(idx + 1) % 4];
       _repositionTransitionForNewDirection(t, newDir, state.roomData);
     }
+  } else if (sel.type === 'enemy') {
+    const enemy = state.roomData.enemies.find(e => e.uid === sel.uid);
+    if (enemy?.isMomentumTurretFlag === 1) {
+      enemy.momentumTurretFacingIndex = (((enemy.momentumTurretFacingIndex ?? 0) + 1) % 4) as 0 | 1 | 2 | 3;
+    }
   }
 }
 

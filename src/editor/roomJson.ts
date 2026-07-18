@@ -254,6 +254,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isVoidSingularityPairFlag: (e.isVoidSingularityPair ?? false) ? 1 : 0,
     isDustLeechFlag:       (e.isDustLeech ?? false) ? 1 : 0,
     isGridBlockEnemyFlag:  (e.isGridBlockEnemy ?? false) ? 1 : 0,
+    isMomentumTurretFlag: (e.isMomentumTurret ?? false) ? 1 : 0,
+    momentumTurretFacingIndex: e.momentumTurretFacingIndex ?? 0,
     gridBlockSizeIndex:    e.gridBlockSizeIndex  ?? 0,
     gridBlockSpeedIndex:   e.gridBlockSpeedIndex ?? 0,
     isGridSnakeEnemyFlag:  (e.isGridSnakeEnemy ?? false) ? 1 : 0,

@@ -361,6 +361,8 @@ export interface RoomEnemyDef {
   isDustLeechFlag?: 0 | 1;
   /** 1 if this enemy is a grid-aligned block enemy. */
   isGridBlockEnemyFlag?: 0 | 1;
+  isMomentumTurretFlag?: 0 | 1;
+  momentumTurretFacingIndex?: 0 | 1 | 2 | 3;
   /** 0 = 1×1, 1 = 2×2. */
   gridBlockSizeIndex?: 0 | 1;
   /** 0 = slow, 1 = medium, 2 = fast. */

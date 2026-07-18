@@ -117,6 +117,7 @@ import type {
 
 /** Determine the SavedEnemyType for a legacy RoomJsonEnemy. */
 export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
+  if (e.isMomentumTurret) return 'momentumTurret';
   if (e.isFlyingEye)      return 'flyingEye';
   if (e.isRollingEnemy)   return 'rolling';
   if (e.isRockElemental)  return 'rockElemental';
@@ -652,6 +653,9 @@ function dehydrateEnemy(e: RoomJsonEnemy): SavedEnemy {
   }
   if (type === 'gridSnake' && e.gridSnakeLength !== undefined && e.gridSnakeLength !== 4) {
     out.snakeLength = e.gridSnakeLength;
+  }
+  if (type === 'momentumTurret' && e.momentumTurretFacingIndex !== undefined && e.momentumTurretFacingIndex !== 0) {
+    out.momentumTurretFacingIndex = e.momentumTurretFacingIndex;
   }
   return out;
 }

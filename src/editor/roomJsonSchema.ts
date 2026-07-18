@@ -82,6 +82,8 @@ export interface RoomJsonEnemy {
   isVoidSingularityPair?: boolean;
   isDustLeech?: boolean;
   isGridBlockEnemy?: boolean;
+  isMomentumTurret?: boolean;
+  momentumTurretFacingIndex?: 0 | 1 | 2 | 3;
   gridBlockSizeIndex?: 0 | 1;
   gridBlockSpeedIndex?: 0 | 1 | 2;
   isGridSnakeEnemy?: boolean;

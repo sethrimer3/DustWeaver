@@ -1,5 +1,6 @@
 import { PLAYER_HALF_WIDTH_WORLD, PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
 import { MAX_CW_METEOR_SCHEDULE } from './crimsonWizardConfig';
+import { MT_MAX_RING_RADIUS_WORLD } from './momentumTurretConfig';
 
 export interface ClusterState {
   entityId: number;
@@ -872,6 +873,13 @@ export interface ClusterState {
   // ── Grid Block Enemy ────────────────────────────────────────────────────────
   /** 1 if this cluster is a grid-aligned block enemy. */
   isGridBlockEnemyFlag: 0 | 1;
+  isMomentumTurretFlag: 0 | 1;
+  momentumTurretFacingIndex: 0 | 1 | 2 | 3;
+  momentumTurretTargetRadiusWorld: number;
+  momentumTurretHasLineOfSightFlag: 0 | 1;
+  momentumTurretFireGraceTicks: number;
+  momentumTurretCooldownTicks: number;
+  momentumTurretShotFlashTicks: number;
   /** 0 = 1×1 tile, 1 = 2×2 tiles. */
   gridBlockSizeIndex: number;
   /** 0 = slow (20 ticks/step), 1 = medium (12), 2 = fast (7). */
@@ -1244,6 +1252,13 @@ export function createClusterState(
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
     isGridBlockEnemyFlag: 0,
+    isMomentumTurretFlag: 0,
+    momentumTurretFacingIndex: 0,
+    momentumTurretTargetRadiusWorld: MT_MAX_RING_RADIUS_WORLD,
+    momentumTurretHasLineOfSightFlag: 0,
+    momentumTurretFireGraceTicks: 0,
+    momentumTurretCooldownTicks: 0,
+    momentumTurretShotFlashTicks: 0,
     gridBlockSizeIndex: 0,
     gridBlockSpeedIndex: 0,
     gridBlockGridX: 0,

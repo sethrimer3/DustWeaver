@@ -100,6 +100,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
       isDustLeech:        e.isDustLeechFlag === 1,
       isGridBlockEnemy:   e.isGridBlockEnemyFlag === 1 ? true : undefined,
+      isMomentumTurret: e.isMomentumTurretFlag === 1 ? true : undefined,
+      momentumTurretFacingIndex: e.isMomentumTurretFlag === 1 ? (e.momentumTurretFacingIndex ?? 0) : undefined,
       gridBlockSizeIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSizeIndex  : undefined,
       gridBlockSpeedIndex: e.isGridBlockEnemyFlag === 1 ? e.gridBlockSpeedIndex : undefined,
       isGridSnakeEnemy:   e.isGridSnakeEnemyFlag === 1 ? true : undefined,

@@ -1,0 +1,12 @@
+export const MT_HP = 2;
+export const MT_HALF_WIDTH_WORLD = 4;
+export const MT_HALF_HEIGHT_WORLD = 4;
+export const MT_MAX_RING_RADIUS_WORLD = 28;
+export const MT_MAX_CLOSE_RATE_WORLD_PER_SEC = 20;
+export const MT_RECOVERY_RATE_WORLD_PER_SEC = 10;
+export const MT_FIRE_GRACE_TICKS = 8;
+export const MT_SHOT_COOLDOWN_TICKS = 75;
+export const MT_SHOT_FLASH_TICKS = 8;
+export const MT_SHOT_DAMAGE = 1;
+export const MT_MUZZLE_OFFSET_WORLD = 5;
+export const MT_LINE_OF_SIGHT_EPSILON_WORLD = 0.25;

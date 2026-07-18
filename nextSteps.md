@@ -1293,3 +1293,6 @@ Shadow occluder allocation reduction, decoration bloom allocation reduction, env
 ### BUILD 318 — Campaign Spawn Trigger & Fade From Black
 
 Campaign spawn data model, editor placement, official campaign spawn from registry, and fade-from-black on campaign start.
+# Momentum Turret manual validation
+
+- Run an editor playtest with multiple wall-mounted Momentum Turrets and verify ring/beam alignment, roughly 1.5-second standstill lock timing plus grace, paused lock visuals behind terrain, independent tracking, authored-position stability, and normal momentum-collision death. Automated simulation/schema coverage and the production build pass; this live visual/input pass was not available in the current non-interactive validation run.

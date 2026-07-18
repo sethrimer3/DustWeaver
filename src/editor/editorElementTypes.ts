@@ -145,6 +145,8 @@ export interface EditorEnemy {
   isVoidSingularityPairFlag?: 0 | 1;
   isDustLeechFlag?: 0 | 1;
   isGridBlockEnemyFlag?: 0 | 1;
+  isMomentumTurretFlag?: 0 | 1;
+  momentumTurretFacingIndex?: 0 | 1 | 2 | 3;
   gridBlockSizeIndex?: 0 | 1;
   gridBlockSpeedIndex?: 0 | 1 | 2;
   isGridSnakeEnemyFlag?: 0 | 1;

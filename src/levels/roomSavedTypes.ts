@@ -141,7 +141,8 @@ export type SavedEnemyType =
   | 'gridBlock2x2Slow'
   | 'gridBlock2x2Medium'
   | 'gridBlock2x2Fast'
-  | 'gridSnake';
+  | 'gridSnake'
+  | 'momentumTurret';
 
 export interface SavedEnemy {
   type: SavedEnemyType;
@@ -153,6 +154,7 @@ export interface SavedEnemy {
   /** Sprite index — only meaningful for `rolling`. */
   spriteIndex?: number;
   snakeLength?: number;
+  momentumTurretFacingIndex?: 0 | 1 | 2 | 3;
 }
 
 export interface SavedTransition {

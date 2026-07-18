@@ -237,6 +237,9 @@ export function applyClusterMovement(world: WorldState): void {
       // ── Golden Mimic: movement and collision handled entirely in goldenMimicAi.ts ──
       // Nothing to do here — velocity is 0 (skipped in tickEnemyMovement) and
       // goldenMimicAi.ts applies its own physics after applyClusterMovement runs.
+    } else if (cluster.isMomentumTurretFlag === 1) {
+      cluster.velocityXWorld = 0;
+      cluster.velocityYWorld = 0;
     } else if (cluster.isGridBlockEnemyFlag === 1) {
       // ── Grid block enemy: position driven entirely by gridBlockEnemyAi.ts ──
       // No gravity, no velocity integration, no wall collision sweep.

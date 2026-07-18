@@ -1,6 +1,7 @@
 import { ClusterState } from '../sim/clusters/state';
 import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
 import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
+import { MT_MAX_RING_RADIUS_WORLD } from '../sim/clusters/momentumTurretConfig';
 import type { ClusterSnapshot } from './snapshotTypes';
 
 /**
@@ -178,6 +179,13 @@ export function _makeEmptyCluster(): _MutableCluster {
     voidSingularityWholeState: 0,
     voidSingularityWholeStateTicks: 0,
     isGridBlockEnemyFlag: 0,
+    isMomentumTurretFlag: 0,
+    momentumTurretFacingIndex: 0,
+    momentumTurretTargetRadiusWorld: MT_MAX_RING_RADIUS_WORLD,
+    momentumTurretHasLineOfSightFlag: 0,
+    momentumTurretFireGraceTicks: 0,
+    momentumTurretCooldownTicks: 0,
+    momentumTurretShotFlashTicks: 0,
     gridBlockSizeIndex: 0,
     gridBlockSpeedIndex: 0,
     gridBlockGlintPhase: 0,
@@ -381,6 +389,13 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.voidSingularityWholeState              = src.voidSingularityWholeState;
   dst.voidSingularityWholeStateTicks         = src.voidSingularityWholeStateTicks;
   dst.isGridBlockEnemyFlag           = src.isGridBlockEnemyFlag;
+  dst.isMomentumTurretFlag = src.isMomentumTurretFlag;
+  dst.momentumTurretFacingIndex = src.momentumTurretFacingIndex;
+  dst.momentumTurretTargetRadiusWorld = src.momentumTurretTargetRadiusWorld;
+  dst.momentumTurretHasLineOfSightFlag = src.momentumTurretHasLineOfSightFlag;
+  dst.momentumTurretFireGraceTicks = src.momentumTurretFireGraceTicks;
+  dst.momentumTurretCooldownTicks = src.momentumTurretCooldownTicks;
+  dst.momentumTurretShotFlashTicks = src.momentumTurretShotFlashTicks;
   dst.gridBlockSizeIndex             = src.gridBlockSizeIndex;
   dst.gridBlockSpeedIndex            = src.gridBlockSpeedIndex;
   dst.gridBlockGlintPhase            = src.gridBlockGlintPhase;

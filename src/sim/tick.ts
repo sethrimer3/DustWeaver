@@ -54,6 +54,7 @@ import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyGridBlockEnemyAI, applyGridSnakeEnemyAI } from './clusters/gridBlockEnemyAi';
+import { applyMomentumTurretAI } from './clusters/momentumTurretAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
 import { applyDustConstellationAI } from './clusters/dustConstellationAi';
@@ -163,6 +164,7 @@ export function tick(world: WorldState): void {
   //        Phase 2 applies AABB collision damage to overlapping enemies.
   updateMomentumCombatState(world);
   applyMomentumCombatCollisionDamage(world);
+  applyMomentumTurretAI(world);
 
   // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
   applyEnemyAI(world);

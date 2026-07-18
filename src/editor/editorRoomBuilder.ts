@@ -296,6 +296,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       isOrbitalDustCoreLargeFlag: e.isOrbitalDustCoreLargeFlag ?? 0,
       isDustLeechFlag:       e.isDustLeechFlag       ?? 0,
       isGridBlockEnemyFlag:  e.isGridBlockEnemyFlag  ?? 0,
+      isMomentumTurretFlag: e.isMomentumTurretFlag ?? 0,
+      momentumTurretFacingIndex: e.momentumTurretFacingIndex ?? 0,
       gridBlockSizeIndex:    e.gridBlockSizeIndex     ?? 0,
       gridBlockSpeedIndex:   e.gridBlockSpeedIndex    ?? 0,
       isGridSnakeEnemyFlag:  e.isGridSnakeEnemyFlag   ?? 0,

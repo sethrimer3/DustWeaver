@@ -24,6 +24,7 @@ import {
   HURT_FLASH_MAX_ALPHA,
 } from './characterSprites';
 import { renderGridBlockEnemy, renderGridSnakeEnemy } from './gridBlockEnemyRenderer';
+import { renderMomentumTurret } from './momentumTurretRenderer';
 import { renderCrimsonWizardBody, renderCrimsonWizardEffects } from './crimsonWizardRenderer';
 import { renderHeraldBody, renderPhantasmalGeometry, renderVoidSpheres } from './heraldRenderer';
 import { renderIceSpikes, renderIceWizardBody } from './iceWizardRenderer';
@@ -526,6 +527,8 @@ export function renderClusters(
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else if (cluster.isGridSnakeEnemyFlag === 1) {
       renderGridSnakeEnemy(ctx, screenX, screenY, cluster, scalePx, offsetXPx, offsetYPx);
+    } else if (cluster.isMomentumTurretFlag === 1) {
+      renderMomentumTurret(ctx, cluster, snapshot.clusters[0], scalePx, offsetXPx, offsetYPx, snapshot.tick);
     } else if (cluster.isGridBlockEnemyFlag === 1) {
       renderGridBlockEnemy(ctx, screenX, screenY, cluster, scalePx);
     } else {
@@ -627,6 +630,8 @@ export function renderClusters(
       barColor = cluster.gridBlockSpeedIndex === 0 ? '#4caf50'
                : cluster.gridBlockSpeedIndex === 1 ? '#ffc107'
                : '#f44336';
+    } else if (cluster.isMomentumTurretFlag === 1) {
+      barColor = '#ff5a24';
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {
