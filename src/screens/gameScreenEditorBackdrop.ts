@@ -27,6 +27,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { HudState } from '../render/hud/overlay';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
+import { resetCanvasPass } from '../render/canvasViewport';
 
 /**
  * Renders gameplay scene as a static backdrop while world editor consumes input.
@@ -55,11 +56,11 @@ export function renderEditorBackdrop(
   renderProfiler: RenderProfiler,
   isDebugMode: boolean,
 ): void {
+  resetCanvasPass(ctx, virtualCanvas.width, virtualCanvas.height, false);
   bloomSystem.beginFrame();
 
   if (webglRenderer.isAvailable) {
     webglRenderer.render(snapshot, offsetXPx, offsetYPx, zoom);
-    ctx.clearRect(0, 0, virtualWidthPx, virtualHeightPx);
   } else {
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
@@ -111,7 +112,7 @@ export function renderEditorBackdrop(
 
   editorController.render(ctx, offsetXPx, offsetYPx, zoom, virtualWidthPx, virtualHeightPx);
 
-  deviceCtx.imageSmoothingEnabled = false;
+  resetCanvasPass(deviceCtx, canvas.width, canvas.height, false);
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   if (webglRenderer.isAvailable) {
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);

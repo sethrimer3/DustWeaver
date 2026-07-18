@@ -35,6 +35,7 @@
  */
 
 import type { ShadowCasterOccluderPx } from './shadowCaster';
+import { resetCanvasPass, resizeCanvasBackingStore } from '../canvasViewport';
 export type { ShadowCasterOccluderPx } from './shadowCaster';
 
 // ── Flat light-buffer layout ──────────────────────────────────────────────────
@@ -129,8 +130,7 @@ export class DarkRoomOverlay {
   resize(widthPx: number, heightPx: number): void {
     this._widthPx  = Math.max(1, widthPx);
     this._heightPx = Math.max(1, heightPx);
-    this._canvas.width  = this._widthPx;
-    this._canvas.height = this._heightPx;
+    resizeCanvasBackingStore(this._canvas, this._widthPx, this._heightPx);
   }
 
   /**
@@ -160,8 +160,7 @@ export class DarkRoomOverlay {
     const ctx = this._ctx;
 
     // ── Step 1: fill darkness canvas with near-opaque black ─────────────────
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
+    resetCanvasPass(ctx, this._canvas.width, this._canvas.height, true);
     ctx.globalAlpha = DARKNESS_ALPHA;
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, w, h);

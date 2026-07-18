@@ -90,6 +90,7 @@ import { renderVoidEdge } from '../render/voidEdgeRenderer';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
+import { resetCanvasPass } from '../render/canvasViewport';
 import { renderSnakes } from '../render/clusters/snakeRenderer';
 import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRenderer';
 import { renderGrappleCarryBlocks, renderPhantasmalTiles } from '../render/grappleCarryBlockRenderer';
@@ -324,8 +325,10 @@ export function renderFrame(r: RenderFrameContext): void {
   const roomScreenYPx = oy;
   const roomScreenWidthPx = roomWidthWorld * zoom;
   const roomScreenHeightPx = roomHeightWorld * zoom;
-  // Keep sprite sampling nearest-neighbour even if context state changed.
-  ctx.imageSmoothingEnabled = false;
+  // Start every frame from an identity-space, unclipped context. This clears
+  // the complete virtual backing store even if a prior pass leaked a clip,
+  // transform, alpha, or composite mode.
+  resetCanvasPass(ctx, virtualCanvas.width, virtualCanvas.height, false);
   bloomSystem.beginFrame();
 
   // ── Clear / fill virtual canvas ─────────────────────────────────────────
@@ -631,7 +634,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
-  deviceCtx.imageSmoothingEnabled = false;
+  resetCanvasPass(deviceCtx, canvas.width, canvas.height, false);
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {

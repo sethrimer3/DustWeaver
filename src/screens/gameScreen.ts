@@ -31,6 +31,7 @@ import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getManualSprintEnabled, getCombatModeFromStorage } from '../ui/renderSettings';
+import { computeRenderViewportMetrics, resizeCanvasBackingStore } from '../render/canvasViewport';
 import { setCombatMode } from '../sim/combatMode';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
@@ -231,15 +232,20 @@ export function startGameScreen(
   const deviceCtx = canvas.getContext('2d')!;
 
   function resizeCanvas(): void {
-    const deviceScale = window.devicePixelRatio || 1;
     const selectedRenderSize = getSelectedRenderSize();
-    canvas.width = Math.round(selectedRenderSize.widthPx * deviceScale);
-    canvas.height = Math.round(selectedRenderSize.heightPx * deviceScale);
-    // Read the active World View preset to determine virtual canvas height.
-    virtualHeightPx = getActiveWorldViewPreset().virtualHeight;
-    virtualWidthPx = Math.max(1, Math.round((canvas.width / canvas.height) * virtualHeightPx));
-    virtualCanvas.width = virtualWidthPx;
-    virtualCanvas.height = virtualHeightPx;
+    const rect = canvas.getBoundingClientRect();
+    const metrics = computeRenderViewportMetrics(
+      rect.width || window.innerWidth || selectedRenderSize.widthPx,
+      rect.height || window.innerHeight || selectedRenderSize.heightPx,
+      selectedRenderSize.widthPx,
+      selectedRenderSize.heightPx,
+      window.devicePixelRatio || 1,
+      getActiveWorldViewPreset().virtualHeight,
+    );
+    resizeCanvasBackingStore(canvas, metrics.backingWidthPx, metrics.backingHeightPx);
+    virtualWidthPx = metrics.logicalWidthPx;
+    virtualHeightPx = metrics.logicalHeightPx;
+    resizeCanvasBackingStore(virtualCanvas, virtualWidthPx, virtualHeightPx);
     // Canvas resize resets 2D context state, so enforce nearest-neighbour
     // sampling again for pixel-art sprite rendering.
     virtualCtx.imageSmoothingEnabled = false;

@@ -1,4 +1,5 @@
 import type { BloomConfig } from './bloomConfig';
+import { resetCanvasPass } from '../canvasViewport';
 
 export interface GlowStyle {
   enabled?: boolean;
@@ -33,8 +34,7 @@ export class GlowPass {
 
   clear(widthPx: number, heightPx: number): void {
     this.hasGlow = false;
-    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-    this.ctx.clearRect(0, 0, widthPx, heightPx);
+    resetCanvasPass(this.ctx, widthPx, heightPx, false);
   }
 
   drawSprite(params: GlowSpriteParams): void {

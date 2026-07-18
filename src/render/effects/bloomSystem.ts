@@ -1,6 +1,7 @@
 import type { BloomConfig } from './bloomConfig';
 import { GlowPass } from './glowPass';
 import * as FP from '../../debug/perfFreezeProfiler';
+import { resetCanvasPass, resizeCanvasBackingStore } from '../canvasViewport';
 
 /**
  * Owns reusable render targets for selective bloom and exposes a tiny API:
@@ -45,16 +46,13 @@ export class BloomSystem {
     this.widthPx = Math.max(1, widthPx);
     this.heightPx = Math.max(1, heightPx);
 
-    this.glowCanvas.width = this.widthPx;
-    this.glowCanvas.height = this.heightPx;
+    resizeCanvasBackingStore(this.glowCanvas, this.widthPx, this.heightPx);
 
     const scaledWidthPx = Math.max(1, Math.round(this.widthPx * this.config.glowTargetScale));
     const scaledHeightPx = Math.max(1, Math.round(this.heightPx * this.config.glowTargetScale));
 
-    this.blurPingCanvas.width = scaledWidthPx;
-    this.blurPingCanvas.height = scaledHeightPx;
-    this.blurPongCanvas.width = scaledWidthPx;
-    this.blurPongCanvas.height = scaledHeightPx;
+    resizeCanvasBackingStore(this.blurPingCanvas, scaledWidthPx, scaledHeightPx);
+    resizeCanvasBackingStore(this.blurPongCanvas, scaledWidthPx, scaledHeightPx);
 
     this.glowCtx.imageSmoothingEnabled = false;
     this.blurPingCtx.imageSmoothingEnabled = true;
@@ -93,19 +91,16 @@ export class BloomSystem {
 
     const blurRadius = Math.max(0, this.config.blurRadiusPx);
 
-    this.blurPingCtx.setTransform(1, 0, 0, 1, 0, 0);
-    this.blurPingCtx.clearRect(0, 0, this.blurPingCanvas.width, this.blurPingCanvas.height);
+    resetCanvasPass(this.blurPingCtx, this.blurPingCanvas.width, this.blurPingCanvas.height, true);
     this.blurPingCtx.drawImage(this.glowCanvas, 0, 0, this.blurPingCanvas.width, this.blurPingCanvas.height);
 
     if (blurRadius > 0) {
-      this.blurPongCtx.setTransform(1, 0, 0, 1, 0, 0);
-      this.blurPongCtx.clearRect(0, 0, this.blurPongCanvas.width, this.blurPongCanvas.height);
+      resetCanvasPass(this.blurPongCtx, this.blurPongCanvas.width, this.blurPongCanvas.height, true);
       this.blurPongCtx.filter = `blur(${blurRadius}px)`;
       this.blurPongCtx.drawImage(this.blurPingCanvas, 0, 0);
       this.blurPongCtx.filter = 'none';
     } else {
-      this.blurPongCtx.setTransform(1, 0, 0, 1, 0, 0);
-      this.blurPongCtx.clearRect(0, 0, this.blurPongCanvas.width, this.blurPongCanvas.height);
+      resetCanvasPass(this.blurPongCtx, this.blurPongCanvas.width, this.blurPongCanvas.height, true);
       this.blurPongCtx.drawImage(this.blurPingCanvas, 0, 0);
     }
 

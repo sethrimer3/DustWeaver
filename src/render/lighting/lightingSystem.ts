@@ -25,6 +25,7 @@ import type { OccluderSegment } from './visibilityPolygon';
 import { buildWallOccluders, computeVisibilityPolygon } from './visibilityPolygon';
 import { drawLight } from './lightRenderer';
 import * as FP from '../../debug/perfFreezeProfiler';
+import { resetCanvasPass, resizeCanvasBackingStore } from '../canvasViewport';
 
 // ── Pre-allocated scratch buffers ─────────────────────────────────────────────
 
@@ -94,14 +95,11 @@ let _cachedWalls: readonly WallForOccluder[] = [];
 export function initLightingSystem(widthPx: number, heightPx: number): void {
   if (_offscreenCanvas === null) {
     _offscreenCanvas = document.createElement('canvas');
-    _offscreenCanvas.width  = widthPx;
-    _offscreenCanvas.height = heightPx;
+    resizeCanvasBackingStore(_offscreenCanvas, widthPx, heightPx);
     _offscreenCtx = _offscreenCanvas.getContext('2d') ?? null;
     return;
   }
-  if (_offscreenCanvas.width !== widthPx || _offscreenCanvas.height !== heightPx) {
-    _offscreenCanvas.width  = widthPx;
-    _offscreenCanvas.height = heightPx;
+  if (resizeCanvasBackingStore(_offscreenCanvas, widthPx, heightPx)) {
     _offscreenCtx = _offscreenCanvas.getContext('2d') ?? null;
   }
 }
@@ -177,48 +175,50 @@ export function renderLightingPass(
     return;
   }
 
-  // Clear the offscreen canvas.
-  ctx.clearRect(0, 0, _offscreenCanvas.width, _offscreenCanvas.height);
-
-  // Apply camera transform so we draw in world space.
-  ctx.save();
-  ctx.translate(offsetXPx, offsetYPx);
-  ctx.scale(zoom, zoom);
+  // Clear the entire target in identity space and reset any leaked pass state.
+  resetCanvasPass(ctx, _offscreenCanvas.width, _offscreenCanvas.height, false);
 
   // Draw each light.
   let shadowLightCount = 0;
   let totalOccluderSegs = 0;
 
-  for (let i = 0; i < _culledLightCount; i++) {
-    const light = _culledLights[i];
-    let visResult = null;
+  // Apply camera transform so we draw in world space.
+  ctx.save();
+  try {
+    ctx.translate(offsetXPx, offsetYPx);
+    ctx.scale(zoom, zoom);
 
-    if (light.castsShadowsFlag === 1 && _cachedWalls.length > 0) {
-      const visRadiusWorld = light.kind === 'sunray'
-        ? Math.max(light.radiusWorld, light.lengthWorld ?? light.radiusWorld)
-        : light.radiusWorld;
-      // Build occluder segments spatially culled to this light's radius.
-      // Only walls within `visRadiusWorld` of the light origin are included,
-      // so large rooms don't pay the cost of distant walls.
-      const lightSegCount = buildWallOccluders(
-        _cachedWalls,
-        light.xWorld, light.yWorld, visRadiusWorld,
-        _lightOccluders,
-      );
-      if (lightSegCount > 0) {
-        visResult = computeVisibilityPolygon(
+    for (let i = 0; i < _culledLightCount; i++) {
+      const light = _culledLights[i];
+      let visResult = null;
+
+      if (light.castsShadowsFlag === 1 && _cachedWalls.length > 0) {
+        const visRadiusWorld = light.kind === 'sunray'
+          ? Math.max(light.radiusWorld, light.lengthWorld ?? light.radiusWorld)
+          : light.radiusWorld;
+        // Build occluder segments spatially culled to this light's radius.
+        // Only walls within `visRadiusWorld` of the light origin are included,
+        // so large rooms don't pay the cost of distant walls.
+        const lightSegCount = buildWallOccluders(
+          _cachedWalls,
           light.xWorld, light.yWorld, visRadiusWorld,
-          _lightOccluders, lightSegCount,
+          _lightOccluders,
         );
-        totalOccluderSegs += lightSegCount;
+        if (lightSegCount > 0) {
+          visResult = computeVisibilityPolygon(
+            light.xWorld, light.yWorld, visRadiusWorld,
+            _lightOccluders, lightSegCount,
+          );
+          totalOccluderSegs += lightSegCount;
+        }
+        shadowLightCount++;
       }
-      shadowLightCount++;
+
+      drawLight(ctx, light, nowMs, visResult);
     }
-
-    drawLight(ctx, light, nowMs, visResult);
+  } finally {
+    ctx.restore();
   }
-
-  ctx.restore();
 
   FP.recordSceneLightStats(lights.length, _culledLightCount, shadowLightCount, totalOccluderSegs);
 
