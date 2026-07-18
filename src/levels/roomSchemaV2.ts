@@ -117,6 +117,7 @@ import type {
 
 /** Determine the SavedEnemyType for a legacy RoomJsonEnemy. */
 export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
+  if (e.isSlimeSnail) return 'slimeSnail';
   if (e.isMomentumTurret) return 'momentumTurret';
   if (e.isFlyingEye)      return 'flyingEye';
   if (e.isRollingEnemy)   return 'rolling';
@@ -656,6 +657,10 @@ function dehydrateEnemy(e: RoomJsonEnemy): SavedEnemy {
   }
   if (type === 'momentumTurret' && e.momentumTurretFacingIndex !== undefined && e.momentumTurretFacingIndex !== 0) {
     out.momentumTurretFacingIndex = e.momentumTurretFacingIndex;
+  }
+  if (type === 'slimeSnail') {
+    if (e.slimeSnailSurfaceSideIndex !== undefined && e.slimeSnailSurfaceSideIndex !== 0) out.slimeSnailSideIndex = e.slimeSnailSurfaceSideIndex;
+    if (e.slimeSnailClockwiseFlag === 0) out.slimeSnailCw = 0;
   }
   return out;
 }

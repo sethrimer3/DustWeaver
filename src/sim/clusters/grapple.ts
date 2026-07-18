@@ -85,6 +85,7 @@ import {
 } from './grappleShared';
 import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { raycastRopeSegments } from './grappleRopeSupport';
+import { isGrappleWallHitSlimed } from './slimeSnailAi';
 import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
 
 export { updateGrappleRopeAnchor } from './grappleRopeSupport';

@@ -51,7 +51,7 @@ import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompres
 /** Expand a SavedEnemyType into the legacy boolean-flag shape (as RoomJsonEnemy). */
 export function enemyTypeToFlags(
   type: SavedEnemyType,
-  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; spriteIndex?: number; snakeLength?: number; momentumTurretFacingIndex?: 0 | 1 | 2 | 3 },
+  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; spriteIndex?: number; snakeLength?: number; momentumTurretFacingIndex?: 0 | 1 | 2 | 3; slimeSnailSideIndex?: 0 | 1 | 2 | 3; slimeSnailCw?: 0 | 1 },
 ): RoomJsonEnemy {
   return {
     xBlock: base.xBlock,
@@ -82,6 +82,9 @@ export function enemyTypeToFlags(
     isDustLeech:              type === 'dustLeech',
     isMomentumTurret: type === 'momentumTurret',
     momentumTurretFacingIndex: type === 'momentumTurret' ? (base.momentumTurretFacingIndex ?? 0) : undefined,
+    isSlimeSnail: type === 'slimeSnail',
+    slimeSnailSurfaceSideIndex: type === 'slimeSnail' ? (base.slimeSnailSideIndex ?? 0) : undefined,
+    slimeSnailClockwiseFlag: type === 'slimeSnail' ? (base.slimeSnailCw ?? 1) : undefined,
     isGridSnakeEnemy:         type === 'gridSnake',
     gridSnakeLength:          type === 'gridSnake' ? (base.snakeLength ?? 4) : undefined,
     isGridBlockEnemy: (
@@ -235,6 +238,8 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     spriteIndex: e.spriteIndex,
     snakeLength: e.snakeLength,
     momentumTurretFacingIndex: e.momentumTurretFacingIndex,
+    slimeSnailSideIndex: e.slimeSnailSideIndex,
+    slimeSnailCw: e.slimeSnailCw,
   }));
 
   const transitions: RoomJsonTransition[] = (saved.transitions ?? []).map(t => {

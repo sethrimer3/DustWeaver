@@ -16,6 +16,7 @@ import type { WorldSnapshot, WallSnapshot } from './snapshot';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { getWallLayoutCache } from './walls/blockWallLayoutCache';
 import { isSurfaceEligibleForGrapple, type GrappleEligibilityState } from '../sim/clusters/grappleSurfaceEligibility';
+import { SURFACE_SIDES } from '../sim/world/surfaceExposure';
 
 // ── DEV-only grapple-eligible surface debug overlay ───────────────────────────
 //
@@ -287,12 +288,32 @@ function drawReachableEdgeGlow(
   // instance per wall-layout signature, not rebuilt here.
   const surfaceExposureMap = getWallLayoutCache(walls, BLOCK_SIZE_SMALL, roomWidthBlocks, roomHeightBlocks).surfaceExposureMap;
 
+  // Build a compact set of currently-slimed surface keys once per render
+  // call, rather than scanning the trail buffer per segment.
+  const slimedKeys = new Set<string>();
+  {
+    const stride = snapshot.slimeSnailTrailStride;
+    const slotCount = snapshot.slimeSnailTrailCount.length;
+    for (let slot = 0; slot < slotCount; slot++) {
+      const count = snapshot.slimeSnailTrailCount[slot];
+      if (count === 0) continue;
+      const base = slot * stride;
+      for (let i = 0; i < count; i++) {
+        const flat = base + i;
+        if (snapshot.slimeSnailTrailRemainingTicks[flat] <= 0) continue;
+        slimedKeys.add(`${snapshot.slimeSnailTrailCol[flat]},${snapshot.slimeSnailTrailRow[flat]},${snapshot.slimeSnailTrailSideIndex[flat]}`);
+      }
+    }
+  }
+
   const eligibility: GrappleEligibilityState = {
     playerXWorld,
     playerYWorld,
     maxRangeWorldSq: influenceRadiusWorld * influenceRadiusWorld,
     hasLineOfSight: (xWorld: number, yWorld: number): boolean =>
       !isEdgeOccluded(playerXWorld, playerYWorld, xWorld, yWorld, walls, -1),
+    isSurfaceForbidden: (segment): boolean =>
+      slimedKeys.has(`${segment.col},${segment.row},${SURFACE_SIDES.indexOf(segment.side)}`),
   };
 
   ctx.lineWidth = 1.0;

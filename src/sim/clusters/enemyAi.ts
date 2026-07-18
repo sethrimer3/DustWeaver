@@ -55,6 +55,7 @@ export function applyEnemyAI(world: WorldState): void {
     if (cluster.isVoidSingularityFlag === 1) continue;
     if (cluster.isDustLeechFlag === 1) continue;
     if (cluster.isDustEchoFlag === 1) continue;
+    if (cluster.isSlimeSnailFlag === 1) continue;
 
     // ── Tick down cooldowns ────────────────────────────────────────────────
     if (cluster.dashCooldownTicks > 0) {

@@ -135,7 +135,7 @@ export function getNextSlimeSnailSegment(
     if (seg.index === currentIndex) continue;
 
     const sameTile = seg.col === current.col && seg.row === current.row;
-    const cardinallyAdjacent = seg.col === current.col || seg.row === current.row;
+    const cardinallyAdjacent = Math.abs(seg.col - current.col) + Math.abs(seg.row - current.row) === 1;
     if (!sameTile && !cardinallyAdjacent) continue;
 
     const dir = getDirectedEndpoints(seg, clockwiseFlag);
