@@ -117,6 +117,8 @@ import type {
 
 /** Determine the SavedEnemyType for a legacy RoomJsonEnemy. */
 export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
+  if (e.isShadowEnemy) return 'shadow';
+  if (e.isNeedleUrchin) return 'needleUrchin';
   if (e.isSlimeSnail) return 'slimeSnail';
   if (e.isMomentumTurret) return 'momentumTurret';
   if (e.isFlyingEye)      return 'flyingEye';

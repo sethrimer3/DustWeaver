@@ -91,6 +91,8 @@ import {
   MAX_VOID_SPHERES,
 } from './clusters/heraldConfig';
 import { MAX_ICE_SPIKES } from './clusters/iceWizardConfig';
+import { MAX_SHADOW_ENEMIES, SHADOW_PATH_CAPACITY } from './clusters/shadowEnemyConfig';
+import { MAX_NEEDLE_URCHINS, NEEDLE_URCHIN_NEEDLES_PER_BURST } from './clusters/needleUrchinConfig';
 /** Maximum number of dust boost jars per room. */
 export const MAX_DUST_BOOST_JARS = 16;
 /** Maximum number of firefly jars per room. */
@@ -604,6 +606,22 @@ export interface HazardWorldState {
   slimeSnailTrailCount: Uint8Array;
   /** Number of entries per slot (= SLIME_SNAIL_TRAIL_STRIDE). Read-only after init. */
   slimeSnailTrailStride: number;
+  shadowPathXWorld: Float32Array;
+  shadowPathYWorld: Float32Array;
+  shadowPathHead: Uint16Array;
+  shadowPathCount: Uint16Array;
+  shadowPathLastRecordedXWorld: Float32Array;
+  shadowPathLastRecordedYWorld: Float32Array;
+  shadowPathStride: number;
+  needleProjectileXWorld: Float32Array;
+  needleProjectileYWorld: Float32Array;
+  needleProjectilePrevXWorld: Float32Array;
+  needleProjectilePrevYWorld: Float32Array;
+  needleProjectileVelXWorld: Float32Array;
+  needleProjectileVelYWorld: Float32Array;
+  needleProjectileLifetimeTicks: Uint16Array;
+  needleProjectileAliveFlag: Uint8Array;
+  needleProjectileOwnerSlot: Int8Array;
 
   // ── Bee-swarm individual bee position buffers ────────────────────────────────
   /**
@@ -1019,6 +1037,22 @@ export function createHazardWorldState(): HazardWorldState {
     slimeSnailTrailVisualSeed:     new Uint32Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
     slimeSnailTrailHead:           new Uint8Array(MAX_SLIME_SNAILS),
     slimeSnailTrailCount:          new Uint8Array(MAX_SLIME_SNAILS),
+    shadowPathStride: SHADOW_PATH_CAPACITY,
+    shadowPathXWorld: new Float32Array(MAX_SHADOW_ENEMIES * SHADOW_PATH_CAPACITY),
+    shadowPathYWorld: new Float32Array(MAX_SHADOW_ENEMIES * SHADOW_PATH_CAPACITY),
+    shadowPathHead: new Uint16Array(MAX_SHADOW_ENEMIES),
+    shadowPathCount: new Uint16Array(MAX_SHADOW_ENEMIES),
+    shadowPathLastRecordedXWorld: new Float32Array(MAX_SHADOW_ENEMIES),
+    shadowPathLastRecordedYWorld: new Float32Array(MAX_SHADOW_ENEMIES),
+    needleProjectileXWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileYWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectilePrevXWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectilePrevYWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileVelXWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileVelYWorld: new Float32Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileLifetimeTicks: new Uint16Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileAliveFlag: new Uint8Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST),
+    needleProjectileOwnerSlot: new Int8Array(MAX_NEEDLE_URCHINS * NEEDLE_URCHIN_NEEDLES_PER_BURST).fill(-1),
     beeSwarmBeeXWorld:             new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeYWorld:             new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeVelXWorld:          new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),

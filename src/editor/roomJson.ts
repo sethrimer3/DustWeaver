@@ -243,6 +243,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isIceBubbleFlag: (e.isIceBubble ?? false) ? 1 : 0,
     isSquareStampedeFlag: (e.isSquareStampede ?? false) ? 1 : 0,
     isSlimeSnailFlag: (e.isSlimeSnail ?? false) ? 1 : 0,
+    isShadowEnemyFlag: (e.isShadowEnemy ?? false) ? 1 : 0,
+    isNeedleUrchinFlag: (e.isNeedleUrchin ?? false) ? 1 : 0,
     slimeSnailSurfaceSideIndex: e.slimeSnailSurfaceSideIndex ?? 0,
     slimeSnailClockwiseFlag: e.slimeSnailClockwiseFlag ?? 1,
     isGoldenMimicFlag: (e.isGoldenMimic ?? false) ? 1 : 0,

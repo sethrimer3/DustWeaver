@@ -96,6 +96,7 @@ interface _ReusableBacking {
   slimeSnailTrailHead: Uint8Array;
   slimeSnailTrailCount: Uint8Array;
   slimeSnailTrailStride: number;
+  needleProjectileXWorld:Float32Array;needleProjectileYWorld:Float32Array;needleProjectileVelXWorld:Float32Array;needleProjectileVelYWorld:Float32Array;needleProjectileAliveFlag:Uint8Array;
   beeSwarmBeeXWorld: Float32Array;
   beeSwarmBeeYWorld: Float32Array;
   beeSwarmBeeVelXWorld: Float32Array;
@@ -288,6 +289,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     slimeSnailTrailHead:           world.slimeSnailTrailHead,
     slimeSnailTrailCount:          world.slimeSnailTrailCount,
     slimeSnailTrailStride:         world.slimeSnailTrailStride,
+    needleProjectileXWorld:world.needleProjectileXWorld,needleProjectileYWorld:world.needleProjectileYWorld,needleProjectileVelXWorld:world.needleProjectileVelXWorld,needleProjectileVelYWorld:world.needleProjectileVelYWorld,needleProjectileAliveFlag:world.needleProjectileAliveFlag,
     beeSwarmBeeXWorld:         world.beeSwarmBeeXWorld,
     beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
     beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
@@ -671,6 +673,7 @@ export function refreshSnapshotWorldArrayRefs(
   raw.slimeSnailTrailVisualSeed      = world.slimeSnailTrailVisualSeed;
   raw.slimeSnailTrailHead            = world.slimeSnailTrailHead;
   raw.slimeSnailTrailCount           = world.slimeSnailTrailCount;
+  raw.needleProjectileXWorld=world.needleProjectileXWorld;raw.needleProjectileYWorld=world.needleProjectileYWorld;raw.needleProjectileVelXWorld=world.needleProjectileVelXWorld;raw.needleProjectileVelYWorld=world.needleProjectileVelYWorld;raw.needleProjectileAliveFlag=world.needleProjectileAliveFlag;
   raw.beeSwarmBeeXWorld              = world.beeSwarmBeeXWorld;
   raw.beeSwarmBeeYWorld              = world.beeSwarmBeeYWorld;
   raw.beeSwarmBeeVelXWorld           = world.beeSwarmBeeVelXWorld;

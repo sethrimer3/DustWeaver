@@ -100,6 +100,8 @@ export function _makeEmptyCluster(): _MutableCluster {
     squareStampedeSlotIndex: -1,
     squareStampedeBaseHalfSizeWorld: 0,
     isSlimeSnailFlag: 0,
+    isShadowEnemyFlag:0,shadowStartupTicks:0,shadowRephaseTicks:0,shadowVisualPhaseRad:0,shadowHitFlashTicks:0,
+    isNeedleUrchinFlag:0,needleUrchinState:0,needleUrchinStateTicks:0,needleUrchinBurstPhaseRad:0,needleUrchinShotFlashTicks:0,needleUrchinHitFlashTicks:0,
     slimeSnailSurfaceSideIndex: 0,
     slimeSnailBodyAngleRad: 0,
     slimeSnailClockwiseFlag: 1,
@@ -314,6 +316,8 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.squareStampedeSlotIndex         = src.squareStampedeSlotIndex;
   dst.squareStampedeBaseHalfSizeWorld = src.squareStampedeBaseHalfSizeWorld;
   dst.isSlimeSnailFlag                = src.isSlimeSnailFlag;
+  dst.isShadowEnemyFlag=src.isShadowEnemyFlag;dst.shadowStartupTicks=src.shadowStartupTicks;dst.shadowRephaseTicks=src.shadowRephaseTicks;dst.shadowVisualPhaseRad=src.shadowVisualPhaseRad;dst.shadowHitFlashTicks=src.shadowHitFlashTicks;
+  dst.isNeedleUrchinFlag=src.isNeedleUrchinFlag;dst.needleUrchinState=src.needleUrchinState;dst.needleUrchinStateTicks=src.needleUrchinStateTicks;dst.needleUrchinBurstPhaseRad=src.needleUrchinBurstPhaseRad;dst.needleUrchinShotFlashTicks=src.needleUrchinShotFlashTicks;dst.needleUrchinHitFlashTicks=src.needleUrchinHitFlashTicks;
   dst.slimeSnailSurfaceSideIndex      = src.slimeSnailSurfaceSideIndex;
   dst.slimeSnailBodyAngleRad          = src.slimeSnailBodyAngleRad;
   dst.slimeSnailClockwiseFlag         = src.slimeSnailClockwiseFlag;

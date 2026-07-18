@@ -164,6 +164,8 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     extraCss: `border-radius: 55% 45% 35% 30%; border-bottom: 2px solid #b9f49b; box-sizing: border-box;`,
     glyph: '•',
   },
+  enemy_shadow: { bg: '#100c18', extraCss: `border: 2px solid #6d39a8; box-sizing: border-box; opacity:.8;`, glyph: '◼' },
+  enemy_needle_urchin: { bg: '#303441', extraCss: `border-radius:50%; border:4px dashed #aaa4bc; box-sizing:border-box;`, glyph: '✦' },
   enemy_momentum_turret: {
     bg: 'linear-gradient(90deg, #292b35 0 55%, #ff4b20 56% 72%, #6d707d 73%)',
     extraCss: `border: 2px solid #171820; box-sizing: border-box;`,

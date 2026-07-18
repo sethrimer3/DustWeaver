@@ -306,6 +306,8 @@ export interface RoomEnemyDef {
    * floor/wall/ceiling surfaces, leaving a grapple-blocking slime trail.
    */
   isSlimeSnailFlag?: 0 | 1;
+  isShadowEnemyFlag?: 0 | 1;
+  isNeedleUrchinFlag?: 0 | 1;
   /** Starting exposed surface side (0=top,1=right,2=bottom,3=left). Only meaningful when isSlimeSnailFlag === 1. */
   slimeSnailSurfaceSideIndex?: 0 | 1 | 2 | 3;
   /** 1 = clockwise traversal, 0 = counterclockwise. Only meaningful when isSlimeSnailFlag === 1. */

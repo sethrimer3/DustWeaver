@@ -247,6 +247,8 @@ export function applyClusterMovement(world: WorldState): void {
       // ── Wall Snake / Needle Snake: movement handled entirely in snakeAi.ts ──
       // Snake AI pathing drives the head position directly so standard ground
       // gravity and collision sweeps must not run here.
+    } else if (cluster.isShadowEnemyFlag === 1 || cluster.isNeedleUrchinFlag === 1) {
+      cluster.velocityXWorld = 0; cluster.velocityYWorld = 0;
     } else if (cluster.isSlimeSnailFlag === 1) {
       // ── Slime Snail: movement handled entirely in slimeSnailAi.ts ──
       // Kinematic surface-crawl (no gravity, no generic wall collision sweep).

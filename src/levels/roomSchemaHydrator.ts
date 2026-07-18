@@ -83,6 +83,8 @@ export function enemyTypeToFlags(
     isMomentumTurret: type === 'momentumTurret',
     momentumTurretFacingIndex: type === 'momentumTurret' ? (base.momentumTurretFacingIndex ?? 0) : undefined,
     isSlimeSnail: type === 'slimeSnail',
+    isShadowEnemy: type === 'shadow',
+    isNeedleUrchin: type === 'needleUrchin',
     slimeSnailSurfaceSideIndex: type === 'slimeSnail' ? (base.slimeSnailSideIndex ?? 0) : undefined,
     slimeSnailClockwiseFlag: type === 'slimeSnail' ? (base.slimeSnailCw ?? 1) : undefined,
     isGridSnakeEnemy:         type === 'gridSnake',

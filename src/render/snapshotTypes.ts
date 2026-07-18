@@ -228,6 +228,11 @@ export interface WorldSnapshot {
   readonly slimeSnailTrailCount: Uint8Array;
   /** Number of entries per slot (SLIME_SNAIL_TRAIL_STRIDE). */
   readonly slimeSnailTrailStride: number;
+  readonly needleProjectileXWorld: Float32Array;
+  readonly needleProjectileYWorld: Float32Array;
+  readonly needleProjectileVelXWorld: Float32Array;
+  readonly needleProjectileVelYWorld: Float32Array;
+  readonly needleProjectileAliveFlag: Uint8Array;
 
   // ── Bee-swarm individual bee position buffers ─────────────────────────────
   /**

@@ -36,16 +36,18 @@ export interface PlayerDamageTarget {
   hurtTicks: number;
   isHighVelocityAttacking?: 0 | 1;
 }
+export interface PlayerDamageOptions { bypassMomentumInvulnerability?: boolean; }
 
 export function applyPlayerDamageWithKnockback(
   player: PlayerDamageTarget,
   damagePoints: number,
   sourceXWorld: number,
   _sourceYWorld: number,
+  options?: PlayerDamageOptions,
 ): void {
   if (player.isAliveFlag === 0) return;
   if (player.invulnerabilityTicks > 0) return;
-  if (player.isHighVelocityAttacking === 1) return; // momentum combat invulnerability
+  if (player.isHighVelocityAttacking === 1 && options?.bypassMomentumInvulnerability !== true) return;
 
   const damageToApply = Math.max(0, damagePoints);
   if (damageToApply <= 0) return;
@@ -74,4 +76,10 @@ export function applyPlayerDamageWithKnockback(
 
   player.invulnerabilityTicks = INVULNERABILITY_DURATION_TICKS;
   player.hurtTicks = HURT_VISUAL_DURATION_TICKS;
+}
+
+export function killPlayerImmediately(player: PlayerDamageTarget): void {
+  if (player.isAliveFlag === 0) return;
+  player.healthPoints = 0;
+  player.isAliveFlag = 0;
 }

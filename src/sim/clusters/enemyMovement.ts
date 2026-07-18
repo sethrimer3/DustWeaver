@@ -77,6 +77,7 @@ export function tickEnemyMovement(
   if (cluster.isMomentumTurretFlag === 1) {
     return;
   }
+  if (cluster.isShadowEnemyFlag === 1 || cluster.isNeedleUrchinFlag === 1) return;
   if (cluster.isCrimsonWizardFlag === 1) {
     return;
   }

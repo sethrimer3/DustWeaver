@@ -26,6 +26,8 @@ import {
 import { renderGridBlockEnemy, renderGridSnakeEnemy } from './gridBlockEnemyRenderer';
 import { renderMomentumTurret } from './momentumTurretRenderer';
 import { renderSlimeSnailBody, renderSlimeSnailTrails } from './slimeSnailRenderer';
+import { renderShadowEnemy } from './shadowEnemyRenderer';
+import { renderNeedleProjectiles, renderNeedleUrchin } from './needleUrchinRenderer';
 import { renderCrimsonWizardBody, renderCrimsonWizardEffects } from './crimsonWizardRenderer';
 import { renderHeraldBody, renderPhantasmalGeometry, renderVoidSpheres } from './heraldRenderer';
 import { renderIceSpikes, renderIceWizardBody } from './iceWizardRenderer';
@@ -116,6 +118,7 @@ export function renderClusters(
   renderPhantasmalGeometry(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderIceSpikes(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   renderSlimeSnailTrails(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
+  renderNeedleProjectiles(ctx,snapshot,scalePx,offsetXPx,offsetYPx);
   renderVoidSpheres(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
   // should land on integer screen pixels to avoid texture interpolation blur.
@@ -529,6 +532,8 @@ export function renderClusters(
       // Snake bodies are rendered in snakeRenderer.ts after the main cluster pass.
     } else if (cluster.isGridSnakeEnemyFlag === 1) {
       renderGridSnakeEnemy(ctx, screenX, screenY, cluster, scalePx, offsetXPx, offsetYPx);
+    } else if(cluster.isShadowEnemyFlag===1){renderShadowEnemy(ctx,cluster,scalePx,offsetXPx,offsetYPx);
+    } else if(cluster.isNeedleUrchinFlag===1){renderNeedleUrchin(ctx,cluster,scalePx,offsetXPx,offsetYPx,snapshot.tick);
     } else if (cluster.isSlimeSnailFlag === 1) {
       renderSlimeSnailBody(ctx, cluster, scalePx, offsetXPx, offsetYPx);
     } else if (cluster.isMomentumTurretFlag === 1) {
@@ -638,6 +643,8 @@ export function renderClusters(
       barColor = '#ff5a24';
     } else if (cluster.isSlimeSnailFlag === 1) {
       barColor = '#70c85c';
+    } else if(cluster.isShadowEnemyFlag===1){barColor='#482064';
+    } else if(cluster.isNeedleUrchinFlag===1){barColor='#aaa4bc';
     } else if (isPlayer) {
       barColor = '#00ff99';
     } else {

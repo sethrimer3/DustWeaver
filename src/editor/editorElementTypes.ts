@@ -130,6 +130,8 @@ export interface EditorEnemy {
   isIceBubbleFlag: 0 | 1;
   isSquareStampedeFlag: 0 | 1;
   isSlimeSnailFlag?: 0 | 1;
+  isShadowEnemyFlag?: 0 | 1;
+  isNeedleUrchinFlag?: 0 | 1;
   slimeSnailSurfaceSideIndex?: 0 | 1 | 2 | 3;
   slimeSnailClockwiseFlag?: 0 | 1;
   isGoldenMimicFlag?: 0 | 1;

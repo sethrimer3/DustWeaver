@@ -143,7 +143,9 @@ export type SavedEnemyType =
   | 'gridBlock2x2Fast'
   | 'gridSnake'
   | 'momentumTurret'
-  | 'slimeSnail';
+  | 'slimeSnail'
+  | 'shadow'
+  | 'needleUrchin';
 
 export interface SavedEnemy {
   type: SavedEnemyType;

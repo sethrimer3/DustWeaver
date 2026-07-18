@@ -177,6 +177,17 @@ export interface ClusterSnapshot {
   readonly squareStampedeBaseHalfSizeWorld: number;
   /** 1 if this cluster is a slime snail — crawls along surfaces, leaving a slime trail. */
   readonly isSlimeSnailFlag: 0 | 1;
+  readonly isShadowEnemyFlag: 0 | 1;
+  readonly shadowStartupTicks: number;
+  readonly shadowRephaseTicks: number;
+  readonly shadowVisualPhaseRad: number;
+  readonly shadowHitFlashTicks: number;
+  readonly isNeedleUrchinFlag: 0 | 1;
+  readonly needleUrchinState: number;
+  readonly needleUrchinStateTicks: number;
+  readonly needleUrchinBurstPhaseRad: number;
+  readonly needleUrchinShotFlashTicks: number;
+  readonly needleUrchinHitFlashTicks: number;
   /** Starting/current surface side (0=top,1=right,2=bottom,3=left). */
   readonly slimeSnailSurfaceSideIndex: 0 | 1 | 2 | 3;
   /** Current body orientation in radians (follows movement tangent / corner arc). */

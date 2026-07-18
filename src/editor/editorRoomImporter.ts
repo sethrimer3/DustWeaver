@@ -169,6 +169,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isIceBubbleFlag: (e.isIceBubbleFlag ?? 0) as 0 | 1,
     isSquareStampedeFlag: (e.isSquareStampedeFlag ?? 0) as 0 | 1,
     isSlimeSnailFlag: (e.isSlimeSnailFlag ?? 0) as 0 | 1,
+    isShadowEnemyFlag: (e.isShadowEnemyFlag ?? 0) as 0 | 1,
+    isNeedleUrchinFlag: (e.isNeedleUrchinFlag ?? 0) as 0 | 1,
     slimeSnailSurfaceSideIndex: (e.slimeSnailSurfaceSideIndex ?? 0) as 0 | 1 | 2 | 3,
     slimeSnailClockwiseFlag: (e.slimeSnailClockwiseFlag ?? 1) as 0 | 1,
     isGoldenMimicFlag: (e.isGoldenMimicFlag ?? 0) as 0 | 1,

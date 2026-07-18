@@ -55,6 +55,8 @@ import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyGridBlockEnemyAI, applyGridSnakeEnemyAI } from './clusters/gridBlockEnemyAi';
 import { applySlimeSnailAI, tickSlimeSnailTrails } from './clusters/slimeSnailAi';
+import { recordAndMoveShadowEnemies, resolveShadowFatalContacts } from './clusters/shadowEnemyAi';
+import { applyNeedleUrchinAI, tickNeedleUrchinProjectiles } from './clusters/needleUrchinAi';
 import { applyMomentumTurretAI } from './clusters/momentumTurretAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
@@ -165,13 +167,17 @@ export function tick(world: WorldState): void {
   //         ticks independent of whether any snail is still alive.
   applySlimeSnailAI(world);
   tickSlimeSnailTrails(world);
+  recordAndMoveShadowEnemies(world);
 
   // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
   //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;
   //        Phase 2 applies AABB collision damage to overlapping enemies.
   updateMomentumCombatState(world);
   applyMomentumCombatCollisionDamage(world);
+  resolveShadowFatalContacts(world);
   applyMomentumTurretAI(world);
+  applyNeedleUrchinAI(world);
+  tickNeedleUrchinProjectiles(world);
 
   // 0.5. Enemy AI — decide attack / block / dodge for each enemy cluster
   applyEnemyAI(world);

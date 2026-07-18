@@ -33,6 +33,9 @@ import {
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
 import { SLIME_SNAIL_HALF_WIDTH_WORLD, SLIME_SNAIL_HALF_HEIGHT_WORLD, SLIME_SNAIL_HP } from '../sim/clusters/slimeSnailConfig';
 import { placeSlimeSnailOnSurface } from '../sim/clusters/slimeSnailAi';
+import { MAX_SHADOW_ENEMIES, SHADOW_HALF_HEIGHT_WORLD, SHADOW_HALF_WIDTH_WORLD, SHADOW_HP, SHADOW_START_DELAY_TICKS } from '../sim/clusters/shadowEnemyConfig';
+import { appendShadowWaypoint, clearShadowPath } from '../sim/clusters/shadowEnemyAi';
+import { MAX_NEEDLE_URCHINS, NEEDLE_URCHIN_HALF_SIZE_WORLD, NEEDLE_URCHIN_HP, NEEDLE_URCHIN_NEEDLES_PER_BURST } from '../sim/clusters/needleUrchinConfig';
 import {
   DEFAULT_GRID_SNAKE_LENGTH,
   getGridBlockFootprintSize,
@@ -303,6 +306,14 @@ export function spawnEnemyClusters(
       enemyCluster.squareStampedeAiState           = 0;
       enemyCluster.squareStampedeAiStateTicks      = 20;
       enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
+    } else if (enemyDef.isShadowEnemyFlag === 1) {
+      let slot=-1;for(let si=0;si<MAX_SHADOW_ENEMIES;si++){if(!world.clusters.some(c=>c.isShadowEnemyFlag===1&&c.shadowPathSlotIndex===si)){slot=si;break;}}
+      enemyCluster.isShadowEnemyFlag=1;enemyCluster.shadowPathSlotIndex=slot;enemyCluster.shadowStartupTicks=SHADOW_START_DELAY_TICKS;enemyCluster.halfWidthWorld=SHADOW_HALF_WIDTH_WORLD;enemyCluster.halfHeightWorld=SHADOW_HALF_HEIGHT_WORLD;enemyCluster.healthPoints=SHADOW_HP;enemyCluster.maxHealthPoints=SHADOW_HP;
+      const player=world.clusters[0];if(slot>=0&&player?.isPlayerFlag===1){clearShadowPath(world,slot);appendShadowWaypoint(world,slot,player.positionXWorld,player.positionYWorld);world.shadowPathLastRecordedXWorld[slot]=player.positionXWorld;world.shadowPathLastRecordedYWorld[slot]=player.positionYWorld;}
+    } else if (enemyDef.isNeedleUrchinFlag === 1) {
+      let slot=-1;for(let si=0;si<MAX_NEEDLE_URCHINS;si++){if(!world.clusters.some(c=>c.isNeedleUrchinFlag===1&&c.needleUrchinSlotIndex===si)){slot=si;break;}}
+      enemyCluster.isNeedleUrchinFlag=1;enemyCluster.needleUrchinSlotIndex=slot;enemyCluster.halfWidthWorld=NEEDLE_URCHIN_HALF_SIZE_WORLD;enemyCluster.halfHeightWorld=NEEDLE_URCHIN_HALF_SIZE_WORLD;enemyCluster.healthPoints=NEEDLE_URCHIN_HP;enemyCluster.maxHealthPoints=NEEDLE_URCHIN_HP;
+      if(slot>=0){const b=slot*NEEDLE_URCHIN_NEEDLES_PER_BURST;world.needleProjectileAliveFlag.fill(0,b,b+NEEDLE_URCHIN_NEEDLES_PER_BURST);}
     } else if (enemyDef.isSlimeSnailFlag === 1) {
       // Allocate a trail ring-buffer slot for this snail; spawn still succeeds
       // (without emitting slime) if no slot is free.
@@ -829,8 +840,9 @@ export function spawnEnemyClusters(
       enemyCluster.isGridSnakeEnemyFlag === 1 ||
       enemyCluster.isGridBlockEnemyFlag === 1 ||
       enemyCluster.isSlimeSnailFlag === 1;
+    const skipNewEnemyParticles=enemyCluster.isShadowEnemyFlag===1||enemyCluster.isNeedleUrchinFlag===1;
     const skipTurretParticleSpawn = enemyCluster.isMomentumTurretFlag === 1;
-    if (!skipParticleSpawn && !skipTurretParticleSpawn) {
+    if (!skipParticleSpawn && !skipTurretParticleSpawn && !skipNewEnemyParticles) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
     }
 

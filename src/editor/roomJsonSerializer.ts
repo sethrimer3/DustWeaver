@@ -89,6 +89,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isIceBubble: e.isIceBubbleFlag === 1,
       isSquareStampede: e.isSquareStampedeFlag === 1,
       isSlimeSnail: e.isSlimeSnailFlag === 1 ? true : undefined,
+      isShadowEnemy: e.isShadowEnemyFlag === 1 ? true : undefined,
+      isNeedleUrchin: e.isNeedleUrchinFlag === 1 ? true : undefined,
       slimeSnailSurfaceSideIndex: e.isSlimeSnailFlag === 1 ? (e.slimeSnailSurfaceSideIndex ?? 0) : undefined,
       slimeSnailClockwiseFlag: e.isSlimeSnailFlag === 1 ? (e.slimeSnailClockwiseFlag ?? 1) : undefined,
       isGoldenMimic: e.isGoldenMimicFlag === 1,

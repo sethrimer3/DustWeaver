@@ -549,6 +549,19 @@ export interface ClusterState {
   // ---- Slime Snail (populated only when isSlimeSnailFlag === 1) -------------
   /** 1 if this cluster is a slime snail — crawls deterministically along exposed surfaces, leaving a slime trail. */
   isSlimeSnailFlag: 0 | 1;
+  isShadowEnemyFlag: 0 | 1;
+  shadowPathSlotIndex: number;
+  shadowStartupTicks: number;
+  shadowRephaseTicks: number;
+  shadowVisualPhaseRad: number;
+  shadowHitFlashTicks: number;
+  isNeedleUrchinFlag: 0 | 1;
+  needleUrchinSlotIndex: number;
+  needleUrchinState: number;
+  needleUrchinStateTicks: number;
+  needleUrchinBurstPhaseRad: number;
+  needleUrchinShotFlashTicks: number;
+  needleUrchinHitFlashTicks: number;
   /** Index into the WorldState slime-snail trail ring-buffer arrays. -1 when no slot has been assigned. */
   slimeSnailTrailSlotIndex: number;
   /** Index of the current surface segment (in the room's derived slime-snail surface topology) the snail occupies. -1 when unresolved/stationary. */
@@ -1176,6 +1189,19 @@ export function createClusterState(
     squareStampedeAiStateTicks: 0,
     squareStampedeTrailTimerTicks: 0,
     isSlimeSnailFlag: 0,
+    isShadowEnemyFlag: 0,
+    shadowPathSlotIndex: -1,
+    shadowStartupTicks: 0,
+    shadowRephaseTicks: 0,
+    shadowVisualPhaseRad: 0,
+    shadowHitFlashTicks: 0,
+    isNeedleUrchinFlag: 0,
+    needleUrchinSlotIndex: -1,
+    needleUrchinState: 0,
+    needleUrchinStateTicks: 0,
+    needleUrchinBurstPhaseRad: 0,
+    needleUrchinShotFlashTicks: 0,
+    needleUrchinHitFlashTicks: 0,
     slimeSnailTrailSlotIndex: -1,
     slimeSnailSurfaceSegmentIndex: -1,
     slimeSnailSurfaceSideIndex: 0,
