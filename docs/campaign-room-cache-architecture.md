@@ -239,6 +239,13 @@ is used unchanged.
 
 When the user clicks **Export Campaign** in the Electron editor:
 
+The progress modal is appended and allowed to paint before campaign assembly
+begins, so preparation is visible instead of presenting as an editor freeze.
+For the official campaign, export reuses compact rooms from the canonical
+campaign as its baseline and serializes/bakes only rooms present in the
+editor's pending-edit set. If no canonical packed campaign was loaded, export
+falls back to rebuilding the registry rooms.
+
 ```
 Renderer                               Main Process (IPC)
    │                                         │

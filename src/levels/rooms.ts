@@ -38,6 +38,9 @@ let loadedOfficialCampaignRevisionMetadata: SavedCampaignRevisionMetadata | null
 /** Campaign spawn from the last successfully loaded official campaign file. Null before init or if absent. */
 let loadedOfficialCampaignSpawn: CampaignSpawnData | null = null;
 
+/** Canonical packed campaign retained so editor export can reuse unchanged rooms. */
+let loadedOfficialPackedCampaign: SavedCampaignV1 | null = null;
+
 /**
  * Returns the revision metadata from the loaded official packed campaign, or null
  * if the campaign was not loaded from a packed file or has no metadata.
@@ -54,6 +57,15 @@ export function getLoadedOfficialCampaignRevisionMetadata(): SavedCampaignRevisi
  */
 export function getLoadedOfficialCampaignSpawn(): CampaignSpawnData | null {
   return loadedOfficialCampaignSpawn;
+}
+
+/**
+ * Returns the canonical official campaign loaded for this session. Export uses
+ * its compact saved rooms as the baseline instead of rebuilding and rebaking
+ * every unchanged runtime RoomDef.
+ */
+export function getLoadedOfficialPackedCampaign(): SavedCampaignV1 | null {
+  return loadedOfficialPackedCampaign;
 }
 
 // ── World-map metadata stores ─────────────────────────────────────────────────
@@ -182,6 +194,7 @@ export async function initRoomRegistry(): Promise<void> {
   roomWorldOverridesMap.clear();
   loadedOfficialCampaignRevisionMetadata = null;
   loadedOfficialCampaignSpawn = null;
+  loadedOfficialPackedCampaign = null;
 
   // ── Primary: load from packed campaign file ────────────────────────────────
   const packedCampaign = await fetchOfficialPackedCampaign();
@@ -204,6 +217,7 @@ export async function initRoomRegistry(): Promise<void> {
     }
     loadedOfficialCampaignRevisionMetadata = packedCampaign.metadata ?? null;
     loadedOfficialCampaignSpawn = packedCampaign.campaign.campaignSpawn ?? null;
+    loadedOfficialPackedCampaign = packedCampaign;
     console.log(
       `[rooms] Loaded ${registryMap.size} rooms from packed campaign ` +
       `"${packedCampaign.campaign.id}" (initialRoom: ${packedCampaign.campaign.initialRoomId})`
@@ -291,6 +305,7 @@ export function clearRegistryAndApplyCampaignMetadata(campaign: SavedCampaignV1)
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
+  loadedOfficialPackedCampaign = campaign;
 
   // Populate world names from the campaign's worldMap.worlds so that proper
   // names (e.g. "Ancient Ruins") are used instead of the "World N" fallbacks.
@@ -323,6 +338,7 @@ export function clearRegistryAndApplyCampaignMetadata(campaign: SavedCampaignV1)
 export function applyOfficialCampaignMetadata(campaign: SavedCampaignV1): void {
   loadedOfficialCampaignRevisionMetadata = campaign.metadata ?? null;
   loadedOfficialCampaignSpawn = campaign.campaign.campaignSpawn ?? null;
+  loadedOfficialPackedCampaign = campaign;
 }
 
 
@@ -335,6 +351,7 @@ export function registerRoomsFromPackedCampaign(campaign: SavedCampaignV1): void
   worldMapPositions.clear();
   roomNameOverridesMap.clear();
   roomWorldOverridesMap.clear();
+  loadedOfficialPackedCampaign = campaign;
 
   for (const [id, room] of rooms) {
     registryMap.set(id, room);

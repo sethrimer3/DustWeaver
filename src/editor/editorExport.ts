@@ -21,7 +21,7 @@ import { dehydrateRoom, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import {
   ROOM_REGISTRY,
 } from '../levels/rooms';
-import { getLoadedOfficialCampaignRevisionMetadata } from '../levels/rooms';
+import { getLoadedOfficialCampaignRevisionMetadata, getLoadedOfficialPackedCampaign } from '../levels/rooms';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES, WORLD_ORDER } from '../levels/rooms';
@@ -272,7 +272,7 @@ export function exportAllChanges(
  * `exportCampaignJson` instead.
  */
 async function runElectronProgressExport(
-  exported: import('../levels/campaignSchema').SavedCampaignV1,
+  buildExport: () => import('../levels/campaignSchema').SavedCampaignV1 | Promise<import('../levels/campaignSchema').SavedCampaignV1>,
   isOfficialCampaign: boolean,
   progressRoot: HTMLElement,
 ): Promise<void> {
@@ -304,6 +304,13 @@ async function runElectronProgressExport(
   });
 
   try {
+    // Give Chromium a full paint opportunity before campaign assembly starts.
+    // Without this, expensive room baking runs before the newly-added modal is
+    // visible, which makes most of the export look like an unexplained freeze.
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    });
+    const exported = await buildExport();
     const result = await electronApi.exportCampaignWithProgress(exported, { isOfficialCampaign, exportId });
 
     // The invoke result is authoritative: if the final progress event was
@@ -344,45 +351,54 @@ export function exportCampaignJson(
   progressRoot?: HTMLElement | null,
   customBlockDefs?: import('../levels/campaignSchema').SavedCampaignV1['customBlockDefs'],
 ): void {
-  let exported: ReturnType<typeof assembleExportCampaign>;
-  if (session.campaignStore !== undefined) {
-    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
-    session.campaignStore.updateWorldMap(worldMap);
-    if (activeRoomData !== undefined && activeRoomData !== null) {
-      session.campaignStore.setActiveRoomId(activeRoomData.id);
-      session.campaignStore.commitActiveRoom(activeRoomData);
+  const buildExport = (): ReturnType<typeof assembleExportCampaign> => {
+    let exported: ReturnType<typeof assembleExportCampaign>;
+    if (session.campaignStore !== undefined) {
+      const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
+      session.campaignStore.updateWorldMap(worldMap);
+      if (
+        activeRoomData !== undefined &&
+        activeRoomData !== null &&
+        session.campaignStore.dirtyRoomIds.has(activeRoomData.id)
+      ) {
+        session.campaignStore.setActiveRoomId(activeRoomData.id);
+        session.campaignStore.commitActiveRoom(activeRoomData);
+        if (import.meta.env.DEV) {
+          const verboseJson = editorRoomDataToJson(activeRoomData);
+          const errors = validateRoomRoundtrip(verboseJson);
+          if (errors.length > 0) {
+            console.error(`[editorExport] Campaign round-trip validation failed for room "${activeRoomData.id}":`, errors);
+          }
+        }
+      }
+      exported = session.campaignStore.buildExportCampaign(session.campaign, customBlockDefs);
+    } else {
       if (import.meta.env.DEV) {
-        const verboseJson = editorRoomDataToJson(activeRoomData);
-        const errors = validateRoomRoundtrip(verboseJson);
-        if (errors.length > 0) {
-          console.error(`[editorExport] Campaign round-trip validation failed for room "${activeRoomData.id}":`, errors);
+        // Validate round-trip for each pending room.
+        for (const [, data] of pendingRoomEdits) {
+          const verboseJson = editorRoomDataToJson(data);
+          const errors = validateRoomRoundtrip(verboseJson);
+          if (errors.length > 0) {
+            console.error(`[editorExport] Campaign round-trip validation failed for room "${data.id}":`, errors);
+          }
         }
       }
+      const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
+      exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
     }
-    exported = session.campaignStore.buildExportCampaign(session.campaign, customBlockDefs);
-  } else {
-    if (import.meta.env.DEV) {
-      // Validate round-trip for each pending room.
-      for (const [, data] of pendingRoomEdits) {
-        const verboseJson = editorRoomDataToJson(data);
-        const errors = validateRoomRoundtrip(verboseJson);
-        if (errors.length > 0) {
-          console.error(`[editorExport] Campaign round-trip validation failed for room "${data.id}":`, errors);
-        }
-      }
-    }
-    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
-    exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
-  }
+    return exported;
+  };
 
   // In Electron, write directly to userData/CUSTOM_CAMPAIGNS/<id>/ with progress.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(exported, false, progressRoot).catch((err: unknown) => {
+    runElectronProgressExport(buildExport, false, progressRoot).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron custom campaign export error:', msg);
     });
     return;
   }
+
+  const exported = buildExport();
 
   // Browser / GitHub Pages fallback — trigger a download.
   const stringifyStartMs = import.meta.env.DEV ? performance.now() : 0;
@@ -431,73 +447,75 @@ export function exportMainCampaignJson(
   progressRoot?: HTMLElement | null,
   campaignSpawn?: CampaignSpawnData | null,
 ): void {
-  if (import.meta.env.DEV) {
-    for (const [, data] of pendingRoomEdits) {
-      const verboseJson = editorRoomDataToJson(data);
-      const errors = validateRoomRoundtrip(verboseJson);
-      if (errors.length > 0) {
-        console.error(
-          `[editorExport] Main campaign round-trip validation failed for room "${data.id}":`,
-          errors,
-        );
+  const buildExport = (): SavedCampaignV1 => {
+    if (import.meta.env.DEV) {
+      for (const [, data] of pendingRoomEdits) {
+        const verboseJson = editorRoomDataToJson(data);
+        const errors = validateRoomRoundtrip(verboseJson);
+        if (errors.length > 0) {
+          console.error(
+            `[editorExport] Main campaign round-trip validation failed for room "${data.id}":`,
+            errors,
+          );
+        }
       }
     }
-  }
 
-  // Dehydrate every room in the registry to SavedRoomV2 as the baseline.
-  // assembleExportCampaign will override with pending edits when present.
-  const baselineRooms: ReturnType<typeof dehydrateRoom>[] = [];
-  for (const [, roomDef] of ROOM_REGISTRY) {
-    const { data } = roomDefToEditorRoomData(roomDef, 1);
-    const jsonDef = editorRoomDataToJson(data);
-    baselineRooms.push(dehydrateRoom(jsonDef));
-  }
+    // The canonical campaign already contains compact saved representations of
+    // every unchanged room. Reusing them avoids rebuilding wall templates for
+    // the entire campaign; assembleExportCampaign replaces only pending edits.
+    const loadedCampaign = getLoadedOfficialPackedCampaign();
+    const baselineRooms: ReturnType<typeof dehydrateRoom>[] = loadedCampaign !== null
+      ? loadedCampaign.rooms
+      : [...ROOM_REGISTRY.values()].map((roomDef) => {
+          const { data } = roomDefToEditorRoomData(roomDef, 1);
+          return dehydrateRoom(editorRoomDataToJson(data));
+        });
 
-  const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
-
-  // Synthetic session carrying the main campaign metadata and baseline rooms.
-  // Propagate the existing revision metadata from the loaded canonical campaign
-  // so that re-exporting increments the version counter rather than resetting to 1.
-  const loadedRevMeta = getLoadedOfficialCampaignRevisionMetadata();
-  const syntheticSession: EditableCampaignSession = {
-    source: 'main',
-    campaign: {
-      v: 1,
-      kind: 'DustWeaverCampaign',
-      ...(loadedRevMeta !== null ? { metadata: loadedRevMeta } : {}),
+    const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
+    const loadedRevMeta = getLoadedOfficialCampaignRevisionMetadata();
+    const syntheticSession: EditableCampaignSession = {
+      source: 'main',
       campaign: {
-        id: MAIN_CAMPAIGN_ID,
-        title: MAIN_CAMPAIGN_TITLE,
-        creator: MAIN_CAMPAIGN_CREATOR,
-        description: MAIN_CAMPAIGN_DESCRIPTION,
-        initialRoomId: campaignSpawn?.roomId ?? MAIN_CAMPAIGN_INITIAL_ROOM_ID,
-        initialRoomImagePath: null,
-        ...(campaignSpawn !== undefined && campaignSpawn !== null ? { campaignSpawn } : {}),
+        v: 1,
+        kind: 'DustWeaverCampaign',
+        ...(loadedRevMeta !== null ? { metadata: loadedRevMeta } : {}),
+        campaign: {
+          id: MAIN_CAMPAIGN_ID,
+          title: MAIN_CAMPAIGN_TITLE,
+          creator: MAIN_CAMPAIGN_CREATOR,
+          description: MAIN_CAMPAIGN_DESCRIPTION,
+          initialRoomId: campaignSpawn?.roomId ?? MAIN_CAMPAIGN_INITIAL_ROOM_ID,
+          initialRoomImagePath: null,
+          ...(campaignSpawn !== undefined && campaignSpawn !== null ? { campaignSpawn } : {}),
+        },
+        worldMap,
+        rooms: baselineRooms,
+        editor: {
+          createdWithBuild: String(BUILD_NUMBER),
+          lastEditedIso: new Date().toISOString(),
+        },
       },
-      worldMap,
-      rooms: baselineRooms,
-      editor: {
-        createdWithBuild: String(BUILD_NUMBER),
-        lastEditedIso: new Date().toISOString(),
-      },
-    },
-  };
+    };
 
-  const exported = assembleExportCampaign(
-    syntheticSession,
-    pendingRoomEdits,
-    ROOM_REGISTRY,
-    worldMap,
-  );
+    return assembleExportCampaign(
+      syntheticSession,
+      pendingRoomEdits,
+      ROOM_REGISTRY,
+      worldMap,
+    );
+  };
 
   // In Electron, write directly to the project files with a progress modal.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(exported, true, progressRoot).catch((err: unknown) => {
+    runElectronProgressExport(buildExport, true, progressRoot).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron main campaign export error:', msg);
     });
     return;
   }
+
+  const exported = buildExport();
 
   // In Electron without a progressRoot (legacy callers) fall back to the old
   // synchronous IPC call so no regression occurs.

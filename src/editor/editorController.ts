@@ -621,7 +621,6 @@ export function createEditorController(
           }
         },
         onExportCampaignJson: () => {
-          commitActiveRoomToCampaign('export');
           if (campaignSession) {
             const customBlockDefs = state.customBlockRegistry.size > 0
               ? [...state.customBlockRegistry.values()].map(def =>
@@ -629,8 +628,12 @@ export function createEditorController(
               : undefined;
             exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot, customBlockDefs);
           } else {
+            const exportRoomEdits = new Map(pendingRoomEdits);
+            if (isCurrentRoomDirty && state.roomData !== null) {
+              exportRoomEdits.set(state.roomData.id, state.roomData);
+            }
             exportMainCampaignJson(
-              pendingRoomEdits,
+              exportRoomEdits,
               uiRoot,
               activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
             );
