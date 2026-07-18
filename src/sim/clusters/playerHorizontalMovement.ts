@@ -26,7 +26,6 @@ import {
   GROUND_DECELERATION_PER_SEC2,
   AIR_ACCELERATION_PER_SEC2,
   TURN_ACCELERATION_PER_SEC2,
-  WALL_JUMP_X_SPEED_WORLD,
   FAST_FALL_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_HALF_WIDTH_WORLD,
   WALL_JUMP_AIR_ACCEL_MULTIPLIER,
@@ -93,8 +92,12 @@ export function applyPlayerHorizontalMovement(
     // During wall-jump force-time window, override horizontal velocity
     // to the outward launch direction — prevents immediately steering back.
     // Cancel early if the player hits a wall in the force direction.
+    // Reapplies the SAME magnitude latched at jump time
+    // (cluster.wallJumpLaunchXSpeedWorld, set by computeWallJumpXSpeedWorld
+    // in playerWallJump.ts) for the whole window, rather than recomputing a
+    // tier from input that may have changed since the jump fired.
     if (cluster.wallJumpForceTimeTicks > 0) {
-      const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
+      const wallJumpX = cluster.wallJumpLaunchXSpeedWorld;
       const hitsWallInForceDir =
         (cluster.wallJumpDirX > 0 && cluster.isTouchingWallRightFlag === 1) ||
         (cluster.wallJumpDirX < 0 && cluster.isTouchingWallLeftFlag  === 1);

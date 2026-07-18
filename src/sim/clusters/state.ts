@@ -132,6 +132,15 @@ export interface ClusterState {
    */
   wallJumpDirX: number;
   /**
+   * Horizontal launch speed magnitude (world units/s) of the most recent
+   * wall jump, as decided by computeWallJumpXSpeedWorld (playerWallJump.ts)
+   * at the moment the jump fired. Latched so the force-time window in
+   * playerHorizontalMovement.ts reapplies the SAME magnitude for the whole
+   * window rather than recomputing it (and potentially picking a different
+   * tier) as input changes mid-window.
+   */
+  wallJumpLaunchXSpeedWorld: number;
+  /**
    * Number of wall jumps used since the last reset point (0 = none yet).
    * Reset points: touching ground or attaching a grapple.
    * Used to apply a three-tier height profile:
@@ -1086,6 +1095,7 @@ export function createClusterState(
     wallJumpLockoutTicks: 0,
     wallJumpForceTimeTicks: 0,
     wallJumpDirX: 0,
+    wallJumpLaunchXSpeedWorld: 0,
     wallJumpCountSinceReset: 0,
     wallJumpGraceLeftTicks: 0,
     wallJumpGraceRightTicks: 0,

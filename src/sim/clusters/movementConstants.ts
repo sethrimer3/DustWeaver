@@ -305,11 +305,28 @@ export const WALL_SLIDE_MAX_FALL_SPEED = 17.0;
 // Wall jump
 // ============================================================================
 
+// ── Wall-jump horizontal launch speed (tiered by count + input) ────────────
+// See computeWallJumpXSpeedWorld in playerWallJump.ts — the one authoritative
+// helper that resolves these into a single magnitude per jump. Reduced
+// speeds only apply on the first/second wall jump AND only when the player
+// is actively holding horizontal input toward the wall being jumped from
+// (left wall + holding left, or right wall + holding right); holding away,
+// holding nothing, or any other input state uses the default speed.
+// Preserves the existing outward launch DIRECTION — these are magnitudes.
+
+/** Horizontal wall-jump launch speed (px/s) for the first wall jump after a reset, when holding input toward the jumped-from wall. */
+export const WALL_JUMP_X_SPEED_FIRST_TOWARD_WALL_WORLD = 50.0;
+
+/** Horizontal wall-jump launch speed (px/s) for the second wall jump after a reset, when holding input toward the jumped-from wall. */
+export const WALL_JUMP_X_SPEED_SECOND_TOWARD_WALL_WORLD = 100.0;
+
 /**
- * Horizontal launch speed away from the wall on a wall jump (px/s).
+ * Default horizontal wall-jump launch speed (px/s): used for the third and
+ * every later wall jump regardless of input, and for the first/second wall
+ * jump whenever the player is not holding input toward the jumped-from wall.
  * Strong outward push prevents rapid same-wall climbing.
  */
-export const WALL_JUMP_X_SPEED_WORLD = 147.0;
+export const WALL_JUMP_X_SPEED_DEFAULT_WORLD = 150.0;
 
 /**
  * Vertical launch speed on a wall jump (px/s, applied upward).

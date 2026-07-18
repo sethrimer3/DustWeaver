@@ -48,8 +48,13 @@ reversing direction at or above walking speed — see "Skid Tech" below.
 - **Wall Slide**
   - Max slide descent speed: **17 units/sec**.
 - **Wall Jump**
-  - Horizontal launch speed: **147 units/sec** away from wall.
-  - Vertical launch speed: first wall jump **152 units/sec** (142 + 10 bonus); subsequent wall jumps **71 units/sec** (142 × 0.5).
+  - Horizontal launch speed away from wall (magnitude; direction unchanged), tiered by wall-jump count AND whether the player is holding input toward the wall being jumped from at the moment of the jump:
+    - First wall jump, holding toward the wall: **50 units/sec**.
+    - Second wall jump, holding toward the wall: **100 units/sec**.
+    - Third and later wall jumps: **150 units/sec**, always, regardless of input.
+    - First or second wall jump while holding away from the wall, holding no horizontal input, or an ambiguous input state: **150 units/sec**.
+    - One authoritative helper (`computeWallJumpXSpeedWorld` in `src/sim/clusters/playerWallJump.ts`) resolves the tier; the magnitude is latched (`wallJumpLaunchXSpeedWorld`) so the force-time window re-applies the same value for its full duration.
+  - Vertical launch speed (unchanged): first wall jump **152 units/sec** (142 + 10 bonus); second wall jump **~122 units/sec** (152 × 0.80); third and later wall jumps **71 units/sec** (142 × 0.5).
 - **Post-Wall-Jump Air Acceleration**
   - After any wall jump, horizontal air acceleration is **doubled (2×)** until the player lands, making steering away from the wall snappier.
 - **Wall Jump Force-Time**
