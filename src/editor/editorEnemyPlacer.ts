@@ -4,6 +4,31 @@
  */
 
 import { EditorState, EditorRoomData, PaletteItem, allocateUid } from './editorState';
+import { MAX_SHADOW_ENEMIES } from '../sim/clusters/shadowEnemyConfig';
+import { MAX_NEEDLE_URCHINS } from '../sim/clusters/needleUrchinConfig';
+
+export function canAddLimitedEnemy(
+  room: EditorRoomData,
+  enemyType: 'shadow' | 'needleUrchin',
+): boolean {
+  const limit = enemyType === 'shadow' ? MAX_SHADOW_ENEMIES : MAX_NEEDLE_URCHINS;
+  let count = 0;
+  for (const enemy of room.enemies) {
+    const matches = enemyType === 'shadow'
+      ? enemy.isShadowEnemyFlag === 1
+      : enemy.isNeedleUrchinFlag === 1;
+    if (matches) {
+      count++;
+    }
+  }
+  return count < limit;
+}
+
+function warnEditorCapacity(enemyType: 'Shadow' | 'Needle Urchin', limit: number): void {
+  if (import.meta.env.DEV) {
+    console.warn(`[editorEnemyPlacer] ${enemyType} limit reached; maximum per room is ${limit}.`);
+  }
+}
 
 /**
  * Handles placement of enemy and grasshopper-area palette items.
@@ -249,8 +274,37 @@ export function placeEnemyAtCursor(
       isSquareStampedeFlag: 1,
     });
   } else if (item.id === 'enemy_shadow' || item.id === 'enemy_needle_urchin') {
-    const shadow=item.id==='enemy_shadow';
-    room.enemies.push({uid:allocateUid(state),xBlock:bx,yBlock:by,kinds:[shadow?'Void':'Physical'],particleCount:shadow?1:3,isBossFlag:0,isFlyingEyeFlag:0,isRollingEnemyFlag:0,rollingEnemySpriteIndex:0,isRockElementalFlag:0,isRadiantTetherFlag:0,isRadiantWebFlag:0,isGrappleHunterFlag:0,isSlimeFlag:0,isLargeSlimeFlag:0,isWheelEnemyFlag:0,isBeetleFlag:0,isBubbleEnemyFlag:0,isIceBubbleFlag:0,isSquareStampedeFlag:0,isShadowEnemyFlag:shadow?1:0,isNeedleUrchinFlag:shadow?0:1});
+    const isShadow = item.id === 'enemy_shadow';
+    const enemyType = isShadow ? 'shadow' : 'needleUrchin';
+    const limit = isShadow ? MAX_SHADOW_ENEMIES : MAX_NEEDLE_URCHINS;
+    if (!canAddLimitedEnemy(room, enemyType)) {
+      warnEditorCapacity(isShadow ? 'Shadow' : 'Needle Urchin', limit);
+      return true;
+    }
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: [isShadow ? 'Void' : 'Physical'],
+      particleCount: isShadow ? 1 : 3,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+      isRadiantTetherFlag: 0,
+      isRadiantWebFlag: 0,
+      isGrappleHunterFlag: 0,
+      isSlimeFlag: 0,
+      isLargeSlimeFlag: 0,
+      isWheelEnemyFlag: 0,
+      isBeetleFlag: 0,
+      isBubbleEnemyFlag: 0,
+      isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
+      isShadowEnemyFlag: isShadow ? 1 : 0,
+      isNeedleUrchinFlag: isShadow ? 0 : 1,
+    });
   } else if (item.id === 'enemy_slime_snail') {
     room.enemies.push({
       uid: allocateUid(state),

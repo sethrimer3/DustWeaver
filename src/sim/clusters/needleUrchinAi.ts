@@ -1,9 +1,262 @@
 import type { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import type { ClusterState } from './state';
 import * as C from './needleUrchinConfig';
 
-export function segmentAabbHitT(x0:number,y0:number,x1:number,y1:number,minX:number,minY:number,maxX:number,maxY:number):number|null{const dx=x1-x0,dy=y1-y0;let lo=0,hi=1;for(const [p,d,a,b] of [[x0,dx,minX,maxX],[y0,dy,minY,maxY]]){if(Math.abs(d)<1e-9){if(p<a||p>b)return null;}else{let t0=(a-p)/d,t1=(b-p)/d;if(t0>t1)[t0,t1]=[t1,t0];lo=Math.max(lo,t0);hi=Math.min(hi,t1);if(lo>hi)return null;}}return lo;}
-export function shouldTriggerNeedleUrchin(dx:number,dy:number,vx:number,vy:number):boolean{return dx*dx+dy*dy<=C.NEEDLE_URCHIN_TRIGGER_RADIUS_WORLD**2&&Math.hypot(vx,vy)>C.NEEDLE_URCHIN_TRIGGER_SPEED_WORLD_PER_SEC;}
-export function fireNeedleBurst(world:WorldState,u:import('./state').ClusterState):void{const p=world.clusters[0],slot=u.needleUrchinSlotIndex;if(!p||slot<0)return;const base=Math.atan2(p.positionYWorld-u.positionYWorld,p.positionXWorld-u.positionXWorld);u.needleUrchinBurstPhaseRad=base;for(let i=0;i<C.NEEDLE_URCHIN_NEEDLES_PER_BURST;i++){const f=slot*C.NEEDLE_URCHIN_NEEDLES_PER_BURST+i,a=base+i*Math.PI*2/C.NEEDLE_URCHIN_NEEDLES_PER_BURST,dx=Math.cos(a),dy=Math.sin(a);world.needleProjectileXWorld[f]=u.positionXWorld+dx*C.NEEDLE_PROJECTILE_SPAWN_RADIUS_WORLD;world.needleProjectileYWorld[f]=u.positionYWorld+dy*C.NEEDLE_PROJECTILE_SPAWN_RADIUS_WORLD;world.needleProjectilePrevXWorld[f]=world.needleProjectileXWorld[f];world.needleProjectilePrevYWorld[f]=world.needleProjectileYWorld[f];world.needleProjectileVelXWorld[f]=dx*C.NEEDLE_PROJECTILE_SPEED_WORLD_PER_SEC;world.needleProjectileVelYWorld[f]=dy*C.NEEDLE_PROJECTILE_SPEED_WORLD_PER_SEC;world.needleProjectileLifetimeTicks[f]=C.NEEDLE_PROJECTILE_LIFETIME_TICKS;world.needleProjectileAliveFlag[f]=1;world.needleProjectileOwnerSlot[f]=slot;}}
-export function applyNeedleUrchinAI(world:WorldState):void{const p=world.clusters[0];if(!p)return;for(const u of world.clusters){if(u.isNeedleUrchinFlag!==1||u.isAliveFlag===0)continue;u.velocityXWorld=0;u.velocityYWorld=0;if(u.needleUrchinShotFlashTicks>0)u.needleUrchinShotFlashTicks--;const ok=shouldTriggerNeedleUrchin(p.positionXWorld-u.positionXWorld,p.positionYWorld-u.positionYWorld,p.velocityXWorld,p.velocityYWorld);if(u.needleUrchinState===C.NEEDLE_URCHIN_STATE_IDLE){if(ok){u.needleUrchinState=C.NEEDLE_URCHIN_STATE_TELEGRAPH;u.needleUrchinStateTicks=0;}}else if(u.needleUrchinState===C.NEEDLE_URCHIN_STATE_TELEGRAPH){if(!ok){u.needleUrchinState=0;u.needleUrchinStateTicks=0;}else if(++u.needleUrchinStateTicks>=C.NEEDLE_URCHIN_TELEGRAPH_TICKS){fireNeedleBurst(world,u);u.needleUrchinState=C.NEEDLE_URCHIN_STATE_COOLDOWN;u.needleUrchinStateTicks=C.NEEDLE_URCHIN_COOLDOWN_TICKS;u.needleUrchinShotFlashTicks=C.NEEDLE_URCHIN_SHOT_FLASH_TICKS;}}else if(--u.needleUrchinStateTicks<=0){u.needleUrchinState=0;u.needleUrchinStateTicks=0;}}}
-export function tickNeedleUrchinProjectiles(world:WorldState):void{const p=world.clusters[0],dt=world.dtMs*.001;for(let i=0;i<world.needleProjectileAliveFlag.length;i++){if(!world.needleProjectileAliveFlag[i])continue;const x0=world.needleProjectileXWorld[i],y0=world.needleProjectileYWorld[i],x1=x0+world.needleProjectileVelXWorld[i]*dt,y1=y0+world.needleProjectileVelYWorld[i]*dt;world.needleProjectilePrevXWorld[i]=x0;world.needleProjectilePrevYWorld[i]=y0;let best=2,hitPlayer=false;if(p&&p.isAliveFlag===1){const t=segmentAabbHitT(x0,y0,x1,y1,p.positionXWorld-p.halfWidthWorld-C.NEEDLE_PROJECTILE_HALF_WIDTH_WORLD,p.positionYWorld-p.halfHeightWorld-C.NEEDLE_PROJECTILE_HALF_WIDTH_WORLD,p.positionXWorld+p.halfWidthWorld+C.NEEDLE_PROJECTILE_HALF_WIDTH_WORLD,p.positionYWorld+p.halfHeightWorld+C.NEEDLE_PROJECTILE_HALF_WIDTH_WORLD);if(t!==null){best=t;hitPlayer=true;}}for(let w=0;w<world.wallCount;w++){const t=segmentAabbHitT(x0,y0,x1,y1,world.wallXWorld[w],world.wallYWorld[w],world.wallXWorld[w]+world.wallWWorld[w],world.wallYWorld[w]+world.wallHWorld[w]);if(t!==null&&t<best){best=t;hitPlayer=false;}}if(best<=1){world.needleProjectileXWorld[i]=x0+(x1-x0)*best;world.needleProjectileYWorld[i]=y0+(y1-y0)*best;world.needleProjectileAliveFlag[i]=0;if(hitPlayer&&p)applyPlayerDamageWithKnockback(p,C.NEEDLE_PROJECTILE_DAMAGE,world.needleProjectileXWorld[i],world.needleProjectileYWorld[i],{bypassMomentumInvulnerability:true});continue;}world.needleProjectileXWorld[i]=x1;world.needleProjectileYWorld[i]=y1;if(world.needleProjectileLifetimeTicks[i]>0)world.needleProjectileLifetimeTicks[i]--;if(world.needleProjectileLifetimeTicks[i]===0||x1<0||y1<0||x1>world.worldWidthWorld||y1>world.worldHeightWorld)world.needleProjectileAliveFlag[i]=0;}}
+export function segmentAabbHitT(
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+): number | null {
+  const deltaX = x1 - x0;
+  const deltaY = y1 - y0;
+  let earliestT = 0;
+  let latestT = 1;
+  const axes: readonly (readonly [number, number, number, number])[] = [
+    [x0, deltaX, minX, maxX],
+    [y0, deltaY, minY, maxY],
+  ];
+
+  for (const [position, delta, minimum, maximum] of axes) {
+    if (Math.abs(delta) < 1e-9) {
+      if (position < minimum || position > maximum) {
+        return null;
+      }
+      continue;
+    }
+
+    let entryT = (minimum - position) / delta;
+    let exitT = (maximum - position) / delta;
+    if (entryT > exitT) {
+      [entryT, exitT] = [exitT, entryT];
+    }
+    earliestT = Math.max(earliestT, entryT);
+    latestT = Math.min(latestT, exitT);
+    if (earliestT > latestT) {
+      return null;
+    }
+  }
+  return earliestT;
+}
+
+export function findSweptNeedlePlayerHitT(
+  player: ClusterState | undefined,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number | null {
+  if (!player || player.isAliveFlag === 0) {
+    return null;
+  }
+
+  const padding = C.NEEDLE_PROJECTILE_HALF_WIDTH_WORLD;
+  return segmentAabbHitT(
+    x0,
+    y0,
+    x1,
+    y1,
+    player.positionXWorld - player.halfWidthWorld - padding,
+    player.positionYWorld - player.halfHeightWorld - padding,
+    player.positionXWorld + player.halfWidthWorld + padding,
+    player.positionYWorld + player.halfHeightWorld + padding,
+  );
+}
+
+export function findEarliestNeedleWallHitT(
+  world: WorldState,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): number | null {
+  let earliestWallT: number | null = null;
+  for (let wallIndex = 0; wallIndex < world.wallCount; wallIndex++) {
+    const widthWorld = world.wallWWorld[wallIndex];
+    const heightWorld = world.wallHWorld[wallIndex];
+    if (widthWorld <= 0 || heightWorld <= 0) {
+      continue;
+    }
+
+    const wallT = segmentAabbHitT(
+      x0,
+      y0,
+      x1,
+      y1,
+      world.wallXWorld[wallIndex],
+      world.wallYWorld[wallIndex],
+      world.wallXWorld[wallIndex] + widthWorld,
+      world.wallYWorld[wallIndex] + heightWorld,
+    );
+    if (wallT !== null && (earliestWallT === null || wallT < earliestWallT)) {
+      earliestWallT = wallT;
+    }
+  }
+  return earliestWallT;
+}
+
+export function shouldTriggerNeedleUrchin(
+  deltaXWorld: number,
+  deltaYWorld: number,
+  velocityXWorld: number,
+  velocityYWorld: number,
+): boolean {
+  const withinRange = deltaXWorld * deltaXWorld + deltaYWorld * deltaYWorld
+    <= C.NEEDLE_URCHIN_TRIGGER_RADIUS_WORLD ** 2;
+  const speedWorldPerSec = Math.hypot(velocityXWorld, velocityYWorld);
+  return withinRange && speedWorldPerSec > C.NEEDLE_URCHIN_TRIGGER_SPEED_WORLD_PER_SEC;
+}
+
+export function fireNeedleBurst(world: WorldState, urchin: ClusterState): void {
+  const player = world.clusters[0];
+  const slot = urchin.needleUrchinSlotIndex;
+  if (!player || slot < 0) {
+    return;
+  }
+
+  const baseAngleRad = Math.atan2(
+    player.positionYWorld - urchin.positionYWorld,
+    player.positionXWorld - urchin.positionXWorld,
+  );
+  const angleStepRad = Math.PI * 2 / C.NEEDLE_URCHIN_NEEDLES_PER_BURST;
+  urchin.needleUrchinBurstPhaseRad = baseAngleRad;
+
+  for (let needleIndex = 0; needleIndex < C.NEEDLE_URCHIN_NEEDLES_PER_BURST; needleIndex++) {
+    const flatIndex = slot * C.NEEDLE_URCHIN_NEEDLES_PER_BURST + needleIndex;
+    const angleRad = baseAngleRad + needleIndex * angleStepRad;
+    const directionX = Math.cos(angleRad);
+    const directionY = Math.sin(angleRad);
+    const xWorld = urchin.positionXWorld + directionX * C.NEEDLE_PROJECTILE_SPAWN_RADIUS_WORLD;
+    const yWorld = urchin.positionYWorld + directionY * C.NEEDLE_PROJECTILE_SPAWN_RADIUS_WORLD;
+
+    world.needleProjectileXWorld[flatIndex] = xWorld;
+    world.needleProjectileYWorld[flatIndex] = yWorld;
+    world.needleProjectilePrevXWorld[flatIndex] = xWorld;
+    world.needleProjectilePrevYWorld[flatIndex] = yWorld;
+    world.needleProjectileVelXWorld[flatIndex] = directionX * C.NEEDLE_PROJECTILE_SPEED_WORLD_PER_SEC;
+    world.needleProjectileVelYWorld[flatIndex] = directionY * C.NEEDLE_PROJECTILE_SPEED_WORLD_PER_SEC;
+    world.needleProjectileLifetimeTicks[flatIndex] = C.NEEDLE_PROJECTILE_LIFETIME_TICKS;
+    world.needleProjectileAliveFlag[flatIndex] = 1;
+    world.needleProjectileOwnerSlot[flatIndex] = slot;
+  }
+}
+
+export function applyNeedleUrchinAI(world: WorldState): void {
+  const player = world.clusters[0];
+  if (!player) {
+    return;
+  }
+
+  for (const urchin of world.clusters) {
+    if (urchin.isNeedleUrchinFlag !== 1 || urchin.isAliveFlag === 0) {
+      continue;
+    }
+
+    if (urchin.healthPoints < urchin.needleUrchinPrevHealthPoints) {
+      urchin.needleUrchinHitFlashTicks = C.NEEDLE_URCHIN_HIT_FLASH_TICKS;
+    } else if (urchin.needleUrchinHitFlashTicks > 0) {
+      urchin.needleUrchinHitFlashTicks--;
+    }
+    urchin.needleUrchinPrevHealthPoints = urchin.healthPoints;
+
+    urchin.velocityXWorld = 0;
+    urchin.velocityYWorld = 0;
+    if (urchin.needleUrchinShotFlashTicks > 0) {
+      urchin.needleUrchinShotFlashTicks--;
+    }
+
+    const shouldTrigger = shouldTriggerNeedleUrchin(
+      player.positionXWorld - urchin.positionXWorld,
+      player.positionYWorld - urchin.positionYWorld,
+      player.velocityXWorld,
+      player.velocityYWorld,
+    );
+
+    if (urchin.needleUrchinState === C.NEEDLE_URCHIN_STATE_IDLE) {
+      if (shouldTrigger) {
+        urchin.needleUrchinState = C.NEEDLE_URCHIN_STATE_TELEGRAPH;
+        urchin.needleUrchinStateTicks = 0;
+      }
+      continue;
+    }
+
+    if (urchin.needleUrchinState === C.NEEDLE_URCHIN_STATE_TELEGRAPH) {
+      if (!shouldTrigger) {
+        urchin.needleUrchinState = C.NEEDLE_URCHIN_STATE_IDLE;
+        urchin.needleUrchinStateTicks = 0;
+        continue;
+      }
+      urchin.needleUrchinStateTicks++;
+      if (urchin.needleUrchinStateTicks >= C.NEEDLE_URCHIN_TELEGRAPH_TICKS) {
+        fireNeedleBurst(world, urchin);
+        urchin.needleUrchinState = C.NEEDLE_URCHIN_STATE_COOLDOWN;
+        urchin.needleUrchinStateTicks = C.NEEDLE_URCHIN_COOLDOWN_TICKS;
+        urchin.needleUrchinShotFlashTicks = C.NEEDLE_URCHIN_SHOT_FLASH_TICKS;
+      }
+      continue;
+    }
+
+    urchin.needleUrchinStateTicks--;
+    if (urchin.needleUrchinStateTicks <= 0) {
+      urchin.needleUrchinState = C.NEEDLE_URCHIN_STATE_IDLE;
+      urchin.needleUrchinStateTicks = 0;
+    }
+  }
+}
+
+export function tickNeedleUrchinProjectiles(world: WorldState): void {
+  const player = world.clusters[0];
+  const dtSeconds = world.dtMs * 0.001;
+
+  for (let needleIndex = 0; needleIndex < world.needleProjectileAliveFlag.length; needleIndex++) {
+    if (world.needleProjectileAliveFlag[needleIndex] === 0) {
+      continue;
+    }
+
+    const x0 = world.needleProjectileXWorld[needleIndex];
+    const y0 = world.needleProjectileYWorld[needleIndex];
+    const x1 = x0 + world.needleProjectileVelXWorld[needleIndex] * dtSeconds;
+    const y1 = y0 + world.needleProjectileVelYWorld[needleIndex] * dtSeconds;
+    world.needleProjectilePrevXWorld[needleIndex] = x0;
+    world.needleProjectilePrevYWorld[needleIndex] = y0;
+
+    const playerT = findSweptNeedlePlayerHitT(player, x0, y0, x1, y1);
+    const wallT = findEarliestNeedleWallHitT(world, x0, y0, x1, y1);
+    const wallWins = wallT !== null && (playerT === null || wallT <= playerT + C.NEEDLE_COLLISION_T_EPSILON);
+    const impactT = wallWins ? wallT : playerT;
+
+    if (impactT !== null && impactT <= 1) {
+      world.needleProjectileXWorld[needleIndex] = x0 + (x1 - x0) * impactT;
+      world.needleProjectileYWorld[needleIndex] = y0 + (y1 - y0) * impactT;
+      world.needleProjectileAliveFlag[needleIndex] = 0;
+      if (!wallWins && player) {
+        applyPlayerDamageWithKnockback(
+          player,
+          C.NEEDLE_PROJECTILE_DAMAGE,
+          world.needleProjectileXWorld[needleIndex],
+          world.needleProjectileYWorld[needleIndex],
+          { bypassMomentumInvulnerability: true },
+        );
+      }
+      continue;
+    }
+
+    world.needleProjectileXWorld[needleIndex] = x1;
+    world.needleProjectileYWorld[needleIndex] = y1;
+    if (world.needleProjectileLifetimeTicks[needleIndex] > 0) {
+      world.needleProjectileLifetimeTicks[needleIndex]--;
+    }
+    const outsideRoom = x1 < 0
+      || y1 < 0
+      || x1 > world.worldWidthWorld
+      || y1 > world.worldHeightWorld;
+    if (world.needleProjectileLifetimeTicks[needleIndex] === 0 || outsideRoom) {
+      world.needleProjectileAliveFlag[needleIndex] = 0;
+    }
+  }
+}

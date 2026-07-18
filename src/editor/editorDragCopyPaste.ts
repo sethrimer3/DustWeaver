@@ -14,6 +14,7 @@ import {
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   SelectedElement, allocateUid, EditorRoomData, EditorGuideDustPath,
 } from './editorState';
+import { canAddLimitedEnemy } from './editorEnemyPlacer';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
 
@@ -408,6 +409,12 @@ export function pasteFromClipboard(s: EditorState): void {
     newElements.push({ type: 'wall', uid: newUid });
   }
   for (const e of data.enemies) {
+    if (e.isShadowEnemyFlag === 1 && !canAddLimitedEnemy(s.roomData, 'shadow')) {
+      continue;
+    }
+    if (e.isNeedleUrchinFlag === 1 && !canAddLimitedEnemy(s.roomData, 'needleUrchin')) {
+      continue;
+    }
     const newUid = allocateUid(s);
     s.roomData.enemies.push({
       ...e,

@@ -133,6 +133,59 @@ export const SLIME_HOP_INTERVAL_INITIAL_TICKS = 30;
 /** Initial hop delay for large slime enemies (ticks). */
 export const LARGE_SLIME_HOP_INTERVAL_INITIAL_TICKS = 45;
 
+let warnedShadowCapacityExceeded = false;
+let warnedNeedleUrchinCapacityExceeded = false;
+
+export function allocateShadowPathSlot(world: WorldState): number {
+  for (let slot = 0; slot < MAX_SHADOW_ENEMIES; slot++) {
+    let occupied = false;
+    for (const cluster of world.clusters) {
+      if (cluster.isShadowEnemyFlag === 1 && cluster.shadowPathSlotIndex === slot) {
+        occupied = true;
+        break;
+      }
+    }
+    if (!occupied) {
+      return slot;
+    }
+  }
+  return -1;
+}
+
+export function allocateNeedleUrchinSlot(world: WorldState): number {
+  for (let slot = 0; slot < MAX_NEEDLE_URCHINS; slot++) {
+    let occupied = false;
+    for (const cluster of world.clusters) {
+      if (cluster.isNeedleUrchinFlag === 1 && cluster.needleUrchinSlotIndex === slot) {
+        occupied = true;
+        break;
+      }
+    }
+    if (!occupied) {
+      return slot;
+    }
+  }
+  return -1;
+}
+
+function warnCapacityExceededOnce(enemyType: 'Shadow' | 'Needle Urchin', limit: number): void {
+  if (!import.meta.env.DEV) {
+    return;
+  }
+  if (enemyType === 'Shadow') {
+    if (warnedShadowCapacityExceeded) {
+      return;
+    }
+    warnedShadowCapacityExceeded = true;
+  } else {
+    if (warnedNeedleUrchinCapacityExceeded) {
+      return;
+    }
+    warnedNeedleUrchinCapacityExceeded = true;
+  }
+  console.warn(`[enemySpawn] ${enemyType} capacity exceeded; maximum active ${enemyType}s per room is ${limit}.`);
+}
+
 /**
  * Creates and pushes enemy `ClusterState` objects from `enemyDefs` into
  * `world.clusters`, spawning their particle loadout with `spawnLoadoutParticles`.
@@ -152,6 +205,16 @@ export function spawnEnemyClusters(
   let nextEntityId = startEntityId;
   for (let ei = 0; ei < enemyDefs.length; ei++) {
     const enemyDef = enemyDefs[ei];
+    const shadowSlot = enemyDef.isShadowEnemyFlag === 1 ? allocateShadowPathSlot(world) : -1;
+    if (enemyDef.isShadowEnemyFlag === 1 && shadowSlot < 0) {
+      warnCapacityExceededOnce('Shadow', MAX_SHADOW_ENEMIES);
+      continue;
+    }
+    const needleUrchinSlot = enemyDef.isNeedleUrchinFlag === 1 ? allocateNeedleUrchinSlot(world) : -1;
+    if (enemyDef.isNeedleUrchinFlag === 1 && needleUrchinSlot < 0) {
+      warnCapacityExceededOnce('Needle Urchin', MAX_NEEDLE_URCHINS);
+      continue;
+    }
     const ex = enemyDef.xBlock * BLOCK_SIZE_MEDIUM;
     const ey = enemyDef.yBlock * BLOCK_SIZE_MEDIUM;
     const hp = enemyDef.isBossFlag === 1 ? enemyDef.particleCount * BOSS_HP_MULTIPLIER : enemyDef.particleCount;
@@ -307,13 +370,31 @@ export function spawnEnemyClusters(
       enemyCluster.squareStampedeAiStateTicks      = 20;
       enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
     } else if (enemyDef.isShadowEnemyFlag === 1) {
-      let slot=-1;for(let si=0;si<MAX_SHADOW_ENEMIES;si++){if(!world.clusters.some(c=>c.isShadowEnemyFlag===1&&c.shadowPathSlotIndex===si)){slot=si;break;}}
-      enemyCluster.isShadowEnemyFlag=1;enemyCluster.shadowPathSlotIndex=slot;enemyCluster.shadowStartupTicks=SHADOW_START_DELAY_TICKS;enemyCluster.halfWidthWorld=SHADOW_HALF_WIDTH_WORLD;enemyCluster.halfHeightWorld=SHADOW_HALF_HEIGHT_WORLD;enemyCluster.healthPoints=SHADOW_HP;enemyCluster.maxHealthPoints=SHADOW_HP;
-      const player=world.clusters[0];if(slot>=0&&player?.isPlayerFlag===1){clearShadowPath(world,slot);appendShadowWaypoint(world,slot,player.positionXWorld,player.positionYWorld);world.shadowPathLastRecordedXWorld[slot]=player.positionXWorld;world.shadowPathLastRecordedYWorld[slot]=player.positionYWorld;}
+      enemyCluster.isShadowEnemyFlag = 1;
+      enemyCluster.shadowPathSlotIndex = shadowSlot;
+      enemyCluster.shadowStartupTicks = SHADOW_START_DELAY_TICKS;
+      enemyCluster.halfWidthWorld = SHADOW_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld = SHADOW_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints = SHADOW_HP;
+      enemyCluster.maxHealthPoints = SHADOW_HP;
+      const player = world.clusters[0];
+      if (player?.isPlayerFlag === 1) {
+        clearShadowPath(world, shadowSlot);
+        appendShadowWaypoint(world, shadowSlot, player.positionXWorld, player.positionYWorld);
+        world.shadowPathLastRecordedXWorld[shadowSlot] = player.positionXWorld;
+        world.shadowPathLastRecordedYWorld[shadowSlot] = player.positionYWorld;
+      }
     } else if (enemyDef.isNeedleUrchinFlag === 1) {
-      let slot=-1;for(let si=0;si<MAX_NEEDLE_URCHINS;si++){if(!world.clusters.some(c=>c.isNeedleUrchinFlag===1&&c.needleUrchinSlotIndex===si)){slot=si;break;}}
-      enemyCluster.isNeedleUrchinFlag=1;enemyCluster.needleUrchinSlotIndex=slot;enemyCluster.halfWidthWorld=NEEDLE_URCHIN_HALF_SIZE_WORLD;enemyCluster.halfHeightWorld=NEEDLE_URCHIN_HALF_SIZE_WORLD;enemyCluster.healthPoints=NEEDLE_URCHIN_HP;enemyCluster.maxHealthPoints=NEEDLE_URCHIN_HP;
-      if(slot>=0){const b=slot*NEEDLE_URCHIN_NEEDLES_PER_BURST;world.needleProjectileAliveFlag.fill(0,b,b+NEEDLE_URCHIN_NEEDLES_PER_BURST);}
+      enemyCluster.isNeedleUrchinFlag = 1;
+      enemyCluster.needleUrchinSlotIndex = needleUrchinSlot;
+      enemyCluster.halfWidthWorld = NEEDLE_URCHIN_HALF_SIZE_WORLD;
+      enemyCluster.halfHeightWorld = NEEDLE_URCHIN_HALF_SIZE_WORLD;
+      enemyCluster.healthPoints = NEEDLE_URCHIN_HP;
+      enemyCluster.maxHealthPoints = NEEDLE_URCHIN_HP;
+      enemyCluster.needleUrchinPrevHealthPoints = NEEDLE_URCHIN_HP;
+      const projectileStart = needleUrchinSlot * NEEDLE_URCHIN_NEEDLES_PER_BURST;
+      const projectileEnd = projectileStart + NEEDLE_URCHIN_NEEDLES_PER_BURST;
+      world.needleProjectileAliveFlag.fill(0, projectileStart, projectileEnd);
     } else if (enemyDef.isSlimeSnailFlag === 1) {
       // Allocate a trail ring-buffer slot for this snail; spawn still succeeds
       // (without emitting slime) if no slot is free.

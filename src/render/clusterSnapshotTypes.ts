@@ -181,7 +181,6 @@ export interface ClusterSnapshot {
   readonly shadowStartupTicks: number;
   readonly shadowRephaseTicks: number;
   readonly shadowVisualPhaseRad: number;
-  readonly shadowHitFlashTicks: number;
   readonly isNeedleUrchinFlag: 0 | 1;
   readonly needleUrchinState: number;
   readonly needleUrchinStateTicks: number;
