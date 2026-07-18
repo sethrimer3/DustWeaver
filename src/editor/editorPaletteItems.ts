@@ -260,6 +260,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Ultra ice blocks (velocity-locking ice with sparkling effect) ─────────
   { id: 'ultra_ice_block_1x1', label: 'Ultra Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'ultraIceBlock' },
   { id: 'ultra_ice_block_2x2', label: 'Ultra Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'ultraIceBlock' },
+  // ── Rocket blocks (grant Movement V2 rocket boost when jumped from) ───────────
+  { id: 'rocket_block_1x1', label: 'Rocket Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'rocketBlock' },
+  { id: 'rocket_block_2x2', label: 'Rocket Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'rocketBlock' },
   // ── Background blocks (visual-only, no collision) ────────────────────────
   { id: 'bg_block_1x1',       label: 'BG Block 1×1',              category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const },
   { id: 'bg_block_2x2',       label: 'BG Block 2×2',              category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const },
