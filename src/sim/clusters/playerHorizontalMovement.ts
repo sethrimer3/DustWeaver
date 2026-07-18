@@ -10,6 +10,16 @@
  * reliably decelerates existing velocity through zero (see the isTurning
  * branch below) instead of getting stuck at the cap.
  *
+ * Both the grounded and airborne branches gate "should input accelerate this
+ * tick" on velocity PROJECTED ONTO the pressed direction
+ * (`velocityXWorld * inputDx`), never on raw speed magnitude. This is what
+ * lets held same-direction input leave externally-earned over-cap momentum
+ * untouched while still letting opposite-direction input brake through any
+ * speed (including well above the cap) and cross zero — a magnitude-only
+ * check cannot tell "over cap, same direction" from "over cap, opposite
+ * direction" apart, and would otherwise silently refuse to reverse whenever
+ * the player carries enough momentum against the pressed direction.
+ *
  * Extracted from playerMovement.ts to keep each movement axis in a focused
  * module.  Call `applyPlayerHorizontalMovement` once per tick for the player
  * cluster, after `applyPlayerGravityAndJump` (so wall-jump velocity set by
@@ -37,6 +47,22 @@ import {
   AIR_FRICTION_PER_SEC2,
   ROCKET_BOOST_AIR_ACCEL_MULTIPLIER,
 } from './movementConstants';
+
+/**
+ * Clamps velocity down to `cap` only in the pressed direction — i.e. only
+ * when it has overshot due to input-generated acceleration this tick. Never
+ * touches velocity in the opposite direction, so externally earned momentum
+ * against the pressed direction (mid-reversal) is left alone until it
+ * naturally decelerates through zero. Shared by every grounded/airborne cap
+ * clamp below to avoid duplicating the same three-line pattern per call site.
+ */
+function clampToCapInInputDirection(cluster: ClusterState, inputDx: number, cap: number): void {
+  if (inputDx > 0 && cluster.velocityXWorld > cap) {
+    cluster.velocityXWorld = cap;
+  } else if (inputDx < 0 && cluster.velocityXWorld < -cap) {
+    cluster.velocityXWorld = -cap;
+  }
+}
 
 /**
  * Apply horizontal movement (wall-jump force-time override, grounded/airborne
@@ -131,20 +157,12 @@ export function applyPlayerHorizontalMovement(
           // This guarantees a reversal exactly at, or above, the ground cap
           // still reduces velocity and eventually crosses zero.
           cluster.velocityXWorld += inputDx * TURN_ACCELERATION_PER_SEC2 * dtSec;
-          if (inputDx > 0 && cluster.velocityXWorld > groundCap) {
-            cluster.velocityXWorld = groundCap;
-          } else if (inputDx < 0 && cluster.velocityXWorld < -groundCap) {
-            cluster.velocityXWorld = -groundCap;
-          }
+          clampToCapInInputDirection(cluster, inputDx, groundCap);
         } else if (absVBefore < groundCap) {
           // Below the target speed, same direction: accelerate up toward it,
           // never overshoot.
           cluster.velocityXWorld += inputDx * baseGroundAccel * dtSec;
-          if (inputDx > 0 && cluster.velocityXWorld > groundCap) {
-            cluster.velocityXWorld = groundCap;
-          } else if (inputDx < 0 && cluster.velocityXWorld < -groundCap) {
-            cluster.velocityXWorld = -groundCap;
-          }
+          clampToCapInInputDirection(cluster, inputDx, groundCap);
         } else if (cluster.groundedTicks > GROUND_DECEL_GRACE_TICKS) {
           // At/above the target speed, same direction, and grounded long
           // enough: bleed the excess back down toward the cap (never below
@@ -163,10 +181,22 @@ export function applyPlayerHorizontalMovement(
         // velocity as-is.
       } else {
         // ── Airborne, holding input: accelerate up toward the air cap only;
-        // never decelerate while any direction is held. Rocket-boosted jumps
-        // ignore the cap entirely, accelerating at half rate with no ceiling.
+        // never decelerate SAME-direction over-cap momentum while input is
+        // held. Rocket-boosted jumps ignore the cap entirely, accelerating
+        // at half rate with no ceiling.
+        //
+        // Gate on velocity PROJECTED ONTO the pressed direction, not raw
+        // speed magnitude: `Math.abs(velocityXWorld) < airCap` cannot tell
+        // "over cap, same direction as input" (must stay untouched) apart
+        // from "over cap, OPPOSITE direction" (must be free to brake back
+        // through zero) — it would refuse to apply any deceleration at all
+        // once speed exceeded the cap in either direction, trapping the
+        // player unable to reverse. speedInInputDirection is negative
+        // whenever input opposes current velocity, so it is always < airCap
+        // in that case and acceleration (braking) is applied regardless of
+        // how large the opposing speed is.
         const airCap = ov(debugSpeedOverrides.airMoveSpeedWorld, AIR_MAX_INPUT_SPEED_WORLD_PER_SEC);
-        const absVBefore = Math.abs(cluster.velocityXWorld);
+        const speedInInputDirection = cluster.velocityXWorld * inputDx;
         const wallJumpMult = cluster.wallJumpCountSinceReset > 0
           ? ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
           : 1.0;
@@ -177,15 +207,14 @@ export function applyPlayerHorizontalMovement(
           : baseAirAccel * wallJumpMult;
         if (cluster.isRocketBoostedFlag === 1) {
           cluster.velocityXWorld += inputDx * accel * ROCKET_BOOST_AIR_ACCEL_MULTIPLIER * dtSec;
-        } else if (absVBefore < airCap) {
+        } else if (speedInInputDirection < airCap) {
           cluster.velocityXWorld += inputDx * accel * dtSec;
-          if (inputDx > 0 && cluster.velocityXWorld > airCap) {
-            cluster.velocityXWorld = airCap;
-          } else if (inputDx < 0 && cluster.velocityXWorld < -airCap) {
-            cluster.velocityXWorld = -airCap;
-          }
+          // Clamp only input-generated overshoot in the pressed direction —
+          // never touches (or reduces) velocity in the opposite direction.
+          clampToCapInInputDirection(cluster, inputDx, airCap);
         }
-        // Already at/above the air cap and not rocket-boosted: no change.
+        // Already at/above the air cap in the pressed direction and not
+        // rocket-boosted: no change — externally earned momentum untouched.
       }
     } else if (cluster.wallJumpForceTimeTicks <= 0) {
       // No horizontal input and not in force-time.

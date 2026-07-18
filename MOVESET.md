@@ -15,11 +15,28 @@ reversing direction at or above walking speed — see "Skid Tech" below.
     (`GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC`) — the single authoritative
     walking speed; there is no separate faster sprint gait.
   - Ground acceleration: **800 units/sec²**.
-  - Air acceleration: **520 units/sec²**.
+  - Air acceleration: **520 units/sec²** (doubled during post-wall-jump air control — see below).
+  - Airborne input speed target (cap): **100 world units/sec**
+    (`AIR_MAX_INPUT_SPEED_WORLD_PER_SEC`). Gated on velocity PROJECTED ONTO
+    the pressed direction (`speedInInputDirection = velocityXWorld * inputDx`),
+    never on raw speed magnitude — a magnitude-only check cannot tell "over
+    cap, same direction as input" (must stay untouched) apart from "over cap,
+    OPPOSITE direction" (must be free to brake back through zero), and would
+    otherwise refuse to reverse whenever the player carried more than 100
+    units/sec of momentum against the pressed direction. Concretely: holding
+    input in the same direction as an over-cap velocity (e.g. from a grapple
+    launch) leaves it completely untouched; holding input opposite an
+    over-cap velocity always brakes it, crosses zero, and then accelerates
+    up to the cap in the new direction — regardless of how large the
+    original opposing speed was. Only input-generated overshoot in the
+    pressed direction is clamped to the cap. Rocket-boosted jumps bypass
+    this cap entirely (uncapped acceleration at half rate). See
+    `applyPlayerHorizontalMovement` in `src/sim/clusters/playerHorizontalMovement.ts`.
   - Turn acceleration (reversal / deceleration toward zero): **1466.7 units/sec²**,
     applied uniformly whether current speed is below or above the walking-speed
     target — a deliberate reversal always decelerates existing velocity through
-    zero, even from external over-cap momentum (grapple, bounce, etc.).
+    zero, even from external over-cap momentum (grapple, bounce, etc.). Applies
+    on the ground and in the air alike.
 - **Crouch (hold S / ArrowDown while grounded)**
   - Input condition: grounded + crouch input held (binary state toggle).
     Fully blocks horizontal acceleration; unmodified by any other key.
