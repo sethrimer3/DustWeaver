@@ -1678,6 +1678,7 @@ export function startGameScreen(
     });
     playerSpeedometerOverlay.update({
       world,
+      isDebugMode: pauseController.state.isDebugMode,
       playerRenderXWorld: reusableSnapshot.clusters[0]?.renderPositionXWorld ?? world.clusters[0]?.positionXWorld ?? 0,
       playerRenderYWorld: reusableSnapshot.clusters[0]?.renderPositionYWorld ?? world.clusters[0]?.positionYWorld ?? 0,
       canvas,
