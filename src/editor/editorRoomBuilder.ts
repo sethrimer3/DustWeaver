@@ -402,7 +402,6 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     sunrays:               data.sunrays,
     backgroundLightSpill:  data.backgroundLightSpill,
     solidLightSoftness:    data.solidLightSoftness,
-    sunrays:               data.sunrays,
     ambientLightBlockers: (data.ambientLightBlockers ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,

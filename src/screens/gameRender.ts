@@ -672,15 +672,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Upscale virtual canvas to device canvas ────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_UPSCALE);
-<<<<<<< HEAD
   resetCanvasPass(deviceCtx, canvas.width, canvas.height, false);
-=======
-  deviceCtx.setTransform(1, 0, 0, 1, 0, 0);
-  deviceCtx.globalAlpha = 1;
-  deviceCtx.globalCompositeOperation = 'source-over';
-  deviceCtx.imageSmoothingEnabled = false;
-  deviceCtx.clearRect(0, 0, canvas.width, canvas.height);
->>>>>>> origin/pre-grid-block-enemy-revert
   deviceCtx.drawImage(virtualCanvas, 0, 0, canvas.width, canvas.height);
   // Composite WebGL particle canvas on top (also at virtual resolution)
   if (webglRenderer.isAvailable) {

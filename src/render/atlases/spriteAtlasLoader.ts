@@ -3,7 +3,7 @@ import {
   getSpriteAtlasConfigState,
   isSpriteAtlasHardDisabled,
   isSpriteAtlasEnabled,
-  setSpriteAtlasEnabledForDev,
+  setSpriteAtlasUseSetting,
   type SpriteAtlasConfigState,
 } from './spriteAtlasConfig';
 import type {
@@ -334,7 +334,7 @@ export function getSpriteAtlasDebugInfo(): SpriteAtlasDebugInfo {
     idleAtlases,
     stats,
     instructions: {
-      inspect: 'window.__dwSpriteAtlasDebug()',
+      inspect: 'window.__dwSpriteAtlasDetail()',
       enable: 'window.__dwSetSpriteAtlasesEnabled(true); location.reload()',
       disable: 'window.__dwSetSpriteAtlasesEnabled(false); location.reload()',
       benchmark: "await window.__dwBenchSpriteAtlasRoom('lobby')",
@@ -348,13 +348,16 @@ export function installSpriteAtlasDiagnostics(): void {
   type DwWindow = Window & {
     __dwSpriteAtlasStats?: () => SpriteAtlasStats;
     __dwSetSpriteAtlasesEnabled?: (enabled: boolean) => SpriteAtlasConfigState;
-    __dwSpriteAtlasDebug?: () => SpriteAtlasDebugInfo;
+    __dwSpriteAtlasDetail?: () => SpriteAtlasDebugInfo;
     __dwBenchSpriteAtlasRoom?: (roomId: string, opts?: unknown) => Promise<SpriteAtlasBenchUnavailable>;
   };
   const w = window as DwWindow;
   w.__dwSpriteAtlasStats = getSpriteAtlasStats;
-  w.__dwSetSpriteAtlasesEnabled = (enabled: boolean) => setSpriteAtlasEnabledForDev(Boolean(enabled));
-  w.__dwSpriteAtlasDebug = getSpriteAtlasDebugInfo;
+  w.__dwSetSpriteAtlasesEnabled = (enabled: boolean) => {
+    setSpriteAtlasUseSetting(Boolean(enabled));
+    return getSpriteAtlasConfigState();
+  };
+  w.__dwSpriteAtlasDetail = getSpriteAtlasDebugInfo;
   w.__dwBenchSpriteAtlasRoom = async (roomId: string): Promise<SpriteAtlasBenchUnavailable> => ({
     ok: false,
     roomId,

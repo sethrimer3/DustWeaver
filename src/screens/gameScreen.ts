@@ -1665,17 +1665,10 @@ export function startGameScreen(
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-<<<<<<< HEAD
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
-=======
-      webglRenderer, environmentalDust, skidDebris, crumbleDebris, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
-      sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
-      world, currentRoom,
->>>>>>> origin/pre-grid-block-enemy-revert
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,
       cachedDecorationCenterX,
@@ -1846,30 +1839,7 @@ export function startGameScreen(
       };
       requestAnimationFrame(tick);
     };
-<<<<<<< HEAD
 
-    // ── DEV-only spawn hook for The Void Herald boss ─────────────────────
-    // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns The Void Herald directly
-    // into the running world at the given block position (defaults to the
-    // room center), bypassing the room-def enemy list entirely.
-    (w as DwWin & { __dwSpawnHerald?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnHerald =
-      (xBlock?: number, yBlock?: number): number => {
-        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
-        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
-        const entityId = spawnHeraldForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
-        console.log(`[dev] spawned The Void Herald (entityId=${entityId}) at block (${bx}, ${by})`);
-        return entityId;
-      };
-
-    (w as DwWin & { __dwSpawnIceWizard?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnIceWizard =
-      (xBlock?: number, yBlock?: number): number => {
-        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
-        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
-        const entityId = spawnIceWizardForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
-        console.log(`[dev] spawned Ice Wizard (entityId=${entityId}) at block (${bx}, ${by})`);
-        return entityId;
-      };
-=======
     const waitForFrames = (frames: number): Promise<void> => new Promise(resolve => {
       let remaining = Math.max(1, Math.floor(frames));
       const tick = (): void => {
@@ -1947,7 +1917,28 @@ export function startGameScreen(
       }]);
       return summary;
     };
->>>>>>> origin/pre-grid-block-enemy-revert
+
+    // ── DEV-only spawn hook for The Void Herald boss ─────────────────────
+    // `window.__dwSpawnHerald(xBlock?, yBlock?)` — spawns The Void Herald directly
+    // into the running world at the given block position (defaults to the
+    // room center), bypassing the room-def enemy list entirely.
+    (w as DwWin & { __dwSpawnHerald?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnHerald =
+      (xBlock?: number, yBlock?: number): number => {
+        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
+        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
+        const entityId = spawnHeraldForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
+        console.log(`[dev] spawned The Void Herald (entityId=${entityId}) at block (${bx}, ${by})`);
+        return entityId;
+      };
+
+    (w as DwWin & { __dwSpawnIceWizard?: (xBlock?: number, yBlock?: number) => number }).__dwSpawnIceWizard =
+      (xBlock?: number, yBlock?: number): number => {
+        const bx = xBlock ?? Math.floor(world.worldWidthWorld / BLOCK_SIZE_MEDIUM / 2);
+        const by = yBlock ?? Math.floor(world.worldHeightWorld / BLOCK_SIZE_MEDIUM / 2);
+        const entityId = spawnIceWizardForTesting(world, bx * BLOCK_SIZE_MEDIUM, by * BLOCK_SIZE_MEDIUM);
+        console.log(`[dev] spawned Ice Wizard (entityId=${entityId}) at block (${bx}, ${by})`);
+        return entityId;
+      };
   }
 
   rafHandle = requestAnimationFrame(frame);

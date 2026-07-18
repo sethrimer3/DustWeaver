@@ -45,11 +45,6 @@ import {
   setSpriteAtlasUseSetting,
 } from '../render/atlases/spriteAtlasConfig';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
-import {
-  getSpriteAtlasConfigState,
-  getSpriteAtlasUseSetting,
-  setSpriteAtlasUseSetting,
-} from '../render/atlases/spriteAtlasConfig';
 
 /**
  * Builds the settings panel into `settingsEl` and attaches a back button
@@ -397,11 +392,7 @@ export function buildSettingsUI(
     const atlasRow = document.createElement('label');
     atlasRow.style.cssText = `
       display: flex; align-items: center; gap: 10px;
-<<<<<<< HEAD
       width: 100%; padding: 10px 14px; margin-bottom: 8px;
-=======
-      width: 100%; padding: 10px 14px; margin-bottom: 10px;
->>>>>>> origin/pre-grid-block-enemy-revert
       font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
       cursor: pointer; border-radius: 4px;
       border: 1px solid rgba(212,168,75,${atlasEnabled ? '0.7' : '0.3'});
@@ -417,11 +408,7 @@ export function buildSettingsUI(
     atlasText.textContent = 'Use sprite atlases (experimental)';
     const atlasHint = document.createElement('div');
     atlasHint.style.cssText = `
-<<<<<<< HEAD
       margin: -2px 0 10px 28px;
-=======
-      margin: -4px 0 10px 28px;
->>>>>>> origin/pre-grid-block-enemy-revert
       font-family: 'Cinzel', serif;
       color: rgba(212,168,75,0.55);
       font-size: 0.72rem;
@@ -431,17 +418,9 @@ export function buildSettingsUI(
     const updateAtlasHint = (): void => {
       const state = getSpriteAtlasConfigState();
       atlasHint.textContent = state.hardDisableActive
-<<<<<<< HEAD
         ? 'Currently hard-disabled internally while legacy room rendering remains active.'
         : 'Reload or re-enter the room after changing this for a clean test.';
     };
-=======
-        ? 'Currently hard-disabled internally while legacy room rendering is restored.'
-        : 'Reload or re-enter the room after changing this for a clean test.';
-    };
-    atlasRow.appendChild(atlasCheckbox);
-    atlasRow.appendChild(atlasText);
->>>>>>> origin/pre-grid-block-enemy-revert
     atlasCheckbox.addEventListener('change', () => {
       const enabled = atlasCheckbox.checked;
       setSpriteAtlasUseSetting(enabled);
@@ -449,11 +428,8 @@ export function buildSettingsUI(
       atlasRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0'})`;
       updateAtlasHint();
     });
-<<<<<<< HEAD
     atlasRow.appendChild(atlasCheckbox);
     atlasRow.appendChild(atlasText);
-=======
->>>>>>> origin/pre-grid-block-enemy-revert
     tabContent.appendChild(atlasRow);
     updateAtlasHint();
     tabContent.appendChild(atlasHint);
