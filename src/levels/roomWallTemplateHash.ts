@@ -19,7 +19,7 @@
 import type { RoomJsonDef, RoomJsonBakedWallTemplate } from '../editor/roomJsonSchema';
 import type { RoomWallTemplate } from './roomDef';
 import { BLOCK_SIZE_MEDIUM } from './roomDef';
-import { blockThemeToIndex } from './blockTheme';
+import { blockThemeToIndex, indexToBlockTheme } from './blockTheme';
 
 // ── Schema version ────────────────────────────────────────────────────────────
 
@@ -200,6 +200,13 @@ export function hydrateAndValidateBakedWallTemplate(
     resolvedThemeIndex = Uint8Array.from(baked.themeIndex);
   }
 
+  // isRocketBlockFlag is not part of the baked schema (added after baking was
+  // introduced) — derive it from the resolved theme index, same as gameRoomWalls
+  // derives isIceFlag/isUltraIceFlag from theme at build time.
+  const isRocketBlockFlag = Uint8Array.from(
+    resolvedThemeIndex, idx => (indexToBlockTheme(idx) === 'rocketBlock' ? 1 : 0),
+  );
+
   return {
     wallCount: n,
     xWorld:                Float32Array.from(baked.xWorld),
@@ -215,5 +222,6 @@ export function hydrateAndValidateBakedWallTemplate(
     isPillarHalfWidthFlag: Uint8Array.from(baked.isPillarHalfWidthFlag),
     isIceFlag:             Uint8Array.from(baked.isIceFlag),
     isUltraIceFlag:        Uint8Array.from(baked.isUltraIceFlag),
+    isRocketBlockFlag,
   };
 }

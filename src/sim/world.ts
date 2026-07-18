@@ -150,6 +150,13 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   wallIsUltraIceFlag: Uint8Array;
 
   /**
+   * 1 if the corresponding wall uses the 'rocketBlock' theme.
+   * Jumping off a rocket block grants the player uncapped horizontal air
+   * acceleration (Movement V2 rocket boost) until they next land.
+   */
+  wallIsRocketBlockFlag: Uint8Array;
+
+  /**
    * 1 if the corresponding wall is a kinetic block (gives the player a
    * directional velocity boost on contact, rather than reflecting like a
    * bounce pad).
@@ -535,6 +542,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallBouncePadSpeedFactorIndex: new Uint8Array(MAX_WALLS),
     wallIsIceFlag: new Uint8Array(MAX_WALLS),
     wallIsUltraIceFlag: new Uint8Array(MAX_WALLS),
+    wallIsRocketBlockFlag: new Uint8Array(MAX_WALLS),
     wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
     wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
     bgWallGridWidth: 0,

@@ -51,6 +51,7 @@ export interface SerializedWallTemplate {
   isPillarHalfWidthFlag: ArrayBuffer;
   isIceFlag: ArrayBuffer;
   isUltraIceFlag: ArrayBuffer;
+  isRocketBlockFlag: ArrayBuffer;
 }
 
 // ── Worker outbound messages ──────────────────────────────────────────────────

@@ -38,6 +38,7 @@ const _self = self as unknown as _WorkerCtx;
 
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { indexToBlockTheme } from '../levels/blockTheme';
 import { buildRoomWallTemplate } from './gameRoomWalls';
 import { buildRoomDecorations } from '../render/effects/decorationWaveState';
 import type {
@@ -78,6 +79,8 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
         isPillarHalfWidthFlag: new Uint8Array(b.isPillarHalfWidthFlag),
         isIceFlag:            new Uint8Array(b.isIceFlag),
         isUltraIceFlag:       new Uint8Array(b.isUltraIceFlag),
+        // Not part of the baked schema — derive from theme, same as gameRoomWalls.
+        isRocketBlockFlag:    Uint8Array.from(b.themeIndex, idx => (indexToBlockTheme(idx) === 'rocketBlock' ? 1 : 0)),
       };
       wallSource = 'baked';
     } else {
@@ -142,6 +145,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       isPillarHalfWidthFlag: wt.isPillarHalfWidthFlag.buffer as ArrayBuffer,
       isIceFlag: wt.isIceFlag.buffer as ArrayBuffer,
       isUltraIceFlag: wt.isUltraIceFlag.buffer as ArrayBuffer,
+      isRocketBlockFlag: wt.isRocketBlockFlag.buffer as ArrayBuffer,
     };
 
     // ── Wire encoding for blocker sets ─────────────────────────────────────
@@ -180,6 +184,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       serialisedWt.isPillarHalfWidthFlag,
       serialisedWt.isIceFlag,
       serialisedWt.isUltraIceFlag,
+      serialisedWt.isRocketBlockFlag,
     ];
 
     _self.postMessage(msg, transfer);

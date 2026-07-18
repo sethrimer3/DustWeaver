@@ -174,6 +174,9 @@ export function applyPlayerGravityAndJump(
       : baseJumpSpeed;
     if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
       // ── Normal ground jump ─────────────────────────────────────────
+      // Jumping directly off a rocket block grants uncapped horizontal air
+      // acceleration (at half rate) until the player next lands.
+      cluster.isRocketBoostedFlag = cluster.isGroundedOnRocketFlag === 1 ? 1 : 0;
       cluster.velocityYWorld      = -jumpSpeed;
       cluster.isGroundedFlag      = 0;
       cluster.coyoteTimeTicks     = 0;

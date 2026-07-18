@@ -86,6 +86,7 @@ export function resetClusterGroundedFlag(cluster: ClusterState): void {
   cluster.isGroundedFlag = 0;
   cluster.isGroundedOnIceFlag = 0;
   cluster.isGroundedOnUltraIceFlag = 0;
+  cluster.isGroundedOnRocketFlag = 0;
 }
 
 /**

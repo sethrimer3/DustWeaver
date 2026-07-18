@@ -43,6 +43,7 @@ export function tickPlayerMovement(
   if (cluster.isGroundedFlag === 1) {
     cluster.airborneTicks = 0;
     cluster.groundedTicks += 1;
+    cluster.isRocketBoostedFlag = 0;
   } else {
     cluster.airborneTicks += 1;
     cluster.groundedTicks = 0;

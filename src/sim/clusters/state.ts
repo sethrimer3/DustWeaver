@@ -36,6 +36,15 @@ export interface ClusterState {
    * surface.  Persists through jumps and airborne phases.
    */
   isOnUltraIceFlag: 0 | 1;
+  /** 1 while the cluster is grounded on a 'rocketBlock'-themed wall this tick. */
+  isGroundedOnRocketFlag: 0 | 1;
+  /**
+   * 1 while the player is "rocket-boosted" — set when a jump is triggered
+   * while standing on a rocket block; grants uncapped horizontal air
+   * acceleration at half rate until the player next lands (cleared on
+   * landing, i.e. the same tick isGroundedFlag becomes 1).
+   */
+  isRocketBoostedFlag: 0 | 1;
   /** Half-width of the cluster box in world units (used for rendering and collision). */
   halfWidthWorld: number;
   /** Half-height of the cluster box in world units (used for rendering and collision). */
@@ -1049,6 +1058,8 @@ export function createClusterState(
     isGroundedOnIceFlag: 0,
     isGroundedOnUltraIceFlag: 0,
     isOnUltraIceFlag: 0,
+    isGroundedOnRocketFlag: 0,
+    isRocketBoostedFlag: 0,
     halfWidthWorld: PLAYER_HALF_WIDTH_WORLD,
     halfHeightWorld: PLAYER_HALF_HEIGHT_WORLD,
     coyoteTimeTicks: 0,

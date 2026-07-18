@@ -93,6 +93,7 @@ export function* buildRoomWallTemplateIncremental(
   const ph: number[] = []; // isPillarHalfWidthFlag (0 or 1)
   const ic: number[] = []; // isIceFlag (0 or 1)
   const uic: number[] = []; // isUltraIceFlag (0 or 1)
+  const rkt: number[] = []; // isRocketBlockFlag (0 or 1)
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -120,6 +121,7 @@ export function* buildRoomWallTemplateIncremental(
       : indexToBlockTheme(themeIdx);
     ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
     uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
+    rkt.push(resolvedTheme === 'rocketBlock' ? 1 : 0);
   }
 
   // ── Incremental merge pass ────────────────────────────────────────────────
@@ -229,6 +231,7 @@ export function* buildRoomWallTemplateIncremental(
     isPillarHalfWidthFlag: new Uint8Array(finalCount),
     isIceFlag: new Uint8Array(finalCount),
     isUltraIceFlag: new Uint8Array(finalCount),
+    isRocketBlockFlag: new Uint8Array(finalCount),
   };
   for (let wi = 0; wi < finalCount; wi++) {
     template.xWorld[wi] = xs[wi];
@@ -244,6 +247,7 @@ export function* buildRoomWallTemplateIncremental(
     template.isPillarHalfWidthFlag[wi] = ph[wi];
     template.isIceFlag[wi] = ic[wi];
     template.isUltraIceFlag[wi] = uic[wi];
+    template.isRocketBlockFlag[wi] = rkt[wi];
   }
   return template;
 }
@@ -316,6 +320,7 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
     world.wallBouncePadSpeedFactorIndex[wi] = 0;
     world.wallIsIceFlag[wi] = template.isIceFlag[wi];
     world.wallIsUltraIceFlag[wi] = template.isUltraIceFlag[wi];
+    world.wallIsRocketBlockFlag[wi] = template.isRocketBlockFlag[wi];
     world.wallIsKineticBlockFlag[wi] = 0;
     world.wallKineticBlockIndex[wi] = -1;
   }

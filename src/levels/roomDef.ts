@@ -884,4 +884,6 @@ export interface RoomWallTemplate {
   readonly isIceFlag: Uint8Array;
   /** 1 for walls whose theme is 'ultraIceBlock' — velocity lock and grapple recharge suppression. */
   readonly isUltraIceFlag: Uint8Array;
+  /** 1 for walls whose theme is 'rocketBlock' — grants Movement V2 rocket boost on jump-off. */
+  readonly isRocketBlockFlag: Uint8Array;
 }

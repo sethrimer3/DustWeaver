@@ -68,6 +68,7 @@ export function resolveStairsSurfaces(
 
     const isIce = world.wallIsIceFlag[wi] === 1;
     const isUltraIce = world.wallIsUltraIceFlag[wi] === 1;
+    const isRocket = world.wallIsRocketBlockFlag[wi] === 1;
 
     // Y before X, deliberately — the reverse of resolveClusterSolidWallCollision.
     //
@@ -78,7 +79,7 @@ export function resolveStairsSurfaces(
     // step. Landing on Y first snaps its feet flush to the tread, after which
     // the riser no longer overlaps and the X pass correctly does nothing.
     for (let i = 0; i < _stepRects.length; i += 4) {
-      if (_resolveStepY(cluster, prevYWorld, isIce, isUltraIce,
+      if (_resolveStepY(cluster, prevYWorld, isIce, isUltraIce, isRocket,
         _stepRects[i], _stepRects[i + 1], _stepRects[i + 2], _stepRects[i + 3])) {
         landed = true;
       }
@@ -94,7 +95,7 @@ export function resolveStairsSurfaces(
     // penetration. Never a vertical-only push: ejecting a cluster upward out of
     // the tall face of a 2x2 stair would look like a 14px teleport.
     for (let i = 0; i < _stepRects.length; i += 4) {
-      if (_depenetrateStep(cluster, isIce, isUltraIce,
+      if (_depenetrateStep(cluster, isIce, isUltraIce, isRocket,
         _stepRects[i], _stepRects[i + 1], _stepRects[i + 2], _stepRects[i + 3])) {
         landed = true;
       }
@@ -112,6 +113,7 @@ function _depenetrateStep(
   cluster: ClusterState,
   isIce: boolean,
   isUltraIce: boolean,
+  isRocket: boolean,
   stepLeft: number, stepTop: number, stepRight: number, stepBottom: number,
 ): boolean {
   const hw = cluster.halfWidthWorld;
@@ -148,6 +150,7 @@ function _depenetrateStep(
     cluster.isGroundedFlag = 1;
     if (isIce) cluster.isGroundedOnIceFlag = 1;
     if (isUltraIce) cluster.isGroundedOnUltraIceFlag = 1;
+    if (isRocket) cluster.isGroundedOnRocketFlag = 1;
     return true;
   }
 
@@ -200,6 +203,7 @@ function _resolveStepY(
   prevYWorld: number,
   isIce: boolean,
   isUltraIce: boolean,
+  isRocket: boolean,
   stepLeft: number, stepTop: number, stepRight: number, stepBottom: number,
 ): boolean {
   const hw = cluster.halfWidthWorld;
@@ -220,6 +224,7 @@ function _resolveStepY(
     cluster.isGroundedFlag = 1;
     if (isIce) cluster.isGroundedOnIceFlag = 1;
     if (isUltraIce) cluster.isGroundedOnUltraIceFlag = 1;
+    if (isRocket) cluster.isGroundedOnRocketFlag = 1;
     return true;
   };
 

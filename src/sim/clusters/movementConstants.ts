@@ -154,27 +154,55 @@ export const JUMP_BUFFER_TICKS = Math.round(JUMP_BUFFER_MS / 1000.0 * 60);
 export const MAX_RUN_SPEED_WORLD_PER_SEC = 105.0;
 
 // ============================================================================
-// Movement V2 — ground-input speed cap, uncapped air momentum, and grace-period
-// ground deceleration. Left/right input accelerates the player up to
-// MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC; air has no resistance so momentum
-// carries indefinitely; ground friction only kicks in after the player has
-// been continuously grounded for longer than GROUND_DECEL_GRACE_TICKS, so
-// bunny-hopping (repeated jumping) never decelerates.
+// Movement V2 — input accelerates up to a per-surface speed target (only
+// while below it — momentum above the target is never clamped down by the
+// mere act of accelerating), ground/air speed is otherwise uncapped, and
+// deceleration behaves differently per surface:
+//   • Ground, no input: friction applies immediately.
+//   • Ground, holding input, above GROUND_MAX_INPUT_SPEED: once the player
+//     has been continuously grounded for GROUND_DECEL_GRACE_TICKS, held-input
+//     deceleration bleeds excess speed back down toward the cap.  Repeated
+//     jumping resets groundedTicks to 0 every airborne tick, so bunny-hopping
+//     never triggers this.
+//   • Air, holding input: never decelerates — only accelerates while below
+//     AIR_MAX_INPUT_SPEED.
+//   • Air, no input: a slight constant air-friction deceleration applies.
 // ============================================================================
 
-/** Speed cap for player-input horizontal acceleration, both ground and air (px/s). */
-export const MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC = 150.0;
+/** Speed target for grounded player-input horizontal acceleration (px/s). */
+export const GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 120.0;
+
+/** Speed target for airborne player-input horizontal acceleration (px/s). */
+export const AIR_MAX_INPUT_SPEED_WORLD_PER_SEC = 100.0;
 
 /**
- * Continuous grounded contact time (seconds) required before ground
- * deceleration begins. Repeated jumping resets the grounded-contact timer
- * each tick the player is airborne, so a player who keeps jumping never
- * triggers deceleration.
+ * Continuous grounded contact time (seconds) required before held-input
+ * deceleration of over-cap ground speed begins. Repeated jumping resets the
+ * grounded-contact timer each tick the player is airborne, so a player who
+ * keeps jumping never triggers deceleration.
  */
 export const GROUND_DECEL_GRACE_SEC = 0.75;
 
 /** GROUND_DECEL_GRACE_SEC expressed in ticks (60 fps). */
 export const GROUND_DECEL_GRACE_TICKS = Math.round(GROUND_DECEL_GRACE_SEC * 60.0);
+
+/**
+ * Passive air friction (px/s²) applied while airborne with no horizontal
+ * input. Much gentler than ground friction — a light deceleration, not a
+ * hard stop.
+ */
+export const AIR_FRICTION_PER_SEC2 = 60.0;
+
+// ── Rocket blocks ────────────────────────────────────────────────────────────
+// Jumping off a rocket block grants uncapped horizontal acceleration (no
+// speed ceiling) at half the normal air acceleration rate, until the player
+// next lands.
+
+/** Fraction of normal air acceleration applied while rocket-boosted. */
+export const ROCKET_BOOST_AIR_ACCEL_MULTIPLIER = 0.5;
+
+/** Extra speed (px/s) the charged trail particles travel above the player's own velocity. */
+export const ROCKET_BOOST_PARTICLE_EXTRA_SPEED_WORLD_PER_SEC = 50.0;
 
 /** Ground acceleration: how quickly the player builds up speed on the ground (px/s²). */
 export const GROUND_ACCELERATION_PER_SEC2 = 800.0;
