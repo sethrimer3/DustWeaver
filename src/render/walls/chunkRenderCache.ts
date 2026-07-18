@@ -784,6 +784,26 @@ export class RoomChunkCache {
     let skippedCount  = 0;
     let rebuildTotalMs = 0;
 
+    // Missing, foreign-generation, and explicitly dirty chunks are required
+    // for correct current-room coverage. Prioritize them over cosmetic
+    // fallback retries so a repeatedly unavailable sprite near the start of
+    // the scan cannot permanently starve a newly visible chunk near the end.
+    let hasPrimaryBuilds = false;
+    for (let cy = cyMin; cy <= cyMax && !hasPrimaryBuilds; cy++) {
+      for (let cx = cxMin; cx <= cxMax; cx++) {
+        const key = `${cx},${cy}`;
+        const chunk = this._chunks.get(key);
+        if (
+          chunk === undefined ||
+          chunk.contentGeneration !== this._contentGeneration ||
+          this._dirtyKeys.has(key)
+        ) {
+          hasPrimaryBuilds = true;
+          break;
+        }
+      }
+    }
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
 
@@ -794,7 +814,11 @@ export class RoomChunkCache {
 
         const isDirty = this._dirtyKeys.has(key);
         const hasForeignGeneration = chunk !== undefined && chunk.contentGeneration !== this._contentGeneration;
-        const needsBuild = chunk === undefined || hasForeignGeneration || isDirty || chunk.hadFallbacksFlag;
+        const needsBuild =
+          chunk === undefined ||
+          hasForeignGeneration ||
+          isDirty ||
+          (chunk.hadFallbacksFlag && !hasPrimaryBuilds);
         if (hasForeignGeneration) {
           if (_isDevMode() && !this._loggedForeignGenerationWarning) {
             this._loggedForeignGenerationWarning = true;
@@ -825,12 +849,21 @@ export class RoomChunkCache {
             skippedCount++;
             const screenX = Math.round(cx * chunkSizePx + offsetXPx);
             const screenY = Math.round(cy * chunkSizePx + offsetYPx);
-            // Never present a dirty canvas. The same deterministic neutral
-            // fallback is used whether a canvas exists or not, and no new
-            // canvas is allocated until the real rebuild can run.
-            const side = Math.max(1, Math.ceil(chunkSizePx));
-            ctx.fillStyle = 'rgba(20,20,24,0.85)';
-            ctx.fillRect(screenX, screenY, side, side);
+            if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration) {
+              // A same-generation canvas is owned by this exact room/render
+              // state. Keep its last valid pixels visible while a bounded retry
+              // is pending instead of replacing an entire chunk with a hard
+              // rectangular placeholder. Foreign generations were rejected
+              // above, so this cannot resurrect artwork from another room.
+              ctx.drawImage(chunk.canvas, screenX, screenY);
+              visibleCount++;
+              this._lastVisibleFrame.set(key, this._frame);
+            } else {
+              // A genuinely missing chunk has no safe prior pixels to present.
+              const side = Math.max(1, Math.ceil(chunkSizePx));
+              ctx.fillStyle = 'rgba(20,20,24,0.85)';
+              ctx.fillRect(screenX, screenY, side, side);
+            }
             continue;
           }
 
@@ -874,7 +907,7 @@ export class RoomChunkCache {
 
             const devMode = _isDevMode();
             const _ct0 = devMode ? performance.now() : 0;
-            chunk.hadFallbacksFlag = buildChunkFn(
+            const hadFallbacks = buildChunkFn(
               chunkCtx,
               chunkOffX,
               chunkOffY,
@@ -886,6 +919,12 @@ export class RoomChunkCache {
               rowMax,
             );
             chunk.builtWithGameplayFallbackFlag = wasBakeForbidden;
+            // The gameplay renderer intentionally uses a cheap fallback while
+            // baking is forbidden. Keep that chunk stable until the bake-unlock
+            // generation schedules its one real retry; treating the intentional
+            // fallback as an ordinary build failure would rebuild it forever and
+            // exhaust the per-frame budget, exposing the rectangular placeholder.
+            chunk.hadFallbacksFlag = wasBakeForbidden ? false : hadFallbacks;
             if (devMode) {
               const chunkMs = performance.now() - _ct0;
               rebuildTotalMs += chunkMs;

@@ -5,6 +5,7 @@ import {
   RoomChunkCache,
   createChunkCacheOwnershipKey,
 } from '../render/walls/chunkRenderCache';
+import * as FP from '../debug/perfFreezeProfiler';
 
 const BLOCK_SIZE = 8;
 const SMALL_VIEWPORT = 1;
@@ -93,7 +94,7 @@ function makeRecorder(): DrawRecorder {
   return { ctx, drawn, fills };
 }
 
-function makeBuildFn(label: string, builtKeys: string[] = []) {
+function makeBuildFn(label: string, builtKeys: string[] = [], returnsFallback = false) {
   return (
     chunkCtx: CanvasRenderingContext2D,
     _chunkOffsetXPx: number,
@@ -106,9 +107,114 @@ function makeBuildFn(label: string, builtKeys: string[] = []) {
     const canvas = chunkCtx.canvas as FakeCanvas;
     canvas.builtFor = label;
     builtKeys.push(`${colMin / CHUNK_SIZE_BLOCKS},${rowMin / CHUNK_SIZE_BLOCKS}`);
-    return false;
+    return returnsFallback;
   };
 }
+
+test('gameplay fallback chunks remain drawable without perpetual rebuild churn', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  const builtKeys: string[] = [];
+  const gameplayFallbackBuild = makeBuildFn('gameplay-fallback', builtKeys, true);
+
+  FP.setBakeForbiddenInGameplay(true);
+  try {
+    cache.activateContentOwnership(owner('room-a'));
+    cache.setMaxChunksPerFrame(0);
+    cache.renderVisibleChunks(
+      makeRecorder().ctx,
+      layout,
+      0,
+      0,
+      1,
+      BLOCK_SIZE,
+      SMALL_VIEWPORT,
+      SMALL_VIEWPORT,
+      gameplayFallbackBuild,
+    );
+    assert.equal(builtKeys.length, 4);
+    assert.deepEqual(cache.getFallbackDiagnosticCounts(), {
+      hadFallbacksCount: 0,
+      gameplayFallbackCount: 4,
+    });
+
+    cache.setMaxChunksPerFrame(1);
+    const steadyFrame = makeRecorder();
+    cache.renderVisibleChunks(
+      steadyFrame.ctx,
+      layout,
+      0,
+      0,
+      1,
+      BLOCK_SIZE,
+      SMALL_VIEWPORT,
+      SMALL_VIEWPORT,
+      gameplayFallbackBuild,
+    );
+
+    assert.equal(builtKeys.length, 4, 'intentional gameplay fallbacks must not rebuild every frame');
+    assert.equal(steadyFrame.drawn.length, 4, 'all fallback chunks remain drawable while baking is forbidden');
+    assert.equal(steadyFrame.fills.length, 0, 'the rebuild-budget rectangle must not cover stable fallback chunks');
+    assert.equal(cache.stats.rebuiltThisFrame, 0);
+    assert.equal(cache.stats.skippedThisFrame, 0);
+  } finally {
+    FP.setBakeForbiddenInGameplay(false);
+  }
+});
+
+test('missing visible chunks converge before ordinary fallback retries can starve them', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  const builtKeys: string[] = [];
+  const fallbackBuild = makeBuildFn('sprite-fallback', builtKeys, true);
+
+  cache.activateContentOwnership(owner('room-a'));
+  cache.setMaxChunksPerFrame(0);
+  cache.renderVisibleChunks(
+    makeRecorder().ctx,
+    layout,
+    0,
+    0,
+    1,
+    BLOCK_SIZE,
+    SMALL_VIEWPORT,
+    SMALL_VIEWPORT,
+    fallbackBuild,
+  );
+  assert.equal(builtKeys.length, 4);
+
+  cache.setMaxChunksPerFrame(1);
+  const chunkShift = -(CHUNK_SIZE_BLOCKS * BLOCK_SIZE);
+  const firstExpandedFrame = makeRecorder();
+  cache.renderVisibleChunks(
+    firstExpandedFrame.ctx,
+    layout,
+    chunkShift,
+    0,
+    1,
+    BLOCK_SIZE,
+    SMALL_VIEWPORT,
+    SMALL_VIEWPORT,
+    fallbackBuild,
+  );
+  assert.equal(cache.stats.rebuiltThisFrame, 1);
+  assert.equal(firstExpandedFrame.fills.length, 1, 'only the second newly exposed chunk waits one frame');
+
+  const secondExpandedFrame = makeRecorder();
+  cache.renderVisibleChunks(
+    secondExpandedFrame.ctx,
+    layout,
+    chunkShift,
+    0,
+    1,
+    BLOCK_SIZE,
+    SMALL_VIEWPORT,
+    SMALL_VIEWPORT,
+    fallbackBuild,
+  );
+  assert.equal(cache.stats.rebuiltThisFrame, 1);
+  assert.equal(secondExpandedFrame.fills.length, 0, 'new coverage must converge despite earlier fallback-retry chunks');
+});
 
 function renderSmallViewport(
   cache: RoomChunkCache,
@@ -253,7 +359,7 @@ test('clean same-room chunks are reused and targeted invalidation rebuilds only 
   assert.equal(builtKeys.at(-1), '0,0');
 });
 
-test('dirty same-room canvases use neutral fallback once the rebuild budget is exhausted', () => {
+test('dirty same-room canvases retain owned pixels once the rebuild budget is exhausted', () => {
   const cache = new RoomChunkCache();
   const layout = {};
   cache.activateContentOwnership(owner('room-a'));
@@ -268,8 +374,8 @@ test('dirty same-room canvases use neutral fallback once the rebuild budget is e
   const recorder = makeRecorder();
   renderSmallViewport(cache, recorder, layout, 'room-a-updated');
 
-  assert.ok(!recorder.drawn.includes(staleSecondCanvas));
-  assert.equal(recorder.fills.length, 1);
+  assert.ok(recorder.drawn.includes(staleSecondCanvas));
+  assert.equal(recorder.fills.length, 0);
   assert.equal(cache.stats.rebuiltThisFrame, 1);
   assert.equal(cache.stats.skippedThisFrame, 1);
 });
