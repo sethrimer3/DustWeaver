@@ -55,6 +55,8 @@ import { processRoomPickups } from './gamePickups';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometerOverlayRenderer';
+import { PlayerSpeedGraphOverlayRenderer } from '../render/ui/playerSpeedGraphOverlayRenderer';
+import { debugPanelVisibility, isPanelVisible } from '../ui/debugPanelManager';
 import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
@@ -439,6 +441,7 @@ export function startGameScreen(
   const dialogueState = createDialogueState();
   const dialogueRenderer = new DialogueOverlayRenderer(uiRoot);
   const playerSpeedometerOverlay = new PlayerSpeedometerOverlayRenderer(uiRoot);
+  const playerSpeedGraphOverlay = new PlayerSpeedGraphOverlayRenderer(uiRoot);
   /**
    * UIDs of dialogue triggers that have already fired this room visit.
    * Cleared on every room load so each trigger fires once per visit.
@@ -1039,6 +1042,7 @@ export function startGameScreen(
   function frame(timestampMs: number): void {
     if (!isRunning) return;
     playerSpeedometerOverlay.hide();
+    playerSpeedGraphOverlay.hide();
 
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
@@ -1685,6 +1689,11 @@ export function startGameScreen(
       offsetYPx: oy,
       zoom,
     });
+    playerSpeedGraphOverlay.update({
+      world,
+      nowMs: timestampMs,
+      visible: pauseController.state.isDebugMode && isPanelVisible('speedGraph', debugPanelVisibility),
+    });
     FP.recordRenderMs(import.meta.env.DEV ? performance.now() - _renderT0 : 0);
 
     // Tick the loading overlay — hides it once sprites are ready.
@@ -1836,6 +1845,7 @@ export function startGameScreen(
     webglRenderer.dispose();
     dialogueRenderer.destroy();
     playerSpeedometerOverlay.destroy();
+    playerSpeedGraphOverlay.destroy();
     window.removeEventListener('resize', onResize);
     loadingOverlay.destroy();
     if (menuButton !== null && menuButton.parentElement !== null) {

@@ -105,6 +105,7 @@ const DEBUG_PANEL_DEFS: readonly DebugPanelDef[] = [
   { id: 'room',        label: 'Room / Editor Debug' },
   { id: 'resident',    label: 'Resident Room Debug' },
   { id: 'iceMoteAura', label: 'Ice Mote Aura Debug' },
+  { id: 'speedGraph',  label: 'Speed Graph' },
 ];
 
 export interface DebugPanel {

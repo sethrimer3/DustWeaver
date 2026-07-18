@@ -21,7 +21,8 @@ export type DebugPanelId =
   | 'freeze'
   | 'prewarm'
   | 'resident'
-  | 'iceMoteAura';
+  | 'iceMoteAura'
+  | 'speedGraph';
 
 export interface DebugPanelVisibility {
   movement: boolean;
@@ -35,6 +36,8 @@ export interface DebugPanelVisibility {
   prewarm: boolean;
   resident: boolean;
   iceMoteAura: boolean;
+  /** Real-time player speed graph, bottom-left. Defaults to visible (unlike other panels). */
+  speedGraph: boolean;
 }
 
 const STORAGE_KEY = 'dw_debug_panels';
@@ -52,6 +55,7 @@ function makeDefaults(): DebugPanelVisibility {
     prewarm:     false,
     resident:    false,
     iceMoteAura: false,
+    speedGraph:  true,
   };
 }
 

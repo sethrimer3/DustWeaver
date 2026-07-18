@@ -410,7 +410,9 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // Only the tangential component is damped so gravity's natural acceleration
   // is not penalised.  The effect is subtle: enough that perpetual motion
   // eventually decays, but not so strong that the swing feels dead.
-  {
+  // Movement V2: skip entirely while the player holds directional input —
+  // matching the free-air rule that input never decelerates the player.
+  if (world.playerMoveInputDxWorld === 0) {
     const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;
     const vTangX  = player.velocityXWorld - vRadial * nx;
     const vTangY  = player.velocityYWorld - vRadial * ny;
