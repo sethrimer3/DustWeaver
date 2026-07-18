@@ -198,7 +198,7 @@ test('missing visible chunks converge before ordinary fallback retries can starv
     fallbackBuild,
   );
   assert.equal(cache.stats.rebuiltThisFrame, 1);
-  assert.equal(firstExpandedFrame.fills.length, 1, 'only the second newly exposed chunk waits one frame');
+  assert.equal(firstExpandedFrame.fills.length, 0, 'no opaque placeholder is drawn for the newly exposed margin chunk that waits one frame');
 
   const secondExpandedFrame = makeRecorder();
   cache.renderVisibleChunks(
@@ -257,7 +257,7 @@ test('room switch under rebuild pressure never draws Room A canvases for Room B'
   assert.equal(recorderB.drawn.length, 1, 'the one rebuilt Room B chunk is drawable');
   assert.ok(recorderB.drawn.every((canvas) => !roomACanvases.has(canvas)));
   assert.ok(recorderB.drawn.every((canvas) => canvas.builtFor === 'room-b'));
-  assert.equal(recorderB.fills.length, 3, 'budget-skipped chunks use the neutral fallback');
+  assert.equal(recorderB.fills.length, 0, 'budget-skipped margin chunks are never drawn as an opaque placeholder');
   assert.equal(cache.stats.rebuiltThisFrame, 1);
   assert.equal(cache.stats.skippedThisFrame, 3);
 
@@ -297,7 +297,7 @@ test('partial Room B adoption removes untouched Room A chunk keys before large-r
     const movedView = makeRecorder();
     renderSmallViewport(cache, movedView, {}, 'room-b', [], 1, -2 * CHUNK_SIZE_BLOCKS * BLOCK_SIZE);
     assert.ok(!movedView.drawn.includes(roomAExtra));
-    assert.ok(movedView.fills.length > 0, `${isBgLayer ? 'background' : 'wall'} cache must fill missing distant chunks neutrally`);
+    assert.equal(movedView.fills.length, 0, `${isBgLayer ? 'background' : 'wall'} cache must never draw an opaque placeholder over missing distant chunks`);
   }
 });
 
@@ -398,7 +398,7 @@ test('zoom change drops prior-scale canvases and keeps the rebuild limit', () =>
   renderSmallViewport(cache, scaleTwo, layout, 'scale-2', [], 2);
   assert.equal(cache.stats.rebuiltThisFrame, 1);
   assert.ok(scaleTwo.drawn.every((canvas) => !oldCanvases.has(canvas)));
-  assert.ok(scaleTwo.fills.length > 0);
+  assert.equal(scaleTwo.fills.length, 0, 'no opaque placeholder is ever drawn, even for budget-skipped margin chunks');
 });
 
 test('dispose resets ownership, content metadata, visibility state, and diagnostics', () => {
@@ -428,4 +428,135 @@ test('dispose resets ownership, content metadata, visibility state, and diagnost
     rebuildMsThisFrame: 0,
     skippedThisFrame: 0,
   });
+});
+
+// ── Core-viewport coverage invariant ────────────────────────────────────────
+//
+// A "core" chunk is one whose grid cell falls inside the exact (margin-0)
+// viewport intersection. Every core chunk MUST be built/presented in the
+// same frame it becomes visible — regardless of the rebuild budget — because
+// unlike margin/prefetch chunks, core chunks are guaranteed to be on-screen.
+
+test('core viewport bypasses the rebuild budget: no missing core chunk in frame 1', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  const builtKeys: string[] = [];
+  // A viewport exactly 3 chunks wide/tall — the ceil() in the chunk-range
+  // math includes one extra boundary column/row, so the actual core grid is
+  // 4x4 = 16 chunks here (see _fillChunkRange for the exact edge rule).
+  const wideViewport = CHUNK_SIZE_BLOCKS * BLOCK_SIZE * 3;
+
+  cache.activateContentOwnership(owner('room-a'));
+  cache.setMaxChunksPerFrame(4); // far fewer than the 16 core chunks needed.
+  const recorder = makeRecorder();
+  cache.renderVisibleChunks(
+    recorder.ctx,
+    layout,
+    0,
+    0,
+    1,
+    BLOCK_SIZE,
+    wideViewport,
+    wideViewport,
+    makeBuildFn('room-a', builtKeys),
+  );
+
+  // All 16 core chunks (4x4) must have been built this very frame, even
+  // though the configured budget (4) is far smaller.
+  assert.equal(builtKeys.length, 16, 'every core chunk must build synchronously in frame 1');
+  assert.equal(recorder.fills.length, 0, 'no opaque placeholder may ever cover a core (visible) chunk');
+  assert.ok(cache.stats.rebuiltThisFrame >= 16);
+});
+
+test('tall-room camera descent: every core chunk is presented at every camera position, no starvation', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  cache.activateContentOwnership(owner('tall-room'));
+  cache.setMaxChunksPerFrame(4);
+
+  const vpW = CHUNK_SIZE_BLOCKS * BLOCK_SIZE; // 1 chunk wide core.
+  const vpH = CHUNK_SIZE_BLOCKS * BLOCK_SIZE; // 1 chunk tall core.
+  const chunkPx = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+
+  // Descend through 40 chunk-rows worth of camera offset, one full chunk at
+  // a time, and require full core coverage (no fill, no missing core chunk)
+  // at every single position — never requiring the camera to sit still to
+  // "catch up".
+  for (let row = 0; row < 40; row++) {
+    const offsetY = -(row * chunkPx);
+    const recorder = makeRecorder();
+    cache.renderVisibleChunks(
+      recorder.ctx,
+      layout,
+      0,
+      offsetY,
+      1,
+      BLOCK_SIZE,
+      vpW,
+      vpH,
+      makeBuildFn('tall-room'),
+    );
+    assert.equal(recorder.fills.length, 0, `row ${row}: no opaque placeholder over the core chunk`);
+    assert.ok(recorder.drawn.length >= 1, `row ${row}: the core chunk must be drawn`);
+  }
+});
+
+test('wide-room camera pan: every core chunk is presented at every camera position, no starvation', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  cache.activateContentOwnership(owner('wide-room'));
+  cache.setMaxChunksPerFrame(4);
+
+  const vpW = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+  const vpH = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+  const chunkPx = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+
+  for (let col = 0; col < 40; col++) {
+    const offsetX = -(col * chunkPx);
+    const recorder = makeRecorder();
+    cache.renderVisibleChunks(
+      recorder.ctx,
+      layout,
+      offsetX,
+      0,
+      1,
+      BLOCK_SIZE,
+      vpW,
+      vpH,
+      makeBuildFn('wide-room'),
+    );
+    assert.equal(recorder.fills.length, 0, `col ${col}: no opaque placeholder over the core chunk`);
+    assert.ok(recorder.drawn.length >= 1, `col ${col}: the core chunk must be drawn`);
+  }
+});
+
+test('stable room across 120+ frames converges: rebuiltThisFrame and skippedThisFrame reach 0', () => {
+  const cache = new RoomChunkCache();
+  const layout = {};
+  cache.activateContentOwnership(owner('stable-room'));
+  cache.setMaxChunksPerFrame(4);
+  const vpW = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+  const vpH = CHUNK_SIZE_BLOCKS * BLOCK_SIZE;
+
+  const initialOwnershipKey = cache.contentOwnershipKey;
+  const initialGeneration = cache.contentGeneration;
+
+  for (let frame = 0; frame < 130; frame++) {
+    cache.renderVisibleChunks(
+      makeRecorder().ctx,
+      layout,
+      0,
+      0,
+      1,
+      BLOCK_SIZE,
+      vpW,
+      vpH,
+      makeBuildFn('stable-room'),
+    );
+  }
+
+  assert.equal(cache.contentOwnershipKey, initialOwnershipKey, 'ownership must stay stable across a static room');
+  assert.equal(cache.contentGeneration, initialGeneration, 'content generation must not churn on a stable room');
+  assert.equal(cache.stats.rebuiltThisFrame, 0, 'a converged stable room must stop rebuilding');
+  assert.equal(cache.stats.skippedThisFrame, 0, 'a converged stable room must have nothing left to skip');
 });
