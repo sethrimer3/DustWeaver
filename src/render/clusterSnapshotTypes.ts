@@ -52,6 +52,8 @@ export interface ClusterSnapshot {
   readonly isGroundedFlag: 0 | 1;
   /** 1 while the player is performing a controlled wall slide. */
   readonly isWallSlidingFlag: 0 | 1;
+  /** 1 while the player is Movement-V2 rocket-boosted (jumped off a rocket block). */
+  readonly isRocketBoostedFlag: 0 | 1;
   /**
    * Current idle animation state:
    *  0 = standing, 1 = idle1, 2 = idle2, 3 = idleBlink

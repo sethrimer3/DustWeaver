@@ -40,6 +40,7 @@ export function _makeEmptyCluster(): _MutableCluster {
     isCrouchingFlag: 0,
     isGroundedFlag: 0,
     isWallSlidingFlag: 0,
+    isRocketBoostedFlag: 0,
     playerIdleAnimState: 0,
     isRockElementalFlag: 0,
     rockElementalState: 0,
@@ -259,6 +260,7 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.isCrouchingFlag                 = src.isCrouchingFlag;
   dst.isGroundedFlag                  = src.isGroundedFlag;
   dst.isWallSlidingFlag               = src.isWallSlidingFlag;
+  dst.isRocketBoostedFlag             = src.isRocketBoostedFlag;
   dst.playerIdleAnimState             = src.playerIdleAnimState;
   dst.isRockElementalFlag             = src.isRockElementalFlag;
   dst.rockElementalState              = src.rockElementalState;

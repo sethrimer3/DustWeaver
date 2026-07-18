@@ -28,6 +28,10 @@ import { applyVoidLensDistortion } from '../render/effects/voidLensDistortion';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
+import {
+  tickPlayerRocketChargeParticles,
+  drawPlayerRocketChargeParticles,
+} from '../render/playerRocketChargeParticles';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
@@ -505,6 +509,17 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
+  if (playerForSunrayDust !== null) {
+    tickPlayerRocketChargeParticles(
+      playerForSunrayDust.renderPositionXWorld,
+      playerForSunrayDust.renderPositionYWorld,
+      playerForSunrayDust.velocityXWorld,
+      playerForSunrayDust.velocityYWorld,
+      playerForSunrayDust.isRocketBoostedFlag === 1,
+      FIXED_DT_MS * 0.001,
+    );
+    drawPlayerRocketChargeParticles(ctx, ox, oy, zoom);
+  }
   renderSnakes(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantTether(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderRadiantWeb(ctx, snapshot, ox, oy, zoom, isDebugMode);

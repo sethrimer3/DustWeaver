@@ -53,6 +53,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isCrouchingFlag:           c.isCrouchingFlag,
       isGroundedFlag:            c.isGroundedFlag,
       isWallSlidingFlag:         c.isWallSlidingFlag,
+      isRocketBoostedFlag:       c.isRocketBoostedFlag,
       playerIdleAnimState:       c.playerIdleAnimState,
       isRockElementalFlag:              c.isRockElementalFlag,
       rockElementalState:               c.rockElementalState,
