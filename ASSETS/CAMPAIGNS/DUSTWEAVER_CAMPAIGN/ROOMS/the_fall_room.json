@@ -2755,7 +2755,7 @@
   ],
   "theme": "bk",
   "bg": "brownRock",
-  "light": "Above",
+  "light": "Ambient",
   "transitions": [
     {
       "dir": "up",
