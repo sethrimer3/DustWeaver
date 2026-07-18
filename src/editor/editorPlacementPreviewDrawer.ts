@@ -424,6 +424,21 @@ export function drawPlacementPreview(
     return;
   }
 
+  if (item.id === 'enemy_slime_snail') {
+    drawObjectFootprint(ctx, state.cursorBlockX, state.cursorBlockY, 1, 1,
+      offsetXPx, offsetYPx, zoom, 'rgba(80,190,75,0.25)', 2);
+    const cx = (state.cursorBlockX + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const cy = (state.cursorBlockY + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const side = state.placementRotationSteps % 4;
+    const normals = [[0,-1],[1,0],[0,1],[-1,0]] as const;
+    ctx.save();
+    ctx.strokeStyle = '#b9f49b'; ctx.lineWidth = Math.max(1, zoom);
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + normals[side][0] * 5 * zoom, cy + normals[side][1] * 5 * zoom); ctx.stroke();
+    ctx.fillStyle = '#397f3d'; ctx.beginPath(); ctx.arc(cx, cy, 3 * zoom, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
   if (item.id === 'skill_tomb') {
     const wPx = SKILL_TOMB_FOOTPRINT_W_BLOCKS * BLOCK_SIZE_SMALL * zoom;
     const hPx = SKILL_TOMB_FOOTPRINT_H_BLOCKS * BLOCK_SIZE_SMALL * zoom;

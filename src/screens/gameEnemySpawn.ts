@@ -827,7 +827,8 @@ export function spawnEnemyClusters(
       enemyCluster.isVoidSingularityFlag === 1 ||
       enemyCluster.isDustLeechFlag === 1 ||
       enemyCluster.isGridSnakeEnemyFlag === 1 ||
-      enemyCluster.isGridBlockEnemyFlag === 1;
+      enemyCluster.isGridBlockEnemyFlag === 1 ||
+      enemyCluster.isSlimeSnailFlag === 1;
     const skipTurretParticleSpawn = enemyCluster.isMomentumTurretFlag === 1;
     if (!skipParticleSpawn && !skipTurretParticleSpawn) {
       spawnLoadoutParticles(world, enemyCluster.entityId, ex, ey, enemyDef.kinds, enemyDef.particleCount, levelRng);
