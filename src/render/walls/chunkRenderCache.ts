@@ -770,6 +770,19 @@ export class RoomChunkCache {
 
     // ── Compute visible chunk range ──────────────────────────────────────────
     // Uses _fillChunkRange so the range matches isViewportCovered exactly.
+    // The CORE range (margin 0) is the exact viewport intersection — every
+    // chunk in it MUST have a valid same-frame presentation (real content or
+    // a synchronous cheap build), never an opaque placeholder. The margin
+    // range extends this for prefetch purposes and IS subject to the
+    // per-frame rebuild budget / can be left unbuilt with no draw at all.
+    _fillChunkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, 0, _rangeOut);
+    const coreCxMin = _rangeOut.cxMin;
+    const coreCyMin = _rangeOut.cyMin;
+    const coreCxMax = _rangeOut.cxMax;
+    const coreCyMax = _rangeOut.cyMax;
+    const isCoreChunk = (cx: number, cy: number): boolean =>
+      cx >= coreCxMin && cx <= coreCxMax && cy >= coreCyMin && cy <= coreCyMax;
+
     _fillChunkRange(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, blockSizePx, CHUNK_MARGIN, _rangeOut);
     const cxMin = _rangeOut.cxMin;
     const cyMin = _rangeOut.cyMin;
@@ -838,35 +851,43 @@ export class RoomChunkCache {
           chunk = undefined;
         }
 
+        const isCore = isCoreChunk(cx, cy);
+
         if (needsBuild) {
           // ── Per-frame rebuild budget check ──────────────────────────────
-          if (this._maxChunksPerFrame > 0 && rebuiltCount >= this._maxChunksPerFrame) {
-            // Budget exhausted — skip this chunk for this frame.
+          // The budget NEVER applies to core (margin-0, exact-viewport)
+          // chunks — those are built synchronously below regardless of
+          // rebuiltCount so the invariant "every visible chunk has a valid
+          // same-frame presentation" holds even when many chunks become
+          // visible at once (e.g. a tall room during fast camera descent).
+          // Only prefetch-margin chunks are deferrable.
+          if (!isCore && this._maxChunksPerFrame > 0 && rebuiltCount >= this._maxChunksPerFrame) {
+            // Budget exhausted — skip this margin chunk for this frame.
             // Ensure it will be retried next frame.
             if (chunk !== undefined && !hasForeignGeneration) {
               chunk.hadFallbacksFlag = true;
             }
             skippedCount++;
-            const screenX = Math.round(cx * chunkSizePx + offsetXPx);
-            const screenY = Math.round(cy * chunkSizePx + offsetYPx);
-            if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration && !isDirty) {
-              // A same-generation, non-dirty canvas is owned by this exact
-              // room/render state and still reflects current content. Keep
-              // its last valid pixels visible while a bounded retry is
-              // pending instead of replacing an entire chunk with a hard
-              // rectangular placeholder. Foreign generations were rejected
-              // above, and dirty chunks are excluded so this cannot present
-              // stale pre-invalidation pixels (e.g. an old lighting bake)
-              // next to freshly rebuilt neighbors.
+            if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration) {
+              // A same-generation canvas (dirty or not) is owned by this
+              // exact room/render state and still reflects the most recently
+              // built content for this key. Keep its last valid pixels
+              // visible while a bounded retry is pending instead of
+              // replacing the chunk with a hard rectangular placeholder —
+              // slightly-stale real pixels are always preferable to a flat
+              // fill. Foreign generations were rejected above so this cannot
+              // present another room's/scale's pixels.
+              const screenX = Math.round(cx * chunkSizePx + offsetXPx);
+              const screenY = Math.round(cy * chunkSizePx + offsetYPx);
               ctx.drawImage(chunk.canvas, screenX, screenY);
               visibleCount++;
               this._lastVisibleFrame.set(key, this._frame);
-            } else {
-              // A genuinely missing chunk has no safe prior pixels to present.
-              const side = Math.max(1, Math.ceil(chunkSizePx));
-              ctx.fillStyle = 'rgba(20,20,24,0.85)';
-              ctx.fillRect(screenX, screenY, side, side);
             }
+            // A genuinely missing/dirty MARGIN chunk is left undrawn (no
+            // placeholder) — it is outside the exact viewport, so nothing is
+            // visibly wrong; it will be built on a subsequent frame within
+            // budget. Placeholder fills are never drawn for margin chunks
+            // either — an unbuilt margin chunk is simply absent this frame.
             continue;
           }
 
