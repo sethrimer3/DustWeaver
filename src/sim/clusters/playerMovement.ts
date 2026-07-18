@@ -3,12 +3,13 @@
  *
  * Handles:
  *   • Cooldown / buffer timer ticks
- *   • Facing direction, sprint, slide, crouch state
+ *   • Facing direction, crouch state
+ *   • Skid activation/termination (authoritative phase, before jump)
  *   • Idle animation state machine
  *
  * Vertical physics (gravity, variable-jump sustain, fall speed cap, jump
  * trigger) live in playerVerticalMovement.ts.
- * Horizontal physics (acceleration, deceleration, skid detection) live in
+ * Horizontal physics (acceleration, deceleration) live in
  * playerHorizontalMovement.ts.
  */
 
@@ -23,6 +24,7 @@ import {
   IDLE_TRIGGER_TICKS,
   IDLE_BLINK_DURATION_TICKS,
 } from './movementConstants';
+import { updatePlayerSkidState } from './playerSkid';
 import { applyPlayerGravityAndJump } from './playerVerticalMovement';
 import { applyPlayerHorizontalMovement } from './playerHorizontalMovement';
 import { applyPlayerWaterHorizontalDrag } from './playerWaterPhysics';
@@ -103,25 +105,6 @@ export function tickPlayerMovement(
     }
   }
 
-  // ── Sprint state ──────────────────────────────────────────────────
-  {
-    if (world.playerSprintHeldFlag === 1 && cluster.isGroundedFlag === 1) {
-      cluster.isSprintingFlag = 1;
-    } else {
-      cluster.isSprintingFlag = 0;
-    }
-  }
-
-  // ── Slide state (shift + down on ground) ──────────────────────────
-  {
-    if (world.playerSprintHeldFlag === 1 && world.playerCrouchHeldFlag === 1
-      && cluster.isGroundedFlag === 1) {
-      cluster.isSlidingFlag = 1;
-    } else {
-      cluster.isSlidingFlag = 0;
-    }
-  }
-
   // ── Crouch state ──────────────────────────────────────────────────
   {
     const wasCrouching = cluster.isCrouchingFlag === 1;
@@ -187,6 +170,11 @@ export function tickPlayerMovement(
       }
     }
   }
+
+  // ── Skid activation/termination (authoritative; must run before the jump
+  // trigger below so a same-tick reversal + jump press is handled correctly,
+  // and before horizontal movement integrates this tick's velocity change) ──
+  updatePlayerSkidState(cluster, world);
 
   // ── Apply gravity, variable-jump sustain, fall speed cap, and jump trigger ──
   applyPlayerGravityAndJump(cluster, world, dtSec);

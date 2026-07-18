@@ -2,18 +2,27 @@
 
 This document lists the currently implemented movement techniques and their exact tuning values (60 FPS reference).
 
+Movement V2: sprint has been removed entirely — there is no Shift-modified
+movement state anywhere in the game. Walking speed is a single, constant
+grounded-input target. What used to require holding Shift (the skid
+technique) is now a speed-scaled technique triggered purely by deliberately
+reversing direction at or above walking speed — see "Skid Tech" below.
+
 ## Core Ground / Air Movement
 
 - **Run (Left / Right)**
-  - Max run speed: **105 world units/sec**.
+  - Grounded-input walking-speed target: **120 world units/sec**
+    (`GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC`) — the single authoritative
+    walking speed; there is no separate faster sprint gait.
   - Ground acceleration: **800 units/sec²**.
   - Air acceleration: **520 units/sec²**.
-  - Turn acceleration: **1466.7 units/sec²**.
-- **Sprint (hold Shift)**
-  - Grounded sprint top-speed multiplier: **1.5×** (run speed becomes **157.5 units/sec**).
-  - Extra sprint friction multiplier while slowing down: **0.5×** (slides longer than normal run).
+  - Turn acceleration (reversal / deceleration toward zero): **1466.7 units/sec²**,
+    applied uniformly whether current speed is below or above the walking-speed
+    target — a deliberate reversal always decelerates existing velocity through
+    zero, even from external over-cap momentum (grapple, bounce, etc.).
 - **Crouch (hold S / ArrowDown while grounded)**
   - Input condition: grounded + crouch input held (binary state toggle).
+    Fully blocks horizontal acceleration; unmodified by any other key.
 - **Jump (ground jump)**
   - Initial jump speed: **300 units/sec** upward.
 - **Variable Jump Height**
@@ -48,16 +57,46 @@ This document lists the currently implemented movement techniques and their exac
 - **Wall Jump Lockout**
   - Same-wall re-grab suppression: **12 ticks** (**0.20s**).
 
-## Skid Tech
+## Skid Tech (Movement V2 — speed-scaled, no Shift required)
 
-- **Skid**
-  - Triggers when sprinting, grounded, and reversing direction while speed exceeds threshold.
-  - Velocity threshold to qualify for skid direction checks: **5 units/sec**.
-  - Skid deceleration multiplier: **1.5×**.
+- **Skid Activation**
+  - Triggers when: grounded, not grappling/grapple-stuck, not on normal or
+    ultra ice, not in water, horizontal input is nonzero and opposite the
+    player's current horizontal velocity, and `abs(velocityX)` is at or
+    above walking speed (120, with a tiny floating-point tolerance).
+  - The signed horizontal velocity at the instant of entry is latched
+    (`skidEntryVelocityXWorld`) and used for jump-height and particle
+    scaling — never the live, already-decelerating velocity.
+  - Detected in an authoritative phase (`updatePlayerSkidState`,
+    `src/sim/clusters/playerSkid.ts`) that runs before vertical/jump
+    movement each tick, so a same-tick reversal + jump press is never lost.
+  - Ends when: velocity crosses into the new direction, input is released
+    or no longer opposes the original direction, the player leaves the
+    ground beyond the coyote-time window without consuming a skid jump, or
+    the player enters water/ice/ultra-ice/grapple movement.
 - **Skid Jump Boost**
-  - Jump speed multiplier while skidding: **1.153×** (targets ~6 small blocks of height).
+  - Available only while an active skid has not yet been consumed.
+  - Target bonus apex height (small blocks):
+    `bonusBlocks = 1 + max(0, abs(skidEntryVelocityXWorld) - 120) / 30`
+    — continuous, not stepped. 120 → +1, 135 → +1.5, 150 → +2, 180 → +3,
+    210 → +4, 300 → +7 small blocks.
+  - The launch speed needed to reach that added height is derived from the
+    idealized held-jump model `height(v) = v·sustainTime + v²/(2·gravity)`,
+    inverted for `v`, using the currently active base jump speed and
+    gravity (including live debug overrides). See
+    `src/sim/clusters/skidJumpHeight.ts` — one authoritative helper, shared
+    by the direct grounded jump, coyote jump, and landing-buffered ground
+    jump paths. Wall jumps, water jumps, grapple jump-off, zip jumps, and
+    springboards/kinetic blocks never receive this bonus.
 - **Skid Debris (visual)**
-  - Debris spawns at the bottom-front foot while skidding.
+  - Debris spawns at the bottom-front foot while skidding, scaled by a
+    soft-knee curve of the latched skid-entry speed (see
+    `computeSkidVisualSpeedWorld` in `src/render/skidDebrisRenderer.ts`):
+    `effectiveVisualSpeed = walkingSpeed + softKnee·log1p(max(0, skidSpeed − walkingSpeed) / softKnee)`,
+    `softKnee = 90`. Near-linear close to walking speed; smooth diminishing
+    returns at extreme (grapple-launch-range) speed — no hard clamp.
+    Distinct from the separate high-speed *landing* skid dust effect
+    (`playerLandingSkidSpeedFactor`), which is unrelated to direction reversal.
 
 ## Grapple Movement (Special Techniques)
 
@@ -95,6 +134,9 @@ This document lists the currently implemented movement techniques and their exac
 
 - Current movement tuning constants and logic live in:
   - `src/sim/clusters/movement.ts`
+  - `src/sim/clusters/movementConstants.ts`
+  - `src/sim/clusters/playerSkid.ts` (skid activation/termination state machine)
+  - `src/sim/clusters/skidJumpHeight.ts` (authoritative skid-jump launch-speed solver)
   - `src/sim/clusters/grapple.ts`
   - `src/sim/clusters/dashConstants.ts` (enemy dodge cooldown/recharge constants)
-- Debug HUD can display movement flags/counters for testing (grounded, coyote, wall slide, grapple state, skid, sprint, etc.).
+- Debug HUD can display movement flags/counters for testing (grounded, coyote, wall slide, grapple state, skid, etc.).

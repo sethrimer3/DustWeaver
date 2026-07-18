@@ -209,7 +209,6 @@ export function renderClusters(
         velocityYWorld: cluster.velocityYWorld,
         isFacingLeftFlag: cluster.isFacingLeftFlag,
         isGroundedFlag: cluster.isGroundedFlag,
-        isSprintingFlag: cluster.isSprintingFlag,
         isCrouchingFlag: cluster.isCrouchingFlag,
         isWallSlidingFlag: cluster.isWallSlidingFlag,
         halfWidthWorld: cluster.halfWidthWorld,

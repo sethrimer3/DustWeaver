@@ -20,14 +20,12 @@ export const debugSpeedOverrides = {
   gravityWorld: NaN,
   normalFallCapWorld: NaN,
   fastFallCapWorld: NaN,
-  sprintMultiplier: NaN,
   groundAccelWorld: NaN,
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
   airDecelWorld: NaN,
   wallJumpXWorld: NaN,
   wallJumpYWorld: NaN,
-  skidJumpMultiplier: NaN,
   grappleSuperJumpMultiplier: NaN,
   wallJumpAirAccelMultiplier: NaN,
   airMoveSpeedWorld: NaN,
@@ -503,24 +501,42 @@ export const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 200.0;
  */
 export const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
 
-// ── Player sprint ───────────────────────────────────────────────────────────
+// ── Player skid (speed-scaled direction-reversal technique) ─────────────────
+// Movement V2: skidding is no longer a sprint side-effect. Reversing input
+// while grounded and moving at or above walking speed latches the entry
+// velocity (see ClusterState.skidEntryVelocityXWorld), granting a
+// speed-scaled jump-height bonus and speed-scaled debris. State machine
+// lives in playerSkid.ts; the jump-height solver lives in skidJumpHeight.ts.
 
-/** Sprint speed multiplier applied to MAX_RUN_SPEED when sprinting on ground.
- * Adds another 50% on top of the base run speed when holding shift.
+/**
+ * Floating-point tolerance (world units/s) applied when checking whether the
+ * velocity at skid entry meets the walking-speed qualification threshold.
+ * Absorbs rounding error from repeated per-tick float accumulation.
  */
-export const SPRINT_SPEED_MULTIPLIER = 1.5;
+export const SKID_ENTRY_SPEED_EPSILON_WORLD = 0.01;
 
-/** Ground deceleration multiplier when holding shift (50% less friction). */
-export const SPRINT_FRICTION_MULTIPLIER = 0.5;
+/**
+ * Speed increment (world units/s) above walking speed required for each
+ * additional +1 small block of skid-jump bonus apex height. Continuous
+ * interpolation, not stepped — see computeSkidJumpBonusBlocks.
+ */
+export const SKID_JUMP_HEIGHT_SPEED_PER_BLOCK_WORLD = 30.0;
 
-/** Ground deceleration multiplier when skidding (50% more friction than default). */
-export const SKID_FRICTION_MULTIPLIER = 1.5;
+/**
+ * Bonus apex height (in small blocks) granted at exactly the minimum
+ * qualifying skid-entry speed (walking speed). Continuous interpolation
+ * above this baseline is driven by SKID_JUMP_HEIGHT_SPEED_PER_BLOCK_WORLD.
+ */
+export const SKID_JUMP_BASE_BONUS_BLOCKS = 1.0;
 
-/** Jump speed multiplier when jumping out of a skid; targets ~6 small blocks of height. */
-export const SKID_JUMP_MULTIPLIER = 1.153;
-
-/** Velocity threshold (px/s) below which a player is considered "not moving" for skid detection. */
-export const SKID_VELOCITY_THRESHOLD_WORLD = 5.0;
+/**
+ * Soft-knee constant (world units/s) for skid-particle visual-intensity
+ * scaling (see computeSkidVisualSpeedWorld in skidDebrisRenderer.ts). Chosen
+ * so the curve reads as close to linear from walking speed through
+ * grapple-zip range (~210 units/s) and only visibly compresses well above
+ * that, at the rare very-high grapple-launch speeds this game reaches.
+ */
+export const SKID_VISUAL_SOFT_KNEE_WORLD_PER_SEC = 90.0;
 
 /**
  * Jump speed multiplier for the zip-jump (zip super jump).
@@ -534,9 +550,9 @@ export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
 
 /**
  * Minimum horizontal speed (world units/s) required to trigger landing-skid
- * dust when the player touches the ground.
- * Set just above sprint speed (MAX_RUN_SPEED × SPRINT_SPEED_MULTIPLIER =
- * 105 × 1.5 = 157.5).  Below this threshold no extra dust appears.
+ * dust when the player touches the ground. Roughly 1.3x walking speed
+ * (GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 120) — below this threshold no
+ * extra dust appears.
  */
 export const LANDING_SKID_SPEED_THRESHOLD_WORLD = 157.5;
 

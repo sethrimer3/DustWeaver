@@ -442,8 +442,6 @@ export interface ClusterState {
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
   isFacingLeftFlag: 0 | 1;
-  /** 1 while the player is sprinting (shift held + grounded + moving). */
-  isSprintingFlag: 0 | 1;
   /** 1 while the player is crouching (S/down held + grounded). */
   isCrouchingFlag: 0 | 1;
   /** Ticks since last horizontal movement input (for idle animation trigger). */
@@ -459,11 +457,23 @@ export interface ClusterState {
   /** Ticks remaining until the next idle animation switch. */
   playerIdleNextSwitchTicks: number;
 
-  // ---- Player skid / slide state -------------------------------------------
-  /** 1 while the player is skidding (sprint + traveling opposite to facing). */
+  // ---- Player skid state (Movement V2 — speed-scaled reversal technique) ---
+  /**
+   * 1 while the player is actively skidding: grounded, deliberately
+   * reversing horizontal input, with velocity still pointing in the
+   * original (pre-reversal) travel direction. See playerSkid.ts for the
+   * authoritative activation/termination rules. No longer tied to sprint —
+   * Movement V2 removed sprint entirely.
+   */
   isSkiddingFlag: 0 | 1;
-  /** 1 while the player is sliding (sprint + crouch/down on ground). */
-  isSlidingFlag: 0 | 1;
+  /**
+   * Signed horizontal velocity (world units/s) latched at the instant the
+   * current skid began. Used (not the live, decelerating velocity) to scale
+   * skid-jump height and skid-particle intensity, so a skid entered at high
+   * speed keeps its full reward even if the jump/particles are evaluated a
+   * few ticks into the skid. Only meaningful while isSkiddingFlag === 1.
+   */
+  skidEntryVelocityXWorld: number;
 
   // ---- Momentum combat -------------------------------------------------------
   /**
@@ -1179,13 +1189,12 @@ export function createClusterState(
     snakeSpawnXWorld: positionXWorld,
     snakeSpawnYWorld: positionYWorld,
     isFacingLeftFlag: 0,
-    isSprintingFlag: 0,
     isCrouchingFlag: 0,
     playerIdleTimerTicks: 0,
     playerIdleAnimState: 0,
     playerIdleNextSwitchTicks: 0,
     isSkiddingFlag: 0,
-    isSlidingFlag: 0,
+    skidEntryVelocityXWorld: 0,
     isHighVelocityAttacking: 0,
     momentumHitCooldownTicks: 0,
     invulnerabilityTicks: 0,

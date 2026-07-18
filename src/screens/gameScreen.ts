@@ -30,7 +30,7 @@ import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
-import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getManualSprintEnabled, getCombatModeFromStorage } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getCombatModeFromStorage } from '../ui/renderSettings';
 import { computeRenderViewportMetrics, resizeCanvasBackingStore } from '../render/canvasViewport';
 import { setCombatMode } from '../sim/combatMode';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -1463,9 +1463,7 @@ export function startGameScreen(
         world.playerMoveInputDxWorld = (!isDialogueBlockingInput && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
         world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
       }
-      // Pass sprint and crouch input to the sim
-      const shouldSprint = !isDialogueBlockingInput && (getManualSprintEnabled() ? inputState.isSprintHeldFlag : moveDx !== 0);
-      world.playerSprintHeldFlag = shouldSprint ? 1 : 0;
+      // Pass crouch input to the sim
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
       _simTickCount++;

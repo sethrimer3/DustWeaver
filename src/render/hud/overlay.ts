@@ -41,13 +41,10 @@ export interface HudDebugState {
   /** Current grapple input mode: 0=Hold, 1=Toggle. */
   grappleInputMode: number;
   isSkidding: boolean;
-  isSliding: boolean;
-  isSprinting: boolean;
   inputUp: boolean;
   inputLeft: boolean;
   inputRight: boolean;
   inputDown: boolean;
-  inputShift: boolean;
   inputLeftClick: boolean;
   inputRightClick: boolean;
   inputGrapple: boolean;
@@ -153,8 +150,8 @@ export function renderHudOverlay(
         `WallL/R:  ${d.isTouchingWallLeft ? 'L' : '-'}${d.isTouchingWallRight ? 'R' : '-'}` +
           `  Slide:${d.isWallSlidingFlag ? 'Y' : 'N'}`,
         `WallLock: ${d.wallJumpLockoutTicks}t`,
-        `Sprint:${d.isSprinting ? 'Y' : 'N'} Skid:${d.isSkidding ? 'Y' : 'N'} Sld:${d.isSliding ? 'Y' : 'N'}`,
-        `Input U/L/R/D/Sh: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}${d.inputShift ? 'S' : '-'}`,
+        `Skid:${d.isSkidding ? 'Y' : 'N'}`,
+        `Input U/L/R/D: ${d.inputUp ? 'U' : '-'}${d.inputLeft ? 'L' : '-'}${d.inputRight ? 'R' : '-'}${d.inputDown ? 'D' : '-'}`,
         `Input M1/M2: ${d.inputLeftClick ? 'M1' : '--'}/${d.inputRightClick ? 'M2' : '--'}`,
         // ── Wall eligibility diagnostics ─────────────────────────────────
         `WallSide: ${d.wallDbgSide}  RawH:${d.wallDbgRawPartHeightWorld.toFixed(0)}wu`,

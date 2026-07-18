@@ -32,7 +32,11 @@ import {
   applyMomentumCombatCollisionDamage,
 } from '../sim/momentumCombat';
 import { applyPlayerDamageWithKnockback } from '../sim/playerDamage';
-import { MAX_RUN_SPEED_WORLD_PER_SEC, PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
+import {
+  MAX_RUN_SPEED_WORLD_PER_SEC,
+  PLAYER_JUMP_SPEED_WORLD,
+  GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC,
+} from '../sim/clusters/movementConstants';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -117,10 +121,15 @@ test('walk speed (MAX_RUN_SPEED) is below horizontal threshold', () => {
     `walk speed ${MAX_RUN_SPEED_WORLD_PER_SEC} must be below threshold ${MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED}`);
 });
 
-test('sprint speed (MAX_RUN_SPEED × 1.5) is below horizontal threshold', () => {
-  const sprintSpeed = MAX_RUN_SPEED_WORLD_PER_SEC * 1.5;
-  assert.ok(sprintSpeed < MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED,
-    `sprint speed ${sprintSpeed} must be below threshold ${MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED}`);
+test('Movement V2 ground walking speed (GROUND_MAX_INPUT_SPEED) is below horizontal threshold', () => {
+  assert.ok(GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC < MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED,
+    `walking speed ${GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC} must be below threshold ${MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED}`);
+});
+
+test('moderately elevated horizontal speed (1.5x walk speed, e.g. a fast skid or carried momentum) is below horizontal threshold', () => {
+  const elevatedSpeed = MAX_RUN_SPEED_WORLD_PER_SEC * 1.5;
+  assert.ok(elevatedSpeed < MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED,
+    `elevated speed ${elevatedSpeed} must be below threshold ${MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED}`);
 });
 
 test('jump speed (PLAYER_JUMP_SPEED_WORLD) is above horizontal threshold (ensures jump would falsely activate with total-speed check)', () => {
@@ -139,7 +148,7 @@ test('isHighVelocityAttacking is FALSE at walk speed horizontal velocity', () =>
   assert.equal(world.clusters[0].isHighVelocityAttacking, 0);
 });
 
-test('isHighVelocityAttacking is FALSE at sprint speed horizontal velocity', () => {
+test('isHighVelocityAttacking is FALSE at moderately elevated horizontal velocity (1.5x walk speed)', () => {
   const world = makeWorld('momentum');
   world.clusters[0].velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC * 1.5; // 157.5
   world.clusters[0].velocityYWorld = 0;
@@ -157,14 +166,14 @@ test('isHighVelocityAttacking is FALSE when only vertical speed is high (simulat
     'vertical-only jump should NOT activate momentum combat');
 });
 
-test('isHighVelocityAttacking is FALSE when sprinting AND jumping (high total speed, but horizontal is only sprint)', () => {
+test('isHighVelocityAttacking is FALSE when moving at elevated horizontal speed AND jumping (high total speed, but horizontal alone is not enough)', () => {
   const world = makeWorld('momentum');
   world.clusters[0].velocityXWorld = MAX_RUN_SPEED_WORLD_PER_SEC * 1.5; // 157.5 px/s horizontal
   world.clusters[0].velocityYWorld = -PLAYER_JUMP_SPEED_WORLD;           // 255 px/s upward
   // total speed ≈ 300 px/s — would have falsely activated with old total-speed check
   updateMomentumCombatState(world);
   assert.equal(world.clusters[0].isHighVelocityAttacking, 0,
-    'sprint+jump total speed must not activate momentum combat — horizontal check prevents this');
+    'elevated-horizontal-speed + jump total speed must not activate momentum combat — horizontal check prevents this');
 });
 
 test('isHighVelocityAttacking is TRUE at grapple-level horizontal speed', () => {

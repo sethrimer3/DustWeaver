@@ -63,32 +63,37 @@ const LAVA_ZONE_INVULN_TICKS = 30;
 /**
  * Minimum momentum (speed × mass approximation) to break a breakable block.
  * Player mass is implicitly 1.0, so this is effectively a speed threshold.
- * Sprint+dash (~373 px/s) should break blocks; normal running (~105 px/s) should not.
- * This is the 'standard' break-resistance tier (Phase 2E) — the name and
- * value are UNCHANGED from pre-Phase-2E so every existing built-in breakable
- * block and every custom fragile block that doesn't set breakResistance
- * keeps byte-identical behavior.
+ * A fast dash-like burst (~373 px/s) should break blocks; normal running
+ * (~105 px/s) should not. This is the 'standard' break-resistance tier
+ * (Phase 2E) — the name and value are UNCHANGED from pre-Phase-2E so every
+ * existing built-in breakable block and every custom fragile block that
+ * doesn't set breakResistance keeps byte-identical behavior.
  */
 const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
 
 /**
  * Phase 2E break-resistance tiers, chosen from DustWeaver's real movement
  * speed scale (see src/sim/clusters/movementConstants.ts):
- *   - MAX_RUN_SPEED_WORLD_PER_SEC = 105 (normal running/walking top speed)
- *   - sprint speed = MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER ≈ 157.5
+ *   - MAX_RUN_SPEED_WORLD_PER_SEC = 105 (legacy top-speed reference; the
+ *     current Movement V2 grounded-input target is
+ *     GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 120)
+ *   - an elevated speed tier of ~157.5 (1.3–1.5x normal ground speed —
+ *     e.g. a fast direction-reversal skid or momentum carried from a
+ *     grapple/bounce)
  *   - GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210
  *   - FAST_MAX_FALL_APPROACH_PER_SEC = 300 (fast-dive vertical speed alone;
  *     combined with any horizontal movement the total magnitude comfortably
  *     exceeds 300)
  *
- * 'weak' (150) sits just above sprint speed (~157.5 clears it) so a bare
- * sprint — not just normal running/walking — reliably breaks a weak block,
- * while ordinary running (105) and any resting/low-speed contact never do.
+ * 'weak' (150) sits just above that elevated ~157.5 tier so genuinely
+ * elevated horizontal speed — not just normal running/walking — reliably
+ * breaks a weak block, while ordinary running (105–120) and any
+ * resting/low-speed contact never do.
  *
  * 'standard' (250, BREAKABLE_MOMENTUM_THRESHOLD_WORLD) is unchanged.
  *
  * 'reinforced' (350) sits above a fast dive alone (300) but is reachable by
- * combining a fast dive with horizontal sprint/grapple-zip momentum, or a
+ * combining a fast dive with elevated horizontal/grapple-zip momentum, or a
  * grapple-zip release chained into a dash — i.e. deliberately achievable
  * through normal high-speed DustWeaver mechanics, never impossible.
  */

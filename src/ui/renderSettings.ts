@@ -298,24 +298,6 @@ export function setAlwaysCenterCamera(enabled: boolean): void {
   localStorage.setItem(ALWAYS_CENTER_CAMERA_STORAGE_KEY, enabled ? '1' : '0');
 }
 
-// ── Manual Sprint ─────────────────────────────────────────────────────────────
-
-const MANUAL_SPRINT_STORAGE_KEY = 'dustweaver-manual-sprint';
-
-/**
- * When false (default), sprint is always active while the player is moving on
- * the ground — the Shift key is not required.
- * When true, sprint requires holding the Sprint key (Shift / LB / L1).
- * Persists in localStorage.
- */
-export function getManualSprintEnabled(): boolean {
-  return localStorage.getItem(MANUAL_SPRINT_STORAGE_KEY) === '1';
-}
-
-export function setManualSprintEnabled(enabled: boolean): void {
-  localStorage.setItem(MANUAL_SPRINT_STORAGE_KEY, enabled ? '1' : '0');
-}
-
 // ── Advanced Wall Jumps ──────────────────────────────────────────────────────
 
 const ADVANCED_WALL_JUMPS_STORAGE_KEY = 'dustweaver-advanced-wall-jumps';

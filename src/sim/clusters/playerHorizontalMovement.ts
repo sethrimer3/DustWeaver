@@ -1,7 +1,14 @@
 /**
- * Player horizontal physics — skid detection, wall-jump force-time override,
- * grounded/airborne acceleration and deceleration, and the fast-fall hitbox
- * width adjustment.
+ * Player horizontal physics — wall-jump force-time override, grounded/airborne
+ * acceleration and deceleration, and the fast-fall hitbox width adjustment.
+ *
+ * Skid activation/termination is decided earlier in the tick by
+ * `updatePlayerSkidState` (playerSkid.ts), before vertical/jump movement.
+ * This module only *applies* the resulting deceleration: a deliberate
+ * direction reversal always uses TURN_ACCELERATION_PER_SEC2 regardless of
+ * whether current speed is above or below the ground cap, so opposite input
+ * reliably decelerates existing velocity through zero (see the isTurning
+ * branch below) instead of getting stuck at the cap.
  *
  * Extracted from playerMovement.ts to keep each movement axis in a focused
  * module.  Call `applyPlayerHorizontalMovement` once per tick for the player
@@ -20,10 +27,6 @@ import {
   AIR_ACCELERATION_PER_SEC2,
   TURN_ACCELERATION_PER_SEC2,
   WALL_JUMP_X_SPEED_WORLD,
-  SPRINT_SPEED_MULTIPLIER,
-  SPRINT_FRICTION_MULTIPLIER,
-  SKID_FRICTION_MULTIPLIER,
-  SKID_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_HALF_WIDTH_WORLD,
   WALL_JUMP_AIR_ACCEL_MULTIPLIER,
@@ -37,9 +40,9 @@ import {
 } from './movementConstants';
 
 /**
- * Apply horizontal movement (skid detection, wall-jump force-time override,
- * grounded/airborne acceleration + deceleration) and update the fast-fall
- * hitbox width for a single player tick.
+ * Apply horizontal movement (wall-jump force-time override, grounded/airborne
+ * acceleration + deceleration) and update the fast-fall hitbox width for a
+ * single player tick.
  *
  * Must be called after `applyPlayerGravityAndJump` so that any wall-jump
  * launch velocity set during the jump trigger is handled correctly by the
@@ -58,28 +61,11 @@ export function applyPlayerHorizontalMovement(
   let inputDx   = world.playerMoveInputDxWorld;
   const isGrounded = cluster.isGroundedFlag === 1;
 
-  // When holding down (without shift), block horizontal acceleration.
-  // When holding shift+down (sliding), allow normal input.
+  // Holding down always blocks horizontal acceleration while grounded —
+  // ordinary crouching, unmodified by any other key.
   const isHoldingDown = world.playerCrouchHeldFlag === 1;
-  if (isHoldingDown && world.playerSprintHeldFlag === 0 && isGrounded) {
+  if (isHoldingDown && isGrounded) {
     inputDx = 0;
-  }
-
-  // ── Skid detection ─────────────────────────────────────────────────
-  // Skid when sprint is held, grounded, moving, and velocity is opposite
-  // to the facing direction (changing direction while sprinting).
-  // Ice surfaces suppress skidding — there is no traction to skid on.
-  {
-    const isFacingLeft = cluster.isFacingLeftFlag === 1;
-    const isMovingRight = cluster.velocityXWorld > SKID_VELOCITY_THRESHOLD_WORLD;
-    const isMovingLeft = cluster.velocityXWorld < -SKID_VELOCITY_THRESHOLD_WORLD;
-    const isTravelingOppositeToFacing =
-      (isFacingLeft && isMovingRight) || (!isFacingLeft && isMovingLeft);
-    if (world.playerSprintHeldFlag === 1 && isGrounded && isTravelingOppositeToFacing && cluster.isGroundedOnIceFlag === 0) {
-      cluster.isSkiddingFlag = 1;
-    } else {
-      cluster.isSkiddingFlag = 0;
-    }
   }
 
   // ── Ultra ice velocity lock ─────────────────────────────────────────
@@ -100,7 +86,6 @@ export function applyPlayerHorizontalMovement(
 
   if (world.isGrappleActiveFlag === 0) {
     const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
-    const sprintMult = ov(debugSpeedOverrides.sprintMultiplier, SPRINT_SPEED_MULTIPLIER);
     const baseGroundAccel = ov(debugSpeedOverrides.groundAccelWorld, GROUND_ACCELERATION_PER_SEC2);
     const baseGroundDecel = ov(debugSpeedOverrides.groundDecelWorld, GROUND_DECELERATION_PER_SEC2);
     const baseAirAccel = ov(debugSpeedOverrides.airAccelWorld, AIR_ACCELERATION_PER_SEC2);
@@ -124,42 +109,55 @@ export function applyPlayerHorizontalMovement(
       if (isGrounded) {
         // ── Grounded, holding input ──────────────────────────────────────
         const isOnIce = cluster.isGroundedOnIceFlag === 1;
-        const groundCap = cluster.isSprintingFlag === 1
-          ? baseRunSpeed * sprintMult
-          : baseRunSpeed;
+        const groundCap = baseRunSpeed;
         const absVBefore = Math.abs(cluster.velocityXWorld);
+        const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
+                          (inputDx < 0 && cluster.velocityXWorld >  1.0);
         if (isOnIce) {
           // Ice traction: no turn boost, slow acceleration regardless of direction.
           cluster.velocityXWorld += inputDx * ICE_GROUND_ACCELERATION_PER_SEC2 * dtSec;
+        } else if (isTurning) {
+          // Deliberate direction reversal: intentional braking. Always uses
+          // TURN_ACCELERATION_PER_SEC2 to decelerate the existing velocity
+          // toward zero and then accelerate in the new direction, regardless
+          // of whether current speed is above or below the ground cap and
+          // regardless of the grounded-decel-grace timer below (that grace
+          // only protects SAME-direction over-cap momentum from decaying
+          // merely because input is held — opposite-direction input is never
+          // "merely held", it is deliberate braking and must always work).
+          // This guarantees a reversal exactly at, or above, the ground cap
+          // still reduces velocity and eventually crosses zero.
+          cluster.velocityXWorld += inputDx * TURN_ACCELERATION_PER_SEC2 * dtSec;
+          if (inputDx > 0 && cluster.velocityXWorld > groundCap) {
+            cluster.velocityXWorld = groundCap;
+          } else if (inputDx < 0 && cluster.velocityXWorld < -groundCap) {
+            cluster.velocityXWorld = -groundCap;
+          }
         } else if (absVBefore < groundCap) {
-          // Below the target speed: accelerate up toward it, never overshoot.
-          const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
-                            (inputDx < 0 && cluster.velocityXWorld >  1.0);
-          const accel = isTurning ? TURN_ACCELERATION_PER_SEC2 : baseGroundAccel;
-          cluster.velocityXWorld += inputDx * accel * dtSec;
+          // Below the target speed, same direction: accelerate up toward it,
+          // never overshoot.
+          cluster.velocityXWorld += inputDx * baseGroundAccel * dtSec;
           if (inputDx > 0 && cluster.velocityXWorld > groundCap) {
             cluster.velocityXWorld = groundCap;
           } else if (inputDx < 0 && cluster.velocityXWorld < -groundCap) {
             cluster.velocityXWorld = -groundCap;
           }
         } else if (cluster.groundedTicks > GROUND_DECEL_GRACE_TICKS) {
-          // At/above the target speed and grounded long enough: bleed the
-          // excess back down toward the cap (never below it) while input
-          // is still held.
-          let decel = baseGroundDecel;
-          if (cluster.isSkiddingFlag === 1) {
-            decel *= SKID_FRICTION_MULTIPLIER;
-          } else if (world.playerSprintHeldFlag === 1) {
-            decel *= SPRINT_FRICTION_MULTIPLIER;
-          }
-          const dv = decel * dtSec;
+          // At/above the target speed, same direction, and grounded long
+          // enough: bleed the excess back down toward the cap (never below
+          // it) while input is still held. Externally earned over-cap
+          // momentum (grapple, bounce, etc.) is preserved until this grace
+          // window elapses, so held same-direction input alone never
+          // destroys it immediately.
+          const dv = baseGroundDecel * dtSec;
           if (cluster.velocityXWorld > 0) {
             cluster.velocityXWorld = Math.max(groundCap, cluster.velocityXWorld - dv);
           } else {
             cluster.velocityXWorld = Math.min(-groundCap, cluster.velocityXWorld + dv);
           }
         }
-        // Above cap but still within the grace window: leave velocity as-is.
+        // Above cap, same direction, still within the grace window: leave
+        // velocity as-is.
       } else {
         // ── Airborne, holding input: accelerate up toward the air cap only;
         // never decelerate while any direction is held. Rocket-boosted jumps

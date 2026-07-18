@@ -21,8 +21,6 @@ export interface InputState {
   isJumpHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
-  /** True while the Shift key is physically held down (sprint). */
-  isSprintHeldFlag: boolean;
   mouseXPx: number;
   mouseYPx: number;
   // Touch joystick state (populated by touch listeners; read by renderer for visual feedback)
@@ -98,7 +96,6 @@ export function createInputState(): InputState {
     isDownTriggeredFlag: false,
     isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
-    isSprintHeldFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
     isTouchJoystickActiveFlag: 0,
@@ -191,10 +188,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
-    if (keyMatches(e.key, b.sprint)) {
-      e.preventDefault();
-      state.isSprintHeldFlag = true;
-    }
     if (keyMatches(e.key, b.interact) && !e.repeat) {
       state.isInteractTriggeredFlag = true;
     }
@@ -218,14 +211,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = false;
     if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
-    }
-    if (keyMatches(e.key, b.sprint)) {
-      state.isSprintHeldFlag = false;
-    }
-    // If the sprint binding is a modifier key (e.g. Shift), keep sprint active
-    // when the other physical key of the same type is still held.
-    if (b.sprint.toLowerCase() === 'shift' && e.shiftKey) {
-      state.isSprintHeldFlag = true;
     }
   }
   function onMouseMove(e: MouseEvent): void {
@@ -337,7 +322,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isKeyD = false;
     state.isKeyS = false;
     state.isJumpHeldFlag = false;
-    state.isSprintHeldFlag = false;
     // Fire a grapple release so the rope is cancelled when the window loses
     // focus (alt-tab, task switch, etc.).  Without this the grapple stays
     // active in the sim and the player is frozen mid-swing on return.

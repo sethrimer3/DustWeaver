@@ -49,7 +49,6 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       rollingEnemySpriteIndex:  c.rollingEnemySpriteIndex,
       rollingEnemyRollAngleRad: c.rollingEnemyRollAngleRad,
       isFacingLeftFlag:          c.isFacingLeftFlag,
-      isSprintingFlag:           c.isSprintingFlag,
       isCrouchingFlag:           c.isCrouchingFlag,
       isGroundedFlag:            c.isGroundedFlag,
       isWallSlidingFlag:         c.isWallSlidingFlag,

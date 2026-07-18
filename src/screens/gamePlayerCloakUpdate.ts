@@ -68,7 +68,6 @@ export function updatePlayerCloaks(
     velocityYWorld: cloakPlayer.velocityYWorld,
     isFacingLeftFlag: cloakPlayer.isFacingLeftFlag,
     isGroundedFlag: cloakPlayer.isGroundedFlag,
-    isSprintingFlag: cloakPlayer.isSprintingFlag,
     isCrouchingFlag: cloakPlayer.isCrouchingFlag,
     isWallSlidingFlag: cloakPlayer.isWallSlidingFlag,
     halfWidthWorld: cloakPlayer.halfWidthWorld,
