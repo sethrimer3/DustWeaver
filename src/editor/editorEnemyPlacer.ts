@@ -6,26 +6,10 @@
 import { EditorState, EditorRoomData, PaletteItem, allocateUid } from './editorState';
 import { MAX_SHADOW_ENEMIES } from '../sim/clusters/shadowEnemyConfig';
 import { MAX_NEEDLE_URCHINS } from '../sim/clusters/needleUrchinConfig';
-
-export function canAddLimitedEnemy(
-  room: EditorRoomData,
-  enemyType: 'shadow' | 'needleUrchin',
-): boolean {
-  const limit = enemyType === 'shadow' ? MAX_SHADOW_ENEMIES : MAX_NEEDLE_URCHINS;
-  let count = 0;
-  for (const enemy of room.enemies) {
-    const matches = enemyType === 'shadow'
-      ? enemy.isShadowEnemyFlag === 1
-      : enemy.isNeedleUrchinFlag === 1;
-    if (matches) {
-      count++;
-    }
-  }
-  return count < limit;
-}
+import { canAddLimitedEnemy } from './editorEnemyCapacity';
 
 function warnEditorCapacity(enemyType: 'Shadow' | 'Needle Urchin', limit: number): void {
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV === true) {
     console.warn(`[editorEnemyPlacer] ${enemyType} limit reached; maximum per room is ${limit}.`);
   }
 }

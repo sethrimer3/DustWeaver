@@ -169,7 +169,7 @@ export function allocateNeedleUrchinSlot(world: WorldState): number {
 }
 
 function warnCapacityExceededOnce(enemyType: 'Shadow' | 'Needle Urchin', limit: number): void {
-  if (!import.meta.env.DEV) {
+  if (import.meta.env?.DEV !== true) {
     return;
   }
   if (enemyType === 'Shadow') {

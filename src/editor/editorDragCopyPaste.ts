@@ -14,7 +14,7 @@ import {
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   SelectedElement, allocateUid, EditorRoomData, EditorGuideDustPath,
 } from './editorState';
-import { canAddLimitedEnemy } from './editorEnemyPlacer';
+import { canAddLimitedEnemy } from './editorEnemyCapacity';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
 
