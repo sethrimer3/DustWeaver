@@ -849,12 +849,15 @@ export class RoomChunkCache {
             skippedCount++;
             const screenX = Math.round(cx * chunkSizePx + offsetXPx);
             const screenY = Math.round(cy * chunkSizePx + offsetYPx);
-            if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration) {
-              // A same-generation canvas is owned by this exact room/render
-              // state. Keep its last valid pixels visible while a bounded retry
-              // is pending instead of replacing an entire chunk with a hard
+            if (chunk !== undefined && chunk.contentGeneration === this._contentGeneration && !isDirty) {
+              // A same-generation, non-dirty canvas is owned by this exact
+              // room/render state and still reflects current content. Keep
+              // its last valid pixels visible while a bounded retry is
+              // pending instead of replacing an entire chunk with a hard
               // rectangular placeholder. Foreign generations were rejected
-              // above, so this cannot resurrect artwork from another room.
+              // above, and dirty chunks are excluded so this cannot present
+              // stale pre-invalidation pixels (e.g. an old lighting bake)
+              // next to freshly rebuilt neighbors.
               ctx.drawImage(chunk.canvas, screenX, screenY);
               visibleCount++;
               this._lastVisibleFrame.set(key, this._frame);

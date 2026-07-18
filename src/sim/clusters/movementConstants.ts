@@ -153,6 +153,29 @@ export const JUMP_BUFFER_TICKS = Math.round(JUMP_BUFFER_MS / 1000.0 * 60);
 /** Maximum horizontal run speed (px/s). Increased by 50% from 70.0. */
 export const MAX_RUN_SPEED_WORLD_PER_SEC = 105.0;
 
+// ============================================================================
+// Movement V2 — ground-input speed cap, uncapped air momentum, and grace-period
+// ground deceleration. Left/right input accelerates the player up to
+// MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC; air has no resistance so momentum
+// carries indefinitely; ground friction only kicks in after the player has
+// been continuously grounded for longer than GROUND_DECEL_GRACE_TICKS, so
+// bunny-hopping (repeated jumping) never decelerates.
+// ============================================================================
+
+/** Speed cap for player-input horizontal acceleration, both ground and air (px/s). */
+export const MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC = 150.0;
+
+/**
+ * Continuous grounded contact time (seconds) required before ground
+ * deceleration begins. Repeated jumping resets the grounded-contact timer
+ * each tick the player is airborne, so a player who keeps jumping never
+ * triggers deceleration.
+ */
+export const GROUND_DECEL_GRACE_SEC = 0.75;
+
+/** GROUND_DECEL_GRACE_SEC expressed in ticks (60 fps). */
+export const GROUND_DECEL_GRACE_TICKS = Math.round(GROUND_DECEL_GRACE_SEC * 60.0);
+
 /** Ground acceleration: how quickly the player builds up speed on the ground (px/s²). */
 export const GROUND_ACCELERATION_PER_SEC2 = 800.0;
 

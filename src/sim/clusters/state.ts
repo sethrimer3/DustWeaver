@@ -89,6 +89,15 @@ export interface ClusterState {
    */
   airborneTicks: number;
 
+  /**
+   * Number of consecutive ticks the player has been grounded (touching the
+   * floor without interruption). Reset to 0 each tick the player is airborne;
+   * incremented while grounded. Used by Movement V2 ground deceleration:
+   * friction only kicks in once this exceeds GROUND_DECEL_GRACE_TICKS, so
+   * players who keep jumping never lose their momentum.
+   */
+  groundedTicks: number;
+
   // ---- Wall interaction ---------------------------------------------------
   /** 1 when the player's left side is pressed against a solid wall this tick. */
   isTouchingWallLeftFlag: 0 | 1;
@@ -1049,6 +1058,7 @@ export function createClusterState(
     varJumpSpeedWorld: 0,
     isFastFallModeFlag: 0,
     airborneTicks: 0,
+    groundedTicks: 0,
     isTouchingWallLeftFlag: 0,
     isTouchingWallRightFlag: 0,
     isWallSlidingFlag: 0,

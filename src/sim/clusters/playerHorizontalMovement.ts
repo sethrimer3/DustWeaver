@@ -15,11 +15,9 @@ import { PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import {
   debugSpeedOverrides,
   ov,
-  MAX_RUN_SPEED_WORLD_PER_SEC,
   GROUND_ACCELERATION_PER_SEC2,
   GROUND_DECELERATION_PER_SEC2,
   AIR_ACCELERATION_PER_SEC2,
-  AIR_DECELERATION_PER_SEC2,
   TURN_ACCELERATION_PER_SEC2,
   WALL_JUMP_X_SPEED_WORLD,
   SPRINT_SPEED_MULTIPLIER,
@@ -29,12 +27,10 @@ import {
   FAST_FALL_VELOCITY_THRESHOLD_WORLD,
   FAST_FALL_HALF_WIDTH_WORLD,
   WALL_JUMP_AIR_ACCEL_MULTIPLIER,
-  AIR_MOVE_SPEED_WORLD_PER_SEC,
-  AIR_BRAKING_PER_SEC2,
-  MOMENTUM_DECAY_PER_SEC2,
-  HIGH_SPEED_STEERING_FACTOR,
   ICE_GROUND_ACCELERATION_PER_SEC2,
   ICE_GROUND_DECELERATION_PER_SEC2,
+  MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC,
+  GROUND_DECEL_GRACE_TICKS,
 } from './movementConstants';
 
 /**
@@ -100,12 +96,11 @@ export function applyPlayerHorizontalMovement(
   }
 
   if (world.isGrappleActiveFlag === 0) {
-    const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, MAX_RUN_SPEED_WORLD_PER_SEC);
+    const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, MOVEMENT_V2_MAX_INPUT_SPEED_WORLD_PER_SEC);
     const sprintMult = ov(debugSpeedOverrides.sprintMultiplier, SPRINT_SPEED_MULTIPLIER);
     const baseGroundAccel = ov(debugSpeedOverrides.groundAccelWorld, GROUND_ACCELERATION_PER_SEC2);
     const baseGroundDecel = ov(debugSpeedOverrides.groundDecelWorld, GROUND_DECELERATION_PER_SEC2);
     const baseAirAccel = ov(debugSpeedOverrides.airAccelWorld, AIR_ACCELERATION_PER_SEC2);
-    const baseAirDecel = ov(debugSpeedOverrides.airDecelWorld, AIR_DECELERATION_PER_SEC2);
 
     // During wall-jump force-time window, override horizontal velocity
     // to the outward launch direction — prevents immediately steering back.
@@ -144,89 +139,38 @@ export function applyPlayerHorizontalMovement(
           cluster.velocityXWorld = -maxSpeed;
         }
       } else {
-        // ── Airborne: momentum-preserving air control ─────────────────────
-        // AIR_MOVE_SPEED is the soft cap for input-generated speed.
-        // Externally generated momentum (grapple launch, bounce pads, etc.)
-        // above this cap is preserved.  Input can steer or brake, but cannot
-        // push abs(vx) above the pre-input value when already above the cap.
-        const airMoveSpeed = ov(debugSpeedOverrides.airMoveSpeedWorld, AIR_MOVE_SPEED_WORLD_PER_SEC);
-        const preInputAbsVxWorld = Math.abs(cluster.velocityXWorld);
-
-        if (preInputAbsVxWorld > airMoveSpeed) {
-          // High-speed regime: check whether input opposes or matches velocity.
-          const isOpposing = (inputDx > 0 && cluster.velocityXWorld < 0) ||
-                             (inputDx < 0 && cluster.velocityXWorld > 0);
-          if (isOpposing) {
-            // Intentional air brake — bleed off high-speed momentum deliberately.
-            const airBraking = ov(debugSpeedOverrides.airBrakingWorld, AIR_BRAKING_PER_SEC2);
-            cluster.velocityXWorld += inputDx * airBraking * dtSec;
-          } else {
-            // Same direction: subtle steering feel without increasing speed.
-            const steeringAccel = baseAirAccel
-              * ov(debugSpeedOverrides.highSpeedSteeringFactor, HIGH_SPEED_STEERING_FACTOR);
-            cluster.velocityXWorld += inputDx * steeringAccel * dtSec;
-            // Hard cap: steering must not push abs(vx) above its pre-input value.
-            if (Math.abs(cluster.velocityXWorld) > preInputAbsVxWorld) {
-              cluster.velocityXWorld = (cluster.velocityXWorld > 0 ? 1 : -1) * preInputAbsVxWorld;
-            }
-          }
-        } else {
-          // Normal speed range: standard air control clamped to airMoveSpeed.
-          // Normal input cannot push the player above this soft cap.
-          const wallJumpMult = cluster.wallJumpCountSinceReset > 0
-            ? ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
-            : 1.0;
-          const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
-                            (inputDx < 0 && cluster.velocityXWorld >  1.0);
-          const accel = isTurning
-            ? TURN_ACCELERATION_PER_SEC2
-            : baseAirAccel * wallJumpMult;
-          cluster.velocityXWorld += inputDx * accel * dtSec;
-          // Clamp to airMoveSpeed in input direction.
-          if (inputDx > 0 && cluster.velocityXWorld > airMoveSpeed) {
-            cluster.velocityXWorld = airMoveSpeed;
-          } else if (inputDx < 0 && cluster.velocityXWorld < -airMoveSpeed) {
-            cluster.velocityXWorld = -airMoveSpeed;
-          }
-        }
+        // ── Airborne: uncapped acceleration, no air resistance ─────────────
+        // Input keeps accelerating the player with no speed ceiling; momentum
+        // earned in the air (grapple launch, bounce pads, wall jumps, etc.)
+        // is never clamped back down.
+        const wallJumpMult = cluster.wallJumpCountSinceReset > 0
+          ? ov(debugSpeedOverrides.wallJumpAirAccelMultiplier, WALL_JUMP_AIR_ACCEL_MULTIPLIER)
+          : 1.0;
+        const isTurning = (inputDx > 0 && cluster.velocityXWorld < -1.0) ||
+                          (inputDx < 0 && cluster.velocityXWorld >  1.0);
+        const accel = isTurning
+          ? TURN_ACCELERATION_PER_SEC2
+          : baseAirAccel * wallJumpMult;
+        cluster.velocityXWorld += inputDx * accel * dtSec;
       }
     } else if (cluster.wallJumpForceTimeTicks <= 0) {
-      // No horizontal input and not in force-time — decelerate toward zero.
+      // No horizontal input and not in force-time.
       if (isGrounded) {
-        // ── Grounded: friction with skid, sprint, and ice surface modifiers ────────────
-        const isOnIce = cluster.isGroundedOnIceFlag === 1;
-        let decel = isOnIce ? ICE_GROUND_DECELERATION_PER_SEC2 : baseGroundDecel;
-        if (!isOnIce) {
-          if (cluster.isSkiddingFlag === 1) {
-            decel *= SKID_FRICTION_MULTIPLIER;
-          } else if (world.playerSprintHeldFlag === 1) {
-            decel *= SPRINT_FRICTION_MULTIPLIER;
+        // ── Grounded: friction only kicks in after a sustained grounded
+        // window (GROUND_DECEL_GRACE_TICKS) — repeated jumping keeps
+        // resetting groundedTicks to 0, so a player who keeps hopping never
+        // decelerates.
+        if (cluster.groundedTicks > GROUND_DECEL_GRACE_TICKS) {
+          const isOnIce = cluster.isGroundedOnIceFlag === 1;
+          let decel = isOnIce ? ICE_GROUND_DECELERATION_PER_SEC2 : baseGroundDecel;
+          if (!isOnIce) {
+            if (cluster.isSkiddingFlag === 1) {
+              decel *= SKID_FRICTION_MULTIPLIER;
+            } else if (world.playerSprintHeldFlag === 1) {
+              decel *= SPRINT_FRICTION_MULTIPLIER;
+            }
           }
-        }
-        const dv = decel * dtSec;
-        if (cluster.velocityXWorld > 0) {
-          cluster.velocityXWorld = cluster.velocityXWorld - dv > 0 ? cluster.velocityXWorld - dv : 0;
-        } else if (cluster.velocityXWorld < 0) {
-          cluster.velocityXWorld = cluster.velocityXWorld + dv < 0 ? cluster.velocityXWorld + dv : 0;
-        }
-      } else {
-        // ── Airborne: preserve high-speed momentum; gentle decel at normal speeds
-        const airMoveSpeed = ov(debugSpeedOverrides.airMoveSpeedWorld, AIR_MOVE_SPEED_WORLD_PER_SEC);
-        const absVxWorld = Math.abs(cluster.velocityXWorld);
-        if (absVxWorld > airMoveSpeed) {
-          // Subtle momentum decay above airMoveSpeed.
-          // The decay floor prevents bleeding below airMoveSpeed so normal
-          // air deceleration behaviour is unchanged at typical speeds.
-          const momentumDecay = ov(debugSpeedOverrides.momentumDecayWorld, MOMENTUM_DECAY_PER_SEC2);
-          const dv = momentumDecay * dtSec;
-          if (cluster.velocityXWorld > 0) {
-            cluster.velocityXWorld = Math.max(airMoveSpeed, cluster.velocityXWorld - dv);
-          } else {
-            cluster.velocityXWorld = Math.min(-airMoveSpeed, cluster.velocityXWorld + dv);
-          }
-        } else {
-          // Normal air decel toward zero.
-          const dv = baseAirDecel * dtSec;
+          const dv = decel * dtSec;
           if (cluster.velocityXWorld > 0) {
             cluster.velocityXWorld = cluster.velocityXWorld - dv > 0 ? cluster.velocityXWorld - dv : 0;
           } else if (cluster.velocityXWorld < 0) {
@@ -234,6 +178,7 @@ export function applyPlayerHorizontalMovement(
           }
         }
       }
+      // ── Airborne, no input: no air resistance — velocity is left unchanged.
     }
   }
 

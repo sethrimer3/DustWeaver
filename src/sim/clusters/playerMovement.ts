@@ -42,8 +42,10 @@ export function tickPlayerMovement(
   // runs after tickPlayerMovement), which is the correct value.
   if (cluster.isGroundedFlag === 1) {
     cluster.airborneTicks = 0;
+    cluster.groundedTicks += 1;
   } else {
     cluster.airborneTicks += 1;
+    cluster.groundedTicks = 0;
   }
   if (cluster.dashCooldownTicks > 0) {
     cluster.dashCooldownTicks -= 1;
