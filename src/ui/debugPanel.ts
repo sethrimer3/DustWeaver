@@ -114,12 +114,19 @@ export function createDebugPanel(root: HTMLElement): DebugPanel {
   const container = document.createElement('div');
   container.id = 'debug-speed-panel';
   container.style.cssText = `
-    position: absolute; top: 74px; right: 16px; width: 220px;
+    position: absolute; top: 74px; right: 16px; width: 190px;
     background: ${PANEL_BG}; border: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; font-family: monospace; font-size: 10px;
     padding: 6px; box-sizing: border-box; z-index: 850;
     pointer-events: auto; border-radius: 6px;
+    opacity: 0.3; transition: opacity 140ms ease-out;
   `;
+  container.addEventListener('mouseenter', () => {
+    container.style.opacity = '1';
+  });
+  container.addEventListener('mouseleave', () => {
+    container.style.opacity = '0.3';
+  });
 
   // ── Dev Mode toggle (gates debug-only UI elements in other menus) ────────
   const devModeBtn = document.createElement('button');
