@@ -76,6 +76,7 @@ import { tickRopes } from './ropes/ropeSim';
 import { tickFallingBlocks } from './fallingBlocks/fallingBlockSim';
 import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
+import { tickZipMoveBlocks } from './zipMoveBlocks/zipMoveBlockSim';
 import { tickIceMoteAura } from './iceMoteAura';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
@@ -125,6 +126,7 @@ export function tick(world: WorldState): void {
   // 0.06. Kinetic block animation phase advancement
   tickKineticBlocks(world);
   tickGrappleCarryBlocks(world);
+  tickZipMoveBlocks(world, world.dtMs);
 
   // 0.065. Keep the pixel-material solid mask in sync with dynamic wall
   //         geometry (falling blocks moving, crumble/breakable blocks being

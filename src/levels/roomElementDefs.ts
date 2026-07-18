@@ -312,6 +312,16 @@ export interface RoomGrappleCarryBlockDef {
   yBlock: number;
 }
 
+/** A solid rectangle activated by a completed player zip to one of its faces. */
+export interface RoomZipMoveBlockDef {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  variant: 'toward' | 'away';
+}
+
 /** A 1x1 ghost tile: player/grapple ignore it, carried physics blocks collide. */
 export interface RoomPhantasmalTileDef {
   xBlock: number;

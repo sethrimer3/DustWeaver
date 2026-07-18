@@ -438,6 +438,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.challengeTotems?.length) {
     out.challengeTotems = json.challengeTotems.map(element => [element.uid, element.xBlock, element.yBlock]);
   }
+  if (json.gates?.length) out.gates = json.gates.map(gate => ({ ...gate }));
   if (json.skillBooks && json.skillBooks.length > 0) {
     out.skillBooks = json.skillBooks.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }
@@ -547,6 +548,11 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       const code = v === 'sensitive' ? 's' : v === 'crumbling' ? 'c' : 't';
       return [fb.xBlock, fb.yBlock, code] as [number, number, string];
     });
+  }
+  if (json.zipMoveBlocks?.length) {
+    out.zipMoveBlocks = json.zipMoveBlocks.map(b => [
+      b.uid, b.xBlock, b.yBlock, Math.max(3, b.wBlock), Math.max(3, b.hBlock), b.variant === 'away' ? 'a' : 't',
+    ]);
   }
   if (json.crumbleBlocks && json.crumbleBlocks.length > 0) {
     out.crumbles = json.crumbleBlocks.map(c => {

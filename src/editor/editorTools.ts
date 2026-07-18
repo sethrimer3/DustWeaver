@@ -63,8 +63,14 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   for (const field of room.challengeFields ?? []) {
     if (hitTestZone(field, bx, by)) return { type: 'challengeField', uid: field.uid };
   }
+  for (const block of room.zipMoveBlocks ?? []) {
+    if (hitTestZone(block, bx, by)) return { type: 'zipMoveBlock', uid: block.uid };
+  }
   for (const gate of room.challengeGates ?? []) {
     if (hitTestZone(gate, bx, by)) return { type: 'challengeGate', uid: gate.uid };
+  }
+  for (const gate of room.gates ?? []) {
+    if (hitTestZone(gate, bx, by)) return { type: 'gate', uid: gate.uid };
   }
   for (const totem of room.challengeTotems ?? []) {
     if (hitTestPoint(totem.xBlock, totem.yBlock, bx, by)) return { type: 'challengeTotem', uid: totem.uid };

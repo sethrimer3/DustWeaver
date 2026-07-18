@@ -67,13 +67,6 @@ export function renderChallengeFieldsAndGates(
       }
     }
   }
-  if (!state.isActive) {
-    for (const gate of state.gates) {
-      const cx = (gate.xBlock + gate.wBlock * 0.5) * BLOCK_SIZE_MEDIUM * zoom + ox;
-      const cy = (gate.yBlock + gate.hBlock * 0.5) * BLOCK_SIZE_MEDIUM * zoom + oy;
-      drawShield(ctx, cx, cy, Math.max(0.7, zoom), '#ffd85a');
-    }
-  }
   ctx.restore();
 }
 

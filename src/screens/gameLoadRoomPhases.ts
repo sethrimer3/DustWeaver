@@ -843,7 +843,7 @@ export function* makeLoadRoomPhases(
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     loadRoomHazards(world, room);
-    loadRoomChallengeElements(world, room);
+    loadRoomChallengeElements(world, room, ctx.progress);
     FP.recordLoadPhaseStep('E:hazards', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   resetIceMoteAuraForRoom(world);

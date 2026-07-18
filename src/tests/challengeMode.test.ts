@@ -93,13 +93,13 @@ test('gate collision and visibility share active state and reset on room reload'
   world.clusters.push(createClusterState(1, 0, 0, 1, 3));
   const room = { id: 'gates', challengeGates: [{ uid: 9, xBlock: 3, yBlock: 2, wBlock: 1, hBlock: 4 }] } as RoomDef;
   loadRoomChallengeElements(world, room);
-  const wallIndex = world.challengeMode.gates[0].wallIndex;
+  const wallIndex = world.gates[0].wallIndex;
   assert.deepEqual([world.wallWWorld[wallIndex], world.wallIsInvisibleFlag[wallIndex]], [BLOCK, 0]);
   world.challengeMode.isActive = true;
   updateRoomChallengeElements(world);
   assert.deepEqual([world.wallWWorld[wallIndex], world.wallIsInvisibleFlag[wallIndex]], [0, 1]);
   world.wallCount = 0;
   loadRoomChallengeElements(world, room);
-  const reloadedIndex = world.challengeMode.gates[0].wallIndex;
+  const reloadedIndex = world.gates[0].wallIndex;
   assert.deepEqual([world.wallWWorld[reloadedIndex], world.wallIsInvisibleFlag[reloadedIndex]], [BLOCK, 0]);
 });

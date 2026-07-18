@@ -14,3 +14,11 @@ test('challenge rectangle resize clamps to room bounds and one-block minimum', (
   assert.deepEqual(resizeBlockRect(rect, 'right', 99, 0, 10, 10).wBlock, 6);
   assert.deepEqual(resizeBlockRect(rect, 'bottom', 0, 5, 10, 10).hBlock, 1);
 });
+
+test('gate corner handles resize both axes and normalize dragged bounds', () => {
+  const rect = { xBlock: 4, yBlock: 5, wBlock: 4, hBlock: 3 };
+  assert.equal(hitTestRectResizeEdge(rect, 4, 5), 'topLeft');
+  assert.equal(hitTestRectResizeEdge(rect, 8, 8), 'bottomRight');
+  assert.deepEqual(resizeBlockRect(rect, 'topLeft', 2, 3, 20, 20), { xBlock: 2, yBlock: 3, wBlock: 6, hBlock: 5 });
+  assert.deepEqual(resizeBlockRect(rect, 'bottomRight', 10, 11, 20, 20), { xBlock: 4, yBlock: 5, wBlock: 6, hBlock: 6 });
+});

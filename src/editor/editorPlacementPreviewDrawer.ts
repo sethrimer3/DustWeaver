@@ -406,17 +406,21 @@ export function drawPlacementPreview(
     return;
   }
 
-  if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
+  if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
     const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const wPx = (item.defaultWidthBlocks ?? 1) * BLOCK_SIZE_SMALL * zoom;
     const hPx = (item.defaultHeightBlocks ?? 1) * BLOCK_SIZE_SMALL * zoom;
-    ctx.fillStyle = item.id === 'challenge_field' ? 'rgba(155,70,255,0.30)' : 'rgba(90,45,130,0.60)';
+    const gateStyle = item.id === 'enemy_gate' ? ['rgba(194,145,151,0.76)', 'X']
+      : item.id === 'heart_gate' ? ['rgba(227,174,186,0.76)', 'H']
+      : item.id === 'speed_gate' ? ['rgba(151,207,220,0.76)', '>']
+      : ['rgba(220,196,125,0.76)', 'S'];
+    ctx.fillStyle = item.id === 'challenge_field' ? 'rgba(155,70,255,0.30)' : gateStyle[0];
     ctx.fillRect(xPx, yPx, wPx, hPx);
     ctx.strokeStyle = item.id === 'challenge_field' ? '#c878ff' : '#ffd85a';
     ctx.lineWidth = 2;
     ctx.strokeRect(xPx, yPx, wPx, hPx);
-    drawMarker(ctx, state.cursorBlockX + (item.defaultWidthBlocks ?? 1) * 0.5, state.cursorBlockY + (item.defaultHeightBlocks ?? 1) * 0.5, offsetXPx, offsetYPx, zoom, '#ffffff', item.id === 'challenge_field' ? 'C' : 'S');
+    drawMarker(ctx, state.cursorBlockX + (item.defaultWidthBlocks ?? 1) * 0.5, state.cursorBlockY + (item.defaultHeightBlocks ?? 1) * 0.5, offsetXPx, offsetYPx, zoom, '#ffffff', item.id === 'challenge_field' ? 'C' : gateStyle[1]);
     return;
   }
   if (item.id === 'challenge_totem') {

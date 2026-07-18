@@ -47,6 +47,7 @@ export function stringToParticleKind(name: string): ParticleKind | null {
 // ── JSON schema types ────────────────────────────────────────────────────────
 
 export interface RoomJsonEnemy {
+  countsTowardRoomCompletion?: boolean;
   xBlock: number;
   yBlock: number;
   kinds: string[];
@@ -169,6 +170,8 @@ export interface RoomJsonChallengeTotem {
   xBlock: number;
   yBlock: number;
 }
+export type RoomJsonGate = import('../levels/gateDefs').RoomGateDef;
+export type RoomJsonZipMoveBlock = import('../levels/roomElementDefs').RoomZipMoveBlockDef;
 
 /** Skill Tomb — grants a specific dust skill/weave when interacted with. */
 export interface RoomJsonDustSkillTomb {
@@ -472,6 +475,7 @@ export interface RoomJsonDef {
   challengeFields?: RoomJsonChallengeRect[];
   challengeGates?: RoomJsonChallengeRect[];
   challengeTotems?: RoomJsonChallengeTotem[];
+  gates?: RoomJsonGate[];
   /** Skill Tombs — grant dust skills/weaves when interacted with. */
   dustSkillTombs?: RoomJsonDustSkillTomb[];
   /** Collectible skill book positions (block units). */
@@ -490,6 +494,7 @@ export interface RoomJsonDef {
   bouncePads?: RoomJsonBouncePad[];
   kineticBlocks?: RoomJsonKineticBlock[];
   grappleCarryBlocks?: RoomJsonGrappleCarryBlock[];
+  zipMoveBlocks?: RoomJsonZipMoveBlock[];
   phantasmalTiles?: RoomJsonPhantasmalTile[];
   pixelMaterials?: RoomJsonPixelMaterial[];
   ropes?: RoomJsonRope[];

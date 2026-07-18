@@ -18,6 +18,7 @@ export const PALETTE_CATEGORIES = [
   'specialBlocks',
   'enemies',
   'triggers',
+  'gates',
   'collectables',
   'environment',
   'dust',
@@ -36,6 +37,7 @@ export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> 
   specialBlocks: 'Special Blocks',
   enemies: 'Enemies',
   triggers: 'Triggers',
+  gates: 'Gates',
   collectables: 'Collectables',
   environment: 'Environment',
   dust: 'Dust',
@@ -86,6 +88,8 @@ export interface PaletteItem {
   isKineticBlockItem?: 1;
   /** 1 if this palette item places a 1x1 grapple-carry physics block. */
   isGrappleCarryBlockItem?: 1;
+  /** Zip-activated moving solid rectangle variant. */
+  zipMoveBlockVariant?: 'toward' | 'away';
   /** 1 if this palette item places a phantasmal tile. */
   isPhantasmalTileItem?: 1;
   /** Block theme override used by special block entries such as ice blocks. */
@@ -196,7 +200,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
   { id: 'dialogue_trigger', label: 'Dialogue Trigger', category: 'triggers' },
   { id: 'challenge_field', label: 'Challenge Field', category: 'triggers', defaultWidthBlocks: 4, defaultHeightBlocks: 4 },
-  { id: 'challenge_gate', label: 'Challenge Gate', category: 'triggers', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
+  { id: 'enemy_gate', label: 'Enemy Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
+  { id: 'challenge_gate', label: 'Challenge Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
+  { id: 'heart_gate', label: 'Heart Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
+  { id: 'speed_gate', label: 'Speed Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
   { id: 'challenge_totem', label: 'Challenge Totem', category: 'objects' },
   // Collectables (items the player can pick up for permanent upgrades)
   { id: 'skill_tomb',            label: 'Skill Tomb',            category: 'collectables' },
@@ -256,6 +263,8 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'kinetic_block_1x1', label: 'Kinetic Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isKineticBlockItem: 1 },
   { id: 'kinetic_block_2x2', label: 'Kinetic Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isKineticBlockItem: 1 },
   { id: 'grapple_carry_block', label: 'Grapple Carry 1x1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isGrappleCarryBlockItem: 1 },
+  { id: 'zip_move_toward', label: 'Zip Block — Toward', category: 'specialBlocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3, zipMoveBlockVariant: 'toward' },
+  { id: 'zip_move_away', label: 'Zip Block — Away', category: 'specialBlocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3, zipMoveBlockVariant: 'away' },
   { id: 'phantasmal_block', label: 'Phantasmal Block', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPhantasmalTileItem: 1 },
   // ── Ice blocks (static wall theme with ice-surface physics) ───────────────
   { id: 'ice_block_1x1', label: 'Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'iceBlock' },

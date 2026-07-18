@@ -29,6 +29,7 @@ import {
 import type { RoomJsonDef } from '../editor/roomJson';
 import { savedToLightDef } from './lightingSchema';
 import { extractLegacySkillBookWeaves } from './legacySkillBookMigration';
+import { legacyChallengeGateToRoomGate, normalizeRoomGateDef } from './gateDefs';
 import { buildCompleteBoundaryWalls } from './roomBoundaryWalls';
 import { hydrateAndValidateBakedWallTemplate } from './roomWallTemplateHash';
 import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -76,6 +77,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       yBlock: e.yBlock,
       kinds,
       particleCount: e.particleCount,
+      countsTowardRoomCompletionFlag: e.countsTowardRoomCompletion === false ? 0 : 1,
       isBossFlag: e.isBoss ? 1 as const : 0 as const,
       isFlyingEyeFlag: e.isFlyingEye ? 1 as const : 0 as const,
       isRollingEnemyFlag: e.isRollingEnemy ? 1 as const : 0 as const,
@@ -181,6 +183,19 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     yBlock: j.yBlock,
   }));
 
+  const usedGateUids = new Set<number>();
+  let nextGateUid = 0;
+  const gates = [...(json.gates ?? []), ...(json.challengeGates ?? []).map(legacyChallengeGateToRoomGate)].map(gate =>
+    normalizeRoomGateDef(gate, {
+      widthBlocks: json.widthBlocks,
+      heightBlocks: json.heightBlocks,
+      usedUids: usedGateUids,
+      allocateUid: () => {
+        while (usedGateUids.has(nextGateUid)) nextGateUid++;
+        return nextGateUid++;
+      },
+    }));
+
   const room: RoomDef = {
     id: json.id,
     name: json.name,
@@ -200,8 +215,9 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       ...extractLegacySkillBookWeaves(json.skillBooks),
     ],
     challengeFields: (json.challengeFields ?? []).map(element => ({ ...element })),
-    challengeGates: (json.challengeGates ?? []).map(element => ({ ...element })),
+    challengeGates: [],
     challengeTotems: (json.challengeTotems ?? []).map(element => ({ ...element })),
+    gates,
   };
 
   // Propagate optional theme/background fields

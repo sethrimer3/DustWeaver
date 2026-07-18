@@ -27,7 +27,7 @@ import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
-import { interactWithNearbyChallengeTotem, updateRoomChallengeElements } from './gameRoomChallenge';
+import { handleGateRoomExit, handleGateSaveCompleted, interactWithNearbyChallengeTotem, updateRoomChallengeElements } from './gameRoomChallenge';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
@@ -783,7 +783,10 @@ export function startGameScreen(
     loadRoomSync: (room, spawnXBlock, spawnYBlock) => { loadRoom(room, spawnXBlock, spawnYBlock); },
     createLoadGenerator: (room, spawnXBlock, spawnYBlock) =>
       _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false),
-    capturePlayerTransfer: capturePlayerTransferState,
+    capturePlayerTransfer: (sourceWorld) => {
+      handleGateRoomExit(sourceWorld);
+      return capturePlayerTransferState(sourceWorld);
+    },
     detachPlayerFromWorld: detachPlayerFromResidentWorld,
     defaultPlayerHealth: PLAYER_INITIAL_HEALTH,
     applyResidentActivation: (room, spawnXBlock, spawnYBlock, carryHealthPoints, playerTransfer) =>
@@ -997,7 +1000,10 @@ export function startGameScreen(
       detachInput();
       callbacks.onReturnToMenu();
     },
-    onSave: callbacks.onSave,
+    onSave: () => {
+      callbacks.onSave?.();
+      handleGateSaveCompleted(world);
+    },
     onCheckpointReached: () => {
       // Snapshot the current timer as the checkpoint value.
       const checkpointMs = runTimer.captureCheckpoint();
@@ -1468,7 +1474,7 @@ export function startGameScreen(
       }
       // Pass crouch input to the sim
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
-      updateRoomChallengeElements(world);
+      updateRoomChallengeElements(world, progress);
       tick(world);
       _simTickCount++;
       // If the player died during this tick, stop processing further ticks in

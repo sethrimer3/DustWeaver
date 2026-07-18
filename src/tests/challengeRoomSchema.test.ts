@@ -17,9 +17,9 @@ function room(overrides: Partial<RoomJsonDef> = {}): RoomJsonDef {
 
 test('old room JSON defaults challenge elements to empty editor/runtime arrays', () => {
   const editor = jsonToEditorRoomData(room(), 0).data;
-  assert.deepEqual([editor.challengeFields, editor.challengeGates, editor.challengeTotems], [[], [], []]);
+  assert.deepEqual([editor.challengeFields, editor.challengeGates, editor.challengeTotems, editor.gates], [[], [], [], []]);
   const runtime = roomJsonDefToRoomDef(room());
-  assert.deepEqual([runtime.challengeFields, runtime.challengeGates, runtime.challengeTotems], [[], [], []]);
+  assert.deepEqual([runtime.challengeFields, runtime.challengeGates, runtime.challengeTotems, runtime.gates], [[], [], [], []]);
 });
 
 test('challenge elements survive editor, saved-schema, hydration, and runtime round trip', () => {
@@ -32,7 +32,11 @@ test('challenge elements survive editor, saved-schema, hydration, and runtime ro
   const hydrated = hydrateV2Room(dehydrateRoom(verbose));
   const runtime = roomJsonDefToRoomDef(hydrated);
   assert.deepEqual(runtime.challengeFields, source.challengeFields);
-  assert.deepEqual(runtime.challengeGates, source.challengeGates);
+  assert.deepEqual(runtime.challengeGates, []);
+  assert.deepEqual(runtime.gates, [{
+    ...source.challengeGates![0], schemaVersion: 1, kind: 'challenge', openVisualMode: 'fadeAway',
+    openPersistence: 'untilPlayerLeavesRoom',
+  }]);
   assert.deepEqual(runtime.challengeTotems, source.challengeTotems);
 });
 
@@ -46,4 +50,17 @@ test('invalid challenge rectangles normalize to finite positive in-bounds intege
     { xBlock: 19, yBlock: 14, wBlock: 1, hBlock: 1 },
   ]);
   assert.notEqual(editor.challengeFields?.[0].uid, editor.challengeFields?.[1].uid);
+});
+
+test('all shared gate kinds and settings survive editor and saved-room round trips', () => {
+  const gates = [
+    { schemaVersion: 1, uid: 20, kind: 'enemy', xBlock: 1, yBlock: 2, wBlock: 2, hBlock: 3, openVisualMode: 'darkRecessed', openPersistence: 'forever' },
+    { schemaVersion: 1, uid: 21, kind: 'challenge', xBlock: 4, yBlock: 2, wBlock: 1, hBlock: 4, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom' },
+    { schemaVersion: 1, uid: 22, kind: 'heart', xBlock: 6, yBlock: 2, wBlock: 3, hBlock: 1, openVisualMode: 'powder', openPersistence: 'untilPlayerSaves' },
+    { schemaVersion: 1, uid: 23, kind: 'speed', xBlock: 10, yBlock: 2, wBlock: 2, hBlock: 4, openVisualMode: 'fadeAway', openPersistence: 'untilPlayerSaves', requiredSpeed: 234.5 },
+  ] as const;
+  const source = room({ gates: gates.map(gate => ({ ...gate })) });
+  const verbose = editorRoomDataToJson(jsonToEditorRoomData(source, 0).data);
+  assert.deepEqual(verbose.gates, gates);
+  assert.deepEqual(roomJsonDefToRoomDef(hydrateV2Room(dehydrateRoom(verbose))).gates, gates);
 });

@@ -346,6 +346,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     challengeFields: (data.challengeFields ?? []).map(element => ({ ...element })),
     challengeGates: (data.challengeGates ?? []).map(element => ({ ...element })),
     challengeTotems: (data.challengeTotems ?? []).map(element => ({ ...element })),
+    gates: (data.gates ?? []).map(gate => ({ ...gate })),
     dustContainers: (data.dustContainers ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     dustContainerPieces: (data.dustContainerPieces ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     customBlockPlacements: (data.customBlockPlacements ?? []).length > 0
@@ -473,6 +474,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     grappleCarryBlocks: (data.grappleCarryBlocks ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,
+    })),
+    zipMoveBlocks: (data.zipMoveBlocks ?? []).map(b => ({
+      ...b,
+      wBlock: Math.max(3, Number.isFinite(b.wBlock) ? Math.floor(b.wBlock) : 3),
+      hBlock: Math.max(3, Number.isFinite(b.hBlock) ? Math.floor(b.hBlock) : 3),
+      variant: b.variant === 'away' ? 'away' as const : 'toward' as const,
     })),
     phantasmalTiles: (data.phantasmalTiles ?? []).map(b => ({
       xBlock: b.xBlock,

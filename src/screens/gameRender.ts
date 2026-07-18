@@ -56,6 +56,7 @@ import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDus
 import type { GuideDustPathRenderer } from '../render/effects/guideDustPathRenderer';
 import type { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { renderFallingBlocks } from '../render/fallingBlocks/fallingBlockRenderer';
+import { renderZipMoveBlocks } from '../render/zipMoveBlockRenderer';
 import { renderPixelMaterials } from '../render/pixelMaterials/pixelMaterialRenderer';
 import { renderPixelMaterialDebug } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
 import { renderAirCurrentsDebug } from '../render/pixelMaterials/airCurrentsDebugRenderer';
@@ -99,6 +100,7 @@ import { renderSnakes } from '../render/clusters/snakeRenderer';
 import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRenderer';
 import { renderGrappleCarryBlocks, renderPhantasmalTiles } from '../render/grappleCarryBlockRenderer';
 import { renderChallengeFieldsAndGates, renderChallengeTotems } from '../render/challengeElementRenderer';
+import { renderGates, renderOpenGateRecesses } from '../render/gateRenderer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -444,8 +446,10 @@ export function renderFrame(r: RenderFrameContext): void {
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_DARK_BLOCKER);
   renderDarkAmbientBlockerOverlay(ctx, ox, oy, zoom, BLOCK_SIZE_SMALL, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DARK_BLOCKER);
+  renderOpenGateRecesses(ctx, world.gates, ox, oy, zoom);
   renderChallengeFieldsAndGates(ctx, world.challengeMode, ox, oy, zoom, nowMs, world.clusters[0]?.positionXWorld ?? 0, world.clusters[0]?.positionYWorld ?? 0);
   renderWalls(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderGates(ctx, world.gates, ox, oy, zoom, isAdaptiveReductionActive ? 0.5 : 1);
   renderCustomBlockSprites(ctx, currentRoom, ox, oy, zoom, world);
   renderChallengeTotems(ctx, world.challengeMode, world.clusters[0]?.positionXWorld ?? 0, world.clusters[0]?.positionYWorld ?? 0, ox, oy, zoom, nowMs);
   renderPhantasmalTiles(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
@@ -575,6 +579,7 @@ export function renderFrame(r: RenderFrameContext): void {
   if (world.fallingBlockGroups.length > 0) {
     renderFallingBlocks(ctx, world, ox, oy, zoom, r.world.dtMs, fallingBlockDust, isDebugMode, getActiveProceduralMaterial(), r.renderAlpha, r.prevFallingBlockOffsetY);
   }
+  renderZipMoveBlocks(ctx, world, ox, oy, zoom, qc.isBloomEnabled);
   // Pixel-material particles (falling sand) — crisp one-native-pixel squares.
   renderPixelMaterials(ctx, world, ox, oy, zoom);
   // Dev-only diagnostics: occupied/active/sleeping counters + wind-impulse

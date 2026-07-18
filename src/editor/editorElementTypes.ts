@@ -16,6 +16,7 @@ import type { TransitionDirection, BlockTheme, BackgroundId, LightingEffect, Dec
 import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { EditorCustomBlockPlacement } from '../levels/customBlocks';
+import type { RoomGateDef } from '../levels/gateDefs';
 export type { EditorCustomBlockPlacement } from '../levels/customBlocks';
 
 // ── Ropes ─────────────────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export interface EditorWall {
 // ── Enemies ───────────────────────────────────────────────────────────────────
 
 export interface EditorEnemy {
+  countsTowardRoomCompletionFlag?: 0 | 1;
   uid: number;
   xBlock: number;
   yBlock: number;
@@ -234,6 +236,7 @@ export interface EditorChallengeTotem {
   xBlock: number;
   yBlock: number;
 }
+export type EditorGate = RoomGateDef;
 
 // ── Crumble blocks ────────────────────────────────────────────────────────────
 
@@ -307,6 +310,15 @@ export interface EditorGrappleCarryBlock {
   uid: number;
   xBlock: number;
   yBlock: number;
+}
+
+export interface EditorZipMoveBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+  variant: 'toward' | 'away';
 }
 
 export interface EditorPhantasmalTile {
@@ -594,6 +606,7 @@ export interface EditorRoomData {
   challengeFields?: EditorChallengeRect[];
   challengeGates?: EditorChallengeRect[];
   challengeTotems?: EditorChallengeTotem[];
+  gates?: EditorGate[];
   dustContainers: EditorDustContainer[];
   dustContainerPieces: EditorDustContainerPiece[];
   dustBoostJars: EditorDustBoostJar[];
@@ -623,6 +636,7 @@ export interface EditorRoomData {
   bouncePads?: EditorBouncePad[];
   kineticBlocks?: EditorKineticBlock[];
   grappleCarryBlocks?: EditorGrappleCarryBlock[];
+  zipMoveBlocks?: EditorZipMoveBlock[];
   phantasmalTiles?: EditorPhantasmalTile[];
   /** Authored 1x1 pixel-material placements (currently: sand). */
   pixelMaterials?: EditorPixelMaterial[];
@@ -648,7 +662,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

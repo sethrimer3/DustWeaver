@@ -71,6 +71,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: e.yBlock,
       kinds: [...e.kinds],
       particleCount: e.particleCount,
+      countsTowardRoomCompletion: e.countsTowardRoomCompletionFlag !== 0,
       isBoss: e.isBossFlag === 1,
       isFlyingEye: e.isFlyingEyeFlag === 1,
       isRollingEnemy: e.isRollingEnemyFlag === 1,
@@ -169,6 +170,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if ((data.challengeTotems ?? []).length > 0) {
     json.challengeTotems = data.challengeTotems!.map(element => ({ ...element }));
   }
+  if ((data.gates ?? []).length > 0) json.gates = data.gates!.map(gate => ({ ...gate }));
   if ((data.dustContainers ?? []).length > 0) {
     json.dustContainers = data.dustContainers.map(c => ({
       xBlock: c.xBlock,

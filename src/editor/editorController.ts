@@ -182,7 +182,7 @@ export function createEditorController(
 
   // Edge-resize: original zone geometry of the transition being resized, captured at drag start.
   let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number } | null = null;
-  let challengeResize: { type: 'challengeField' | 'challengeGate'; uid: number; edge: RectResizeEdge; original: { xBlock: number; yBlock: number; wBlock: number; hBlock: number } } | null = null;
+  let challengeResize: { type: 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock'; uid: number; edge: RectResizeEdge; original: { xBlock: number; yBlock: number; wBlock: number; hBlock: number } } | null = null;
 
   // ── Pending-edits persistence for multi-room editing ────────────────────
   // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
@@ -953,6 +953,7 @@ export function createEditorController(
       for (const s of state.roomData.skillTombs)     maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.challengeFields ?? []) maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.challengeGates ?? []) maxUid = Math.max(maxUid, s.uid + 1);
+      for (const s of state.roomData.gates ?? []) maxUid = Math.max(maxUid, s.uid + 1);
       for (const s of state.roomData.challengeTotems ?? []) maxUid = Math.max(maxUid, s.uid + 1);
       for (const p of state.roomData.dustPiles)      maxUid = Math.max(maxUid, p.uid + 1);
       for (const d of (state.roomData.decorations ?? [])) maxUid = Math.max(maxUid, d.uid + 1);
@@ -1283,15 +1284,15 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Select) {
           const soleChallenge = state.selectedElements.length === 1 &&
-            (state.selectedElements[0].type === 'challengeField' || state.selectedElements[0].type === 'challengeGate')
+            (state.selectedElements[0].type === 'challengeField' || state.selectedElements[0].type === 'challengeGate' || state.selectedElements[0].type === 'gate' || state.selectedElements[0].type === 'zipMoveBlock')
             ? state.selectedElements[0] : null;
           const challengeElements = soleChallenge?.type === 'challengeField'
-            ? state.roomData.challengeFields : state.roomData.challengeGates;
+            ? state.roomData.challengeFields : soleChallenge?.type === 'gate' ? state.roomData.gates : soleChallenge?.type === 'zipMoveBlock' ? state.roomData.zipMoveBlocks : state.roomData.challengeGates;
           const challengeRect = soleChallenge ? (challengeElements ?? []).find(element => element.uid === soleChallenge.uid) : undefined;
           const challengeEdge = challengeRect
             ? hitTestRectResizeEdge(challengeRect, state.cursorWorldX, state.cursorWorldY) : null;
           if (challengeRect && soleChallenge && challengeEdge) {
-            challengeResize = { type: soleChallenge.type as 'challengeField' | 'challengeGate', uid: soleChallenge.uid, edge: challengeEdge, original: { ...challengeRect } };
+            challengeResize = { type: soleChallenge.type as 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock', uid: soleChallenge.uid, edge: challengeEdge, original: { ...challengeRect } };
             pushSnapshot(history, state.roomData);
           }
           // If exactly one transition is already selected, check whether the
@@ -1497,7 +1498,7 @@ export function createEditorController(
 
     if (challengeResize && inputState.isMouseDown && state.roomData) {
       const elements = challengeResize.type === 'challengeField'
-        ? state.roomData.challengeFields : state.roomData.challengeGates;
+        ? state.roomData.challengeFields : challengeResize.type === 'gate' ? state.roomData.gates : challengeResize.type === 'zipMoveBlock' ? state.roomData.zipMoveBlocks : state.roomData.challengeGates;
       const rect = (elements ?? []).find(element => element.uid === challengeResize!.uid);
       if (rect) Object.assign(rect, resizeBlockRect(
         challengeResize.original,
@@ -1506,6 +1507,8 @@ export function createEditorController(
         state.cursorBlockY,
         state.roomData.widthBlocks,
         state.roomData.heightBlocks,
+        challengeResize.type === 'zipMoveBlock' ? 3 : 1,
+        challengeResize.type === 'zipMoveBlock' ? 3 : 1,
       ));
     }
 
@@ -1717,12 +1720,14 @@ export function createEditorController(
     }
     let resizeCursor = 'default';
     const selectedForCursor = state.selectedElements.length === 1 ? state.selectedElements[0] : null;
-    if (selectedForCursor?.type === 'challengeField' || selectedForCursor?.type === 'challengeGate') {
-      const elements = selectedForCursor.type === 'challengeField' ? state.roomData?.challengeFields : state.roomData?.challengeGates;
+    if (selectedForCursor?.type === 'challengeField' || selectedForCursor?.type === 'challengeGate' || selectedForCursor?.type === 'gate') {
+      const elements = selectedForCursor.type === 'challengeField' ? state.roomData?.challengeFields : selectedForCursor.type === 'gate' ? state.roomData?.gates : state.roomData?.challengeGates;
       const rect = (elements ?? []).find(element => element.uid === selectedForCursor.uid);
       const edge = rect ? hitTestRectResizeEdge(rect, state.cursorWorldX, state.cursorWorldY) : null;
       if (edge === 'left' || edge === 'right') resizeCursor = 'ew-resize';
       if (edge === 'top' || edge === 'bottom') resizeCursor = 'ns-resize';
+      if (edge === 'topLeft' || edge === 'bottomRight') resizeCursor = 'nwse-resize';
+      if (edge === 'topRight' || edge === 'bottomLeft') resizeCursor = 'nesw-resize';
     }
     canvas.style.cursor = resizeCursor;
 

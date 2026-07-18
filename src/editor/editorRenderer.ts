@@ -26,6 +26,7 @@ import {
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
+  drawEditorZipMoveBlocks,
   drawEditorPhantasmalTiles,
   drawEditorPixelMaterials,
   drawEditorEnvironmentItems,
@@ -103,6 +104,7 @@ export function renderEditorOverlays(
   drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorZipMoveBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
     drawPixelGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);

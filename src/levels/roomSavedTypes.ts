@@ -275,6 +275,7 @@ export interface SavedRoomV2 {
   challengeFields?: [number, number, number, number, number][];
   challengeGates?: [number, number, number, number, number][];
   challengeTotems?: [number, number, number][];
+  gates?: import('./gateDefs').RoomGateDef[];
   skillBooks?: SavedPoint[];
   dustContainers?: SavedPoint[];
   /**
@@ -384,6 +385,8 @@ export interface SavedRoomV2 {
   bounces?: SavedBounce[];
   /** Kinetic blocks. */
   kineticBlocks?: SavedKineticBlock[];
+  /** Zip moving blocks: [uid, x, y, width, height, variant char]. */
+  zipMoveBlocks?: [number, number, number, number, number, 't' | 'a'][];
   /** Ropes. */
   ropes?: SavedRoomRope[];
   /** Dialogue triggers. */

@@ -14,6 +14,7 @@ export interface ClusterState {
   velocityYWorld: number;
   isAliveFlag: 0 | 1;
   isPlayerFlag: 0 | 1;
+  countsTowardRoomCompletionFlag: 0 | 1;
   healthPoints: number;
   maxHealthPoints: number;
 
@@ -1077,6 +1078,7 @@ export function createClusterState(
     velocityYWorld: 0,
     isAliveFlag: 1,
     isPlayerFlag,
+    countsTowardRoomCompletionFlag: isPlayerFlag === 1 ? 0 : 1,
     healthPoints: maxHealthPoints,
     maxHealthPoints,
     isGroundedFlag: 0,

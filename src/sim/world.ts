@@ -7,6 +7,7 @@ import { type CombatMode, DEFAULT_COMBAT_MODE } from './combatMode';
 import { PixelMaterialSystem } from './pixelMaterials/pixelMaterialSystem';
 import { NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX } from './pixelMaterials/pixelMaterialTypes';
 import { createChallengeModeState, type ChallengeModeState } from './challengeMode';
+import type { RuntimeGate } from './gates/gateState';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -50,6 +51,7 @@ export const MOMENTUM_TRAIL_MAX_POINTS = 8;
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
   /** Temporary, instance-local state for the currently loaded room's challenge elements. */
   challengeMode: ChallengeModeState;
+  gates: RuntimeGate[];
   /** Active combat mode. 'momentum' = speed-based; 'legacy' = dust/weave. */
   combatMode: CombatMode;
 
@@ -461,6 +463,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Managed by fallingBlockSim.ts; populated by loadRoomFallingBlocks().
    */
   fallingBlockGroups: import('./fallingBlocks/fallingBlockTypes').FallingBlockGroup[];
+  /** Runtime zip-activated moving rectangles for the current room. */
+  zipMoveBlocks: import('./zipMoveBlocks/zipMoveBlockTypes').ZipMoveBlockRuntime[];
 
   /**
    * Player's downward velocity from the END of the previous tick, before this
@@ -530,6 +534,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     combatMode: DEFAULT_COMBAT_MODE,
     challengeMode: createChallengeModeState(),
+    gates: [],
     builtForRoomId: '',
     tick: 0,
     dtMs,
@@ -652,6 +657,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     isMoteSourceOrbitFlag:         1,
     // ── Falling blocks ────────────────────────────────────────────────────
     fallingBlockGroups:            [],
+    zipMoveBlocks:                  [],
     playerPrevVelocityYWorld:      0,
     // ── Web Spider fading web ring buffer ────────────────────────────────
     webSpiderFadingWebMaxCount:          MAX_FADING_WEBS,

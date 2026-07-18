@@ -512,7 +512,20 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       targetSpawnBlock: [3, 3],
       positionBlock,
     });
-  } else if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
+  } else if (item.zipMoveBlockVariant !== undefined) {
+    const startX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
+    const startY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
+    const xBlock = startX === null ? bx : Math.min(startX, bx);
+    const yBlock = startY === null ? by : Math.min(startY, by);
+    const requestedW = startX === null ? 3 : Math.abs(bx - startX) + 1;
+    const requestedH = startY === null ? 3 : Math.abs(by - startY) + 1;
+    const wBlock = Math.min(Math.max(3, requestedW), room.widthBlocks - xBlock);
+    const hBlock = Math.min(Math.max(3, requestedH), room.heightBlocks - yBlock);
+    if (wBlock < 3 || hBlock < 3) return;
+    (room.zipMoveBlocks ??= []).push({
+      uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock, variant: item.zipMoveBlockVariant,
+    });
+  } else if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
     const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
     const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
     const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
@@ -522,10 +535,16 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     const wBlock = Math.min(requestedW, room.widthBlocks - xBlock);
     const hBlock = Math.min(requestedH, room.heightBlocks - yBlock);
     if (wBlock < 1 || hBlock < 1) return;
-    const target = item.id === 'challenge_field'
-      ? (room.challengeFields ??= [])
-      : (room.challengeGates ??= []);
-    target.push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
+    if (item.id === 'challenge_field') {
+      (room.challengeFields ??= []).push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
+    } else {
+      const kind = item.id.slice(0, -5) as import('../levels/gateDefs').GateKind;
+      (room.gates ??= []).push({
+        schemaVersion: 1, uid: allocateUid(state), kind, xBlock, yBlock, wBlock, hBlock,
+        openVisualMode: 'fadeAway', openPersistence: 'untilPlayerLeavesRoom',
+        ...(kind === 'speed' ? { requiredSpeed: 180 } : {}),
+      });
+    }
   } else if (item.id === 'challenge_totem') {
     const target = (room.challengeTotems ??= []);
     if (target.some(t => t.xBlock === bx && t.yBlock === by)) return;
