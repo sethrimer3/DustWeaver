@@ -18,24 +18,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldState, MAX_WALLS } from '../sim/world';
 import { editorRoomDataToRoomDef } from '../editor/editorRoomBuilder';
-import { editorRoomDataToJson } from '../editor/roomJson';
-import { jsonToEditorRoomData } from '../editor/roomJson';
-import { roomJsonToSaved } from '../levels/roomSchemaV2';
-import { savedToRoomJson } from '../levels/roomSchemaHydrator';
+import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
+import { dehydrateRoom } from '../levels/roomSchemaV2';
+import { hydrateV2Room } from '../levels/roomSchemaHydrator';
 import type { EditorRoomData } from '../editor/editorState';
 import type { EditorFallingBlock } from '../editor/editorElementTypes';
 import { loadRoomWalls } from '../screens/gameRoomWalls';
 import { loadRoomFallingBlocks } from '../screens/gameRoomFallingBlocks';
 import { tickFallingBlocks } from '../sim/fallingBlocks/fallingBlockSim';
 import {
-  FB_STATE_IDLE_STABLE,
-  FB_STATE_WARNING,
-  FB_STATE_PRE_FALL_PAUSE,
   FB_STATE_FALLING,
   FB_STATE_LANDED_STABLE,
-  BLOCK_SIZE_MEDIUM,
 } from '../sim/fallingBlocks/fallingBlockTypes';
-import { BLOCK_SIZE_MEDIUM as ROOM_BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+const ROOM_BLOCK_SIZE_MEDIUM = BLOCK_SIZE_MEDIUM;
 
 function makeRoom(fallingBlocks: EditorFallingBlock[]): EditorRoomData {
   return {
@@ -69,13 +65,13 @@ test('a falling block tile configured with the Blackstone (blackRock) theme keep
   const json = editorRoomDataToJson(room);
   assert.equal(json.fallingBlocks?.[0]?.blockTheme, 'blackRock');
 
-  const saved = roomJsonToSaved(json);
+  const saved = dehydrateRoom(json);
   assert.equal(saved.fallingBlocks?.[0]?.[3], 'blackRock', 'compact tuple must carry the theme as its 4th element');
 
-  const rehydratedJson = savedToRoomJson(saved);
+  const rehydratedJson = hydrateV2Room(saved);
   assert.equal(rehydratedJson.fallingBlocks?.[0]?.blockTheme, 'blackRock');
 
-  const rehydratedEditorRoom = jsonToEditorRoomData(rehydratedJson);
+  const { data: rehydratedEditorRoom } = jsonToEditorRoomData(rehydratedJson, 1000);
   assert.equal(rehydratedEditorRoom.fallingBlocks?.[0]?.blockTheme, 'blackRock');
 
   // Finally, the runtime FallingBlockGroup must carry the resolved theme so the
@@ -331,8 +327,8 @@ test('reserving wall slots for a very large room does not exceed MAX_WALLS budge
   const room = makeRoom([fb(5, 5, 'tough')]);
   const roomDef = editorRoomDataToRoomDef(room);
   const world = createWorldState(1000 / 60, 1);
-  world.wallCount = MAX_WALLS; // simulate an already-full wall budget
   loadRoomWalls(world, roomDef);
+  world.wallCount = MAX_WALLS; // simulate an already-full wall budget before falling-block slots are reserved
   loadRoomFallingBlocks(world, roomDef);
   // Loader must not throw or corrupt state; the group simply gets an
   // unassigned (-1) wall slot rather than writing out of bounds.
