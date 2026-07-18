@@ -343,6 +343,9 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     transitions,
     saveTombs: data.saveTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock })),
     skillTombs: data.skillTombs.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock, weaveId: s.weaveId })),
+    challengeFields: (data.challengeFields ?? []).map(element => ({ ...element })),
+    challengeGates: (data.challengeGates ?? []).map(element => ({ ...element })),
+    challengeTotems: (data.challengeTotems ?? []).map(element => ({ ...element })),
     dustContainers: (data.dustContainers ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     dustContainerPieces: (data.dustContainerPieces ?? []).map(c => ({ xBlock: c.xBlock, yBlock: c.yBlock })),
     customBlockPlacements: (data.customBlockPlacements ?? []).length > 0

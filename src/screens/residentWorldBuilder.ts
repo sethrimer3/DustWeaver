@@ -32,6 +32,7 @@ import { spawnBackgroundFluidParticles, spawnAllDustPiles, BACKGROUND_FLUID_COUN
 import { spawnEnemyClusters } from './gameEnemySpawn';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
 import { loadRoomHazards, loadRoomRopes, loadRoomFallingBlocks, loadRoomGrasshoppers } from './gameRoom';
+import { loadRoomChallengeElements } from './gameRoomChallenge';
 import { applyRoomWallTemplate, buildRoomWallTemplateIncremental } from './gameRoomWalls';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { resolveRoomWallTemplate } from './preparedRoomRuntime';
@@ -210,6 +211,7 @@ export function buildResidentWorldState(
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     loadRoomHazards(rw, room);
+    loadRoomChallengeElements(rw, room);
     FP.recordLoadPhaseStep('Resident:hazards', import.meta.env.DEV ? performance.now() - _t : 0);
   }
   {
@@ -510,6 +512,7 @@ export function* createResidentBuildGenerator(
   {
     const _t = import.meta.env.DEV ? performance.now() : 0;
     loadRoomHazards(rw, room);
+    loadRoomChallengeElements(rw, room);
     loadRoomRopes(rw, room);
     loadRoomFallingBlocks(rw, room);
     loadRoomGrasshoppers(rw, room);

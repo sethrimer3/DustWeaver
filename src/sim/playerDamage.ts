@@ -11,6 +11,9 @@ const FALLBACK_KNOCKBACK_DIR_X = 1.0;
 /** Threshold for considering two X positions identical when computing knockback direction. */
 const HORIZONTAL_POSITION_EPSILON_WORLD = 0.01;
 
+import type { ChallengeModeState } from './challengeMode';
+import { consumeChallengeReturn } from './challengeMode';
+
 
 const INVULNERABILITY_DURATION_TICKS = 90;
 /** Ticks of hurt visual feedback after taking damage (~0.33 s at 60 fps). */
@@ -35,8 +38,17 @@ export interface PlayerDamageTarget {
   invulnerabilityTicks: number;
   hurtTicks: number;
   isHighVelocityAttacking?: 0 | 1;
+  halfWidthWorld?: number;
+  halfHeightWorld?: number;
+  challengeMode?: ChallengeModeState | null;
+  challengeReturnGuard?: 0 | 1;
 }
-export interface PlayerDamageOptions { bypassMomentumInvulnerability?: boolean; }
+
+export interface PlayerDamageOptions {
+  challengeState?: ChallengeModeState;
+  clearTransientMovement?: () => void;
+  bypassMomentumInvulnerability?: boolean;
+}
 
 export function applyPlayerDamageWithKnockback(
   player: PlayerDamageTarget,
@@ -44,13 +56,29 @@ export function applyPlayerDamageWithKnockback(
   sourceXWorld: number,
   _sourceYWorld: number,
   options?: PlayerDamageOptions,
-): void {
-  if (player.isAliveFlag === 0) return;
-  if (player.invulnerabilityTicks > 0) return;
-  if (player.isHighVelocityAttacking === 1 && options?.bypassMomentumInvulnerability !== true) return;
+): boolean {
+  if (player.isAliveFlag === 0) return false;
+  if (player.invulnerabilityTicks > 0) return false;
+  if (player.isHighVelocityAttacking === 1 && options?.bypassMomentumInvulnerability !== true) return false; // momentum combat invulnerability
+  if (player.challengeReturnGuard === 1) return false;
 
   const damageToApply = Math.max(0, damagePoints);
-  if (damageToApply <= 0) return;
+  if (damageToApply <= 0) return false;
+
+  const challenge = options?.challengeState ?? player.challengeMode ?? undefined;
+  if (challenge?.isActive) {
+    const anchorXWorld = challenge.anchorXWorld;
+    const anchorYWorld = challenge.anchorYWorld;
+    if (!consumeChallengeReturn(challenge)) return false;
+    player.positionXWorld = anchorXWorld;
+    player.positionYWorld = anchorYWorld;
+    player.velocityXWorld = 0;
+    player.velocityYWorld = 0;
+    player.isGroundedFlag = 0;
+    player.challengeReturnGuard = 1;
+    options?.clearTransientMovement?.();
+    return true;
+  }
 
   player.healthPoints -= damageToApply;
   if (player.healthPoints <= 0) {
@@ -76,6 +104,7 @@ export function applyPlayerDamageWithKnockback(
 
   player.invulnerabilityTicks = INVULNERABILITY_DURATION_TICKS;
   player.hurtTicks = HURT_VISUAL_DURATION_TICKS;
+  return true;
 }
 
 export function killPlayerImmediately(player: PlayerDamageTarget): void {

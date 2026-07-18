@@ -303,6 +303,35 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     // Legacy: skill books are unified with skill tombs — load them in.
     ...extractLegacySkillBookWeaves(json.skillBooks).map(s => ({ uid: uid++, ...s })),
   ];
+  const importedChallengeUids = new Set<number>();
+  const takeChallengeUid = (candidate: number | undefined): number => {
+    if (Number.isInteger(candidate) && candidate! >= uid && !importedChallengeUids.has(candidate!)) {
+      importedChallengeUids.add(candidate!);
+      uid = Math.max(uid, candidate! + 1);
+      return candidate!;
+    }
+    const allocated = uid++;
+    importedChallengeUids.add(allocated);
+    return allocated;
+  };
+  const normalizeChallengeRect = (element: { uid?: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }) => {
+    const xBlock = Math.max(0, Math.min(json.widthBlocks - 1, Math.floor(Number.isFinite(element.xBlock) ? element.xBlock : 0)));
+    const yBlock = Math.max(0, Math.min(json.heightBlocks - 1, Math.floor(Number.isFinite(element.yBlock) ? element.yBlock : 0)));
+    return {
+      uid: takeChallengeUid(element.uid),
+      xBlock,
+      yBlock,
+      wBlock: Math.max(1, Math.min(json.widthBlocks - xBlock, Math.floor(Number.isFinite(element.wBlock) ? element.wBlock : 1))),
+      hBlock: Math.max(1, Math.min(json.heightBlocks - yBlock, Math.floor(Number.isFinite(element.hBlock) ? element.hBlock : 1))),
+    };
+  };
+  const challengeFields = (json.challengeFields ?? []).map(normalizeChallengeRect);
+  const challengeGates = (json.challengeGates ?? []).map(normalizeChallengeRect);
+  const challengeTotems = (json.challengeTotems ?? []).map(element => ({
+    uid: takeChallengeUid(element.uid),
+    xBlock: Math.max(0, Math.floor(Number.isFinite(element.xBlock) ? element.xBlock : 0)),
+    yBlock: Math.max(0, Math.floor(Number.isFinite(element.yBlock) ? element.yBlock : 0)),
+  }));
 
   const dustContainers: EditorDustContainer[] = (json.dustContainers ?? []).map(container => ({
     uid: uid++,
@@ -574,6 +603,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       transitions,
       saveTombs,
       skillTombs,
+      challengeFields,
+      challengeGates,
+      challengeTotems,
       dustContainers,
       dustContainerPieces,
       dustBoostJars,

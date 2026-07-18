@@ -250,6 +250,31 @@ export function drawEditorSpawnAndTombs(
       offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
     drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '✦');
   }
+  for (const [kind, elements, fill, label] of [
+    ['challengeField', room.challengeFields ?? [], 'rgba(155,70,255,0.34)', 'C'],
+    ['challengeGate', room.challengeGates ?? [], 'rgba(120,70,180,0.58)', 'S'],
+  ] as const) {
+    for (const element of elements) {
+      const selected = isSelected(kind, element.uid);
+      const x = element.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+      const y = element.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+      const w = element.wBlock * BLOCK_SIZE_SMALL * zoom;
+      const h = element.hBlock * BLOCK_SIZE_SMALL * zoom;
+      ctx.fillStyle = fill;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = selected ? '#ffffff' : '#d7a3ff';
+      ctx.lineWidth = selected ? 2 : 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `${Math.max(8, Math.round(10 * zoom))}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText(label, x + w * 0.5, y + h * 0.5 + 3 * zoom);
+    }
+  }
+  for (const totem of room.challengeTotems ?? []) {
+    const selected = isSelected('challengeTotem', totem.uid);
+    drawMarker(ctx, totem.xBlock, totem.yBlock, offsetXPx, offsetYPx, zoom, selected ? '#ffd85a' : '#b85cff', 'C');
+  }
 }
 
 // ============================================================================
@@ -481,4 +506,3 @@ export function drawEditorCustomBlocks(
     }
   }
 }
-

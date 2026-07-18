@@ -27,6 +27,7 @@ import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
 import { createCameraState, getCameraOffset } from '../render/camera';
 import { SkillTombRenderer } from '../render/skillTombRenderer';
 import { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer';
+import { interactWithNearbyChallengeTotem, updateRoomChallengeElements } from './gameRoomChallenge';
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
@@ -1283,8 +1284,7 @@ export function startGameScreen(
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
-    const { moveDx, jumpTriggered, openPause, interactTriggered, interactInputPulseTrigger, grappleFireTriggered } =
-      processPlayerCommands({
+    const commandResult = processPlayerCommands({
         inputState, world, canvas,
         offsetXPx, offsetYPx, zoom,
         virtualWidthPx, virtualHeightPx,
@@ -1302,6 +1302,8 @@ export function startGameScreen(
         clearLambdaAnchorLink: lambdaAnchorState.clearLambdaAnchorLink,
         lambdaTeleportFlash: lambdaAnchorState.lambdaTeleportFlash,
       });
+    const { moveDx, jumpTriggered, openPause, interactInputPulseTrigger, grappleFireTriggered } = commandResult;
+    let { interactTriggered } = commandResult;
 
     let pendingGrappleFireSfx = grappleFireTriggered;
 
@@ -1312,6 +1314,7 @@ export function startGameScreen(
 
     if (interactInputPulseTrigger) {
       interactInputPulseMs = 150;
+      if (interactWithNearbyChallengeTotem(world)) interactTriggered = false;
     }
 
     if (openPause) {
@@ -1465,6 +1468,7 @@ export function startGameScreen(
       }
       // Pass crouch input to the sim
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
+      updateRoomChallengeElements(world);
       tick(world);
       _simTickCount++;
       // If the player died during this tick, stop processing further ticks in
@@ -1639,7 +1643,7 @@ export function startGameScreen(
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
-      world, currentRoom,
+      world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,
       cachedDecorations: cachedWallDecorations,
       cachedDecorationCenterX,

@@ -221,6 +221,20 @@ export interface EditorLavaZone {
   hBlock: number;
 }
 
+export interface EditorChallengeRect {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
+export interface EditorChallengeTotem {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
 // ── Crumble blocks ────────────────────────────────────────────────────────────
 
 /** A crumble block that collapses on first player contact. */
@@ -577,6 +591,9 @@ export interface EditorRoomData {
   transitions: EditorTransition[];
   saveTombs: EditorSaveTomb[];
   skillTombs: EditorSkillTomb[];
+  challengeFields?: EditorChallengeRect[];
+  challengeGates?: EditorChallengeRect[];
+  challengeTotems?: EditorChallengeTotem[];
   dustContainers: EditorDustContainer[];
   dustContainerPieces: EditorDustContainerPiece[];
   dustBoostJars: EditorDustBoostJar[];
@@ -631,7 +648,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

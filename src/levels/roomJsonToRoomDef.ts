@@ -199,6 +199,9 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       // Legacy: skill books are unified with skill tombs — merge them in.
       ...extractLegacySkillBookWeaves(json.skillBooks),
     ],
+    challengeFields: (json.challengeFields ?? []).map(element => ({ ...element })),
+    challengeGates: (json.challengeGates ?? []).map(element => ({ ...element })),
+    challengeTotems: (json.challengeTotems ?? []).map(element => ({ ...element })),
   };
 
   // Propagate optional theme/background fields

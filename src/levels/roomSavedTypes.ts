@@ -272,6 +272,9 @@ export interface SavedRoomV2 {
   saveTombs?: SavedPoint[];
   /** Skill tombs as [x, y, weaveId]. */
   skillTombs?: [number, number, string][];
+  challengeFields?: [number, number, number, number, number][];
+  challengeGates?: [number, number, number, number, number][];
+  challengeTotems?: [number, number, number][];
   skillBooks?: SavedPoint[];
   dustContainers?: SavedPoint[];
   /**

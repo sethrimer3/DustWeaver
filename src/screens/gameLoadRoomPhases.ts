@@ -90,6 +90,7 @@ import {
   loadRoomPixelMaterials,
   worldBgColor,
 } from './gameRoom';
+import { loadRoomChallengeElements } from './gameRoomChallenge';
 import {
   captureClusterInterpolationState,
 } from './gameInterpolationBuffers';
@@ -842,6 +843,7 @@ export function* makeLoadRoomPhases(
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     loadRoomHazards(world, room);
+    loadRoomChallengeElements(world, room);
     FP.recordLoadPhaseStep('E:hazards', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   resetIceMoteAuraForRoom(world);

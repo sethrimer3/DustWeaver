@@ -429,6 +429,15 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.dustSkillTombs && json.dustSkillTombs.length > 0) {
     out.skillTombs = json.dustSkillTombs.map(s => [s.xBlock, s.yBlock, s.weaveId]);
   }
+  if (json.challengeFields?.length) {
+    out.challengeFields = json.challengeFields.map(element => [element.uid, element.xBlock, element.yBlock, element.wBlock, element.hBlock]);
+  }
+  if (json.challengeGates?.length) {
+    out.challengeGates = json.challengeGates.map(element => [element.uid, element.xBlock, element.yBlock, element.wBlock, element.hBlock]);
+  }
+  if (json.challengeTotems?.length) {
+    out.challengeTotems = json.challengeTotems.map(element => [element.uid, element.xBlock, element.yBlock]);
+  }
   if (json.skillBooks && json.skillBooks.length > 0) {
     out.skillBooks = json.skillBooks.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }

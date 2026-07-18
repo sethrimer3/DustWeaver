@@ -21,6 +21,7 @@ import type { RoomComplexitySeverity } from '../levels/roomComplexity';
 export type {
   EditorRope, EditorSceneLight, EditorWall, EditorEnemy, EditorTransition,
   EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
+  EditorChallengeRect, EditorChallengeTotem,
   EditorGrappleCarryBlock, EditorPhantasmalTile, EditorPixelMaterial,
   EditorSaveTomb, EditorSkillTomb, EditorDustContainer, EditorDustContainerPiece,
   EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor, EditorDustPile,

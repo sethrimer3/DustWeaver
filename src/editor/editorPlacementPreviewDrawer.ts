@@ -406,6 +406,24 @@ export function drawPlacementPreview(
     return;
   }
 
+  if (item.id === 'challenge_field' || item.id === 'challenge_gate') {
+    const xPx = state.cursorBlockX * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = state.cursorBlockY * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = (item.defaultWidthBlocks ?? 1) * BLOCK_SIZE_SMALL * zoom;
+    const hPx = (item.defaultHeightBlocks ?? 1) * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = item.id === 'challenge_field' ? 'rgba(155,70,255,0.30)' : 'rgba(90,45,130,0.60)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = item.id === 'challenge_field' ? '#c878ff' : '#ffd85a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    drawMarker(ctx, state.cursorBlockX + (item.defaultWidthBlocks ?? 1) * 0.5, state.cursorBlockY + (item.defaultHeightBlocks ?? 1) * 0.5, offsetXPx, offsetYPx, zoom, '#ffffff', item.id === 'challenge_field' ? 'C' : 'S');
+    return;
+  }
+  if (item.id === 'challenge_totem') {
+    drawMarker(ctx, state.cursorBlockX, state.cursorBlockY, offsetXPx, offsetYPx, zoom, 'rgba(190,90,255,0.8)', 'C');
+    return;
+  }
+
   if (item.id === 'save_tomb') {
     const wPx = SAVE_TOMB_FOOTPRINT_W_BLOCKS * BLOCK_SIZE_SMALL * zoom;
     const hPx = SAVE_TOMB_FOOTPRINT_H_BLOCKS * BLOCK_SIZE_SMALL * zoom;

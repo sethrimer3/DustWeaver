@@ -155,6 +155,22 @@ export function applyPropertyToElement(
       if (prop === 'waterZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
       if (prop === 'waterZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
     }
+  } else if (el.type === 'challengeField' || el.type === 'challengeGate') {
+    const prefix = el.type;
+    const elements = el.type === 'challengeField' ? room.challengeFields : room.challengeGates;
+    const rect = (elements ?? []).find(candidate => candidate.uid === el.uid);
+    if (rect && Number.isFinite(numVal)) {
+      if (prop === `${prefix}.xBlock`) rect.xBlock = Math.max(0, Math.min(room.widthBlocks - rect.wBlock, Math.floor(numVal)));
+      if (prop === `${prefix}.yBlock`) rect.yBlock = Math.max(0, Math.min(room.heightBlocks - rect.hBlock, Math.floor(numVal)));
+      if (prop === `${prefix}.wBlock`) rect.wBlock = Math.max(1, Math.min(room.widthBlocks - rect.xBlock, Math.floor(numVal)));
+      if (prop === `${prefix}.hBlock`) rect.hBlock = Math.max(1, Math.min(room.heightBlocks - rect.yBlock, Math.floor(numVal)));
+    }
+  } else if (el.type === 'challengeTotem') {
+    const totem = (room.challengeTotems ?? []).find(candidate => candidate.uid === el.uid);
+    if (totem && Number.isFinite(numVal)) {
+      if (prop === 'challengeTotem.xBlock') totem.xBlock = Math.max(0, Math.min(room.widthBlocks - 1, Math.floor(numVal)));
+      if (prop === 'challengeTotem.yBlock') totem.yBlock = Math.max(0, Math.min(room.heightBlocks - 1, Math.floor(numVal)));
+    }
   } else if (el.type === 'lavaZone') {
     const zone = (room.lavaZones ?? []).find((z: EditorLavaZone) => z.uid === el.uid);
     if (zone) {

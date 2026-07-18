@@ -730,6 +730,9 @@ export interface RoomDef {
   saveTombs: readonly { xBlock: number; yBlock: number }[];
   /** Skill Tomb definitions (block units) — grant dust skills/weaves when interacted with. */
   skillTombs?: readonly { xBlock: number; yBlock: number; weaveId: string }[];
+  challengeFields?: readonly { uid: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }[];
+  challengeGates?: readonly { uid: number; xBlock: number; yBlock: number; wBlock: number; hBlock: number }[];
+  challengeTotems?: readonly { uid: number; xBlock: number; yBlock: number }[];
   /**
    * Collectible dust container positions (block units).
    * Each pickup grants +4 dust particles to the player.

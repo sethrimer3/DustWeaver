@@ -635,6 +635,22 @@ export function updateInspector(
         });
       }
     }
+  } else if (el.type === 'challengeField' || el.type === 'challengeGate') {
+    const prefix = el.type;
+    const elements = el.type === 'challengeField' ? room.challengeFields : room.challengeGates;
+    const rect = (elements ?? []).find(candidate => candidate.uid === el.uid);
+    if (rect) {
+      addField(div, 'xBlock', String(rect.xBlock), value => callbacks?.onPropertyChange(`${prefix}.xBlock`, parseInt(value)));
+      addField(div, 'yBlock', String(rect.yBlock), value => callbacks?.onPropertyChange(`${prefix}.yBlock`, parseInt(value)));
+      addField(div, 'Width (blocks)', String(rect.wBlock), value => callbacks?.onPropertyChange(`${prefix}.wBlock`, parseInt(value)));
+      addField(div, 'Height (blocks)', String(rect.hBlock), value => callbacks?.onPropertyChange(`${prefix}.hBlock`, parseInt(value)));
+    }
+  } else if (el.type === 'challengeTotem') {
+    const totem = (room.challengeTotems ?? []).find(candidate => candidate.uid === el.uid);
+    if (totem) {
+      addField(div, 'xBlock', String(totem.xBlock), value => callbacks?.onPropertyChange('challengeTotem.xBlock', parseInt(value)));
+      addField(div, 'yBlock', String(totem.yBlock), value => callbacks?.onPropertyChange('challengeTotem.yBlock', parseInt(value)));
+    }
   } else if (el.type === 'waterZone') {
     const zone = (room.waterZones ?? []).find(z => z.uid === el.uid);
     if (zone) {
