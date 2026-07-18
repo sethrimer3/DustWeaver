@@ -46,6 +46,7 @@ import {
   wallTemplateToSnapshot,
 } from '../render/walls/roomRenderState';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
+import { areRoomSpritesReady } from '../render/roomAssetPreloader';
 import {
   decideEntryWarm,
   type EntryWarmCoverageSnapshot,
@@ -261,6 +262,17 @@ export function tickEntryWarm(
     // Runtime data not yet ready — defer, counting against frame budget.
     // (The timing checks above will eventually release the overlay via a
     // soft or hard timeout if this never becomes ready.)
+    state.framesWarmed++;
+    return;
+  }
+
+  // Defer if sprites are not ready yet. Building now would only produce
+  // fallback-rectangle chunks (hadFallbacksFlag=true), which forces an
+  // immediate rebuild on the very next tick — churning the same chunks
+  // through the fallback path every frame until sprites decode, instead of
+  // making real progress. roomRenderChunkWarmScheduler.ts gates on this same
+  // check for the same reason.
+  if (!areRoomSpritesReady(room)) {
     state.framesWarmed++;
     return;
   }
