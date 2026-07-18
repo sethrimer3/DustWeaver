@@ -35,20 +35,11 @@ export const ZOOM_DETAIL_FULL = 5;
 
 // ── Sketch visual constants ───────────────────────────────────────────────────
 
-/** Number of sketch strokes drawn per contour (layered for pencil-like look). */
-const STROKE_COUNT = 3;
+/** Base opacity for the single sketch stroke. */
+const STROKE_ALPHA_BASE = 0.7;
 
-/** Base alpha for the first stroke; each additional stroke is slightly dimmer. */
-const STROKE_ALPHA_BASE = 0.55;
-
-/** Alpha step reduction per subsequent stroke. */
-const STROKE_ALPHA_STEP = 0.10;
-
-/** Line width in canvas pixels for the first stroke. */
-const STROKE_LINE_WIDTH_PX = 2.2;
-
-/** Line width reduction per subsequent stroke. */
-const STROKE_LINE_WIDTH_STEP = 0.35;
+/** Line width in canvas pixels for the single sketch stroke. */
+const STROKE_LINE_WIDTH_PX = 1.9;
 
 /** Max jitter offset in canvas pixels (constant visual size across zoom levels). */
 const JITTER_PX = 3.5;
@@ -69,18 +60,12 @@ const FILL_RGB_CURRENT = '180, 130, 60';
 const FILL_RGB_OTHER = '90, 85, 78';
 
 /**
- * Index offset used when generating stroke-level jitter noise.
- * Must be large enough to be disjoint from per-point indices (max room size
- * is several hundred blocks, so 0xffff is safely out of range).
+ * Noise channel for per-point stroke jitter.
+ * Channels 0–1 are reserved for the interior fill (see drawContour fill
+ * pass); channels 2–3 are used for the single stroke pass.
  */
-const STROKE_JITTER_INDEX_OFFSET = 0xffff;
-
-/**
- * Starting noise channel for per-stroke, per-point jitter.
- * Channels 0–1 are reserved for the interior fill (see drawRoomSketch fill
- * pass); channels starting here are used for the stroke passes.
- */
-const POINT_JITTER_CHANNEL_BASE = 10;
+const STROKE_JITTER_CHANNEL_X = 2;
+const STROKE_JITTER_CHANNEL_Y = 3;
 
 // ── Deterministic noise ───────────────────────────────────────────────────────
 
@@ -614,7 +599,7 @@ function buildRoomContourOpenAir(room: RoomDef): ContourData {
 
 /**
  * Draws the sketch-mode silhouette of one room using the open-air algorithm.
- * Same visual treatment (fill + layered jittered strokes) as `drawRoomSketch`,
+ * Same visual treatment (fill + single jittered stroke) as `drawRoomSketch`,
  * but the underlying contours correctly show room transitions as gaps.
  */
 export function drawRoomSketchOpenAir(
@@ -668,7 +653,7 @@ export function smoothstep(edge0: number, edge1: number, x: number): number {
 // ── Internal per-contour sketch draw ─────────────────────────────────────────
 
 /**
- * Draws fill and multi-stroke sketch outline for one contour polyline.
+ * Draws fill and a single sketch outline stroke for one contour polyline.
  *
  * @param ctx          Canvas 2D rendering context.
  * @param pts          Interleaved [x, y] Float32Array in room-local block units.
@@ -722,41 +707,32 @@ function drawContour(
     ctx.restore();
   }
 
-  // Multi-stroke sketch outline — layered passes for a pencil-like look.
-  for (let strokeIndex = 0; strokeIndex < STROKE_COUNT; strokeIndex++) {
-    // Stable whole-stroke offset gives each pass a slightly different position.
-    const strokeOffX = deterministicNoise(contourSeed, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2)     * JITTER_PX * 0.4;
-    const strokeOffY = deterministicNoise(contourSeed, STROKE_JITTER_INDEX_OFFSET + strokeIndex, strokeIndex * 2 + 1) * JITTER_PX * 0.4;
+  // Single sketch outline stroke, with deterministic per-point jitter so the
+  // line still reads as slightly hand-drawn without layering multiple passes.
+  ctx.save();
+  ctx.globalAlpha = alpha * STROKE_ALPHA_BASE;
+  ctx.strokeStyle = `rgb(${strokeRgb})`;
+  ctx.lineWidth   = STROKE_LINE_WIDTH_PX;
+  ctx.lineJoin    = 'round';
+  ctx.lineCap     = 'round';
 
-    // Per-stroke jitter channels (different per stroke, stable per point).
-    const chanX = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2;
-    const chanY = POINT_JITTER_CHANNEL_BASE + strokeIndex * 2 + 1;
-
-    ctx.save();
-    ctx.globalAlpha = alpha * (STROKE_ALPHA_BASE - strokeIndex * STROKE_ALPHA_STEP);
-    ctx.strokeStyle = `rgb(${strokeRgb})`;
-    ctx.lineWidth   = STROKE_LINE_WIDTH_PX - strokeIndex * STROKE_LINE_WIDTH_STEP;
-    ctx.lineJoin    = 'round';
-    ctx.lineCap     = 'round';
-
-    ctx.beginPath();
-    for (let i = 0; i < ptCount; i++) {
-      const bx = pts[i * 2];
-      const by = pts[i * 2 + 1];
-      const jx = deterministicNoise(contourSeed, i, chanX) * JITTER_PX + strokeOffX;
-      const jy = deterministicNoise(contourSeed, i, chanY) * JITTER_PX + strokeOffY;
-      const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
-      const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
-      if (i === 0) ctx.moveTo(sx, sy);
-      else ctx.lineTo(sx, sy);
-    }
-    // Only close the path for truly closed contours.  Open chains must not
-    // be closed here — doing so would draw a diagonal line from the chain's
-    // last point back to its first point, creating the broken-map artifacts.
-    if (isClosed) ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
+  ctx.beginPath();
+  for (let i = 0; i < ptCount; i++) {
+    const bx = pts[i * 2];
+    const by = pts[i * 2 + 1];
+    const jx = deterministicNoise(contourSeed, i, STROKE_JITTER_CHANNEL_X) * JITTER_PX;
+    const jy = deterministicNoise(contourSeed, i, STROKE_JITTER_CHANNEL_Y) * JITTER_PX;
+    const sx = centerX + (mapXBlock + bx) * cellSizePx + jx;
+    const sy = centerY + (mapYBlock + by) * cellSizePx + jy;
+    if (i === 0) ctx.moveTo(sx, sy);
+    else ctx.lineTo(sx, sy);
   }
+  // Only close the path for truly closed contours.  Open chains must not
+  // be closed here — doing so would draw a diagonal line from the chain's
+  // last point back to its first point, creating the broken-map artifacts.
+  if (isClosed) ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
 }
 
 // ── Public sketch draw call ───────────────────────────────────────────────────
@@ -766,7 +742,7 @@ function drawContour(
  *
  * All contours for the room are drawn — outer cave boundary, interior
  * platforms, island masses, and hole boundaries alike.  Each contour is
- * rendered as fill + 2–3 layered strokes with deterministic per-point jitter
+ * rendered as fill + a single stroke with deterministic per-point jitter
  * to produce a hand-drawn appearance.
  *
  * Jitter is seeded per contour using: roomHash XOR (contourIndex * prime),
