@@ -19,6 +19,7 @@ import { buildSaveSlotUI } from './mainMenuSaveSlots';
 import { MENU_ANIMATION_ASSETS } from './animatedAssetPaths';
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 import { createMusicManager } from '../audio/musicManager';
+import { getMusicVolume } from './renderSettings';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   // ── Background canvas ────────────────────────────────────────────────────
   // ── Music ────────────────────────────────────────────────────────────────
   const music = createMusicManager(BASE);
-  music.setVolume(0.5);
+  music.setVolume(getMusicVolume());
   music.notifyRoomEntered('titleMenu');
 
   /** Try to play music; browsers may block autoplay until interaction. */
@@ -264,7 +265,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     menuEl.style.opacity = '0';
     setTimeout(() => {
       menuEl.style.display = 'none';
-      buildSettingsUI(settingsEl, showMenuFromSettings);
+      buildSettingsUI(settingsEl, showMenuFromSettings, (v) => music.setVolume(v));
       settingsEl.style.display = 'flex';
       requestAnimationFrame(() => {
         settingsEl.style.opacity = '1';

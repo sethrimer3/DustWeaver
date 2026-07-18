@@ -56,7 +56,11 @@ import {
  * @param settingsEl  The flex container managed by the caller (shown/hidden externally).
  * @param onBack      Navigation callback invoked when the user presses Back.
  */
-export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void): void {
+export function buildSettingsUI(
+  settingsEl: HTMLDivElement,
+  onBack: () => void,
+  onMusicVolumeChange?: (volume: number) => void,
+): void {
   settingsEl.innerHTML = '';
 
   // ── Settings panel container ──────────────────────────────────────────
@@ -341,6 +345,7 @@ export function buildSettingsUI(settingsEl: HTMLDivElement, onBack: () => void):
     tabContent.appendChild(musicLbl);
     tabContent.appendChild(makeSettingsSlider('Music', getMusicVolume(), (v) => {
       setMusicVolume(v);
+      onMusicVolumeChange?.(v);
     }));
 
     tabContent.appendChild(makeLabel('Sound Effects Volume'));

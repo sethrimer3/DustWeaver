@@ -111,12 +111,24 @@ export class MusicManager {
   private isDisposed = false;
   private readonly warnedFailures = new Set<string>();
   private readonly retryOnGesture = () => this.retryPlayback();
+  private readonly onVisibilityChange = () => {
+    // rAF is throttled/suspended while the tab is hidden (e.g. the player
+    // switched to another fullscreen app and back), but HTMLAudioElements
+    // keep playing regardless. Without this, an in-progress crossfade would
+    // resume on a single rAF tick with a huge elapsed time, snapping the
+    // outgoing track's volume to 0 far too late — audible as two tracks
+    // playing simultaneously with a large offset. Force-finish any
+    // in-progress crossfade immediately when hidden so no audio element is
+    // left playing unsupervised.
+    if (document.hidden) this.finishTransitionsImmediately();
+  };
 
   constructor(base: string) {
     this.base = base;
     window.addEventListener('pointerdown', this.retryOnGesture);
     window.addEventListener('keydown', this.retryOnGesture);
     window.addEventListener('touchstart', this.retryOnGesture);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
   }
 
   // ── Public API ───────────────────────────────────────────────────────────
@@ -161,6 +173,7 @@ export class MusicManager {
     window.removeEventListener('pointerdown', this.retryOnGesture);
     window.removeEventListener('keydown', this.retryOnGesture);
     window.removeEventListener('touchstart', this.retryOnGesture);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
 
     if (this.rafId !== null) {
       cancelAnimationFrame(this.rafId);
@@ -327,6 +340,38 @@ export class MusicManager {
       const elapsedMs = performance.now() - this.loopCrossfadeStartMs;
       const t = Math.min(elapsedMs / CROSSFADE_LOOP_MS, 1);
       this.loopNextAudio.volume = Math.max(0, Math.min(1, t * this.primaryGain * this.targetVolume));
+    }
+  }
+
+  /**
+   * Immediately snap any in-progress room/loop crossfade to completion,
+   * stopping whichever audio element(s) would otherwise be left fading out
+   * or silently fading in. Used when the tab is about to be backgrounded,
+   * since rAF (which normally drives the fade) stalls while hidden.
+   */
+  private finishTransitionsImmediately(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    if (this.isCrossfading) {
+      this.isCrossfading = false;
+      this.primaryGain = 1;
+      if (this.fadingAudio !== null) {
+        this.stopAudio(this.fadingAudio);
+        this.fadingAudio = null;
+      }
+    }
+    if (this.isLoopCrossfading && this.loopNextAudio !== null) {
+      this.isLoopCrossfading = false;
+      this.stopAudio(this.primaryAudio);
+      this.primaryAudio = this.loopNextAudio;
+      this.loopNextAudio = null;
+      this.primaryGain = 1;
+    }
+    this.applyVolumes();
+    if (this.primaryAudio !== null) {
+      this.primaryAudio.volume = Math.max(0, Math.min(1, this.targetVolume));
     }
   }
 
