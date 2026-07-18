@@ -31,7 +31,7 @@ import type { WorldState } from '../world';
 /** Below this speed (world units/s), an entity emits no movement wind at all. */
 const MIN_SPEED_WORLD = 60;
 
-/** Speed at which wind strength/radius reach their maximum (grapple/zip/sprint territory). */
+/** Speed at which wind strength/radius reach their maximum (grapple/zip/high-speed-skid territory). */
 const MAX_SCALING_SPEED_WORLD = 420;
 
 const MIN_RADIUS_PX = 3;

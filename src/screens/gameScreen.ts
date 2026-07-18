@@ -1463,9 +1463,7 @@ export function startGameScreen(
         world.playerMoveInputDxWorld = (!isDialogueBlockingInput && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
         world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
       }
-      // Pass sprint and crouch input to the sim
-      // Legacy field retained for save/snapshot compatibility; sprint is removed.
-      world.playerSprintHeldFlag = 0;
+      // Pass crouch input to the sim
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       tick(world);
       _simTickCount++;

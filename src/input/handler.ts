@@ -21,8 +21,6 @@ export interface InputState {
   isJumpHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
-  /** True while the Shift key is physically held down (sprint). */
-  isSprintHeldFlag: boolean;
   mouseXPx: number;
   mouseYPx: number;
   // Touch joystick state (populated by touch listeners; read by renderer for visual feedback)
@@ -98,7 +96,6 @@ export function createInputState(): InputState {
     isDownTriggeredFlag: false,
     isJumpHeldFlag: false,
     isJoystickUpActiveFlag: false,
-    isSprintHeldFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
     isTouchJoystickActiveFlag: 0,
@@ -325,7 +322,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isKeyD = false;
     state.isKeyS = false;
     state.isJumpHeldFlag = false;
-    state.isSprintHeldFlag = false;
     // Fire a grapple release so the rope is cancelled when the window loses
     // focus (alt-tab, task switch, etc.).  Without this the grapple stays
     // active in the sim and the player is frozen mid-swing on return.

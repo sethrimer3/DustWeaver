@@ -305,11 +305,28 @@ export const WALL_SLIDE_MAX_FALL_SPEED = 17.0;
 // Wall jump
 // ============================================================================
 
+// ── Wall-jump horizontal launch speed (tiered by count + input) ────────────
+// See computeWallJumpXSpeedWorld in playerWallJump.ts — the one authoritative
+// helper that resolves these into a single magnitude per jump. Reduced
+// speeds only apply on the first/second wall jump AND only when the player
+// is actively holding horizontal input toward the wall being jumped from
+// (left wall + holding left, or right wall + holding right); holding away,
+// holding nothing, or any other input state uses the default speed.
+// Preserves the existing outward launch DIRECTION — these are magnitudes.
+
+/** Horizontal wall-jump launch speed (px/s) for the first wall jump after a reset, when holding input toward the jumped-from wall. */
+export const WALL_JUMP_X_SPEED_FIRST_TOWARD_WALL_WORLD = 50.0;
+
+/** Horizontal wall-jump launch speed (px/s) for the second wall jump after a reset, when holding input toward the jumped-from wall. */
+export const WALL_JUMP_X_SPEED_SECOND_TOWARD_WALL_WORLD = 100.0;
+
 /**
- * Horizontal launch speed away from the wall on a wall jump (px/s).
+ * Default horizontal wall-jump launch speed (px/s): used for the third and
+ * every later wall jump regardless of input, and for the first/second wall
+ * jump whenever the player is not holding input toward the jumped-from wall.
  * Strong outward push prevents rapid same-wall climbing.
  */
-export const WALL_JUMP_X_SPEED_WORLD = 147.0;
+export const WALL_JUMP_X_SPEED_DEFAULT_WORLD = 150.0;
 
 /**
  * Vertical launch speed on a wall jump (px/s, applied upward).
@@ -501,53 +518,42 @@ export const ROLLING_ENEMY_SIGHT_RANGE_WORLD = 200.0;
  */
 export const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
 
-// ── Player sprint ───────────────────────────────────────────────────────────
+// ── Player skid (speed-scaled direction-reversal technique) ─────────────────
+// Movement V2: skidding is no longer a sprint side-effect. Reversing input
+// while grounded and moving at or above walking speed latches the entry
+// velocity (see ClusterState.skidEntryVelocityXWorld), granting a
+// speed-scaled jump-height bonus and speed-scaled debris. State machine
+// lives in playerSkid.ts; the jump-height solver lives in skidJumpHeight.ts.
 
-/** Sprint was removed in Movement V2. Dynamic skid tuning follows. */
+/**
+ * Floating-point tolerance (world units/s) applied when checking whether the
+ * velocity at skid entry meets the walking-speed qualification threshold.
+ * Absorbs rounding error from repeated per-tick float accumulation.
+ */
+export const SKID_ENTRY_SPEED_EPSILON_WORLD = 0.01;
 
-/** Ground deceleration multiplier when skidding (50% more friction than default). */
-export const SKID_FRICTION_MULTIPLIER = 1.5;
+/**
+ * Speed increment (world units/s) above walking speed required for each
+ * additional +1 small block of skid-jump bonus apex height. Continuous
+ * interpolation, not stepped — see computeSkidJumpBonusBlocks.
+ */
+export const SKID_JUMP_HEIGHT_SPEED_PER_BLOCK_WORLD = 30.0;
 
-/** Jump speed multiplier when jumping out of a skid; targets ~6 small blocks of height. */
+/**
+ * Bonus apex height (in small blocks) granted at exactly the minimum
+ * qualifying skid-entry speed (walking speed). Continuous interpolation
+ * above this baseline is driven by SKID_JUMP_HEIGHT_SPEED_PER_BLOCK_WORLD.
+ */
 export const SKID_JUMP_BASE_BONUS_BLOCKS = 1.0;
-export const SKID_JUMP_SPEED_PER_BONUS_BLOCK_WORLD = 30.0;
 
-export function getSkidJumpBonusBlocks(skidEntrySpeedWorld: number): number {
-  return SKID_JUMP_BASE_BONUS_BLOCKS
-    + Math.max(0, skidEntrySpeedWorld - GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC)
-      / SKID_JUMP_SPEED_PER_BONUS_BLOCK_WORLD;
-}
-
-/** Solve height = launchSpeed * sustainTime + launchSpeed^2 / (2 * gravity). */
-export function getJumpLaunchSpeedForTargetHeight(
-  targetHeightWorld: number,
-  gravityWorldPerSec2 = NORMAL_GRAVITY_WORLD_PER_SEC2,
-  sustainTimeSec = VAR_JUMP_TIME_SEC,
-): number {
-  return -gravityWorldPerSec2 * sustainTimeSec
-    + Math.sqrt(
-      gravityWorldPerSec2 * gravityWorldPerSec2 * sustainTimeSec * sustainTimeSec
-      + 2 * gravityWorldPerSec2 * Math.max(0, targetHeightWorld),
-    );
-}
-
-export function getSkidJumpLaunchSpeedWorld(skidEntrySpeedWorld: number): number {
-  const baseTargetHeight = PLAYER_JUMP_SPEED_WORLD * VAR_JUMP_TIME_SEC
-    + PLAYER_JUMP_SPEED_WORLD * PLAYER_JUMP_SPEED_WORLD
-      / (2 * NORMAL_GRAVITY_WORLD_PER_SEC2);
-  return getJumpLaunchSpeedForTargetHeight(
-    baseTargetHeight + getSkidJumpBonusBlocks(skidEntrySpeedWorld) * BLOCK_SIZE_SMALL,
-  );
-}
-
-/** Diminishing-returns particle scale: 1 + maxExtra * excess / (excess + knee). */
-export const SKID_PARTICLE_SOFT_KNEE_SPEED_WORLD = 120.0;
-export const SKID_PARTICLE_MAX_EXTRA_SCALE = 3.0;
-export function getSkidParticleSpeedScale(skidEntrySpeedWorld: number): number {
-  const excess = Math.max(0, skidEntrySpeedWorld - GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
-  return 1 + SKID_PARTICLE_MAX_EXTRA_SCALE
-    * excess / (excess + SKID_PARTICLE_SOFT_KNEE_SPEED_WORLD);
-}
+/**
+ * Soft-knee constant (world units/s) for skid-particle visual-intensity
+ * scaling (see computeSkidVisualSpeedWorld in skidDebrisRenderer.ts). Chosen
+ * so the curve reads as close to linear from walking speed through
+ * grapple-zip range (~210 units/s) and only visibly compresses well above
+ * that, at the rare very-high grapple-launch speeds this game reaches.
+ */
+export const SKID_VISUAL_SOFT_KNEE_WORLD_PER_SEC = 90.0;
 
 /**
  * Jump speed multiplier for the zip-jump (zip super jump).
@@ -561,8 +567,9 @@ export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
 
 /**
  * Minimum horizontal speed (world units/s) required to trigger landing-skid
- * dust when the player touches the ground.
- * This is a separate high-momentum landing effect. Below 157.5 no extra dust appears.
+ * dust when the player touches the ground. Roughly 1.3x walking speed
+ * (GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 120) — below this threshold no
+ * extra dust appears.
  */
 export const LANDING_SKID_SPEED_THRESHOLD_WORLD = 157.5;
 

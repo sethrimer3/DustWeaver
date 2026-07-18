@@ -31,7 +31,6 @@ import {
   CLOAK_REST_BIAS_STRENGTH,
   CLOAK_REST_IDLE,
   CLOAK_REST_RUNNING,
-  CLOAK_REST_SPRINTING,
   CLOAK_REST_JUMPING,
   CLOAK_REST_FALLING,
   CLOAK_REST_WALL_SLIDE,
@@ -58,7 +57,6 @@ import {
   CLOAK_FAST_FALL_VELOCITY_THRESHOLD_WORLD,
   CLOAK_SPREAD_IDLE,
   CLOAK_SPREAD_RUNNING,
-  CLOAK_SPREAD_SPRINTING,
   CLOAK_SPREAD_JUMPING,
   CLOAK_SPREAD_FALLING,
   CLOAK_SPREAD_FAST_FALL,
@@ -103,7 +101,6 @@ export interface CloakPlayerState {
   velocityYWorld: number;
   isFacingLeftFlag: 0 | 1;
   isGroundedFlag: 0 | 1;
-  isSprintingFlag: 0 | 1;
   isCrouchingFlag: 0 | 1;
   isWallSlidingFlag: 0 | 1;
   halfWidthWorld: number;
@@ -515,7 +512,6 @@ export class PlayerCloak {
       if (player.velocityYWorld < this._tunedValue(CLOAK_JUMPING_VELOCITY_THRESHOLD_WORLD, 'jumpingVelocityThresholdWorld')) return CLOAK_REST_JUMPING;
       return CLOAK_REST_FALLING;
     }
-    if (player.isSprintingFlag === 1) return CLOAK_REST_SPRINTING;
     if (Math.abs(player.velocityXWorld) > this._tunedValue(CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD, 'runningVelocityThresholdWorld')) return CLOAK_REST_RUNNING;
     return CLOAK_REST_IDLE;
   }
@@ -533,7 +529,6 @@ export class PlayerCloak {
       }
       return this._tunedValue(CLOAK_SPREAD_FALLING, 'spreadFalling');
     }
-    if (player.isSprintingFlag === 1) return this._tunedValue(CLOAK_SPREAD_SPRINTING, 'spreadSprinting');
     if (Math.abs(player.velocityXWorld) > this._tunedValue(CLOAK_RUNNING_VELOCITY_THRESHOLD_WORLD, 'runningVelocityThresholdWorld')) {
       return this._tunedValue(CLOAK_SPREAD_RUNNING, 'spreadRunning');
     }

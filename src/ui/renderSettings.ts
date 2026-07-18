@@ -298,8 +298,6 @@ export function setAlwaysCenterCamera(enabled: boolean): void {
   localStorage.setItem(ALWAYS_CENTER_CAMERA_STORAGE_KEY, enabled ? '1' : '0');
 }
 
-// ── Manual Sprint ─────────────────────────────────────────────────────────────
-
 // ── Advanced Wall Jumps ──────────────────────────────────────────────────────
 
 const ADVANCED_WALL_JUMPS_STORAGE_KEY = 'dustweaver-advanced-wall-jumps';

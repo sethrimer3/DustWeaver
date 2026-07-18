@@ -13,6 +13,10 @@ const GROUND_PROBE_WORLD = 1.25;
 const LANDING_IMPACT_MIN_SPEED_WORLD_PER_SEC = 90;
 const LANDING_IMPACT_FULL_SPEED_WORLD_PER_SEC = 360;
 const STEP_BASE_INTERVAL_TICKS = 22;
+/** Fastest footstep interval, reached at STEP_FAST_SPEED_RATIO x walking speed. */
+const STEP_FAST_INTERVAL_TICKS = 14;
+/** Horizontal-speed ratio (relative to walking speed) at which footsteps reach their fastest/loudest. */
+const STEP_FAST_SPEED_RATIO = 1.5;
 
 export interface PlayerSfxState {
   wasGroundedFlag: 0 | 1;
@@ -130,10 +134,15 @@ export function updatePlayerSfx(
 
   if (isGrounded === 1 && Math.abs(player.velocityXWorld) > 18 && world.playerMoveInputDxWorld !== 0) {
     if (state.stepTicksUntilNext <= 0) {
-      const sprintT = Math.min(1, Math.abs(player.velocityXWorld) / GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
-      const volume = 0.55 + sprintT * 0.2;
+      // Continuous speed scaling (no separate sprint state): footsteps get
+      // louder and quicker toward STEP_FAST_SPEED_RATIO x walking speed,
+      // covering both ordinary walking and higher over-cap/skid speeds.
+      const speedT = Math.min(1, Math.abs(player.velocityXWorld) / (GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC * STEP_FAST_SPEED_RATIO));
+      const volume = 0.55 + speedT * 0.45;
       sfx.play(stepNameForHardness(hardness), volume);
-      state.stepTicksUntilNext = STEP_BASE_INTERVAL_TICKS;
+      state.stepTicksUntilNext = Math.round(
+        STEP_BASE_INTERVAL_TICKS - (STEP_BASE_INTERVAL_TICKS - STEP_FAST_INTERVAL_TICKS) * speedT,
+      );
     } else {
       state.stepTicksUntilNext -= 1;
     }

@@ -180,11 +180,12 @@ export interface RoomPixelMaterialDef {
 // ── Sandstone fracture configuration ────────────────────────────────────────
 //
 // Velocity scale reference (all in native px/s = world units/s):
-//   Walk/run:  ≤105  Sprint: ≤157.5  Momentum-combat activation: ≥175
-//   Grapple swings routinely reach 250–420+ px/s.
+//   Walk/run: ≤120  Elevated ground speed (fast skid, carried momentum): ≤157.5
+//   Momentum-combat activation: ≥175  Grapple swings routinely reach 250–420+ px/s.
 //
-// Impact threshold (200 px/s) is above sprint but well within grapple range,
-// so only intentional high-speed impacts fracture sandstone.
+// Impact threshold (200 px/s) is above ordinary elevated ground speed but
+// well within grapple range, so only intentional high-speed impacts
+// fracture sandstone.
 //
 // Fracture radius scales with excess speed above the threshold:
 //   At 200 px/s → radius 0 (exactly 1 pixel).

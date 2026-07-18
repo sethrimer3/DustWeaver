@@ -15,7 +15,6 @@ export interface CharacterSprites {
   idle1: HTMLImageElement;
   idle2: HTMLImageElement;
   idleBlink: HTMLImageElement;
-  sprinting: HTMLImageElement;
   crouching: HTMLImageElement;
   grappling: HTMLImageElement;
   jumping: HTMLImageElement;
@@ -203,7 +202,6 @@ function _loadCharacterSprites(characterId: string): CharacterSprites {
     idle1:      standingImg,
     idle2:      standingImg,
     idleBlink:  standingImg,
-    sprinting:  standingImg,
     crouching:  loadImg(`${base}_crouching.png`),
     grappling:  standingImg,
     jumping:    framed('jumping'),
@@ -275,9 +273,8 @@ export const HURT_FLASH_MAX_ALPHA = 0.45;
  *  3. Airborne & moving upward            → jumping sprite
  *  4. Airborne & fast-falling             → fastFalling sprite
  *  5. Airborne & moving downward          → falling sprite
- *  6. Sprinting                           → sprinting sprite
- *  7. Idle animation states               → idle1 / idle2 / idleBlink
- *  8. Default                             → standing sprite
+ *  6. Idle animation states               → idle1 / idle2 / idleBlink
+ *  7. Default                             → standing sprite
  *
  * When grappling with low/zero velocity, the standing sprite is shown.
  */
@@ -310,8 +307,6 @@ export function getPlayerSprite(
   }
 
   // ── Grounded states ───────────────────────────────────────────────────
-  if (cluster.isSprintingFlag === 1) return sprites.sprinting;
-
   // Idle animation states: 0=standing, 1=idle1, 2=idle2, 3=idleBlink
   switch (cluster.playerIdleAnimState) {
     case 1: return sprites.idle1;

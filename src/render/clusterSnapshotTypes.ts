@@ -44,8 +44,6 @@ export interface ClusterSnapshot {
   readonly rollingEnemyRollAngleRad: number;
   /** 1 when the player is facing left (sprites face right by default). */
   readonly isFacingLeftFlag: 0 | 1;
-  /** 1 while the player is sprinting. */
-  readonly isSprintingFlag: 0 | 1;
   /** 1 while the player is crouching. */
   readonly isCrouchingFlag: 0 | 1;
   /** 1 when the cluster is resting on a surface (floor or platform top). */

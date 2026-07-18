@@ -39,6 +39,8 @@
 import { WorldState } from '../world';
 import { tickPlayerMovement } from './playerMovement';
 import { tickEnemyMovement } from './enemyMovement';
+import { clearPlayerSkidState } from './playerSkid';
+import { computeSkidJumpSpeedWorld } from './skidJumpHeight';
 
 // ============================================================================
 // Movement constants — imported from dedicated module for maintainability.
@@ -53,7 +55,6 @@ import {
   COYOTE_TIME_TICKS,
   WALL_SLIDE_MAX_FALL_SPEED,
   WALL_JUMP_GRACE_TICKS,
-  getSkidJumpLaunchSpeedWorld,
   GRAPPLE_SUPER_JUMP_MULTIPLIER,
   ROLLING_ENEMY_SPRITE_RADIUS_WORLD,
   FLYING_EYE_VERTICAL_MARGIN_WORLD,
@@ -61,6 +62,8 @@ import {
   LANDING_SKID_SPEED_THRESHOLD_WORLD,
   LANDING_SKID_SPEED_FACTOR_MAX,
   MAX_RUN_SPEED_WORLD_PER_SEC,
+  NORMAL_GRAVITY_WORLD_PER_SEC2,
+  GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC,
 } from './movementConstants';
 
 const ULTRA_ICE_STOPPED_SPEED_EPSILON_WORLD = 0.1;
@@ -90,8 +93,6 @@ export function applyClusterMovement(world: WorldState): void {
 
   // Reset per-tick landing skid factor (set again below if player just landed at high speed).
   world.playerLandingSkidSpeedFactor = 0.0;
-  world.playerSkidEntrySpeedWorld = 0.0;
-  world.playerSkidTravelDirectionX = 0.0;
   // Reset per-tick weak wall jump cascade flag (set again below if a 3rd+ wall jump fires).
   world.weakWallJumpCascadeFlag = 0;
 
@@ -330,19 +331,33 @@ export function applyClusterMovement(world: WorldState): void {
           // Fire buffered jump immediately on landing
           if (cluster.jumpBufferTicks > 0) {
             const baseJumpSpeedLand = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
-            const landJumpSpeed = cluster.isSkiddingFlag === 1
-              ? getSkidJumpLaunchSpeedWorld(cluster.skidEntrySpeedWorld)
+            // Same authoritative skid-jump calculation as the direct/coyote
+            // ground-jump path in playerVerticalMovement.ts — never duplicate
+            // the formula.
+            const isSkidJumpLand = cluster.isSkiddingFlag === 1;
+            const landJumpSpeed = isSkidJumpLand
+              ? computeSkidJumpSpeedWorld(
+                  cluster.skidEntryVelocityXWorld,
+                  ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC),
+                  baseJumpSpeedLand,
+                  ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2),
+                )
               : baseJumpSpeedLand;
             cluster.velocityYWorld      = -landJumpSpeed;
             cluster.isGroundedFlag      = 0;
             cluster.jumpBufferTicks     = 0;
             cluster.varJumpTimerTicks   = VAR_JUMP_TIME_TICKS;
             cluster.varJumpSpeedWorld   = -landJumpSpeed;
+            if (isSkidJumpLand) {
+              clearPlayerSkidState(cluster);
+            }
           }
 
           // ── Landing skid dust at high horizontal speed ───────────────────
-          // When the player touches the ground at high horizontal speed,
-          // trigger skid-dust scaled to the excess speed.
+          // When the player touches the ground at above-threshold horizontal
+          // speed, trigger skid-dust scaled to the excess speed. Distinct
+          // from the direction-reversal skid technique above (updatePlayerSkidState) —
+          // this fires purely from landing speed, with no direction reversal.
           // factor = 0 at threshold, increasing linearly:
           //   factor = (speed − threshold) / threshold
           // So factor = 1.0 at 2× threshold, 4.0 (max) at 5× threshold.
@@ -461,21 +476,22 @@ export function applyClusterMovement(world: WorldState): void {
      || world.playerLandingSkidSpeedFactor > 0)
   ) {
     world.isPlayerSkiddingFlag = 1;
-    if (player.isSkiddingFlag === 1) {
-      world.playerSkidEntrySpeedWorld = player.skidEntrySpeedWorld;
-      world.playerSkidTravelDirectionX = player.skidTravelDirectionX;
-    }
     if (world.playerLandingSkidSpeedFactor > 0) {
       // Landing skid: center the debris on the player's feet, not just a front corner.
       world.skidDebrisXWorld = player.positionXWorld;
       world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
     } else if (player.isSkiddingFlag === 1) {
-      // Normal skid: front corner = bottom edge in the direction the player is sliding
-      const isMovingRight = player.velocityXWorld > 0;
+      // Normal (direction-reversal) skid: front corner = bottom edge in the
+      // direction the player was originally traveling before the reversal
+      // (the latched entry velocity, not the already-decelerating live
+      // velocity) — this is also the value the renderer scales debris
+      // intensity from, so both position and visuals agree on "which way".
+      const isMovingRight = player.skidEntryVelocityXWorld > 0;
       world.skidDebrisXWorld = isMovingRight
         ? player.positionXWorld + player.halfWidthWorld
         : player.positionXWorld - player.halfWidthWorld;
       world.skidDebrisYWorld = player.positionYWorld + player.halfHeightWorld;
+      world.playerSkidEntryVelocityXWorld = player.skidEntryVelocityXWorld;
     }
   } else {
     world.isPlayerSkiddingFlag = 0;

@@ -14,6 +14,8 @@ import {
   applyNonAdditiveWaterJump,
   applyPlayerWaterVerticalForces,
 } from './playerWaterPhysics';
+import { clearPlayerSkidState } from './playerSkid';
+import { computeSkidJumpSpeedWorld } from './skidJumpHeight';
 import {
   debugSpeedOverrides,
   ov,
@@ -27,7 +29,7 @@ import {
   FAST_MAX_FALL_WORLD_PER_SEC,
   JUMP_BUFFER_TICKS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
-  getSkidJumpLaunchSpeedWorld,
+  GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC,
 } from './movementConstants';
 
 /**
@@ -167,9 +169,18 @@ export function applyPlayerGravityAndJump(
       return;
     }
     const baseJumpSpeed = ov(debugSpeedOverrides.jumpSpeedWorld, PLAYER_JUMP_SPEED_WORLD);
-    // Skid jump boost: if jumping while skidding, increase jump height
-    const jumpSpeed = cluster.isSkiddingFlag === 1
-      ? getSkidJumpLaunchSpeedWorld(cluster.skidEntrySpeedWorld)
+    const gravityWorld = ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2);
+    // Skid jump boost: an active skid (this tick's authoritative state, set
+    // by updatePlayerSkidState before this function runs — including on a
+    // same-tick reversal + jump press) grants a speed-scaled apex-height
+    // bonus derived from the entry speed latched at skid start. Direct
+    // grounded jumps and coyote jumps share this one authoritative
+    // calculation (computeSkidJumpSpeedWorld); the landing-buffered ground
+    // jump path in movement.ts uses the same helper.
+    const isSkidJump = cluster.isSkiddingFlag === 1;
+    const walkingSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
+    const jumpSpeed = isSkidJump
+      ? computeSkidJumpSpeedWorld(cluster.skidEntryVelocityXWorld, walkingSpeed, baseJumpSpeed, gravityWorld)
       : baseJumpSpeed;
     if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
       // ── Normal ground jump ─────────────────────────────────────────
@@ -183,6 +194,9 @@ export function applyPlayerGravityAndJump(
       // Start variable jump sustain timer so holding jump sustains height.
       cluster.varJumpTimerTicks   = VAR_JUMP_TIME_TICKS;
       cluster.varJumpSpeedWorld   = -jumpSpeed;
+      if (isSkidJump) {
+        clearPlayerSkidState(cluster);
+      }
     } else {
       // ── Wall jump (intent-filtered — see playerWallJump.ts) ───────────────
       // attemptWallJump applies wall-face quality filtering (vertical overlap

@@ -27,7 +27,9 @@ import {
   WALL_JUMP_MIN_VERTICAL_OVERLAP_WORLD,
   WALL_JUMP_LEDGE_SUPPRESS_WORLD,
   WALL_JUMP_PROXIMITY_REQUIRES_AWAY_INPUT,
-  WALL_JUMP_X_SPEED_WORLD,
+  WALL_JUMP_X_SPEED_FIRST_TOWARD_WALL_WORLD,
+  WALL_JUMP_X_SPEED_SECOND_TOWARD_WALL_WORLD,
+  WALL_JUMP_X_SPEED_DEFAULT_WORLD,
   WALL_JUMP_Y_SPEED_WORLD,
   WALL_JUMP_FIRST_BONUS_Y_SPEED_WORLD,
   WALL_JUMP_FORCE_TIME_TICKS,
@@ -486,6 +488,32 @@ export function getWallJumpCandidate(
 }
 
 /**
+ * The one authoritative wall-jump horizontal launch-speed helper.
+ *
+ * Reduced speeds (50 for the first wall jump, 100 for the second) apply only
+ * when the player is actively holding horizontal input TOWARD the wall being
+ * jumped from at the moment of the jump. Holding away, holding no horizontal
+ * input, or any other input state — and every third-or-later wall jump
+ * regardless of input — uses the default speed (150).
+ *
+ * @param wallJumpCountSinceReset Jumps already used since the last reset (0 = about to be the first).
+ * @param wallDir +1 if the wall is to the player's right, -1 if to the left.
+ * @param inputDxWorld Current horizontal input direction (-1, 0, or +1).
+ */
+export function computeWallJumpXSpeedWorld(
+  wallJumpCountSinceReset: number,
+  wallDir: number,
+  inputDxWorld: number,
+): number {
+  const isHoldingTowardWall = (wallDir > 0 && inputDxWorld > 0) || (wallDir < 0 && inputDxWorld < 0);
+  if (isHoldingTowardWall) {
+    if (wallJumpCountSinceReset === 0) return WALL_JUMP_X_SPEED_FIRST_TOWARD_WALL_WORLD;
+    if (wallJumpCountSinceReset === 1) return WALL_JUMP_X_SPEED_SECOND_TOWARD_WALL_WORLD;
+  }
+  return WALL_JUMP_X_SPEED_DEFAULT_WORLD;
+}
+
+/**
  * Finds a wall-jump candidate and, if one exists, applies the wall-jump
  * velocity/state immediately. Returns true if a wall jump fired.
  *
@@ -520,7 +548,6 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
     }
   }
 
-  const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, WALL_JUMP_X_SPEED_WORLD);
   const wallJumpYBase = ov(debugSpeedOverrides.wallJumpYWorld, WALL_JUMP_Y_SPEED_WORLD);
   const isInitialWallJump = cluster.wallJumpCountSinceReset === 0;
   const isSecondWallJump  = cluster.wallJumpCountSinceReset === 1;
@@ -532,6 +559,8 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
       : wallJumpYBase * WALL_JUMP_SUBSEQUENT_Y_MULTIPLIER;
   // wallDir = +1 if wall is to the right, -1 if wall is to the left
   const wallDir = canJumpFromRight ? 1 : -1;
+  const tieredWallJumpX = computeWallJumpXSpeedWorld(cluster.wallJumpCountSinceReset, wallDir, world.playerMoveInputDxWorld);
+  const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, tieredWallJumpX);
   // Launch away: strong diagonal push prevents same-wall climbing.
   cluster.velocityXWorld          = -wallDir * wallJumpX;
   cluster.velocityYWorld          = -wallJumpY;
@@ -539,6 +568,7 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
   cluster.wallJumpLockoutTicks    = WALL_JUMP_LOCKOUT_TICKS;
   cluster.wallJumpForceTimeTicks  = WALL_JUMP_FORCE_TIME_TICKS;
   cluster.wallJumpDirX            = -wallDir; // outward direction
+  cluster.wallJumpLaunchXSpeedWorld = wallJumpX;
   cluster.isWallSlidingFlag       = 0;
   cluster.coyoteTimeTicks         = 0;
   cluster.wallJumpGraceLeftTicks  = 0;

@@ -49,8 +49,6 @@ export const CLOAK_REST_BIAS_STRENGTH = 0.5;
 export const CLOAK_REST_IDLE: readonly [number, number] = [0.3, 2.8];
 /** Running: trail backward more strongly. */
 export const CLOAK_REST_RUNNING: readonly [number, number] = [1.6, 2.2];
-/** Sprinting: extra trailing. */
-export const CLOAK_REST_SPRINTING: readonly [number, number] = [2.2, 1.8];
 /** Jumping upward: lag slightly downward / backward. */
 export const CLOAK_REST_JUMPING: readonly [number, number] = [0.6, 2.6];
 /** Falling: lift a little from air resistance. */
@@ -89,8 +87,6 @@ export const CLOAK_CONSTRAINT_ITERATIONS = 3;
 export const CLOAK_SPREAD_IDLE = 0.15;
 /** Spread when running (0–1). */
 export const CLOAK_SPREAD_RUNNING = 0.3;
-/** Spread when sprinting (0–1). */
-export const CLOAK_SPREAD_SPRINTING = 0.4;
 /** Spread when jumping upward (0–1). */
 export const CLOAK_SPREAD_JUMPING = 0.2;
 /** Spread during normal falling (0–1). */
@@ -238,7 +234,6 @@ export interface CloakDebugOverrides {
   landingCompression: number;
   spreadIdle: number;
   spreadRunning: number;
-  spreadSprinting: number;
   spreadJumping: number;
   spreadFalling: number;
   spreadFastFall: number;
@@ -282,7 +277,6 @@ export const debugCloakOverrides: CloakDebugOverrides = {
   landingCompression: NaN,
   spreadIdle: NaN,
   spreadRunning: NaN,
-  spreadSprinting: NaN,
   spreadJumping: NaN,
   spreadFalling: NaN,
   spreadFastFall: NaN,

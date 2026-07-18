@@ -36,7 +36,6 @@ export function _makeEmptyCluster(): _MutableCluster {
     rollingEnemySpriteIndex: 0,
     rollingEnemyRollAngleRad: 0,
     isFacingLeftFlag: 0,
-    isSprintingFlag: 0,
     isCrouchingFlag: 0,
     isGroundedFlag: 0,
     isWallSlidingFlag: 0,
@@ -256,7 +255,6 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.rollingEnemySpriteIndex         = src.rollingEnemySpriteIndex;
   dst.rollingEnemyRollAngleRad        = src.rollingEnemyRollAngleRad;
   dst.isFacingLeftFlag                = src.isFacingLeftFlag;
-  dst.isSprintingFlag                 = src.isSprintingFlag;
   dst.isCrouchingFlag                 = src.isCrouchingFlag;
   dst.isGroundedFlag                  = src.isGroundedFlag;
   dst.isWallSlidingFlag               = src.isWallSlidingFlag;

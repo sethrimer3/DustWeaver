@@ -262,8 +262,6 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   playerMoveInputDxWorld: number;
   playerMoveInputDyWorld: number;
-  /** Legacy compatibility field; sprint is removed and this remains 0. */
-  playerSprintHeldFlag: 0 | 1;
   /** 1 while the crouch key (S / ArrowDown) is held and player is on the ground. */
   playerCrouchHeldFlag: 0 | 1;
   /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
@@ -292,8 +290,16 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * Set per tick in applyClusterMovement; read by skidDebrisRenderer.
    */
   playerLandingSkidSpeedFactor: number;
-  playerSkidEntrySpeedWorld: number;
-  playerSkidTravelDirectionX: number;
+  /**
+   * Signed horizontal velocity (world units/s) latched when the player's
+   * current direction-reversal skid began. Set per tick in
+   * applyClusterMovement while isPlayerSkiddingFlag is due to a normal skid
+   * (not a high-speed landing skid); read by skidDebrisRenderer to derive
+   * speed-scaled particle spawn rate, velocity, and spread. Deliberately
+   * distinct from playerLandingSkidSpeedFactor, which drives the separate
+   * high-speed-landing debris effect.
+   */
+  playerSkidEntryVelocityXWorld: number;
 
   // ---- Weak wall jump cascade visual flags (read by renderer) ---------------
   /**
@@ -585,7 +591,6 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     playerWeaveAimDirYWorld: 0.0,
     playerMoveInputDxWorld: 0.0,
     playerMoveInputDyWorld: 0.0,
-    playerSprintHeldFlag: 0,
     playerCrouchHeldFlag: 0,
     characterId: 'knight',
     playerJumpTriggeredFlag: 0,
@@ -595,8 +600,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     skidDebrisYWorld: 0.0,
     wallJumpSkidDebrisBurstFlag: 0,
     playerLandingSkidSpeedFactor: 0.0,
-    playerSkidEntrySpeedWorld: 0.0,
-    playerSkidTravelDirectionX: 0.0,
+    playerSkidEntryVelocityXWorld: 0.0,
     weakWallJumpCascadeFlag: 0,
     weakWallJumpCascadeXWorld: 0.0,
     weakWallJumpCascadeYWorld: 0.0,

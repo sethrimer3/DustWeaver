@@ -205,7 +205,7 @@ export class SunrayDustMotes {
     if (moveSpeed < cfg.playerAirCurrentMinSpeed) return;
 
     // Speed factor: eased 0..1 ramp between min and max configured speeds so slow
-    // walking barely disturbs the dust while sprint/grapple speeds stir it strongly.
+    // walking barely disturbs the dust while high-speed skid/grapple speeds stir it strongly.
     const speedRange = Math.max(1, cfg.playerAirCurrentMaxSpeed - cfg.playerAirCurrentMinSpeed);
     const rawSpeedT = clamp01((moveSpeed - cfg.playerAirCurrentMinSpeed) / speedRange);
     const speedFactor = rawSpeedT * rawSpeedT * (3 - 2 * rawSpeedT); // smoothstep easing
