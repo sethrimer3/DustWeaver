@@ -54,6 +54,7 @@ import { applyBubbleAI, applyBubblePopForces } from './clusters/bubbleAi';
 import { applySquareStampedeAI } from './clusters/squareStampedeAi';
 import { applyGoldenMimicAI } from './clusters/goldenMimicAi';
 import { applyGridBlockEnemyAI, applyGridSnakeEnemyAI } from './clusters/gridBlockEnemyAi';
+import { applySlimeSnailAI, tickSlimeSnailTrails } from './clusters/slimeSnailAi';
 import { applyMomentumTurretAI } from './clusters/momentumTurretAi';
 import { applyBeeSwarmAI } from './clusters/beeSwarmAi';
 import { applyWebSpiderAI } from './clusters/webSpiderAi';
@@ -158,6 +159,12 @@ export function tick(world: WorldState): void {
   //         this tick's grid-aligned positions rather than last tick's.
   applyGridBlockEnemyAI(world);
   applyGridSnakeEnemyAI(world);
+
+  // 0.25c. Slime Snail movement + trail lifetime — runs before momentum combat
+  //         so momentum hits use this tick's crawl position; trail lifetime
+  //         ticks independent of whether any snail is still alive.
+  applySlimeSnailAI(world);
+  tickSlimeSnailTrails(world);
 
   // 0.26. Momentum combat — must run AFTER grapple so it reads final-frame
   //        post-grapple horizontal velocity.  Phase 1 sets isHighVelocityAttacking;

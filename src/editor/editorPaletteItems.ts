@@ -158,6 +158,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_water_bubble', label: 'Water Bubble', category: 'enemies' },
   { id: 'enemy_ice_bubble',   label: 'Ice Bubble',   category: 'enemies' },
   { id: 'enemy_square_stampede', label: 'Square Stampede', category: 'enemies' },
+  { id: 'enemy_slime_snail', label: 'Slime Snail', category: 'enemies' },
   { id: 'enemy_golden_mimic', label: 'Golden Mimic', category: 'enemies' },
   { id: 'enemy_golden_mimic_xy', label: 'Golden Mimic (XY)', category: 'enemies' },
   { id: 'enemy_bee_swarm', label: 'Bee Swarm', category: 'enemies' },

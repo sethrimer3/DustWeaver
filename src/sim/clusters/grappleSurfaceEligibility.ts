@@ -40,6 +40,13 @@ export interface GrappleEligibilityState {
    * to know about wall geometry representations.
    */
   hasLineOfSight(xWorld: number, yWorld: number): boolean;
+  /**
+   * Optional callback returning true if a segment should be rejected
+   * regardless of range/facing/LOS — used by the Slime Snail trail to keep
+   * slimed surfaces out of both the golden highlight and (via the same
+   * eligibility decision) grapple attachment.
+   */
+  isSurfaceForbidden?(segment: SurfaceSegment): boolean;
 }
 
 /** Clamps (px, py) onto the segment from (x0,y0) to (x1,y1) and returns the closest point. */
@@ -79,6 +86,8 @@ export function isSurfaceEligibleForGrapple(
   segment: SurfaceSegment,
   state: GrappleEligibilityState,
 ): boolean {
+  if (state.isSurfaceForbidden?.(segment)) return false;
+
   const closest = closestPointOnSegment(
     state.playerXWorld, state.playerYWorld,
     segment.x0, segment.y0, segment.x1, segment.y1,

@@ -211,6 +211,24 @@ export interface WorldSnapshot {
   /** Number of entries per slot (SQUARE_STAMPEDE_TRAIL_COUNT). */
   readonly squareStampedeTrailStride: number;
 
+  // ── Slime Snail trail ring buffers ────────────────────────────────────────
+  /** Solid tile column of each completed trail record [slot * stride + local]. */
+  readonly slimeSnailTrailCol: Int16Array;
+  /** Solid tile row of each completed trail record. Same layout as slimeSnailTrailCol. */
+  readonly slimeSnailTrailRow: Int16Array;
+  /** Exposed side index (0=top,1=right,2=bottom,3=left) of each record. Same layout. */
+  readonly slimeSnailTrailSideIndex: Uint8Array;
+  /** Remaining lifetime in ticks; 0 = inactive. Same layout. */
+  readonly slimeSnailTrailRemainingTicks: Uint16Array;
+  /** Deterministic per-record visual seed. Same layout. */
+  readonly slimeSnailTrailVisualSeed: Uint32Array;
+  /** Write-head per slot. */
+  readonly slimeSnailTrailHead: Uint8Array;
+  /** Number of valid trail entries per slot (0..stride). */
+  readonly slimeSnailTrailCount: Uint8Array;
+  /** Number of entries per slot (SLIME_SNAIL_TRAIL_STRIDE). */
+  readonly slimeSnailTrailStride: number;
+
   // ── Bee-swarm individual bee position buffers ─────────────────────────────
   /**
    * X position of each bee (world units).

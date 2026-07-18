@@ -366,6 +366,14 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
     return;
   }
 
+  // Slimed walls cannot be grappled — the shot fails at the slimed surface,
+  // exactly like the existing failed-grapple beam, and does not consume a charge.
+  if (isGrappleWallHitSlimed(world, hit.x, hit.y, hit.normalX, hit.normalY)) {
+    clearLegacyGrappleMissState(world);
+    triggerGrappleFailBeam(world, dirX, dirY, hit.t);
+    return;
+  }
+
   // Confirmed wall hit — cancel any active miss/retract before attaching.
   clearLegacyGrappleMissState(world);
   clearGrappleFailureFx(world);

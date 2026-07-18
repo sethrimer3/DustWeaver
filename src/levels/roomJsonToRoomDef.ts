@@ -90,6 +90,9 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       isLargeSlimeFlag: e.isLargeSlime ? 1 as const : 0 as const,
       isWheelEnemyFlag: e.isWheelEnemy ? 1 as const : 0 as const,
       isBeetleFlag: e.isBeetle ? 1 as const : 0 as const,
+      isSlimeSnailFlag: e.isSlimeSnail ? 1 as const : 0 as const,
+      slimeSnailSurfaceSideIndex: (e.slimeSnailSurfaceSideIndex ?? 0) as 0 | 1 | 2 | 3,
+      slimeSnailClockwiseFlag: (e.slimeSnailClockwiseFlag ?? 1) as 0 | 1,
     };
   });
 

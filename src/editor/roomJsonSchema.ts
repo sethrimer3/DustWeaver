@@ -68,6 +68,9 @@ export interface RoomJsonEnemy {
   isBubbleEnemy?: boolean;
   isIceBubble?: boolean;
   isSquareStampede?: boolean;
+  isSlimeSnail?: boolean;
+  slimeSnailSurfaceSideIndex?: 0 | 1 | 2 | 3;
+  slimeSnailClockwiseFlag?: 0 | 1;
   isGoldenMimic?: boolean;
   isGoldenMimicYFlipped?: boolean;
   isBeeSwarm?: boolean;

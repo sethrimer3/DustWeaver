@@ -142,7 +142,8 @@ export type SavedEnemyType =
   | 'gridBlock2x2Medium'
   | 'gridBlock2x2Fast'
   | 'gridSnake'
-  | 'momentumTurret';
+  | 'momentumTurret'
+  | 'slimeSnail';
 
 export interface SavedEnemy {
   type: SavedEnemyType;
@@ -155,6 +156,10 @@ export interface SavedEnemy {
   spriteIndex?: number;
   snakeLength?: number;
   momentumTurretFacingIndex?: 0 | 1 | 2 | 3;
+  /** Starting exposed surface side (0=top,1=right,2=bottom,3=left) — only meaningful for `slimeSnail`. */
+  slimeSnailSideIndex?: 0 | 1 | 2 | 3;
+  /** 1=clockwise, 0=counterclockwise — only meaningful for `slimeSnail`. */
+  slimeSnailCw?: 0 | 1;
 }
 
 export interface SavedTransition {

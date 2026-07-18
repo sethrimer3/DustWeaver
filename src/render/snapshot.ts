@@ -88,6 +88,14 @@ interface _ReusableBacking {
   squareStampedeTrailHead: Uint8Array;
   squareStampedeTrailCount: Uint8Array;
   squareStampedeTrailStride: number;
+  slimeSnailTrailCol: Int16Array;
+  slimeSnailTrailRow: Int16Array;
+  slimeSnailTrailSideIndex: Uint8Array;
+  slimeSnailTrailRemainingTicks: Uint16Array;
+  slimeSnailTrailVisualSeed: Uint32Array;
+  slimeSnailTrailHead: Uint8Array;
+  slimeSnailTrailCount: Uint8Array;
+  slimeSnailTrailStride: number;
   beeSwarmBeeXWorld: Float32Array;
   beeSwarmBeeYWorld: Float32Array;
   beeSwarmBeeVelXWorld: Float32Array;
@@ -272,6 +280,14 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     squareStampedeTrailHead:   world.squareStampedeTrailHead,
     squareStampedeTrailCount:  world.squareStampedeTrailCount,
     squareStampedeTrailStride: world.squareStampedeTrailStride,
+    slimeSnailTrailCol:            world.slimeSnailTrailCol,
+    slimeSnailTrailRow:            world.slimeSnailTrailRow,
+    slimeSnailTrailSideIndex:      world.slimeSnailTrailSideIndex,
+    slimeSnailTrailRemainingTicks: world.slimeSnailTrailRemainingTicks,
+    slimeSnailTrailVisualSeed:     world.slimeSnailTrailVisualSeed,
+    slimeSnailTrailHead:           world.slimeSnailTrailHead,
+    slimeSnailTrailCount:          world.slimeSnailTrailCount,
+    slimeSnailTrailStride:         world.slimeSnailTrailStride,
     beeSwarmBeeXWorld:         world.beeSwarmBeeXWorld,
     beeSwarmBeeYWorld:         world.beeSwarmBeeYWorld,
     beeSwarmBeeVelXWorld:      world.beeSwarmBeeVelXWorld,
@@ -648,6 +664,13 @@ export function refreshSnapshotWorldArrayRefs(
   raw.squareStampedeTrailYWorld      = world.squareStampedeTrailYWorld;
   raw.squareStampedeTrailHead        = world.squareStampedeTrailHead;
   raw.squareStampedeTrailCount       = world.squareStampedeTrailCount;
+  raw.slimeSnailTrailCol             = world.slimeSnailTrailCol;
+  raw.slimeSnailTrailRow             = world.slimeSnailTrailRow;
+  raw.slimeSnailTrailSideIndex       = world.slimeSnailTrailSideIndex;
+  raw.slimeSnailTrailRemainingTicks  = world.slimeSnailTrailRemainingTicks;
+  raw.slimeSnailTrailVisualSeed      = world.slimeSnailTrailVisualSeed;
+  raw.slimeSnailTrailHead            = world.slimeSnailTrailHead;
+  raw.slimeSnailTrailCount           = world.slimeSnailTrailCount;
   raw.beeSwarmBeeXWorld              = world.beeSwarmBeeXWorld;
   raw.beeSwarmBeeYWorld              = world.beeSwarmBeeYWorld;
   raw.beeSwarmBeeVelXWorld           = world.beeSwarmBeeVelXWorld;

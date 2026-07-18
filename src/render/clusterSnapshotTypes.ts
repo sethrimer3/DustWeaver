@@ -175,6 +175,14 @@ export interface ClusterSnapshot {
   readonly squareStampedeSlotIndex: number;
   /** Original full-health half-size (world units) — constant after spawn. */
   readonly squareStampedeBaseHalfSizeWorld: number;
+  /** 1 if this cluster is a slime snail — crawls along surfaces, leaving a slime trail. */
+  readonly isSlimeSnailFlag: 0 | 1;
+  /** Starting/current surface side (0=top,1=right,2=bottom,3=left). */
+  readonly slimeSnailSurfaceSideIndex: 0 | 1 | 2 | 3;
+  /** Current body orientation in radians (follows movement tangent / corner arc). */
+  readonly slimeSnailBodyAngleRad: number;
+  /** 1=clockwise, 0=counterclockwise traversal. */
+  readonly slimeSnailClockwiseFlag: 0 | 1;
   /** 1 if this cluster is a golden mimic enemy. */
   readonly isGoldenMimicFlag: 0 | 1;
   /** 1 for the XY-flipped variant of the golden mimic. */

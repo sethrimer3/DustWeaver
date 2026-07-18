@@ -99,6 +99,10 @@ export function _makeEmptyCluster(): _MutableCluster {
     isSquareStampedeFlag: 0,
     squareStampedeSlotIndex: -1,
     squareStampedeBaseHalfSizeWorld: 0,
+    isSlimeSnailFlag: 0,
+    slimeSnailSurfaceSideIndex: 0,
+    slimeSnailBodyAngleRad: 0,
+    slimeSnailClockwiseFlag: 1,
     isGoldenMimicFlag: 0,
     isGoldenMimicYFlippedFlag: 0,
     goldenMimicState: 0,
@@ -309,6 +313,10 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.isSquareStampedeFlag            = src.isSquareStampedeFlag;
   dst.squareStampedeSlotIndex         = src.squareStampedeSlotIndex;
   dst.squareStampedeBaseHalfSizeWorld = src.squareStampedeBaseHalfSizeWorld;
+  dst.isSlimeSnailFlag                = src.isSlimeSnailFlag;
+  dst.slimeSnailSurfaceSideIndex      = src.slimeSnailSurfaceSideIndex;
+  dst.slimeSnailBodyAngleRad          = src.slimeSnailBodyAngleRad;
+  dst.slimeSnailClockwiseFlag         = src.slimeSnailClockwiseFlag;
   dst.isGoldenMimicFlag               = src.isGoldenMimicFlag;
   dst.isGoldenMimicYFlippedFlag       = src.isGoldenMimicYFlippedFlag;
   dst.goldenMimicState                = src.goldenMimicState;

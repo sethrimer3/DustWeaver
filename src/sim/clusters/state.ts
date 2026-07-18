@@ -546,6 +546,36 @@ export interface ClusterState {
   /** Countdown ticks until the next trail position is recorded. */
   squareStampedeTrailTimerTicks: number;
 
+  // ---- Slime Snail (populated only when isSlimeSnailFlag === 1) -------------
+  /** 1 if this cluster is a slime snail — crawls deterministically along exposed surfaces, leaving a slime trail. */
+  isSlimeSnailFlag: 0 | 1;
+  /** Index into the WorldState slime-snail trail ring-buffer arrays. -1 when no slot has been assigned. */
+  slimeSnailTrailSlotIndex: number;
+  /** Index of the current surface segment (in the room's derived slime-snail surface topology) the snail occupies. -1 when unresolved/stationary. */
+  slimeSnailSurfaceSegmentIndex: number;
+  /** Current surface side (0=top,1=right,2=bottom,3=left) matching SURFACE_SIDES index order. */
+  slimeSnailSurfaceSideIndex: 0 | 1 | 2 | 3;
+  /** 1 = clockwise traversal, 0 = counterclockwise. */
+  slimeSnailClockwiseFlag: 0 | 1;
+  /** Distance travelled (world units) along the current segment. */
+  slimeSnailSegmentProgressWorld: number;
+  /** Current body orientation in radians, follows movement tangent / corner arc. */
+  slimeSnailBodyAngleRad: number;
+  /** 1 while rounding a corner arc, 0 while traversing a straight segment. */
+  slimeSnailCornerActiveFlag: 0 | 1;
+  /** Distance travelled (world units) along the current corner arc. */
+  slimeSnailCornerProgressWorld: number;
+  /** World-space X of the corner pivot (shared surface endpoint) currently being rounded. */
+  slimeSnailCornerXWorld: number;
+  /** World-space Y of the corner pivot currently being rounded. */
+  slimeSnailCornerYWorld: number;
+  /** Starting normal angle (radians) of the corner arc. */
+  slimeSnailCornerStartAngleRad: number;
+  /** Signed angular delta (radians) of the corner arc (+ = turns one way). */
+  slimeSnailCornerDeltaAngleRad: number;
+  /** Health recorded at end of last tick, used to detect death this tick (suppresses trail deposit after momentum-kill). */
+  slimeSnailPrevHealthPoints: number;
+
   // ---- Bubble enemy (populated only when isBubbleEnemyFlag === 1) ----------
   /**
    * 1 if this cluster is a bubble enemy (water or ice variant).
@@ -1145,6 +1175,20 @@ export function createClusterState(
     squareStampedeAiState: 0,
     squareStampedeAiStateTicks: 0,
     squareStampedeTrailTimerTicks: 0,
+    isSlimeSnailFlag: 0,
+    slimeSnailTrailSlotIndex: -1,
+    slimeSnailSurfaceSegmentIndex: -1,
+    slimeSnailSurfaceSideIndex: 0,
+    slimeSnailClockwiseFlag: 1,
+    slimeSnailSegmentProgressWorld: 0,
+    slimeSnailBodyAngleRad: 0,
+    slimeSnailCornerActiveFlag: 0,
+    slimeSnailCornerProgressWorld: 0,
+    slimeSnailCornerXWorld: 0,
+    slimeSnailCornerYWorld: 0,
+    slimeSnailCornerStartAngleRad: 0,
+    slimeSnailCornerDeltaAngleRad: 0,
+    slimeSnailPrevHealthPoints: maxHealthPoints,
     isBubbleEnemyFlag: 0,
     isIceBubbleFlag: 0,
     bubbleState: 0,

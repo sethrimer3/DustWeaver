@@ -118,6 +118,11 @@ export const MAX_SQUARE_STAMPEDE = 8;
  */
 export const SQUARE_STAMPEDE_TRAIL_COUNT = 19;
 
+/** Maximum number of slime-snail enemies per room. Mirrors slimeSnailConfig.MAX_SLIME_SNAILS. */
+export const MAX_SLIME_SNAILS = 8;
+/** Number of trail ring-buffer slots per slime-snail enemy. Mirrors slimeSnailConfig.SLIME_SNAIL_TRAIL_STRIDE. */
+export const SLIME_SNAIL_TRAIL_COUNT = 20;
+
 /** Maximum number of bee-swarm enemies per room. */
 export const MAX_BEE_SWARMS = 4;
 /** Number of bees in a single bee-swarm cluster. */
@@ -582,6 +587,24 @@ export interface HazardWorldState {
   /** Number of entries per slot (= SQUARE_STAMPEDE_TRAIL_COUNT). Read-only after init. */
   squareStampedeTrailStride: number;
 
+  // ── Slime Snail trail ring buffers ──────────────────────────────────────────
+  /** Solid tile column of each completed trail record. Layout: [slot * stride + local]. */
+  slimeSnailTrailCol: Int16Array;
+  /** Solid tile row of each completed trail record. Same layout as slimeSnailTrailCol. */
+  slimeSnailTrailRow: Int16Array;
+  /** Exposed side index (0=top,1=right,2=bottom,3=left) of each record. Same layout. */
+  slimeSnailTrailSideIndex: Uint8Array;
+  /** Remaining lifetime in ticks; 0 = inactive/empty slot entry. Same layout. */
+  slimeSnailTrailRemainingTicks: Uint16Array;
+  /** Deterministic per-record visual seed for procedural bubbling/decay rendering. Same layout. */
+  slimeSnailTrailVisualSeed: Uint32Array;
+  /** Write-head index (0..stride-1) per snail slot. */
+  slimeSnailTrailHead: Uint8Array;
+  /** Number of valid entries filled so far (0..stride) per snail slot. */
+  slimeSnailTrailCount: Uint8Array;
+  /** Number of entries per slot (= SLIME_SNAIL_TRAIL_STRIDE). Read-only after init. */
+  slimeSnailTrailStride: number;
+
   // ── Bee-swarm individual bee position buffers ────────────────────────────────
   /**
    * X position of each bee (world units).
@@ -988,6 +1011,14 @@ export function createHazardWorldState(): HazardWorldState {
     squareStampedeTrailYWorld:     new Float32Array(MAX_SQUARE_STAMPEDE * SQUARE_STAMPEDE_TRAIL_COUNT),
     squareStampedeTrailHead:       new Uint8Array(MAX_SQUARE_STAMPEDE),
     squareStampedeTrailCount:      new Uint8Array(MAX_SQUARE_STAMPEDE),
+    slimeSnailTrailStride:         SLIME_SNAIL_TRAIL_COUNT,
+    slimeSnailTrailCol:            new Int16Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
+    slimeSnailTrailRow:            new Int16Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
+    slimeSnailTrailSideIndex:      new Uint8Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
+    slimeSnailTrailRemainingTicks: new Uint16Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
+    slimeSnailTrailVisualSeed:     new Uint32Array(MAX_SLIME_SNAILS * SLIME_SNAIL_TRAIL_COUNT),
+    slimeSnailTrailHead:           new Uint8Array(MAX_SLIME_SNAILS),
+    slimeSnailTrailCount:          new Uint8Array(MAX_SLIME_SNAILS),
     beeSwarmBeeXWorld:             new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeYWorld:             new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),
     beeSwarmBeeVelXWorld:          new Float32Array(MAX_BEE_SWARMS * BEES_PER_SWARM),

@@ -1,6 +1,7 @@
 import {
   WorldState,
   MAX_SQUARE_STAMPEDE,
+  MAX_SLIME_SNAILS,
   MAX_BEE_SWARMS,
   BEES_PER_SWARM,
   MAX_DUST_CONSTELLATIONS,
@@ -30,6 +31,8 @@ import {
   TRAIL_UPDATE_INTERVAL_TICKS,
 } from '../sim/clusters/squareStampedeAi';
 import { GOLDEN_MIMIC_HALF_WIDTH_WORLD, GOLDEN_MIMIC_HALF_HEIGHT_WORLD } from '../sim/clusters/goldenMimicAi';
+import { SLIME_SNAIL_HALF_WIDTH_WORLD, SLIME_SNAIL_HALF_HEIGHT_WORLD, SLIME_SNAIL_HP } from '../sim/clusters/slimeSnailConfig';
+import { placeSlimeSnailOnSurface } from '../sim/clusters/slimeSnailAi';
 import {
   DEFAULT_GRID_SNAKE_LENGTH,
   getGridBlockFootprintSize,
@@ -300,6 +303,45 @@ export function spawnEnemyClusters(
       enemyCluster.squareStampedeAiState           = 0;
       enemyCluster.squareStampedeAiStateTicks      = 20;
       enemyCluster.squareStampedeTrailTimerTicks   = TRAIL_UPDATE_INTERVAL_TICKS;
+    } else if (enemyDef.isSlimeSnailFlag === 1) {
+      // Allocate a trail ring-buffer slot for this snail; spawn still succeeds
+      // (without emitting slime) if no slot is free.
+      let slotIndex = -1;
+      for (let si = 0; si < MAX_SLIME_SNAILS; si++) {
+        let taken = false;
+        for (let ci2 = 0; ci2 < world.clusters.length; ci2++) {
+          if (world.clusters[ci2].slimeSnailTrailSlotIndex === si) {
+            taken = true;
+            break;
+          }
+        }
+        if (!taken) {
+          slotIndex = si;
+          const base = si * world.slimeSnailTrailStride;
+          world.slimeSnailTrailCol.fill(0, base, base + world.slimeSnailTrailStride);
+          world.slimeSnailTrailRow.fill(0, base, base + world.slimeSnailTrailStride);
+          world.slimeSnailTrailSideIndex.fill(0, base, base + world.slimeSnailTrailStride);
+          world.slimeSnailTrailRemainingTicks.fill(0, base, base + world.slimeSnailTrailStride);
+          world.slimeSnailTrailVisualSeed.fill(0, base, base + world.slimeSnailTrailStride);
+          world.slimeSnailTrailHead[si]  = 0;
+          world.slimeSnailTrailCount[si] = 0;
+          break;
+        }
+      }
+      if (slotIndex < 0 && import.meta.env?.DEV) {
+        console.warn('[slimeSnail] no free trail slot available; snail will spawn without depositing slime.');
+      }
+
+      enemyCluster.isSlimeSnailFlag              = 1;
+      enemyCluster.halfWidthWorld                = SLIME_SNAIL_HALF_WIDTH_WORLD;
+      enemyCluster.halfHeightWorld               = SLIME_SNAIL_HALF_HEIGHT_WORLD;
+      enemyCluster.healthPoints                  = SLIME_SNAIL_HP;
+      enemyCluster.maxHealthPoints               = SLIME_SNAIL_HP;
+      enemyCluster.slimeSnailTrailSlotIndex      = slotIndex;
+      enemyCluster.slimeSnailSurfaceSideIndex    = (enemyDef.slimeSnailSurfaceSideIndex ?? 0) as 0 | 1 | 2 | 3;
+      enemyCluster.slimeSnailClockwiseFlag       = (enemyDef.slimeSnailClockwiseFlag ?? 1) as 0 | 1;
+      enemyCluster.slimeSnailPrevHealthPoints    = SLIME_SNAIL_HP;
+      placeSlimeSnailOnSurface(world, enemyCluster);
     } else if (enemyDef.isGoldenMimicFlag === 1) {
       const isYFlipped = enemyDef.isGoldenMimicYFlippedFlag === 1;
       enemyCluster.isGoldenMimicFlag         = 1;

@@ -302,6 +302,15 @@ export interface RoomEnemyDef {
    */
   isSquareStampedeFlag?: 0 | 1;
   /**
+   * 1 if this enemy is a slime snail — crawls continuously along exposed
+   * floor/wall/ceiling surfaces, leaving a grapple-blocking slime trail.
+   */
+  isSlimeSnailFlag?: 0 | 1;
+  /** Starting exposed surface side (0=top,1=right,2=bottom,3=left). Only meaningful when isSlimeSnailFlag === 1. */
+  slimeSnailSurfaceSideIndex?: 0 | 1 | 2 | 3;
+  /** 1 = clockwise traversal, 0 = counterclockwise. Only meaningful when isSlimeSnailFlag === 1. */
+  slimeSnailClockwiseFlag?: 0 | 1;
+  /**
    * 1 if this enemy is a golden mimic — a golden silhouette of the player that
    * mirrors player movement (X-axis flipped), deals contact damage, and collapses
    * when half its particles are destroyed.
