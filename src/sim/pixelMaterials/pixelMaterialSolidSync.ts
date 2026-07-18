@@ -5,7 +5,7 @@
  *
  * Dynamic solid-geometry sources currently supported:
  *   - Falling block groups (`WorldState.fallingBlockGroups`) — their reserved
- *     wall slot (`group.wallIndex`) moves every tick while falling.
+ *     exact-footprint wall slots (`group.wallIndices`) move every tick while falling.
  *   - Crumble blocks (`world.crumbleBlockWallIndex`) — their wall slot is
  *     zeroed out (`wallWWorld`/`wallHWorld` set to 0) when destroyed.
  *   - Breakable blocks (`world.breakableBlockWallIndex`) — same zero-out
@@ -92,7 +92,9 @@ export function syncPixelMaterialSolidGeometry(world: WorldState): void {
     else { prev.x = x; prev.y = y; prev.w = w; prev.h = h; }
   };
 
-  for (const g of world.fallingBlockGroups) checkSlot(g.wallIndex);
+  for (const g of world.fallingBlockGroups) {
+    for (let si = 0; si < g.wallSlotCount; si++) checkSlot(g.wallIndices[si]);
+  }
   for (let i = 0; i < world.crumbleBlockCount; i++) checkSlot(world.crumbleBlockWallIndex[i]);
   for (let i = 0; i < world.breakableBlockCount; i++) checkSlot(world.breakableBlockWallIndex[i]);
 

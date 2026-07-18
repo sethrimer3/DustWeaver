@@ -455,6 +455,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     xBlock: fb.xBlock,
     yBlock: fb.yBlock,
     variant: (fb.variant ?? 'tough') as import('../levels/roomDef').FallingBlockVariant,
+    blockTheme: fb.blockTheme ?? null,
   }));
 
   const waterZones: EditorWaterZone[] = (json.waterZones ?? []).map(z => ({

@@ -210,7 +210,10 @@ test('adding solid support (falling block landing) prevents sand from entering t
 
   // Simulate a falling block's wall slot appearing mid-room-life.
   const wi = world.wallCount++;
-  world.fallingBlockGroups.push({ wallIndex: wi } as unknown as (typeof world.fallingBlockGroups)[number]);
+  world.fallingBlockGroups.push({
+    wallSlotCount: 1,
+    wallIndices: Int32Array.from([wi]),
+  } as unknown as (typeof world.fallingBlockGroups)[number]);
   world.wallXWorld[wi] = 0; world.wallYWorld[wi] = 15; world.wallWWorld[wi] = 40; world.wallHWorld[wi] = 8;
 
   syncPixelMaterialSolidGeometry(world);

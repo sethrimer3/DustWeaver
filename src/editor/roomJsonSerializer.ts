@@ -403,6 +403,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       xBlock: fb.xBlock,
       yBlock: fb.yBlock,
       variant: fb.variant,
+      blockTheme: fb.blockTheme ?? undefined,
     }));
   }
   if ((data.dialogueTriggers ?? []).length > 0) {

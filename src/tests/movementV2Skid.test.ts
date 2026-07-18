@@ -60,6 +60,18 @@ function makeWorldAndPlayer(): { world: WorldState; player: ClusterState } {
   return { world, player };
 }
 
+test('zip contact does not recharge grapple before the player touches ground', () => {
+  const { world } = makeWorldAndPlayer();
+  world.hasGrappleChargeFlag = 0;
+  world.prevHasGrappleChargeFlag = 0;
+  world.isGrappleStuckFlag = 1;
+
+  applyClusterMovement(world);
+
+  assert.equal(world.hasGrappleChargeFlag, 0);
+  assert.equal(world.grappleRechargeRingTicksLeft, 0);
+});
+
 // ── 1. Shift is inert ───────────────────────────────────────────────────────
 
 test('grounded acceleration caps at GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC (120), never a legacy sprint multiplier', () => {

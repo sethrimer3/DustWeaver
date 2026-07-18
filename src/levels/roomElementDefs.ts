@@ -476,6 +476,8 @@ export interface RoomFallingBlockDef {
   yBlock: number;
   /** Which falling block variant this tile belongs to. */
   variant: FallingBlockVariant;
+  /** Override block theme/material for this tile (e.g. 'blackRock' = Blackstone). Null/undefined = default rock look. */
+  blockTheme?: string | null;
 }
 
 // ── Background blocks ─────────────────────────────────────────────────────────

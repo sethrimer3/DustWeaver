@@ -546,7 +546,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.fallingBlocks = json.fallingBlocks.map(fb => {
       const v = fb.variant ?? 'tough';
       const code = v === 'sensitive' ? 's' : v === 'crumbling' ? 'c' : 't';
-      return [fb.xBlock, fb.yBlock, code] as [number, number, string];
+      return fb.blockTheme
+        ? [fb.xBlock, fb.yBlock, code, fb.blockTheme] as [number, number, string, string]
+        : [fb.xBlock, fb.yBlock, code] as [number, number, string];
     });
   }
   if (json.zipMoveBlocks?.length) {

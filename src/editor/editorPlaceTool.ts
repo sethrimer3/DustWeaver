@@ -435,6 +435,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
             xBlock: bx + xOffset,
             yBlock: by + yOffset,
             variant,
+            blockTheme: placementBlockTheme,
           };
           room.fallingBlocks.push(fb);
         }

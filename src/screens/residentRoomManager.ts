@@ -43,10 +43,8 @@ import type { RngState } from '../sim/rng';
 import {
   type FallingBlockState,
   FB_STATE_IDLE_STABLE,
-  FB_STATE_REMOVED,
-  getFBGroupTopWorld,
-  getFBGroupLeftWorld,
 } from '../sim/fallingBlocks/fallingBlockTypes';
+import { updateWallSlot } from '../sim/fallingBlocks/fallingBlockSim';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -810,19 +808,9 @@ export class ResidentRoomManager {
         g.shakeOffsetXWorld      = fb.shakeOffsetXWorld;
         g.hasReachedTopSpeedFlag = fb.hasReachedTopSpeedFlag;
         g.crumbleTimerTicks      = fb.crumbleTimerTicks;
-        // Sync the wall slot to match the restored position.
-        const wi = g.wallIndex;
-        if (wi >= 0 && wi < world.wallCount) {
-          if (g.state === FB_STATE_REMOVED) {
-            world.wallWWorld[wi] = 0;
-            world.wallHWorld[wi] = 0;
-          } else {
-            world.wallXWorld[wi] = getFBGroupLeftWorld(g);
-            world.wallYWorld[wi] = getFBGroupTopWorld(g);
-            world.wallWWorld[wi] = g.wWorld;
-            world.wallHWorld[wi] = g.hWorld;
-          }
-        }
+        // Sync all of the group's exact-footprint wall slots to match the
+        // restored position (or clear them if removed).
+        updateWallSlot(g, world);
       }
     }
 

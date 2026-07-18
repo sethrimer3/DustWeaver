@@ -376,6 +376,8 @@ export interface RoomJsonFallingBlock {
   yBlock: number;
   /** 'tough' | 'sensitive' | 'crumbling'. Defaults to 'tough' if missing. */
   variant?: string;
+  /** Override block theme/material for this tile (e.g. 'blackRock' = Blackstone). */
+  blockTheme?: string;
 }
 
 /** JSON representation of a single dialogue entry within a conversation. */

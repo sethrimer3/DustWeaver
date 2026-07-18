@@ -499,6 +499,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       xBlock: fb.xBlock,
       yBlock: fb.yBlock,
       variant: fb.variant,
+      blockTheme: fb.blockTheme,
     })),
     backgroundBlocks: (data.backgroundBlocks ?? []).map(b => ({
       xBlock: b.xBlock,

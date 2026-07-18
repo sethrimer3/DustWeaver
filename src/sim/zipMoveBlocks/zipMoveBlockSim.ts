@@ -9,6 +9,7 @@ import {
   type ZipMoveBlockSide,
 } from './zipMoveBlockTypes';
 import { FB_STATE_IDLE_STABLE, FB_STATE_REMOVED, FB_STATE_WARNING } from '../fallingBlocks/fallingBlockTypes';
+import { updateWallSlot } from '../fallingBlocks/fallingBlockSim';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 
 const EPS = 0.001;
@@ -60,7 +61,7 @@ function moveSwept(world: WorldState, block: ZipMoveBlockRuntime, dx: number, dy
     if (group.variant === 'crumbling') {
       group.state = FB_STATE_REMOVED;
       group.velocityYWorld = 0;
-      if (group.wallIndex >= 0) { world.wallWWorld[group.wallIndex] = 0; world.wallHWorld[group.wallIndex] = 0; }
+      updateWallSlot(group, world);
     } else if (group.state === FB_STATE_IDLE_STABLE) {
       group.state = FB_STATE_WARNING;
       group.stateTimerTicks = 0;

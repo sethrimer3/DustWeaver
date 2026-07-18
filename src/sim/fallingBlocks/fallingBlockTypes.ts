@@ -127,6 +127,9 @@ export interface FallingBlockGroup {
 
   variant: FallingBlockVariant;
 
+  /** Block theme/material override for rendering (e.g. 'blackRock' = Blackstone). Null = default look. */
+  blockThemeId: string | null;
+
   // ── Geometry ──────────────────────────────────────────────────────────────
 
   /** Rest left edge of the group bounding box (world units, constant). */
@@ -210,13 +213,27 @@ export interface FallingBlockGroup {
   /** Countdown ticks until crumble removes the group. */
   crumbleTimerTicks: number;
 
-  // ── Wall slot ─────────────────────────────────────────────────────────────
+  // ── Wall slots ────────────────────────────────────────────────────────────
+  //
+  // A group's true footprint is usually NOT a filled rectangle (concave/irregular
+  // shapes are common), so a single bounding-box wall slot would be solid over
+  // empty holes and would falsely block movement/falling through those holes.
+  // Instead we reserve one wall slot per exact merged run of occupied tiles
+  // (horizontal runs within each row — see loadRoomFallingBlocks), each kept in
+  // sync with the group's current fall offset every tick.
 
-  /**
-   * Index in the world wall arrays that provides the group's solid collision
-   * surface.  -1 means not yet assigned (should never happen at runtime).
-   */
-  wallIndex: number;
+  /** Number of wall slots reserved for this group (equals wallSlotCount). */
+  wallSlotCount: number;
+  /** Index in the world wall arrays for each reserved slot. */
+  wallIndices: Int32Array;
+  /** Left edge of each wall slot relative to restXWorld (world units, constant). */
+  wallSlotRelXWorld: Float32Array;
+  /** Top edge of each wall slot relative to restYWorld (world units, constant). */
+  wallSlotRelYWorld: Float32Array;
+  /** Width of each wall slot (world units, constant). */
+  wallSlotWWorld: Float32Array;
+  /** Height of each wall slot (world units, constant). */
+  wallSlotHWorld: Float32Array;
 
   // ── Debug ─────────────────────────────────────────────────────────────────
 

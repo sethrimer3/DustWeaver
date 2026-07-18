@@ -255,25 +255,34 @@ function triggerGroupsBelow(g: FallingBlockGroup, world: WorldState): void {
 // ── Wall slot management ──────────────────────────────────────────────────────
 
 /**
- * Synchronise the group's reserved wall slot in the world wall arrays to match
- * the group's current vertical position.  Called every tick while the group is
- * not removed.
+ * Synchronise all of the group's reserved wall slots in the world wall arrays
+ * to match the group's current vertical position.  Called every tick while the
+ * group is not removed.
+ *
+ * Each slot is an exact merged run of occupied tiles (see loadRoomFallingBlocks),
+ * never the group's full bounding box, so holes in concave shapes never gain
+ * collision and side-adjacent ordinary terrain never blocks vertical movement.
  */
-function updateWallSlot(g: FallingBlockGroup, world: WorldState): void {
-  const wi = g.wallIndex;
-  if (wi < 0 || wi >= world.wallCount) return;
+export function updateWallSlot(g: FallingBlockGroup, world: WorldState): void {
+  const gx = g.restXWorld;
+  const gy = getFBGroupTopWorld(g);
 
-  if (g.state === FB_STATE_REMOVED) {
-    // Zero out the AABB so the slot contributes no collision
-    world.wallWWorld[wi] = 0;
-    world.wallHWorld[wi] = 0;
-    return;
+  for (let si = 0; si < g.wallSlotCount; si++) {
+    const wi = g.wallIndices[si];
+    if (wi < 0 || wi >= world.wallCount) continue;
+
+    if (g.state === FB_STATE_REMOVED) {
+      // Zero out the AABB so the slot contributes no collision
+      world.wallWWorld[wi] = 0;
+      world.wallHWorld[wi] = 0;
+      continue;
+    }
+
+    world.wallXWorld[wi] = gx + g.wallSlotRelXWorld[si];
+    world.wallYWorld[wi] = gy + g.wallSlotRelYWorld[si];
+    world.wallWWorld[wi] = g.wallSlotWWorld[si];
+    world.wallHWorld[wi] = g.wallSlotHWorld[si];
   }
-
-  world.wallXWorld[wi] = getFBGroupLeftWorld(g);
-  world.wallYWorld[wi] = getFBGroupTopWorld(g);
-  world.wallWWorld[wi] = g.wWorld;
-  world.wallHWorld[wi] = g.hWorld;
 }
 
 // ── Main tick ─────────────────────────────────────────────────────────────────
@@ -293,7 +302,10 @@ export function tickFallingBlocks(world: WorldState, dtMs: number): void {
   // a module-level Set is faster than allocating a new one every tick.
   _fbWallIndexSet.clear();
   for (const g of world.fallingBlockGroups) {
-    if (g.wallIndex >= 0) _fbWallIndexSet.add(g.wallIndex);
+    for (let si = 0; si < g.wallSlotCount; si++) {
+      const wi = g.wallIndices[si];
+      if (wi >= 0) _fbWallIndexSet.add(wi);
+    }
   }
 
   for (const g of world.fallingBlockGroups) {

@@ -362,6 +362,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     xBlock: fb.xBlock,
     yBlock: fb.yBlock,
     variant: fb.variant,
+    blockTheme: fb.blockTheme ?? null,
   }));
 
   const dialogueTriggers: EditorDialogueTrigger[] = (room.dialogueTriggers ?? []).map(dt => ({

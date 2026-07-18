@@ -267,9 +267,9 @@ const _crumbleBurstDoneByGroup = new Uint8Array(64);
  * @param dustRenderer  Shared dust renderer instance.
  * @param isDebugMode   When true, draws debug overlays (variant colours, crosshatch).
  *                      These are NEVER shown during normal gameplay.
- * @param blockMaterial Procedural material name (e.g. 'blackRock') used to look up
- *                      the cookie-cutter block sprite.  Pass null to use the
- *                      neutral dark fallback colour for all tiles.
+ * @param blockMaterial Default procedural material name (e.g. 'blackRock') used for
+ *                      groups that have no per-group `blockThemeId` override. Pass
+ *                      null to use the neutral dark fallback colour for those tiles.
  */
 export function renderFallingBlocks(
   ctx: CanvasRenderingContext2D,
@@ -357,9 +357,14 @@ export function renderFallingBlocks(
       const col = Math.floor((g.restXWorld + g.tileRelXWorld[ti]) / BLOCK_SIZE_MEDIUM);
       const row = Math.floor((g.restYWorld + g.tileRelYWorld[ti]) / BLOCK_SIZE_MEDIUM);
 
+      // Per-group material override (e.g. Blackstone) wins over the room's
+      // default procedural material; resolved through the same canonical
+      // block-sprite lookup ordinary walls use — no crumble-specific fallback.
+      const resolvedMaterial = g.blockThemeId ?? blockMaterial;
+
       let spriteDrawn = false;
-      if (blockMaterial !== null) {
-        const tileSprite = getBlockSprite1x1(col, row, blockMaterial, BLOCK_SIZE_MEDIUM, 0);
+      if (resolvedMaterial !== null) {
+        const tileSprite = getBlockSprite1x1(col, row, resolvedMaterial, BLOCK_SIZE_MEDIUM, 0);
         if (tileSprite !== null) {
           ctx.drawImage(tileSprite, tileLeft, tileTop, tileSz, tileSz);
           spriteDrawn = true;

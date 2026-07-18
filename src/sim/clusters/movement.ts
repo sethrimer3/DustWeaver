@@ -410,7 +410,7 @@ export function applyClusterMovement(world: WorldState): void {
         // ── Grapple charge refresh on ground contact ─────────────────────────
         // The player can only grapple once while airborne.  Touching the ground
         // restores the charge so they can grapple again.
-        if (justLanded || cluster.isGroundedFlag === 1 || world.isGrappleStuckFlag === 1) {
+        if (justLanded || cluster.isGroundedFlag === 1) {
           // Detect the 0→1 recharge transition to trigger the golden ring VFX.
           // At this point hasGrappleChargeFlag is still 0 (we assign 1 below), so
           // the transition is indicated by both prev=0 and current=0 (about to become 1).

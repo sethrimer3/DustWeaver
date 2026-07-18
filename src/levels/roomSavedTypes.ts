@@ -377,8 +377,8 @@ export interface SavedRoomV2 {
   sunrays?: import('./roomDef').RoomSunraysDef;
   /** Designer-placed scene lights (visibility-polygon shadow system). */
   sceneLights?: SavedSceneLight[];
-  /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char]. */
-  fallingBlocks?: [number, number, string][];
+  /** Editor-painted falling block tiles. Stored as compact tuples [x, y, variant_char, blockTheme?]. */
+  fallingBlocks?: [number, number, string, string?][];
   /** Crumble blocks. */
   crumbles?: SavedCrumble[];
   /** Bounce pads. */
