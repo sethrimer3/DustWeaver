@@ -133,6 +133,7 @@ import {
 } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
 import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
+import { getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
 
 /**
  * All dependencies required by `makeLoadRoomPhases`.
@@ -154,6 +155,7 @@ export interface LoadRoomCtx {
   playerCloak: PlayerCloak;
   phantomCloak: PhantomCloakExtension;
   momentumTrail?: import('../render/clusters/momentumTrail').MomentumTrail;
+  stormweaveLifeMotes?: import('../sim/stormweave/lifeMotes').StormweaveLifeMotes;
   decorationWaveState: import('../render/effects/wallDecorations').DecorationWaveState;
   environmentalDust: EnvironmentalDustLayer;
   sunbeamRenderer: SunbeamRenderer;
@@ -450,6 +452,14 @@ function applyRoomEnvironmentAndScheduling(
   playerCloak.reset();
   phantomCloak.reset();
   momentumTrail?.reset();
+  const stormweavePlayer = world.clusters[0];
+  ctx.stormweaveLifeMotes?.reset(
+    stormweavePlayer?.positionXWorld ?? 0,
+    stormweavePlayer?.positionYWorld ?? 0,
+    stormweavePlayer === undefined
+      ? 0
+      : getFullLifeContainerCount(stormweavePlayer.healthPoints),
+  );
 
   decorationWaveState.reset(room.decorations?.length ?? 0);
 

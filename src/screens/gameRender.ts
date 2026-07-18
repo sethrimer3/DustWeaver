@@ -47,6 +47,8 @@ import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer'
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { MomentumTrail } from '../render/clusters/momentumTrail';
+import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
+import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
@@ -137,6 +139,8 @@ export interface RenderFrameContext {
   phantomCloak: PhantomCloakExtension;
   /** Golden high-speed trail — visible while momentum-combat invulnerability is active. */
   momentumTrail: MomentumTrail;
+  /** Runtime visual cloud derived from canonical player health. */
+  stormweaveLifeMotes: StormweaveLifeMotes;
   darkRoomOverlay: DarkRoomOverlay;
   /** Arrow Weave renderer — bow crescent, dissipation, and arrow bodies. */
   arrowWeaveRenderer: ArrowWeaveRenderer;
@@ -298,7 +302,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, phantomCloak, momentumTrail, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -551,6 +555,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
+  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);

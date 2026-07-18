@@ -13,6 +13,7 @@ const HORIZONTAL_POSITION_EPSILON_WORLD = 0.01;
 
 import type { ChallengeModeState } from './challengeMode';
 import { consumeChallengeReturn } from './challengeMode';
+import { getFullLifeContainerCount } from './stormweave/lifeMotes';
 
 
 const INVULNERABILITY_DURATION_TICKS = 90;
@@ -77,6 +78,15 @@ export function applyPlayerDamageWithKnockback(
     player.isGroundedFlag = 0;
     player.challengeReturnGuard = 1;
     options?.clearTransientMovement?.();
+    return true;
+  }
+
+  // A partial dust container is not a life mote. Once no full container
+  // remains, the next otherwise-valid hit is fatal through this canonical
+  // damage path (rather than through visual Stormweave state).
+  if (getFullLifeContainerCount(player.healthPoints) === 0) {
+    player.healthPoints = 0;
+    player.isAliveFlag = 0;
     return true;
   }
 

@@ -3,6 +3,7 @@ import { ParticleKind } from '../sim/particles/kinds';
 import { getElementProfile } from '../sim/particles/elementProfiles';
 import { RngState, nextFloat, nextFloatRange } from '../sim/rng';
 import { PlayerWeaveLoadout, WEAVE_SLOT_PRIMARY, WEAVE_SLOT_SECONDARY } from '../sim/weaves/playerLoadout';
+import { LIFE_DUST_UNITS_PER_CONTAINER } from '../sim/stormweave/lifeMotes';
 
 /** Total particles spawned for the player cluster — distributed across loadout kinds. */
 export const PARTICLE_COUNT_PER_CLUSTER = 20;
@@ -12,7 +13,7 @@ export const BACKGROUND_FLUID_COUNT = 300;
 /** Initial player health (HP). */
 export const PLAYER_INITIAL_HEALTH = 10;
 /** Number of particles per dust container for armor calculation. */
-export const DUST_PARTICLES_PER_CONTAINER = 4;
+export const DUST_PARTICLES_PER_CONTAINER = LIFE_DUST_UNITS_PER_CONTAINER;
 
 /**
  * Spawns `count` particles of `kind` orbiting the given cluster position.

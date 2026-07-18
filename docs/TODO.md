@@ -21,7 +21,8 @@ Keep this file short and actionable. It is not a design document or changelog.
 
 ## Deferred / medium priority
 
-- [ ] Fix the 7 pre-existing `@typescript-eslint/no-explicit-any` lint errors in `src/tests/editorFillBrush.test.ts` (introduced by the 2026-07-12 auto-sync; `npm run lint` fails on them).
+- [ ] Follow up the Stormweave life-mote first stage by migrating/removing the legacy ordered combat-mote queue, Storm-as-equipped-primary gating, Arrow Weave, and Sword Weave without disturbing the new health-derived mote cloud; implement Shield Weave separately.
+- [ ] Fix the 2 pre-existing `no-useless-assignment` lint errors in `src/sim/clusters/playerWallJump.ts` at lines 541 and 546 (`npm run lint` fails on them).
 - [ ] Implement `evictStalePrewarmedChunks` with an LRU or memory cap if warmed chunk memory growth is observed.
 - [ ] Make radius-3 render chunk warming more adaptive by incorporating frame-time checks, if needed.
 - [ ] Expose the prewarm debug panel in pause-menu debug UI if useful.

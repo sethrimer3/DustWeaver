@@ -5,6 +5,7 @@ import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace } from '../render/snapshot';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { MomentumTrail } from '../render/clusters/momentumTrail';
+import { StormweaveLifeMotes, getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
@@ -433,6 +434,7 @@ export function startGameScreen(
   const playerCloak = new PlayerCloak();
   const phantomCloak = new PhantomCloakExtension();
   const momentumTrail = new MomentumTrail();
+  const stormweaveLifeMotes = new StormweaveLifeMotes();
   const decorationWaveState = new DecorationWaveState();
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
@@ -574,6 +576,7 @@ export function startGameScreen(
     playerCloak,
     phantomCloak,
     momentumTrail,
+    stormweaveLifeMotes,
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
@@ -1495,6 +1498,24 @@ export function startGameScreen(
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
       updateRoomChallengeElements(world, progress);
       tick(world);
+      const stormweavePlayer = world.clusters[0];
+      if (stormweavePlayer !== undefined && stormweavePlayer.isAliveFlag === 1) {
+        stormweaveLifeMotes.reconcile(
+          getFullLifeContainerCount(stormweavePlayer.healthPoints),
+          stormweavePlayer.positionXWorld,
+          stormweavePlayer.positionYWorld,
+        );
+        stormweaveLifeMotes.update(
+          FIXED_DT_MS / 1000,
+          stormweavePlayer.positionXWorld,
+          stormweavePlayer.positionYWorld,
+          stormweavePlayer.velocityXWorld,
+          stormweavePlayer.velocityYWorld,
+          stormweavePlayer.isHighVelocityAttacking === 1,
+        );
+      } else {
+        stormweaveLifeMotes.reconcile(0, 0, 0);
+      }
       _simTickCount++;
       // If the player died during this tick, stop processing further ticks in
       // this frame.  Continuing to run enemy AI, spike contact, and force
@@ -1666,7 +1687,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, momentumTrail, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,
