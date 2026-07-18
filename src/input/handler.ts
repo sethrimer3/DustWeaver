@@ -191,10 +191,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       if (!e.repeat) { state.isJumpTriggeredFlag = true; }
       state.isJumpHeldFlag = true;
     }
-    if (keyMatches(e.key, b.sprint)) {
-      e.preventDefault();
-      state.isSprintHeldFlag = true;
-    }
     if (keyMatches(e.key, b.interact) && !e.repeat) {
       state.isInteractTriggeredFlag = true;
     }
@@ -218,14 +214,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = false;
     if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
-    }
-    if (keyMatches(e.key, b.sprint)) {
-      state.isSprintHeldFlag = false;
-    }
-    // If the sprint binding is a modifier key (e.g. Shift), keep sprint active
-    // when the other physical key of the same type is still held.
-    if (b.sprint.toLowerCase() === 'shift' && e.shiftKey) {
-      state.isSprintHeldFlag = true;
     }
   }
   function onMouseMove(e: MouseEvent): void {

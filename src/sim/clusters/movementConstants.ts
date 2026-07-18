@@ -503,12 +503,7 @@ export const ROLLING_ENEMY_SPRITE_RADIUS_WORLD = 5.0;
 
 // ── Player sprint ───────────────────────────────────────────────────────────
 
-/** Sprint speed multiplier applied to MAX_RUN_SPEED when sprinting on ground.
- * Adds another 50% on top of the base run speed when holding shift.
- */
-// Sprint was removed in Movement V2.
-
-/** Ground deceleration multiplier when holding shift (50% less friction). */
+/** Sprint was removed in Movement V2. Dynamic skid tuning follows. */
 
 /** Ground deceleration multiplier when skidding (50% more friction than default). */
 export const SKID_FRICTION_MULTIPLIER = 1.5;
@@ -567,8 +562,7 @@ export const GRAPPLE_SUPER_JUMP_MULTIPLIER = 1.331;
 /**
  * Minimum horizontal speed (world units/s) required to trigger landing-skid
  * dust when the player touches the ground.
- * Set just above sprint speed (MAX_RUN_SPEED × SPRINT_SPEED_MULTIPLIER =
- * 105 × 1.5 = 157.5).  Below this threshold no extra dust appears.
+ * This is a separate high-momentum landing effect. Below 157.5 no extra dust appears.
  */
 export const LANDING_SKID_SPEED_THRESHOLD_WORLD = 157.5;
 

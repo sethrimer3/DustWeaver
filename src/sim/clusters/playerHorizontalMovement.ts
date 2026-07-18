@@ -63,9 +63,8 @@ export function applyPlayerHorizontalMovement(
   }
 
   // ── Skid detection ─────────────────────────────────────────────────
-  // Skid when sprint is held, grounded, moving, and velocity is opposite
-  // to the facing direction (changing direction while sprinting).
-  // Ice surfaces suppress skidding — there is no traction to skid on.
+  // Skid when grounded reversal input opposes walking-speed-or-faster velocity.
+  // Ice, water, ultra ice, and grapple movement suppress skidding.
   {
     const speed = Math.abs(cluster.velocityXWorld);
     const isReversing = inputDx !== 0 && inputDx * cluster.velocityXWorld < 0;

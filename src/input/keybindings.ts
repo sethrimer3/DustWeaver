@@ -17,7 +17,6 @@ export const KB_ACTIONS = [
   'moveRight',
   'moveDown',
   'jump',
-  'sprint',
   'interact',
   'toggleFullscreen',
 ] as const;
@@ -35,7 +34,6 @@ export const KEYBOARD_ACTION_META: Record<KeyboardAction, KeyboardActionMeta> = 
   moveRight:        { label: 'Move Right',         alwaysAlternates: ['ArrowRight'] },
   moveDown:         { label: 'Move Down',          alwaysAlternates: ['ArrowDown'] },
   jump:             { label: 'Jump',               alwaysAlternates: [' ', 'ArrowUp'] },
-  sprint:           { label: 'Sprint',             alwaysAlternates: [] },
   interact:         { label: 'Interact',           alwaysAlternates: [] },
   toggleFullscreen: { label: 'Toggle Fullscreen',  alwaysAlternates: [] },
 };
@@ -45,7 +43,6 @@ export const DEFAULT_KEYBOARD_BINDINGS: Record<KeyboardAction, string> = {
   moveRight:        'd',
   moveDown:         's',
   jump:             'w',
-  sprint:           'Shift',
   interact:         'f',
   toggleFullscreen: 'p',
 };
@@ -55,7 +52,6 @@ export const DEFAULT_KEYBOARD_BINDINGS: Record<KeyboardAction, string> = {
 export const CTRL_ACTIONS = [
   'moveHorizontal',
   'jump',
-  'sprint',
   'interact',
   'primaryAction',
   'secondaryAction',
@@ -67,7 +63,6 @@ export type ControllerAction = typeof CTRL_ACTIONS[number];
 export const CONTROLLER_ACTION_META: Record<ControllerAction, { label: string }> = {
   moveHorizontal: { label: 'Move'             },
   jump:           { label: 'Jump'             },
-  sprint:         { label: 'Sprint / Dash'    },
   interact:       { label: 'Interact'         },
   primaryAction:  { label: 'Attack / Grapple' },
   secondaryAction:{ label: 'Secondary Weave'  },
@@ -77,7 +72,6 @@ export const CONTROLLER_ACTION_META: Record<ControllerAction, { label: string }>
 export const DEFAULT_CONTROLLER_BINDINGS: Record<ControllerAction, string> = {
   moveHorizontal:  'Left Stick',
   jump:            'A / Cross',
-  sprint:          'LB / L1',
   interact:        'B / Circle',
   primaryAction:   'RT / R2',
   secondaryAction: 'LT / L2',

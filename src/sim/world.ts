@@ -262,7 +262,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   playerMoveInputDxWorld: number;
   playerMoveInputDyWorld: number;
-  /** 1 while the sprint key (Shift) is held down. */
+  /** Legacy compatibility field; sprint is removed and this remains 0. */
   playerSprintHeldFlag: 0 | 1;
   /** 1 while the crouch key (S / ArrowDown) is held and player is on the ground. */
   playerCrouchHeldFlag: 0 | 1;

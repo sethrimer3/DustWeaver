@@ -1,7 +1,7 @@
 /**
  * Momentum Combat configuration constants.
  *
- * Sprint max horizontal speed = MAX_RUN_SPEED_WORLD_PER_SEC × SPRINT_SPEED_MULTIPLIER
+ * Ordinary input-generated horizontal speed remains below this threshold.
  *   = 105 × 1.5 = 157.5 px/s.
  *
  * ACTIVATION uses horizontal speed only (ignoring vy) so that a vertical jump

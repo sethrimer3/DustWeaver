@@ -75,7 +75,7 @@ const BREAKABLE_MOMENTUM_THRESHOLD_WORLD = 250.0;
  * Phase 2E break-resistance tiers, chosen from DustWeaver's real movement
  * speed scale (see src/sim/clusters/movementConstants.ts):
  *   - MAX_RUN_SPEED_WORLD_PER_SEC = 105 (normal running/walking top speed)
- *   - sprint speed = MAX_RUN_SPEED_WORLD_PER_SEC * SPRINT_SPEED_MULTIPLIER ≈ 157.5
+ *   - walking input target = 120
  *   - GRAPPLE_ZIP_SPEED_WORLD_PER_SEC = 210
  *   - FAST_MAX_FALL_APPROACH_PER_SEC = 300 (fast-dive vertical speed alone;
  *     combined with any horizontal movement the total magnitude comfortably

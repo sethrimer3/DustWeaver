@@ -18,7 +18,6 @@ import {
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
   setAlwaysCenterCamera,
-  setManualSprintEnabled,
   getPixelSpeedometerEnabled,
   setPixelSpeedometerEnabled,
   getPixelSpeedometerPlacement,
@@ -62,8 +61,6 @@ export interface PauseMenuState {
   alwaysCenterCamera: boolean;
   /** Active world view preset id. */
   worldViewPresetId: WorldViewPresetId;
-  /** When true, sprint requires holding the Sprint key; when false, sprint is always active while moving. */
-  manualSprintEnabled: boolean;
   /** Current combat mode: 'momentum' (default) or 'legacy'. */
   combatMode: CombatMode;
 }
@@ -185,12 +182,6 @@ export function showPauseMenu(
       });
       optionsPanel.appendChild(sfxSlider);
     } else if (activeTab === 'gameplay') {
-      optionsPanel.appendChild(
-        makeCheckboxRow('Manual Sprint (hold Shift)', state.manualSprintEnabled, (enabled) => {
-          state.manualSprintEnabled = enabled;
-          setManualSprintEnabled(enabled);
-        }),
-      );
       optionsPanel.appendChild(
         makeCheckboxRow('Momentum Combat', state.combatMode === 'momentum', (enabled) => {
           const mode: CombatMode = enabled ? 'momentum' : 'legacy';

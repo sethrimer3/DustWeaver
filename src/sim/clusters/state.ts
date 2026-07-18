@@ -442,7 +442,7 @@ export interface ClusterState {
   // ---- Player sprite state (populated only when isPlayerFlag === 1) --------
   /** 1 when the player is facing left (sprites face right by default). */
   isFacingLeftFlag: 0 | 1;
-  /** 1 while the player is sprinting (shift held + grounded + moving). */
+  /** Legacy snapshot field; sprint is removed and this remains 0. */
   isSprintingFlag: 0 | 1;
   /** 1 while the player is crouching (S/down held + grounded). */
   isCrouchingFlag: 0 | 1;
@@ -460,9 +460,9 @@ export interface ClusterState {
   playerIdleNextSwitchTicks: number;
 
   // ---- Player skid / slide state -------------------------------------------
-  /** 1 while the player is skidding (sprint + traveling opposite to facing). */
+  /** 1 while grounded input reverses velocity from walking speed or faster. */
   isSkiddingFlag: 0 | 1;
-  /** 1 while the player is sliding (sprint + crouch/down on ground). */
+  /** Legacy snapshot field; sprint-slide is removed and this remains 0. */
   isSlidingFlag: 0 | 1;
   /** Absolute horizontal velocity latched when a direction-reversal skid begins. */
   skidEntrySpeedWorld: number;
