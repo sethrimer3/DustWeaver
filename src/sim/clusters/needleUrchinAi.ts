@@ -1,5 +1,6 @@
 import type { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { tryBlockHostileProjectile } from '../stormweave/shieldWeave';
 import type { ClusterState } from './state';
 import * as C from './needleUrchinConfig';
 
@@ -229,6 +230,17 @@ export function tickNeedleUrchinProjectiles(world: WorldState): void {
     const wallT = findEarliestNeedleWallHitT(world, x0, y0, x1, y1);
     const wallWins = wallT !== null && (playerT === null || wallT <= playerT + C.NEEDLE_COLLISION_T_EPSILON);
     const impactT = wallWins ? wallT : playerT;
+
+    if (!wallWins && playerT !== null) {
+      const playerImpactX = x0 + (x1 - x0) * playerT;
+      const playerImpactY = y0 + (y1 - y0) * playerT;
+      if (tryBlockHostileProjectile(world.shieldWeave, x0, y0, playerImpactX, playerImpactY)) {
+        world.needleProjectileXWorld[needleIndex] = playerImpactX;
+        world.needleProjectileYWorld[needleIndex] = playerImpactY;
+        world.needleProjectileAliveFlag[needleIndex] = 0;
+        continue;
+      }
+    }
 
     if (impactT !== null && impactT <= 1) {
       world.needleProjectileXWorld[needleIndex] = x0 + (x1 - x0) * impactT;

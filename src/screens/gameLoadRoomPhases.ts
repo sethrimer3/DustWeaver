@@ -134,6 +134,7 @@ import {
 import * as FP from '../debug/perfFreezeProfiler';
 import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
 import { getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
+import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 
 /**
  * All dependencies required by `makeLoadRoomPhases`.
@@ -348,6 +349,7 @@ function resetRoomScopedSimState(world: WorldState): void {
   resetSnakeRuntimeState();
   resetRadiantTetherState();
   resetRadiantWebState();
+  resetShieldWeaveState(world.shieldWeave);
 
   world.isGrappleActiveFlag       = 0;
   world.isGrappleMissActiveFlag   = 0;

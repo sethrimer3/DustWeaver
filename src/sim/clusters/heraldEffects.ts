@@ -1,5 +1,6 @@
 import { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { tryBlockHostileProjectile } from '../stormweave/shieldWeave';
 import {
   MAX_PHANTASMAL_SPIKES,
   MAX_VOID_LASERS,
@@ -437,6 +438,8 @@ export function tickVoidSpheres(world: WorldState): void {
   const player = world.clusters[0];
   for (let i = 0; i < world.voidSphereAliveFlag.length; i++) {
     if (world.voidSphereAliveFlag[i] === 0) continue;
+    const previousX = world.voidSphereXWorld[i];
+    const previousY = world.voidSphereYWorld[i];
     world.voidSphereAgeTicks[i] += 1;
     world.voidSpherePulsePhaseRad[i] += 0.12;
     world.voidSphereXWorld[i] += world.voidSphereVelXWorld[i];
@@ -444,6 +447,17 @@ export function tickVoidSpheres(world: WorldState): void {
 
     const x = world.voidSphereXWorld[i];
     const y = world.voidSphereYWorld[i];
+    if (tryBlockHostileProjectile(
+      world.shieldWeave,
+      previousX,
+      previousY,
+      x,
+      y,
+      VOID_SPHERE_DAMAGE_RADIUS_WORLD,
+    )) {
+      world.voidSphereAliveFlag[i] = 0;
+      continue;
+    }
     if (player !== undefined && player.isAliveFlag === 1 && player.invulnerabilityTicks <= 0) {
       const dx = player.positionXWorld - x;
       const dy = player.positionYWorld - y;

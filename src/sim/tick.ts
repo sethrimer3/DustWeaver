@@ -82,6 +82,8 @@ import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
 import { applyCustomBlockWindVents } from './pixelMaterials/customBlockWindVents';
+import { updateShieldWeaveState } from './stormweave/shieldWeave';
+import { getFullLifeContainerCount } from './stormweave/lifeMotes';
 
 export function tick(world: WorldState): void {
   // Sync world.combatMode from the module singleton (which is updated by the pause menu toggle).
@@ -149,6 +151,28 @@ export function tick(world: WorldState): void {
 
   // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
   applyHazards(world);
+
+  // 0.11. Shield Weave geometry follows the post-movement player body and
+  // canonical health before hostile projectiles run later in this tick.
+  {
+    const player = world.clusters[0];
+    if (player !== undefined && player.isAliveFlag === 1) {
+      updateShieldWeaveState(
+        world.shieldWeave,
+        world.dtMs * 0.001,
+        getFullLifeContainerCount(player.healthPoints),
+        player.positionXWorld,
+        player.positionYWorld,
+        player.halfHeightWorld * 2,
+        world.playerWeaveAimDirXWorld,
+        world.playerWeaveAimDirYWorld,
+      );
+    } else {
+      world.shieldWeave.isHeldRequested = false;
+      world.shieldWeave.isActive = false;
+      world.shieldWeave.moteCount = 0;
+    }
+  }
 
   // 0.15. Rope physics — Verlet integration + constraint relaxation
   tickRopes(world);

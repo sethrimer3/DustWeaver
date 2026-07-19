@@ -1,5 +1,6 @@
 import { WorldState } from '../world';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { tryBlockHostileProjectile } from '../stormweave/shieldWeave';
 import {
   CW_FIRE_DUST_DAMAGE,
   CW_FIRE_DUST_HIT_RADIUS,
@@ -206,6 +207,8 @@ export function tickCrimsonWizardEffects(world: WorldState): void {
   for (let i = 0; i < world.cwProjectileAliveFlag.length; i++) {
     if (world.cwProjectileAliveFlag[i] === 0) continue;
     const type = world.cwProjectileType[i];
+    const previousX = world.cwProjectileXWorld[i];
+    const previousY = world.cwProjectileYWorld[i];
     world.cwProjectileLifetimeTicks[i] -= 1;
     world.cwProjectileXWorld[i] += world.cwProjectileVelXWorld[i];
     world.cwProjectileYWorld[i] += world.cwProjectileVelYWorld[i];
@@ -217,10 +220,13 @@ export function tickCrimsonWizardEffects(world: WorldState): void {
     for (let n = 0; n < trailCount; n++) {
       spawnCrimsonFireDust(world, x + randSigned(world) * size * 0.45, y + randSigned(world) * size * 0.45, -world.cwProjectileVelXWorld[i] * 0.12 + randSigned(world) * 0.35, -0.25 + randSigned(world) * 0.2, 28 + Math.floor(nextFloat(world.rng) * 18));
     }
+    if (tryBlockHostileProjectile(world.shieldWeave, previousX, previousY, x, y, size * 0.5)) {
+      world.cwProjectileHitFlag[i] = 1;
+    }
     if (player !== undefined && player.isAliveFlag === 1 && player.invulnerabilityTicks <= 0) {
       const dx = Math.abs(player.positionXWorld - x);
       const dy = Math.abs(player.positionYWorld - y);
-      if (dx <= player.halfWidthWorld + size * 0.5 && dy <= player.halfHeightWorld + size * 0.5) {
+      if (world.cwProjectileHitFlag[i] === 0 && dx <= player.halfWidthWorld + size * 0.5 && dy <= player.halfHeightWorld + size * 0.5) {
         applyPlayerDamageWithKnockback(player, damage, x, y);
         player.invulnerabilityTicks = Math.max(player.invulnerabilityTicks, CW_PROJECTILE_IFRAMES);
         world.cwProjectileHitFlag[i] = 1;

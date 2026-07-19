@@ -20,6 +20,7 @@
 import { WorldState, MAX_PARTICLES } from '../world';
 import { nextFloat } from '../rng';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
+import { tryBlockHostileProjectile } from '../stormweave/shieldWeave';
 import { ParticleKind } from '../particles/kinds';
 import {
   VS_ACTIVATION_RANGE_WORLD,
@@ -571,12 +572,26 @@ function _tickVSPProjectiles(
     if (world.vspProjAliveFlag[idx] === 0) continue;
 
     // Move.
+    const previousX = world.vspProjXWorld[idx];
+    const previousY = world.vspProjYWorld[idx];
     world.vspProjXWorld[idx] += world.vspProjVelXWorld[idx];
     world.vspProjYWorld[idx] += world.vspProjVelYWorld[idx];
 
     // Tick lifetime.
     world.vspProjLifetimeTicks[idx]--;
     if (world.vspProjLifetimeTicks[idx] <= 0) {
+      world.vspProjAliveFlag[idx] = 0;
+      continue;
+    }
+
+    if (tryBlockHostileProjectile(
+      world.shieldWeave,
+      previousX,
+      previousY,
+      world.vspProjXWorld[idx],
+      world.vspProjYWorld[idx],
+      VSP_PROJ_HIT_RADIUS_WORLD,
+    )) {
       world.vspProjAliveFlag[idx] = 0;
       continue;
     }

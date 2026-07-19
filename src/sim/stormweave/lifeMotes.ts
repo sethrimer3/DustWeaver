@@ -5,6 +5,8 @@
  * serialized and never owns or mutates gameplay life.
  */
 
+import { getShieldMoteAngleRad, type ShieldArcGeometry } from './shieldWeave';
+
 export const LIFE_DUST_UNITS_PER_CONTAINER = 4;
 export const STORMWEAVE_RESTING_REGION_WORLD = 15;
 
@@ -148,6 +150,7 @@ export class StormweaveLifeMotes {
     playerVelocityXWorld: number,
     playerVelocityYWorld: number,
     isAtInvulnerabilitySpeed: boolean,
+    shieldGeometry?: ShieldArcGeometry,
   ): void {
     const dt = Math.max(0, Math.min(dtSec, 0.05));
     if (dt <= 0) return;
@@ -155,8 +158,9 @@ export class StormweaveLifeMotes {
     this.separationX.fill(0, 0, this.count);
     this.separationY.fill(0, 0, this.count);
 
+    const isShieldActive = shieldGeometry?.isActive === true && shieldGeometry.moteCount === this.count;
     const separationRadiusSq = SEPARATION_RADIUS_WORLD * SEPARATION_RADIUS_WORLD;
-    for (let i = 0; i < this.count; i++) {
+    if (!isShieldActive) for (let i = 0; i < this.count; i++) {
       for (let j = i + 1; j < this.count; j++) {
         let dx = this.xWorld[i] - this.xWorld[j];
         let dy = this.yWorld[i] - this.yWorld[j];
@@ -181,12 +185,18 @@ export class StormweaveLifeMotes {
     const damping = Math.exp(-VELOCITY_DAMPING_PER_SEC * dt);
     for (let i = 0; i < this.count; i++) {
       const phase = this.phase[i] + this.elapsedSec * (0.42 + (i % 3) * 0.07);
-      const targetX = playerXWorld + this.preferredOffsetX[i] + Math.cos(phase) * 0.7;
-      const targetY = playerYWorld + this.preferredOffsetY[i] + Math.sin(phase * 0.91) * 0.7;
+      const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
+      const livingOffset = isShieldActive ? Math.sin(phase) * 0.22 : 0;
+      const targetX = isShieldActive
+        ? shieldGeometry.centerXWorld + Math.cos(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
+        : playerXWorld + this.preferredOffsetX[i] + Math.cos(phase) * 0.7;
+      const targetY = isShieldActive
+        ? shieldGeometry.centerYWorld + Math.sin(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
+        : playerYWorld + this.preferredOffsetY[i] + Math.sin(phase * 0.91) * 0.7;
       const dx = targetX - this.xWorld[i];
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
-      const attraction = getStormweaveAttractionAcceleration(distance);
+      const attraction = isShieldActive ? distance * 28 : getStormweaveAttractionAcceleration(distance);
       if (distance > 0.000001) {
         this.velocityXWorld[i] += (dx / distance * attraction + this.separationX[i]) * dt;
         this.velocityYWorld[i] += (dy / distance * attraction + this.separationY[i]) * dt;

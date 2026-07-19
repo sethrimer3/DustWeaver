@@ -8,6 +8,7 @@ import { PixelMaterialSystem } from './pixelMaterials/pixelMaterialSystem';
 import { NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX } from './pixelMaterials/pixelMaterialTypes';
 import { createChallengeModeState, type ChallengeModeState } from './challengeMode';
 import type { RuntimeGate } from './gates/gateState';
+import { createShieldWeaveState, type ShieldWeaveState } from './stormweave/shieldWeave';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -49,6 +50,8 @@ export const MAX_ARROWS = 8;
 export const MOMENTUM_TRAIL_MAX_POINTS = 8;
 
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
+  /** Directional Shield Weave collision state, derived from canonical player life. */
+  shieldWeave: ShieldWeaveState;
   /** Temporary, instance-local state for the currently loaded room's challenge elements. */
   challengeMode: ChallengeModeState;
   gates: RuntimeGate[];
@@ -532,6 +535,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
+    shieldWeave: createShieldWeaveState(),
     combatMode: DEFAULT_COMBAT_MODE,
     challengeMode: createChallengeModeState(),
     gates: [],

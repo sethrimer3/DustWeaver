@@ -259,6 +259,11 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     }
   }
 
+  function onMouseLeave(): void {
+    state.isRightMouseDownFlag = 0;
+    state.isGrappleZipRequestedFlag = 0;
+  }
+
   function onTouchStart(e: TouchEvent): void {
     e.preventDefault();
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -357,6 +362,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('mouseup', onMouseUp);
+  canvas.addEventListener('mouseleave', onMouseLeave);
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
   canvas.addEventListener('touchend', onTouchEnd, { passive: false });
@@ -372,6 +378,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
     canvas.removeEventListener('mouseup', onMouseUp);
+    canvas.removeEventListener('mouseleave', onMouseLeave);
     canvas.removeEventListener('touchstart', onTouchStart);
     canvas.removeEventListener('touchmove', onTouchMove);
     canvas.removeEventListener('touchend', onTouchEnd);
@@ -383,8 +390,6 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
 // Allocates in input layer — acceptable outside sim hot-path
 // Right-click sustained Weave hold state (persists across frames within collectCommands)
 let _rightMouseWasDown = false;
-let _rightMouseDownTimeMs = 0;
-let _isRightWeaveSustainedFlag = false;
 
 export function collectCommands(input: InputState): GameCommand[] {
   const commands: GameCommand[] = [];
@@ -445,32 +450,12 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.GrappleZip });
   }
 
-  // ---- Secondary Weave (right click) --------------------------------------
-  if (input.isRightMouseDownFlag === 1 && !_rightMouseWasDown) {
-    // Right mouse just went down — for burst weaves, we fire on release.
-    // For sustained weaves, we begin holding immediately after threshold.
-    _rightMouseDownTimeMs = performance.now();
-  }
+  // ---- Shield Weave (right click) -----------------------------------------
   if (input.isRightMouseDownFlag === 0 && _rightMouseWasDown) {
-    // Right mouse released
-    const holdMs = performance.now() - _rightMouseDownTimeMs;
-    if (_isRightWeaveSustainedFlag) {
-      _isRightWeaveSustainedFlag = false;
-      commands.push({ kind: CommandKind.WeaveEndSecondary });
-    } else if (holdMs < ATTACK_HOLD_THRESHOLD_MS) {
-      // Quick right click → burst activation of secondary Weave
-      commands.push({ kind: CommandKind.WeaveActivateSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
-    }
+    commands.push({ kind: CommandKind.ShieldWeaveEnd });
   }
-  if (input.isRightMouseDownFlag === 1 && !_isRightWeaveSustainedFlag) {
-    const holdMs = performance.now() - _rightMouseDownTimeMs;
-    if (holdMs >= ATTACK_HOLD_THRESHOLD_MS) {
-      _isRightWeaveSustainedFlag = true;
-      commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
-    }
-  }
-  if (_isRightWeaveSustainedFlag && input.isRightMouseDownFlag === 1) {
-    commands.push({ kind: CommandKind.WeaveHoldSecondary, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
+  if (input.isRightMouseDownFlag === 1) {
+    commands.push({ kind: CommandKind.ShieldWeaveHold, aimXPx: input.mouseXPx, aimYPx: input.mouseYPx });
   }
   _rightMouseWasDown = input.isRightMouseDownFlag === 1;
 

@@ -555,7 +555,7 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom);
+  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom, world.shieldWeave);
 
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);

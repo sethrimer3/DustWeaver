@@ -208,6 +208,25 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0) {
         world.isGrappleZipTriggeredFlag = 1;
       }
+    } else if (cmd.kind === CommandKind.ShieldWeaveHold) {
+      const player = world.clusters[0];
+      if (world.isGrappleActiveFlag === 1 || player === undefined || player.isAliveFlag === 0) {
+        world.shieldWeave.isHeldRequested = false;
+        world.shieldWeave.isActive = false;
+      } else {
+        const aim = screenToWorld(cmd.aimXPx, cmd.aimYPx, offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx);
+        const dx = aim.xWorld - player.positionXWorld;
+        const dy = aim.yWorld - player.positionYWorld;
+        const length = Math.hypot(dx, dy);
+        if (length >= 0.001) {
+          world.playerWeaveAimDirXWorld = dx / length;
+          world.playerWeaveAimDirYWorld = dy / length;
+        }
+        world.shieldWeave.isHeldRequested = true;
+      }
+    } else if (cmd.kind === CommandKind.ShieldWeaveEnd) {
+      world.shieldWeave.isHeldRequested = false;
+      world.shieldWeave.isActive = false;
     } else if (cmd.kind === CommandKind.WeaveActivateSecondary) {
       // Skip secondary Weave while grapple is active (right-click = zip in that state).
       if (!world.isGrappleActiveFlag) {
@@ -257,6 +276,8 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
           // If RMB is held while firing, trigger an instant zip toward the new anchor.
           if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
               && ctx.inputState.isRightMouseDownFlag === 1) {
+            world.shieldWeave.isHeldRequested = false;
+            world.shieldWeave.isActive = false;
             world.isGrappleZipTriggeredFlag = 1;
           }
         }

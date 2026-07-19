@@ -6,6 +6,7 @@ import { createReusableSnapshot, updateSnapshotInPlace } from '../render/snapsho
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { MomentumTrail } from '../render/clusters/momentumTrail';
 import { StormweaveLifeMotes, getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
+import { deactivateShieldWeave, updateShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
 import { EnvironmentalDustLayer } from '../render/environmentalDust';
@@ -1360,6 +1361,7 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
@@ -1369,6 +1371,7 @@ export function startGameScreen(
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
@@ -1500,8 +1503,21 @@ export function startGameScreen(
       tick(world);
       const stormweavePlayer = world.clusters[0];
       if (stormweavePlayer !== undefined && stormweavePlayer.isAliveFlag === 1) {
+        const fullLifeContainerCount = getFullLifeContainerCount(stormweavePlayer.healthPoints);
+        if (world.shieldWeave.isActive && world.shieldWeave.moteCount !== fullLifeContainerCount) {
+          updateShieldWeaveState(
+            world.shieldWeave,
+            0,
+            fullLifeContainerCount,
+            stormweavePlayer.positionXWorld,
+            stormweavePlayer.positionYWorld,
+            stormweavePlayer.halfHeightWorld * 2,
+            world.playerWeaveAimDirXWorld,
+            world.playerWeaveAimDirYWorld,
+          );
+        }
         stormweaveLifeMotes.reconcile(
-          getFullLifeContainerCount(stormweavePlayer.healthPoints),
+          fullLifeContainerCount,
           stormweavePlayer.positionXWorld,
           stormweavePlayer.positionYWorld,
         );
@@ -1512,8 +1528,10 @@ export function startGameScreen(
           stormweavePlayer.velocityXWorld,
           stormweavePlayer.velocityYWorld,
           stormweavePlayer.isHighVelocityAttacking === 1,
+          world.shieldWeave,
         );
       } else {
+        deactivateShieldWeave(world.shieldWeave);
         stormweaveLifeMotes.reconcile(0, 0, 0);
       }
       _simTickCount++;

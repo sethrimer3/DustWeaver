@@ -33,6 +33,8 @@ export enum CommandKind {
   GrappleZip = 18,
   /** Advance the current dialogue entry (Enter or E key, left mouse click). */
   AdvanceDialogue = 19,
+  ShieldWeaveHold = 20,
+  ShieldWeaveEnd = 21,
 }
 
 export interface MovePlayerCommand {
@@ -158,6 +160,16 @@ export interface AdvanceDialogueCommand {
   kind: CommandKind.AdvanceDialogue;
 }
 
+export interface ShieldWeaveHoldCommand {
+  kind: CommandKind.ShieldWeaveHold;
+  aimXPx: number;
+  aimYPx: number;
+}
+
+export interface ShieldWeaveEndCommand {
+  kind: CommandKind.ShieldWeaveEnd;
+}
+
 export type GameCommand =
   | MovePlayerCommand
   | ReturnToMapCommand
@@ -178,4 +190,6 @@ export type GameCommand =
   | ToggleFullscreenCommand
   | OpenMapCommand
   | GrappleZipCommand
-  | AdvanceDialogueCommand;
+  | AdvanceDialogueCommand
+  | ShieldWeaveHoldCommand
+  | ShieldWeaveEndCommand;
