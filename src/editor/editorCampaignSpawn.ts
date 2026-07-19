@@ -98,7 +98,7 @@ export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number,
  * modal and then places the new campaign spawn when the user clicks Yes.
  */
 export function showCampaignSpawnReplaceModal(ctx: CampaignSpawnContext, newXBlock: number, newYBlock: number): void {
-  const { uiRoot } = ctx;
+  const { uiRoot, state } = ctx;
   const backdrop = document.createElement('div');
   backdrop.style.cssText = [
     'position:absolute', 'top:0', 'left:0', 'width:100%', 'height:100%',
@@ -117,8 +117,10 @@ export function showCampaignSpawnReplaceModal(ctx: CampaignSpawnContext, newXBlo
     'min-width:300px', 'box-shadow:0 0 30px rgba(0,0,0,0.8)',
   ].join(';');
 
+  const oldRoomId = ctx.campaignSession?.campaign.campaign.campaignSpawn?.roomId ?? 'another room';
+  const newRoomId = state.roomData?.id ?? 'this room';
   const msg = document.createElement('div');
-  msg.textContent = 'This will remove the current campaign spawn, proceed?';
+  msg.textContent = `Move the campaign spawn from "${oldRoomId}" to "${newRoomId}"?`;
   msg.style.cssText = [
     'font-size:15px', 'font-weight:bold', 'color:#ffe060',
     'letter-spacing:0.04em', 'text-align:center', 'max-width:280px',
@@ -147,6 +149,8 @@ export function showCampaignSpawnReplaceModal(ctx: CampaignSpawnContext, newXBlo
   yesBtn.addEventListener('click', () => {
     dismiss();
     placeCampaignSpawn(ctx, newXBlock, newYBlock);
+    // Auto-select the marker so the inspector shows it immediately.
+    state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
   });
   noBtn.addEventListener('click', () => { dismiss(); });
 

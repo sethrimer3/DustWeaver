@@ -1357,13 +1357,13 @@ export function createEditorController(
           applyEdits('placement');
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
-        } else if (state.activeTool === EditorTool.Place) {
-          if (state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
-            // Rect brush: first click sets the drag start — don't place yet.
-            state.brushRectStartBlockX = state.cursorBlockX;
-            state.brushRectStartBlockY = state.cursorBlockY;
-          } else if (state.selectedPaletteItem?.id === 'campaign_spawn') {
+        } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.id === 'campaign_spawn') {
             // Campaign spawn: singleton logic — only one allowed in the entire campaign.
+            // This branch is checked BEFORE any brush-mode expansion (rect/fill/3x3/5x5)
+            // so campaign spawn always places as a single cell regardless of the
+            // currently selected brush mode, and never leaves stray rect-brush state.
+            state.brushRectStartBlockX = null;
+            state.brushRectStartBlockY = null;
             const bx = state.cursorBlockX;
             const by = state.cursorBlockY;
             const existingSpawn = activeCampaignSession.campaign.campaign.campaignSpawn;
@@ -1371,11 +1371,20 @@ export function createEditorController(
               existingSpawn.roomId === state.roomData?.id;
             if (existingSpawn !== undefined && !isInCurrentRoom) {
                 // Spawn exists in a different room — ask before replacing.
+                // Auto-select happens inside the modal's confirm callback (see
+                // editorCampaignSpawn.ts), not here — nothing has moved yet.
               showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by);
             } else {
                 // Either no spawn yet, or spawn is already in this room — update silently.
               placeCampaignSpawn(campaignSpawnCtx, bx, by);
+              // Auto-select the marker so the inspector shows it immediately.
+              state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
             }
+        } else if (state.activeTool === EditorTool.Place) {
+          if (state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
+            // Rect brush: first click sets the drag start — don't place yet.
+            state.brushRectStartBlockX = state.cursorBlockX;
+            state.brushRectStartBlockY = state.cursorBlockY;
           } else {
             const totalPlacementStartMs = import.meta.env.DEV ? performance.now() : 0;
             // Measure pushSnapshot cost separately on the placement hot path.
