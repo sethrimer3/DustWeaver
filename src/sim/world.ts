@@ -450,6 +450,63 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   swordWeaveLengthRatio: number;
 
+  // ── Stage 3: independent Sword/Shield/Bow Weave unlock flags ───────────────
+  // Set from PlayerProgress.unlockedActiveWeaves at room activation (see
+  // gameLoadRoomPhases.ts applyPlayerWeaveWorldFields). These are independent
+  // of `playerSecondaryWeaveId` (the legacy single-slot equip choice) — any
+  // combination may be true simultaneously.
+  hasSwordWeaveUnlockedFlag: 0 | 1;
+  hasShieldWeaveUnlockedFlag: 0 | 1;
+  hasBowWeaveUnlockedFlag: 0 | 1;
+
+  // ── Independent Sword Weave (Stage 3) — press-driven single crescent swipe ─
+  // See sim/weaves/secondaryWeaveCoordinator.ts and sim/weaves/swordWeave.ts.
+  /** 1 while a swipe (from press through recovery) is in progress. */
+  newSwordActiveFlag: 0 | 1;
+  /** Gesture id (from secondaryWeaveGesture) this swipe belongs to; -1 = none. */
+  newSwordGestureId: number;
+  /** Ticks elapsed since the swipe started. */
+  newSwordTicksElapsed: number;
+  /** Press-time aim angle (radians); fixed for the whole swipe — no retarget. */
+  newSwordAimAngleRad: number;
+  /** Current sweep angle this tick (radians), interpolated across the swipe. */
+  newSwordCurrentAngleRad: number;
+  newSwordHandAnchorXWorld: number;
+  newSwordHandAnchorYWorld: number;
+  /** Reach (world units) computed from available motes at swipe start. */
+  newSwordReachWorld: number;
+  /**
+   * 0..1 sub-phase progress exposed for Stage 5 rendering to interpolate the
+   * sword→shield visual handoff. 0 = pure sword, 1 = fully handed off to
+   * shield ownership of the same motes (sim only exposes discrete state; the
+   * smooth interpolation itself belongs to the renderer).
+   */
+  newSwordToShieldTransition01: number;
+
+  // ── Independent Bow Weave (Stage 3) — press/hold charge, release fire ──────
+  /** 1 while the bow is logically charging (tier tracked but motes not spent). */
+  newBowChargingFlag: 0 | 1;
+  /** Gesture id this charge belongs to. */
+  newBowGestureId: number;
+  /** World tick charging began. */
+  newBowChargeStartTick: number;
+  /** Current logical tier (2/3/4), live-clamped by available motes. */
+  newBowTierMoteCount: number;
+  /**
+   * Quick-release-during-sword latch: true when the player released while
+   * the sword swipe (that started in or before this gesture) had not yet
+   * finished. Captures the release aim + tier so the bow can fire at the
+   * first safe tick after the sword completes.
+   */
+  newBowPendingReleaseFlag: 0 | 1;
+  newBowPendingReleaseAimXWorld: number;
+  newBowPendingReleaseAimYWorld: number;
+  newBowPendingReleaseMoteCount: number;
+  /** Dust kind (ParticleKind) captured per fired arrow, MAX_ARROWS entries. */
+  arrowDustKind: Uint8Array;
+  /** 1 while the independent (Stage 3) Shield Weave crescent currently owns the player's motes. */
+  shieldWeaveIndependentActiveFlag: 0 | 1;
+
   // ── Ordered Mote Queue ─────────────────────────────────────────────────────
   /**
    * Number of active logical mote slots for the player.
@@ -737,6 +794,31 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     swordWeaveHandAnchorXWorld:    0,
     swordWeaveHandAnchorYWorld:    0,
     swordWeaveLengthRatio:         1.0,
+    arrowDustKind:                 new Uint8Array(MAX_ARROWS),
+    shieldWeaveIndependentActiveFlag: 0,
+    // ── Stage 3: independent Sword/Shield/Bow unlock flags ─────────────
+    hasSwordWeaveUnlockedFlag:     0,
+    hasShieldWeaveUnlockedFlag:    0,
+    hasBowWeaveUnlockedFlag:       0,
+    // ── Independent Sword Weave ─────────────────────────────────────────
+    newSwordActiveFlag:            0,
+    newSwordGestureId:             -1,
+    newSwordTicksElapsed:          0,
+    newSwordAimAngleRad:           0,
+    newSwordCurrentAngleRad:       0,
+    newSwordHandAnchorXWorld:      0,
+    newSwordHandAnchorYWorld:      0,
+    newSwordReachWorld:            0,
+    newSwordToShieldTransition01:  0,
+    // ── Independent Bow Weave ───────────────────────────────────────────
+    newBowChargingFlag:            0,
+    newBowGestureId:               -1,
+    newBowChargeStartTick:         -1,
+    newBowTierMoteCount:           0,
+    newBowPendingReleaseFlag:      0,
+    newBowPendingReleaseAimXWorld: 0,
+    newBowPendingReleaseAimYWorld: 0,
+    newBowPendingReleaseMoteCount: 0,
     // ── Ordered Mote Queue ────────────────────────────────────────────
     moteSlotCount:              0,
     moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),

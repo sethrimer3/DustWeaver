@@ -894,7 +894,10 @@ export function startGameScreen(
   // ── Dust selection wheel ────────────────────────────────────────────────
   const dustWheelController = new DustSelectionWheelController();
   const dustWheelGestureState = createDustWheelGestureState();
-  const onDustWheelBlur = (): void => { dustWheelController.cancel(performance.now()); };
+  const onDustWheelBlur = (): void => {
+    dustWheelController.cancel(performance.now());
+    cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
+  };
   window.addEventListener('blur', onDustWheelBlur);
 
   function preloadAdjacentCurrentRoomAssets(): void {
@@ -1384,6 +1387,7 @@ export function startGameScreen(
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
       dustWheelController.cancel(timestampMs);
+      cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
@@ -1395,6 +1399,7 @@ export function startGameScreen(
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
       dustWheelController.cancel(timestampMs);
+      cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
@@ -1439,6 +1444,7 @@ export function startGameScreen(
         // A room transition beginning always closes the wheel safely — the
         // new room's mote queue is rebuilt from scratch on load anyway.
         dustWheelController.cancel(timestampMs);
+        cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
         transitionCoordinator.submitTransition(room, spawnXBlock, spawnYBlock, vx, vy, dir);
       },
       resolveSpawnBlock,
@@ -1475,7 +1481,10 @@ export function startGameScreen(
         dialogueState, dialogueRenderer,
       );
       // Dialogue opening (via trigger or otherwise) closes an open wheel safely.
-      if (dialogueState.isDialogueActiveFlag) dustWheelController.cancel(timestampMs);
+      if (dialogueState.isDialogueActiveFlag) {
+        dustWheelController.cancel(timestampMs);
+        cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
+      }
     }
 
     // During active dialogue, freeze player movement (suppress moveDx/jump inputs).

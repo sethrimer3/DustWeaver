@@ -16,8 +16,8 @@ import {
   fireArrowFromLoading,
 } from './arrowWeave';
 import { tickSwordWeave } from './swordWeave';
-import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
-import { isDustSwitchBehaviorMode } from '../particles/dustSwitchBehaviorMode';
+import { applyShieldWeaveCrescent } from './shieldWeave';
+import { tickSecondaryWeaveCoordinator } from './secondaryWeaveCoordinator';
 
 // ── Storm Weave constants ───────────────────────────────────────────────────
 
@@ -29,22 +29,6 @@ const STORM_ATTRACT_STRENGTH = 120.0;
 const STORM_CLAIM_RADIUS_WORLD = 12.0;
 /** Minimum lifetime (ticks) assigned to newly claimed dust to prevent instant expiration. */
 const MIN_CLAIMED_DUST_LIFETIME_TICKS = 2.0;
-
-// ── Shield Weave constants ──────────────────────────────────────────────────
-
-/** Distance (world units) from player center at which the crescent forms. */
-const SHIELD_CRESCENT_RADIUS_WORLD = 12.0;
-/** Minimum half-arc angle (radians) for 1 particle. */
-const SHIELD_MIN_HALF_ARC_RAD = 0.15;
-/** Maximum half-arc angle (radians) for maximum particles. */
-const SHIELD_MAX_HALF_ARC_RAD = Math.PI * 0.5;
-/** Spring force strength pulling particles toward their crescent position. */
-const SHIELD_SPRING_STRENGTH = 600.0;
-/**
- * Number of particles at which the crescent reaches maximum arc.
- * Beyond this, particles pack more densely rather than widening further.
- */
-const SHIELD_MAX_ARC_PARTICLE_COUNT = 30;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -122,110 +106,36 @@ function applyStormAttraction(world: WorldState): void {
   }
 }
 
-// ── Shield Weave: crescent formation ────────────────────────────────────────
-
-/**
- * Computes the arc-t position (0..1 along the crescent) for a mote at `rank`
- * in the center-out ordering.  Rank 0 gets the center, rank 1 just above,
- * rank 2 just below, rank 3 further above, etc.
- *
- * This ensures the highest-priority (earliest-queue) motes occupy the
- * strongest defensive positions at the shield's center.
- *
- * Allocation-free and branchless after rank/n resolution.
- */
-function _centerOutArcT(rank: number, n: number): number {
-  if (n <= 1) return 0.5;
-  // Map from even positions (0..n-1) to center-out order.
-  // center = floor((n-1)/2); odd ranks go above, even (>0) go below.
-  const center = Math.floor((n - 1) / 2);
-  let posIdx: number;
-  if (rank === 0) {
-    posIdx = center;
-  } else if (rank % 2 === 1) {
-    posIdx = center + Math.ceil(rank / 2);
-  } else {
-    posIdx = center - (rank / 2);
-  }
-  // Clamp to valid range in case of odd n edge cases.
-  posIdx = Math.max(0, Math.min(n - 1, posIdx));
-  return posIdx / (n - 1);
-}
-
-/**
- * Applies spring forces that hold the player's available mote particles in a
- * crescent formation centred on the aim direction.
- *
- * Uses the ordered mote queue so shield density reflects available motes
- * and earlier-queue motes occupy the strongest center positions.
- *
- * **Prerequisite**: `initMoteQueueFromParticles` must have been called at
- * room-load time to populate `world.moteSlotParticleIndex`.  If it was not
- * called, `world.moteSlotCount` will be 0 and this function becomes a no-op,
- * which is safe but produces no shield.
- */
-function applyShieldCrescent(
-  world: WorldState,
-  playerX: number,
-  playerY: number,
-  aimDirX: number,
-  aimDirY: number,
-): void {
-  // Use the ordered mote queue so shield density reflects available motes
-  // and earlier-queue motes occupy the strongest center positions.
-  const available = getAvailableOrderedMoteSlots(world);
-  const total = available.count;
-  if (total === 0) return;
-
-  // Arc half-angle scales with how many motes are present.
-  const arcT = Math.min(1.0, total / SHIELD_MAX_ARC_PARTICLE_COUNT);
-  const halfArcRad = SHIELD_MIN_HALF_ARC_RAD + arcT * (SHIELD_MAX_HALF_ARC_RAD - SHIELD_MIN_HALF_ARC_RAD);
-
-  // Center angle from aim direction.
-  const centerAngle = Math.atan2(aimDirY, aimDirX);
-
-  for (let rank = 0; rank < total; rank++) {
-    const slot = available.indices[rank];
-    const pidx = world.moteSlotParticleIndex[slot];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
-    if (world.isAliveFlag[pidx] === 0) continue;
-    // Mid dust-switch transition — excluded from the shield crescent so it
-    // cannot intercept attacks while recalling/returning.
-    if (isDustSwitchBehaviorMode(world.behaviorMode[pidx])) continue;
-
-    // Center-out arc position: rank 0 = center, rank 1 = above, rank 2 = below …
-    const arcPosition = _centerOutArcT(rank, total);
-    const angle = centerAngle - halfArcRad + arcPosition * 2.0 * halfArcRad;
-
-    // Target position on the crescent.
-    const targetX = playerX + Math.cos(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
-    const targetY = playerY + Math.sin(angle) * SHIELD_CRESCENT_RADIUS_WORLD;
-
-    // Spring force toward target position.
-    const dx = targetX - world.positionXWorld[pidx];
-    const dy = targetY - world.positionYWorld[pidx];
-    world.forceX[pidx] += dx * SHIELD_SPRING_STRENGTH;
-    world.forceY[pidx] += dy * SHIELD_SPRING_STRENGTH;
-
-    // Set to block mode so binding forces don't interfere.
-    world.behaviorMode[pidx] = 2;
-  }
-}
-
 // ── Public entry point ──────────────────────────────────────────────────────
 
 /**
  * Applies weave combat forces for the player each tick.
  *
- * Called from tick.ts. Handles:
- *   1. Storm Weave — passive attraction of nearby unowned Gold Dust
- *   2. Shield Weave — crescent formation when primary/secondary is held
+ * Called from tick.ts.
+ *
+ * `combatMode === 'legacy'` runs the original single-equipped-slot system
+ * (Storm attraction, Shield/Arrow/Shield-Sword secondary branching) exactly
+ * as before — untouched, so existing legacy-mode tests and momentum-mode
+ * collision damage rules are unaffected.
+ *
+ * The default (non-legacy) gameplay mode now runs the Stage 3 independent
+ * Sword/Shield/Bow coordinator instead of returning early: previously this
+ * function no-op'd entirely outside legacy mode, which disabled ALL player
+ * weave offense in the actual default game mode. Storm Weave's passive
+ * attraction remains legacy-only (unrelated to Sword/Shield/Bow and not
+ * blocking this stage's scope); momentum-based player collision damage is
+ * computed entirely outside this function and is unaffected either way.
  */
 export function applyPlayerWeaveCombat(world: WorldState): void {
-  // All player weave offense (Storm attraction, Shield, Arrow, Sword) is legacy-only.
-  // In momentum mode, the player deals damage via velocity collision, not dust/weaves.
-  if (world.combatMode !== 'legacy') return;
+  if (world.combatMode === 'legacy') {
+    applyLegacyPlayerWeaveCombat(world);
+    return;
+  }
 
+  tickSecondaryWeaveCoordinator(world);
+}
+
+function applyLegacyPlayerWeaveCombat(world: WorldState): void {
   // ── Storm Weave — only active when Storm is the equipped primary weave ────
   // Storm passively attracts nearby unowned Gold Dust to orbit the player.
   // When another primary weave is equipped, dust materializes from inventory
@@ -349,7 +259,7 @@ export function applyPlayerWeaveCombat(world: WorldState): void {
   if (world.isPlayerPrimaryWeaveActiveFlag === 1 || isShieldSecondaryActive) {
     const aimX = world.playerWeaveAimDirXWorld;
     const aimY = world.playerWeaveAimDirYWorld;
-    applyShieldCrescent(world, playerX, playerY, aimX, aimY);
+    applyShieldWeaveCrescent(world, playerX, playerY, aimX, aimY);
   }
 }
 

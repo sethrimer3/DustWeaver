@@ -29,23 +29,18 @@ import {
   ODC_SMALL_RING_COUNT,
   ODC_LARGE_RING_COUNT,
 } from '../clusters/orbitalDustCoreConfig';
+import {
+  getBowSpeedForMoteCount,
+  getBowGravityForMoteCount,
+  getBowLifetimeForMoteCount,
+} from './bowProjectilePhysics';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** Ticks from loading start until mote 3 appears (0.5 s at 60 fps). */
-const MOTE_3_LOAD_TICKS = 30;
+export const MOTE_3_LOAD_TICKS = 30;
 /** Total ticks from loading start until mote 4 appears (1.0 s at 60 fps). */
-const MOTE_4_LOAD_TICKS = 60;
-
-/** Initial speed (wu/s) for each arrow tier. */
-const ARROW_SPEED_2_WORLD = 180.0;
-const ARROW_SPEED_3_WORLD = 260.0;
-const ARROW_SPEED_4_WORLD = 320.0;
-
-/** Downward gravity acceleration (wu/s²) per tier.  0 = straight-line (4-mote). */
-const ARROW_GRAVITY_2_WS2 = 200.0;
-const ARROW_GRAVITY_3_WS2 = 140.0;
-const ARROW_GRAVITY_4_WS2 = 0.0;
+export const MOTE_4_LOAD_TICKS = 60;
 
 /** Stuck-arrow lifetime (ticks) per tier — also used by the renderer for fade calculations. */
 export const ARROW_LIFETIME_2_TICKS = 300;  // 5 s
@@ -70,18 +65,19 @@ const ARROW_DAMAGE_COOLDOWN_TICKS = 90;
 // ── Private helpers ───────────────────────────────────────────────────────────
 
 function _gravity(moteCount: number): number {
-  if (moteCount === 4) return ARROW_GRAVITY_4_WS2;
-  if (moteCount === 3) return ARROW_GRAVITY_3_WS2;
-  return ARROW_GRAVITY_2_WS2;
+  return getBowGravityForMoteCount(moteCount);
 }
 
 function _lifetime(moteCount: number): number {
-  if (moteCount === 4) return ARROW_LIFETIME_4_TICKS;
-  if (moteCount === 3) return ARROW_LIFETIME_3_TICKS;
-  return ARROW_LIFETIME_2_TICKS;
+  return getBowLifetimeForMoteCount(moteCount);
 }
 
-function _findFreeSlot(world: WorldState): number {
+/**
+ * Finds a free arrow slot (reusing an expired one, or extending the buffer
+ * if capacity allows). Returns -1 if no room. Exported so bowWeave.ts can
+ * reserve a slot BEFORE depleting motes (reservation-first ordering).
+ */
+export function findFreeArrowSlot(world: WorldState): number {
   // Reuse slots whose lifetime has expired
   for (let i = 0; i < world.arrowCount; i++) {
     if (world.arrowLifetimeTicksLeft[i] <= 0) return i;
@@ -89,6 +85,10 @@ function _findFreeSlot(world: WorldState): number {
   // Extend array if capacity allows
   if (world.arrowCount < MAX_ARROWS) return world.arrowCount++;
   return -1;
+}
+
+function _findFreeSlot(world: WorldState): number {
+  return findFreeArrowSlot(world);
 }
 
 // ── Public API: loading lifecycle ─────────────────────────────────────────────
@@ -171,9 +171,7 @@ export function fireArrowFromLoading(
   const aimDirX = world.playerWeaveAimDirXWorld;
   const aimDirY = world.playerWeaveAimDirYWorld;
 
-  const speed = moteCount === 4 ? ARROW_SPEED_4_WORLD
-    : moteCount === 3 ? ARROW_SPEED_3_WORLD
-    : ARROW_SPEED_2_WORLD;
+  const speed = getBowSpeedForMoteCount(moteCount);
 
   world.arrowXWorld[slot]                = playerXWorld;
   world.arrowYWorld[slot]                = playerYWorld;

@@ -65,6 +65,8 @@ import {
   sanitizePlayerWeaveLoadoutForProgress,
 } from '../sim/weaves/playerLoadout';
 import { WEAVE_NONE, WEAVE_STORM } from '../sim/weaves/weaveDefinition';
+import { hasSwordWeave, hasShieldWeave, hasBowWeave } from '../progression/weaveMigration';
+import { resetSecondaryWeaveCoordinatorState } from '../sim/weaves/secondaryWeaveCoordinator';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
@@ -386,6 +388,14 @@ function applyPlayerWeaveWorldFields(
   world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
   world.isMoteSourceOrbitFlag          = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
   world.characterId                    = ctx.progress?.characterId ?? 'knight';
+
+  // Stage 3: independent Sword/Shield/Bow unlock flags, read directly from
+  // progression rather than the single equipped secondary-weave slot above —
+  // all three may be simultaneously usable regardless of what is equipped.
+  world.hasSwordWeaveUnlockedFlag  = ctx.progress !== undefined && hasSwordWeave(ctx.progress) ? 1 : 0;
+  world.hasShieldWeaveUnlockedFlag = ctx.progress !== undefined && hasShieldWeave(ctx.progress) ? 1 : 0;
+  world.hasBowWeaveUnlockedFlag    = ctx.progress !== undefined && hasBowWeave(ctx.progress) ? 1 : 0;
+  resetSecondaryWeaveCoordinatorState(world);
 }
 
 /** Camera / spawn inputs for `applyRoomEnvironmentAndScheduling`. */

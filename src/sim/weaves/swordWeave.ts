@@ -503,6 +503,190 @@ function _resolveLiveTarget(world: WorldState): ClusterState | null {
   return c;
 }
 
+// ── Stage 3: independent Sword Weave (press-driven single crescent swipe) ────
+//
+// Unlike the legacy `tickSwordWeave` FSM above (auto-swing + guard-swipe,
+// driven by the single equipped-secondary-weave slot and only reachable in
+// `combatMode === 'legacy'`), this is the new independently-unlockable Sword
+// Weave driven by `secondaryWeaveGesture.ts` press events. It is a single
+// press-time-aimed crescent swipe: no continuous retarget once started, no
+// idle auto-target/auto-swing, swept angular-interval collision (not
+// single-angle) so a fast swing cannot tunnel past an enemy, and a
+// resettable per-gesture hit registry so each enemy takes damage at most
+// once per swipe.
+
+/** Ticks the new sword swipe takes to complete (press → recovery-free end). */
+export const NEW_SWORD_SLASH_TICKS = 10;
+/** Total angular sweep of the new sword's swipe (radians). */
+const NEW_SWORD_SLASH_ARC_RAD = Math.PI * 0.75;
+const NEW_SWORD_SLASH_HALF_ARC_RAD = NEW_SWORD_SLASH_ARC_RAD * 0.5;
+/** Whole-number damage applied to each enemy hit once per swipe. */
+const NEW_SWORD_DAMAGE = 2;
+
+/** Per-gesture hit registry for the new sword swipe — reset at swipe start. */
+const _newSwordHitFlags = new Uint8Array(MAX_HIT_REGISTRY_SLOTS);
+
+/** Computes the hand anchor position for the new sword, mirroring the legacy formula. */
+export function computeNewSwordHandAnchor(player: ClusterState, out: { xWorld: number; yWorld: number }): void {
+  const facingSign = player.isFacingLeftFlag === 1 ? -1.0 : 1.0;
+  out.xWorld = player.positionXWorld + HAND_ANCHOR_X_OFFSET_WORLD * facingSign;
+  out.yWorld = player.positionYWorld + HAND_ANCHOR_Y_OFFSET_WORLD;
+}
+
+const _newSwordAnchorScratch = { xWorld: 0, yWorld: 0 };
+
+/**
+ * Starts a new sword swipe using the gesture's press-time aim world position.
+ * Reach scales from currently-available ordinary motes using the same
+ * formula as the legacy sword (`SWORD_REACH_WORLD * lengthRatio`). If zero
+ * motes are available, the swipe still runs its full animation (so input is
+ * consumed cleanly) but with zero reach, so it deals no damage — it is NOT a
+ * full-length fallback blade.
+ */
+export function startNewSwordSwipe(
+  world: WorldState,
+  player: ClusterState,
+  gestureId: number,
+  pressAimXWorld: number,
+  pressAimYWorld: number,
+): void {
+  computeNewSwordHandAnchor(player, _newSwordAnchorScratch);
+  const anchorX = _newSwordAnchorScratch.xWorld;
+  const anchorY = _newSwordAnchorScratch.yWorld;
+
+  const availableCount = getAvailableMoteSlotCount(world);
+  const activeMoteCount = Math.min(MAX_SWORD_BLADE_MOTES, availableCount);
+  const lengthRatio = activeMoteCount / MAX_SWORD_BLADE_MOTES;
+
+  const dx = pressAimXWorld - anchorX;
+  const dy = pressAimYWorld - anchorY;
+  const aimAngleRad = (dx * dx + dy * dy) > 1e-9 ? Math.atan2(dy, dx) : 0;
+
+  world.newSwordActiveFlag       = 1;
+  world.newSwordGestureId        = gestureId;
+  world.newSwordTicksElapsed     = 0;
+  world.newSwordAimAngleRad      = aimAngleRad;
+  world.newSwordCurrentAngleRad  = aimAngleRad - NEW_SWORD_SLASH_HALF_ARC_RAD;
+  world.newSwordHandAnchorXWorld = anchorX;
+  world.newSwordHandAnchorYWorld = anchorY;
+  world.newSwordReachWorld       = SWORD_REACH_WORLD * Math.max(lengthRatio, 0.0);
+  world.newSwordToShieldTransition01 = 0;
+  _newSwordHitFlags.fill(0);
+}
+
+/**
+ * Advances the in-progress new-sword swipe by one tick. Returns true once the
+ * swipe has completed this tick (caller should then clear `newSwordActiveFlag`
+ * and, if the gesture is still held and Shield is unlocked, hand the same
+ * motes to the shield crescent — see secondaryWeaveCoordinator.ts).
+ */
+export function tickNewSwordSwipe(world: WorldState): boolean {
+  if (world.newSwordActiveFlag === 0) return true;
+
+  world.newSwordTicksElapsed++;
+  const t = Math.min(1.0, world.newSwordTicksElapsed / NEW_SWORD_SLASH_TICKS);
+  const eased = t * t * (3.0 - 2.0 * t);
+  const startAngleRad = world.newSwordAimAngleRad - NEW_SWORD_SLASH_HALF_ARC_RAD;
+  const endAngleRad   = world.newSwordAimAngleRad + NEW_SWORD_SLASH_HALF_ARC_RAD;
+
+  // Swept angular-interval collision: test every enemy against the arc swept
+  // THIS tick (previous angle → current angle), not just the current sample,
+  // so a fast swipe cannot skip past an enemy between ticks.
+  const prevAngleRad = world.newSwordCurrentAngleRad;
+  const currentAngleRad = startAngleRad + (endAngleRad - startAngleRad) * eased;
+  world.newSwordCurrentAngleRad = currentAngleRad;
+
+  if (world.newSwordReachWorld > 0) {
+    _applySweptSlashHits(
+      world,
+      world.newSwordHandAnchorXWorld,
+      world.newSwordHandAnchorYWorld,
+      prevAngleRad,
+      currentAngleRad,
+      world.newSwordReachWorld,
+    );
+  }
+
+  if (world.newSwordTicksElapsed >= NEW_SWORD_SLASH_TICKS) {
+    world.newSwordActiveFlag = 0;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Applies NEW_SWORD_DAMAGE to enemies whose bearing falls within the swept
+ * angular interval [min(prev,current), max(prev,current)] (clamped to the
+ * swipe's total arc), each enemy hit at most once per swipe via the
+ * per-gesture hit registry.
+ */
+function _applySweptSlashHits(
+  world: WorldState,
+  anchorXWorld: number,
+  anchorYWorld: number,
+  prevAngleRad: number,
+  currentAngleRad: number,
+  reachWorld: number,
+): void {
+  const reachSq = reachWorld * reachWorld;
+  const loAngle = Math.min(prevAngleRad, currentAngleRad);
+  const hiAngle = Math.max(prevAngleRad, currentAngleRad);
+  const limit = Math.min(world.clusters.length, MAX_HIT_REGISTRY_SLOTS);
+
+  for (let ci = 0; ci < limit; ci++) {
+    if (_newSwordHitFlags[ci] === 1) continue;
+    const c = world.clusters[ci];
+    if (c.isAliveFlag === 0) continue;
+    if (c.isPlayerFlag === 1) continue;
+
+    const dx = c.positionXWorld - anchorXWorld;
+    const dy = c.positionYWorld - anchorYWorld;
+    const distSq = dx * dx + dy * dy;
+    if (distSq > reachSq) continue;
+
+    const bearingRad = Math.atan2(dy, dx);
+    // Normalize bearing into the same winding as [loAngle, hiAngle] by
+    // shifting by full turns until it falls within [loAngle - 2π, hiAngle + 2π].
+    let normalizedBearing = bearingRad;
+    while (normalizedBearing < loAngle - Math.PI) normalizedBearing += 2.0 * Math.PI;
+    while (normalizedBearing > hiAngle + Math.PI) normalizedBearing -= 2.0 * Math.PI;
+    if (normalizedBearing < loAngle || normalizedBearing > hiAngle) continue;
+
+    _newSwordHitFlags[ci] = 1;
+    if (c.isOrbitalDustCoreFlag === 1) {
+      const dist = Math.sqrt(distSq) || 1;
+      const nx = -dx / dist;
+      const ny = -dy / dist;
+      const exposedRing = c.orbitalDustCoreExposedRing;
+      const isLarge = c.isOrbitalDustCoreLargeFlag;
+      const radii = isLarge === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
+      const ringCount = isLarge === 1 ? ODC_LARGE_RING_COUNT : ODC_SMALL_RING_COUNT;
+      const hitR = exposedRing >= ringCount ? 0 : radii[exposedRing];
+      applyODCHit(world, ci, c.positionXWorld + nx * hitR, c.positionYWorld + ny * hitR, NEW_SWORD_DAMAGE);
+      continue;
+    }
+    c.healthPoints -= NEW_SWORD_DAMAGE;
+    if (c.healthPoints <= 0) {
+      c.healthPoints = 0;
+      c.isAliveFlag = 0;
+    }
+  }
+}
+
+/** Resets all new-sword transient state (cancel / room teardown). */
+export function resetNewSwordState(world: WorldState): void {
+  world.newSwordActiveFlag           = 0;
+  world.newSwordGestureId            = -1;
+  world.newSwordTicksElapsed         = 0;
+  world.newSwordAimAngleRad          = 0;
+  world.newSwordCurrentAngleRad      = 0;
+  world.newSwordHandAnchorXWorld     = 0;
+  world.newSwordHandAnchorYWorld     = 0;
+  world.newSwordReachWorld           = 0;
+  world.newSwordToShieldTransition01 = 0;
+  _newSwordHitFlags.fill(0);
+}
+
 // ── Future work (intentionally unimplemented for MVP) ────────────────────────
 //
 // • Compressed segment data model: per-segment logical mote count + durability.
