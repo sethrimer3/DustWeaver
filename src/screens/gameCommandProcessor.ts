@@ -10,6 +10,10 @@
 
 import { collectCommands, InputState } from '../input/handler';
 import { CommandKind } from '../input/commands';
+import {
+  arbitrateExclusivePlayerActions,
+  getActiveExclusivePlayerAction,
+} from '../input/playerActionArbitration';
 import { WorldState } from '../sim/world';
 import { fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
 import { GrappleInputMode } from '../sim/worldGrappleState';
@@ -134,6 +138,17 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
   } = ctx;
 
   const commands = collectCommands(inputState);
+  const grappleRequested = commands.some(command =>
+    command.kind === CommandKind.GrappleFire
+    || (command.kind === CommandKind.Jump && canJumpInputBecomeGrapple(ctx)));
+  const shieldWeaveRequested = commands.some(command => command.kind === CommandKind.ShieldWeaveHold);
+  const exclusiveAction = arbitrateExclusivePlayerActions(
+    getActiveExclusivePlayerAction(
+      world.isGrappleActiveFlag === 1,
+      world.shieldWeave.isActive,
+    ),
+    { grapple: grappleRequested, shieldWeave: shieldWeaveRequested },
+  );
   let openPause = false;
   let moveDx = 0;
   let jumpTriggered = false;
@@ -149,8 +164,10 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       moveDx = cmd.dx;
     } else if (cmd.kind === CommandKind.Jump) {
       if (canJumpInputBecomeGrapple(ctx)) {
-        fireGrappleAtScreenPoint(ctx, inputState.mouseXPx, inputState.mouseYPx);
-        grappleFireTriggered = true;
+        if (exclusiveAction.allowGrapple) {
+          fireGrappleAtScreenPoint(ctx, inputState.mouseXPx, inputState.mouseYPx);
+          grappleFireTriggered = true;
+        }
       } else {
         jumpTriggered = true;
       }
@@ -204,13 +221,13 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       world.playerPrimaryWeaveEndFlag = 1;
     } else if (cmd.kind === CommandKind.GrappleZip) {
       // Right mouse pressed — zip toward anchor if grapple is attached.
-      // If no grapple is active, the subsequent secondary Weave commands handle it.
+      // If no grapple is active, the subsequent Shield Weave command handles it.
       if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0) {
         world.isGrappleZipTriggeredFlag = 1;
       }
     } else if (cmd.kind === CommandKind.ShieldWeaveHold) {
       const player = world.clusters[0];
-      if (world.isGrappleActiveFlag === 1 || player === undefined || player.isAliveFlag === 0) {
+      if (!exclusiveAction.allowShieldWeave || player === undefined || player.isAliveFlag === 0) {
         world.shieldWeave.isHeldRequested = false;
         world.shieldWeave.isActive = false;
       } else {
@@ -270,14 +287,12 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
         if (world.grappleInputMode === GrappleInputMode.Toggle && world.isGrappleActiveFlag === 1) {
           // Toggle mode: a second left-click releases the grapple instead of re-firing.
           releaseGrapple(world);
-        } else {
+        } else if (exclusiveAction.allowGrapple) {
           fireGrappleAtScreenPoint(ctx, cmd.aimXPx, cmd.aimYPx);
           grappleFireTriggered = true;
           // If RMB is held while firing, trigger an instant zip toward the new anchor.
           if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
               && ctx.inputState.isRightMouseDownFlag === 1) {
-            world.shieldWeave.isHeldRequested = false;
-            world.shieldWeave.isActive = false;
             world.isGrappleZipTriggeredFlag = 1;
           }
         }

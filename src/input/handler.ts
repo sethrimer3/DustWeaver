@@ -442,9 +442,9 @@ export function collectCommands(input: InputState): GameCommand[] {
     commands.push({ kind: CommandKind.WeaveEndPrimary });
   }
 
-  // ---- Grapple zip (right mouse press, consumed before weave commands) -----
+  // ---- Grapple zip (right mouse press, consumed before Shield Weave) -------
   // emitted early so the command processor can intercept right-click for zip
-  // before it is interpreted as a secondary Weave activation.
+  // before it is interpreted as Shield Weave input.
   if (input.isGrappleZipRequestedFlag === 1) {
     input.isGrappleZipRequestedFlag = 0;
     commands.push({ kind: CommandKind.GrappleZip });

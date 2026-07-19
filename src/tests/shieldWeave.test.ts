@@ -3,6 +3,10 @@ import { describe, test } from 'node:test';
 import { PLAYER_HALF_HEIGHT_WORLD } from '../levels/roomDef';
 import { CommandKind } from '../input/commands';
 import { collectCommands, createInputState } from '../input/handler';
+import {
+  arbitrateExclusivePlayerActions,
+  ExclusivePlayerAction,
+} from '../input/playerActionArbitration';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
 import { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import {
@@ -108,6 +112,62 @@ describe('Shield Weave activation and geometry', () => {
     const fallback = resolveShieldDirectionAngleRad(0, 0, 0, 0, 1.25);
     assert.equal(fallback, 1.25);
     assert.ok(Number.isFinite(fallback));
+  });
+});
+
+describe('grapple and Shield Weave input arbitration', () => {
+  test('Shield Weave cannot activate during an active grapple', () => {
+    const result = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.Grapple,
+      { grapple: false, shieldWeave: true },
+    );
+    assert.equal(result.allowShieldWeave, false);
+    assert.equal(result.owner, ExclusivePlayerAction.Grapple);
+  });
+
+  test('grappling cannot begin while Shield Weave is active', () => {
+    const result = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.ShieldWeave,
+      { grapple: true, shieldWeave: true },
+    );
+    assert.equal(result.allowGrapple, false);
+    assert.equal(result.owner, ExclusivePlayerAction.ShieldWeave);
+  });
+
+  test('a blocked input does not cancel the currently active ability', () => {
+    const grappleOwner = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.Grapple,
+      { grapple: false, shieldWeave: true },
+    );
+    const shieldOwner = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.ShieldWeave,
+      { grapple: true, shieldWeave: false },
+    );
+    assert.equal(grappleOwner.owner, ExclusivePlayerAction.Grapple);
+    assert.equal(shieldOwner.owner, ExclusivePlayerAction.ShieldWeave);
+  });
+
+  test('releasing the current ability restores the other ability on a subsequent input', () => {
+    const grappleAfterShieldRelease = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.None,
+      { grapple: true, shieldWeave: false },
+    );
+    const shieldAfterGrappleRelease = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.None,
+      { grapple: false, shieldWeave: true },
+    );
+    assert.equal(grappleAfterShieldRelease.allowGrapple, true);
+    assert.equal(shieldAfterGrappleRelease.allowShieldWeave, true);
+  });
+
+  test('simultaneous idle inputs resolve deterministically to grapple priority', () => {
+    const result = arbitrateExclusivePlayerActions(
+      ExclusivePlayerAction.None,
+      { grapple: true, shieldWeave: true },
+    );
+    assert.equal(result.owner, ExclusivePlayerAction.Grapple);
+    assert.equal(result.allowGrapple, true);
+    assert.equal(result.allowShieldWeave, false);
   });
 });
 
