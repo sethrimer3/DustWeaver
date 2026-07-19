@@ -151,7 +151,8 @@ export function buildSaveSlotUI(
   const heading = document.createElement('h2');
   heading.textContent = 'Select Save Slot';
   heading.style.cssText = `
-    color: #d4a84b; font-size: 1.8rem; margin-bottom: 0.6rem;
+    color: #d4a84b; font-size: clamp(1.25rem, 4vh, 1.8rem);
+    margin: 0 0 clamp(0.1rem, 1vh, 0.6rem);
     text-shadow: 0 0 20px rgba(212,168,75,0.3);
     letter-spacing: 0.06em; font-weight: 400;
   `;
@@ -241,9 +242,9 @@ export function buildSaveSlotUI(
     const slotBtn = document.createElement('button');
     slotBtn.style.cssText = `
       background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
-      color: #d4a84b; padding: 1.2rem 2rem;
+      color: #d4a84b; padding: clamp(0.55rem, 2.2vh, 1.2rem) 2rem;
       font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
-      border-radius: 3px; min-width: 300px; text-align: center;
+      border-radius: 3px; min-width: 0; flex: 1; text-align: center;
     `;
 
     if (hasData) {
@@ -334,9 +335,9 @@ export function buildSaveSlotUI(
   backBtn.textContent = 'Back';
   backBtn.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.25);
-    color: rgba(212,168,75,0.6); padding: 0.6rem 2.5rem; font-size: 0.9rem;
+    color: rgba(212,168,75,0.6); padding: clamp(0.4rem, 1.4vh, 0.6rem) 2.5rem; font-size: 0.9rem;
     font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
-    border-radius: 2px; letter-spacing: 0.1em; margin-top: 0.5rem;
+    border-radius: 2px; letter-spacing: 0.1em; margin-top: clamp(0.1rem, 1vh, 0.5rem);
   `;
   backBtn.addEventListener('mouseenter', () => {
     backBtn.style.borderColor = 'rgba(212,168,75,0.6)';

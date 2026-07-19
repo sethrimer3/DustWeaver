@@ -54,19 +54,10 @@ export function renderStormweaveLifeMotes(
   motes.forEachMote((xWorld, yWorld) => {
     const x = Math.round(xWorld * scalePx + offsetXPx);
     const y = Math.round(yWorld * scalePx + offsetYPx);
-    ctx.fillStyle = 'rgba(92,54,8,0.72)';
-    ctx.fillRect(x - 3, y - 3, 7, 7);
-    ctx.fillStyle = 'rgba(226,151,28,0.5)';
-    ctx.fillRect(x - 2, y - 2, 5, 5);
     ctx.fillStyle = '#ffd451';
-    ctx.fillRect(x - 1, y - 1, 3, 3);
+    ctx.fillRect(x - 1, y - 1, 2, 2);
     ctx.fillStyle = '#fff7c2';
     ctx.fillRect(x, y, 1, 1);
-    if (shield.isActive) {
-      ctx.fillStyle = '#fffde8';
-      ctx.fillRect(x - 2, y, 5, 1);
-      ctx.fillRect(x, y - 2, 1, 5);
-    }
   });
   ctx.restore();
 }

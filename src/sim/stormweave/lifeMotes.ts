@@ -11,6 +11,7 @@ import { normalizeMoteCount } from '../playerMoteLife';
 export const STORMWEAVE_RESTING_REGION_WORLD = 15;
 
 const MAX_LIFE_MOTES = 32;
+const MAX_PLAYER_PATH_SAMPLES = 256;
 const MAX_TRAIL_SAMPLES = 192;
 const TRAIL_LIFETIME_SEC = 0.38;
 const ATTRACTION_PER_SEC2 = 7.5;
@@ -64,6 +65,10 @@ export class StormweaveLifeMotes {
   private readonly preferredOffsetX = new Float32Array(MAX_LIFE_MOTES);
   private readonly preferredOffsetY = new Float32Array(MAX_LIFE_MOTES);
   private readonly phase = new Float32Array(MAX_LIFE_MOTES);
+  private readonly pathXWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
+  private readonly pathYWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
+  private pathCount = 0;
+  private pathWriteIndex = 0;
 
   private readonly trailXWorld = new Float32Array(MAX_TRAIL_SAMPLES);
   private readonly trailYWorld = new Float32Array(MAX_TRAIL_SAMPLES);
@@ -118,6 +123,9 @@ export class StormweaveLifeMotes {
     this.trailCount = 0;
     this.trailWriteIndex = 0;
     this.trailEmitting = false;
+    this.pathCount = 0;
+    this.pathWriteIndex = 0;
+    this.recordPlayerPath(playerXWorld, playerYWorld);
     this.reconcile(fullContainerCount, playerXWorld, playerYWorld);
   }
 
@@ -154,6 +162,7 @@ export class StormweaveLifeMotes {
     const dt = Math.max(0, Math.min(dtSec, 0.05));
     if (dt <= 0) return;
     this.elapsedSec += dt;
+    this.recordPlayerPath(playerXWorld, playerYWorld);
     this.separationX.fill(0, 0, this.count);
     this.separationY.fill(0, 0, this.count);
 
@@ -183,15 +192,24 @@ export class StormweaveLifeMotes {
 
     const damping = Math.exp(-VELOCITY_DAMPING_PER_SEC * dt);
     for (let i = 0; i < this.count; i++) {
-      const phase = this.phase[i] + this.elapsedSec * (0.42 + (i % 3) * 0.07);
+      const phase = this.phase[i] + this.elapsedSec * (1.35 + (i % 5) * 0.11);
       const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
       const livingOffset = isShieldActive ? Math.sin(phase) * 0.22 : 0;
+      const delaySamples = 5 + i * 1.35 + Math.sin(phase * 0.53) * 1.5;
+      const pathTarget = this.samplePlayerPath(delaySamples);
+      const olderPathTarget = this.samplePlayerPath(delaySamples + 2);
+      const pathDx = pathTarget[0] - olderPathTarget[0];
+      const pathDy = pathTarget[1] - olderPathTarget[1];
+      const pathLength = Math.hypot(pathDx, pathDy);
+      const perpendicularX = pathLength > 0.0001 ? -pathDy / pathLength : 0;
+      const perpendicularY = pathLength > 0.0001 ? pathDx / pathLength : 1;
+      const waveOffset = Math.sin(phase) * (2.1 + (i % 4) * 0.55);
       const targetX = isShieldActive
         ? shieldGeometry.centerXWorld + Math.cos(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
-        : playerXWorld + this.preferredOffsetX[i] + Math.cos(phase) * 0.7;
+        : pathTarget[0] + this.preferredOffsetX[i] * 0.22 + perpendicularX * waveOffset;
       const targetY = isShieldActive
         ? shieldGeometry.centerYWorld + Math.sin(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
-        : playerYWorld + this.preferredOffsetY[i] + Math.sin(phase * 0.91) * 0.7;
+        : pathTarget[1] + this.preferredOffsetY[i] * 0.22 + perpendicularY * waveOffset;
       const dx = targetX - this.xWorld[i];
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
@@ -230,5 +248,24 @@ export class StormweaveLifeMotes {
         this.trailCount = Math.min(this.trailCount + 1, MAX_TRAIL_SAMPLES);
       }
     }
+  }
+
+  private recordPlayerPath(xWorld: number, yWorld: number): void {
+    this.pathXWorld[this.pathWriteIndex] = xWorld;
+    this.pathYWorld[this.pathWriteIndex] = yWorld;
+    this.pathWriteIndex = (this.pathWriteIndex + 1) % MAX_PLAYER_PATH_SAMPLES;
+    this.pathCount = Math.min(this.pathCount + 1, MAX_PLAYER_PATH_SAMPLES);
+  }
+
+  private samplePlayerPath(samplesAgo: number): [number, number] {
+    const clamped = Math.max(0, Math.min(samplesAgo, this.pathCount - 1));
+    const whole = Math.floor(clamped);
+    const fraction = clamped - whole;
+    const newerIndex = (this.pathWriteIndex - 1 - whole + MAX_PLAYER_PATH_SAMPLES) % MAX_PLAYER_PATH_SAMPLES;
+    const olderIndex = (newerIndex - 1 + MAX_PLAYER_PATH_SAMPLES) % MAX_PLAYER_PATH_SAMPLES;
+    return [
+      this.pathXWorld[newerIndex] + (this.pathXWorld[olderIndex] - this.pathXWorld[newerIndex]) * fraction,
+      this.pathYWorld[newerIndex] + (this.pathYWorld[olderIndex] - this.pathYWorld[newerIndex]) * fraction,
+    ];
   }
 }

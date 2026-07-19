@@ -70,14 +70,15 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   container.id = 'main-menu';
   container.style.cssText = `
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    overflow-y: auto; box-sizing: border-box; padding: clamp(0.5rem, 2vh, 1.5rem) 1rem;
     color: #fff; font-family: 'Cinzel', serif; z-index: 1;
   `;
 
   // ── Title element (fades in) ─────────────────────────────────────────────
   const titleEl = document.createElement('div');
   titleEl.style.cssText = `
-    text-align: center; opacity: 0;
+    text-align: center; opacity: 0; margin-block: auto;
     transition: opacity 2s ease-in;
   `;
   titleEl.innerHTML = `
@@ -98,7 +99,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   const menuEl = document.createElement('div');
   menuEl.style.cssText = `
     display: none; flex-direction: column; align-items: center;
-    gap: 1.2rem; opacity: 0; transition: opacity 0.6s ease-in;
+    gap: 1.2rem; opacity: 0; transition: opacity 0.6s ease-in; margin-block: auto;
   `;
   container.appendChild(menuEl);
 
@@ -106,20 +107,21 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   const saveSlotsEl = document.createElement('div');
   saveSlotsEl.style.cssText = `
     display: none; flex-direction: column; align-items: center;
-    gap: 1rem; opacity: 0; transition: opacity 0.5s ease-in;
+    gap: clamp(0.4rem, 1.6vh, 1rem); opacity: 0; transition: opacity 0.5s ease-in;
+    margin-block: auto; width: min(420px, 100%);
   `;
   container.appendChild(saveSlotsEl);
 
   const settingsEl = document.createElement('div');
   settingsEl.style.cssText = `
     display: none; flex-direction: column; align-items: center;
-    gap: 0.8rem; opacity: 0; transition: opacity 0.5s ease-in;
+    gap: 0.8rem; opacity: 0; transition: opacity 0.5s ease-in; margin-block: auto;
   `;
   container.appendChild(settingsEl);
 
   const customCampaignsEl = document.createElement('div');
   customCampaignsEl.style.cssText = `
-    display: none; flex-direction: column; align-items: center;
+    display: none; flex-direction: column; align-items: center; margin-block: auto;
     gap: 0.8rem; opacity: 0; transition: opacity 0.5s ease-in; width: min(880px, 92vw);
   `;
   container.appendChild(customCampaignsEl);

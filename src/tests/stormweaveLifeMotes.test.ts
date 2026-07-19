@@ -66,6 +66,18 @@ describe('Stormweave current-mote synchronization', () => {
 });
 
 describe('Stormweave life-mote steering', () => {
+  test('motes follow the recorded player route instead of cutting across a turn', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    cloud.setMoteState(0, 0, 0);
+    for (let x = 1; x <= 20; x++) cloud.update(DT_SEC, x, 0, 60, 0, false);
+    for (let y = 1; y <= 8; y++) cloud.update(DT_SEC, 20, y, 0, 60, false);
+    const mote = cloud.getMote(0);
+    assert.ok(mote !== undefined);
+    assert.ok(mote.xWorld < 20, 'mote should still lag behind the corner');
+    assert.ok(mote.yWorld < 8, 'mote should follow the delayed vertical leg');
+  });
+
   test('far-away motes receive stronger attraction than near motes', () => {
     const near = getStormweaveAttractionAcceleration(8);
     const far = getStormweaveAttractionAcceleration(40);

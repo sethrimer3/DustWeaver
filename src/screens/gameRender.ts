@@ -428,6 +428,10 @@ export function renderFrame(r: RenderFrameContext): void {
   }
 
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
+  // Life motes occupy the back-most world layer: tiles and the player occlude
+  // them, while their simulation deliberately remains collision-free.
+  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom, world.shieldWeave);
+
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);
   renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined) {
@@ -551,8 +555,6 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom, world.shieldWeave);
-
   // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
   arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
   // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
