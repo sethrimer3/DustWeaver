@@ -277,6 +277,38 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
           border: 2px solid rgba(220,80,10,0.80); box-sizing: border-box;
           clip-path: polygon(0% 100%, 100% 100%, 100% 0%);`,
       };
+    case 'pillar_half_width':
+      // Narrow vertical pillar centred in the 40x40 preview cell.
+      return {
+        containerCss,
+        shapeCss: `
+          position: absolute; left: 15px; top: 0;
+          width: 10px; height: 40px;
+          background-color: ${fill};
+          background-image: ${cssUrl(spriteUrl)};
+          background-size: auto 40px; image-rendering: pixelated;
+          border-left: 1px solid rgba(255,255,255,0.15);
+          border-right: 1px solid rgba(255,255,255,0.15);
+        `,
+      };
+    case 'springboard':
+      // Spring / upward-arrow icon, visually distinct from bounce pads (which
+      // use an orange glowing-core dot — see the isBouncePadItem overlay below).
+      return {
+        containerCss,
+        shapeCss: `width: 40px; height: 40px; background: rgba(20,60,30,0.85);
+          border: 2px solid rgba(70,220,110,0.85); box-sizing: border-box;`,
+      };
+    case 'breakable_block_1x1':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.9;`,
+      };
+    case 'breakable_block_2x2':
+      return {
+        containerCss,
+        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%; opacity: 0.9;`,
+      };
     case 'kinetic_block_1x1':
       return {
         containerCss,

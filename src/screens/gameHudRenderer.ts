@@ -143,7 +143,9 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
   {
     const playerForHealth = world.clusters[0];
-    if (false && playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
+    // Retained temporarily for legacy health-bar tuning reference; runtime
+    // player ticks are non-negative, so only the mote-slot HUD below is drawn.
+    if (world.tick < 0 && playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
       const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
       const healthBarAlpha = r.isChallengeModeActive ? 1 : getHealthBarAlpha(
         playerForHealth.entityId,

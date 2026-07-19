@@ -26,6 +26,7 @@ export type {
   EditorGrappleCarryBlock, EditorZipMoveBlock, EditorPhantasmalTile, EditorPixelMaterial,
   EditorSaveTomb, EditorSkillTomb, EditorDustContainer, EditorDustContainerPiece,
   EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor, EditorDustPile,
+  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam, EditorFallingBlock,
   EditorBackgroundBlock, EditorDialogueEntry, EditorDialogueTrigger,

@@ -624,8 +624,7 @@ export function* makeLoadRoomPhases(
   if (
     world.clusters.length > 0 &&
     world.clusters[0].isPlayerFlag === 1 &&
-    world.clusters[0].isAliveFlag === 1 &&
-    world.clusters[0].healthPoints > 0
+    world.clusters[0].isAliveFlag === 1
   ) {
     carryHealthPoints = world.clusters[0].healthPoints;
   } else if (world.clusters.length === 0 && progress?.startingHealth !== undefined) {

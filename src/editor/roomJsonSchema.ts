@@ -206,6 +206,8 @@ export interface RoomJsonZone {
 export interface RoomJsonBreakableBlock {
   xBlock: number;
   yBlock: number;
+  /** Shared group id for multi-cell placements (e.g. 2x2), so they act as one unit. */
+  groupId?: number;
 }
 
 export interface RoomJsonCrumbleBlock {

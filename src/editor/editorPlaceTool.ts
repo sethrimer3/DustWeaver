@@ -235,7 +235,15 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     return;
   }
 
-  if (item.category === 'blocks' || item.category === 'specialBlocks') {
+  // Springboard / generic breakable blocks are `specialBlocks`-category items
+  // for palette/preview purposes, but they are NOT wall-array entries at
+  // runtime (unlike bounce pads, kinetic blocks, etc. handled inside the
+  // block below) — they have their own dedicated branches further down.
+  // Excluded here so they don't fall through to the generic wall push at the
+  // end of this block.
+  const isNonWallSpecialBlock = item.id === 'springboard' || item.id === 'breakable_block_1x1' || item.id === 'breakable_block_2x2';
+
+  if (!isNonWallSpecialBlock && (item.category === 'blocks' || item.category === 'specialBlocks')) {
     const wBlock = getPlacementWidth(item, state.placementRotationSteps);
     const hBlock = getPlacementHeight(item, state.placementRotationSteps);
     const isPlatformFlag: 0 | 1 = item.isPlatformItem === 1 ? 1 : 0;

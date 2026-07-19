@@ -18,12 +18,21 @@
  *
  * We only need the keys (file paths); the lazy-import values are never called.
  */
-const _BLOCKS_GLOB = import.meta.glob(
+// `import.meta.glob` is a Vite build-time construct — it doesn't exist when
+// this module is loaded outside a Vite bundle (e.g. by the plain `node
+// --import tsx` test runner used for src/tests/**/*.test.ts). Guard the call
+// so those environments get an empty catalogue instead of a hard crash; the
+// real Vite build always provides a function here, so production behavior is
+// unchanged.
+const _glob: (pattern: string, opts: { query: string; import: string }) => Record<string, unknown> =
+  typeof import.meta.glob === 'function' ? import.meta.glob : () => ({});
+
+const _BLOCKS_GLOB = _glob(
   '/ASSETS/SPRITES/BLOCKS/**/*.{png,webp,jpg,jpeg}',
   { query: '?url', import: 'default' },
 );
 
-const _SPECIAL_BLOCKS_GLOB = import.meta.glob(
+const _SPECIAL_BLOCKS_GLOB = _glob(
   '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
   { query: '?url', import: 'default' },
 );
@@ -157,7 +166,7 @@ function _buildFolderThemes(): FolderThemeData[] {
   // Sort themes by folder name for deterministic ordering
   for (const [id, urls] of [...byFolder.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     if (urls.length === 0) {
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         console.warn(`[folderBlockThemes] Theme folder '${id}' has no valid images — skipped.`);
       }
       continue;
@@ -166,7 +175,7 @@ function _buildFolderThemes(): FolderThemeData[] {
     result.push({ id, label: _folderToLabel(id), sprite16Urls: urls });
   }
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(
       `[folderBlockThemes] Discovered ${result.length} folder-based block theme(s):`,
       result.map(t => `${t.id} (${t.sprite16Urls.length} variation(s))`).join(', ') || '(none)',

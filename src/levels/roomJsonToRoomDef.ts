@@ -166,6 +166,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   const breakableBlocks: RoomBreakableBlockDef[] | undefined = json.breakableBlocks?.map(b => ({
     xBlock: b.xBlock,
     yBlock: b.yBlock,
+    ...(b.groupId !== undefined ? { groupId: b.groupId } : {}),
   }));
 
   const dustBoostJars: RoomDustBoostJarDef[] | undefined = json.dustBoostJars?.map(j => {

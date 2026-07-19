@@ -1,11 +1,18 @@
 import type { BackgroundId } from '../levels/roomDef';
 
-const BASE = import.meta.env.BASE_URL;
+// `import.meta.env`/`import.meta.glob` are Vite build-time constructs and are
+// undefined when this module loads outside a Vite bundle (e.g. the plain
+// `node --import tsx` test runner). Guard both so those environments get an
+// empty catalogue instead of a hard crash; production (always under Vite)
+// behavior is unchanged.
+const BASE = import.meta.env?.BASE_URL ?? '/';
 
-const BACKGROUND_GLOB = import.meta.glob(
-  '/ASSETS/SPRITES/BACKGROUNDS/*/*.{png,webp,jpg,jpeg}',
-  { query: '?url', import: 'default' },
-);
+const BACKGROUND_GLOB: Record<string, unknown> = typeof import.meta.glob === 'function'
+  ? import.meta.glob(
+      '/ASSETS/SPRITES/BACKGROUNDS/*/*.{png,webp,jpg,jpeg}',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
 export interface EditorBackgroundOption {
   readonly id: BackgroundId;

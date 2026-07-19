@@ -176,6 +176,11 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     extraCss: `border-radius: 3px; border: 2px solid #35d6b8; box-sizing: border-box;`,
     glyph: 'S',
   },
+  firefly_jar: {
+    bg: '#241c0a',
+    extraCss: `border-radius: 4px 4px 8px 8px; border: 2px solid rgba(210,180,90,0.7); box-sizing: border-box;`,
+    glyph: '✦',
+  },
   enemy_grapple_hunter: {
     bg: '#2a2418',
     extraCss: `border-radius: 50%; border: 2px solid rgba(200,170,90,0.85); box-sizing: border-box;`,
@@ -291,7 +296,6 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     extraCss: `border-radius: 4px 4px 8px 8px; border: 2px solid rgba(180,60,255,0.8); box-sizing: border-box;`,
     glyph: '⬡',
   },
-
   // ── Lighting ────────────────────────────────────────────────────────────────
   ambient_light_blocker: {
     bg: 'rgba(30,30,40,0.85)',
@@ -481,6 +485,55 @@ function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDi
   // Kinetic blocks (CSS fallback): add a directional-boost arrow overlay
   if (item.isKineticBlockItem) {
     wrap.appendChild(_makeKineticArrowCanvas());
+  }
+
+  // Springboard: upward-arrow glyph, visually distinct from the bounce-pad
+  // glowing-core dot above.
+  if (item.id === 'springboard') {
+    const arrowCanvas = document.createElement('canvas');
+    arrowCanvas.width = 40;
+    arrowCanvas.height = 40;
+    arrowCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const actx = arrowCanvas.getContext('2d');
+    if (actx) {
+      actx.fillStyle = 'rgba(120,255,160,0.9)';
+      actx.beginPath();
+      actx.moveTo(20, 8);
+      actx.lineTo(28, 20);
+      actx.lineTo(23, 20);
+      actx.lineTo(23, 32);
+      actx.lineTo(17, 32);
+      actx.lineTo(17, 20);
+      actx.lineTo(12, 20);
+      actx.closePath();
+      actx.fill();
+    }
+    wrap.appendChild(arrowCanvas);
+  }
+
+  // Breakable blocks: fractured/cracked overlay, matching the crumble-block
+  // crack styling but with a distinct (neutral tan) colour.
+  if (item.id === 'breakable_block_1x1' || item.id === 'breakable_block_2x2') {
+    const crackCanvas = document.createElement('canvas');
+    crackCanvas.width = 40;
+    crackCanvas.height = 40;
+    crackCanvas.style.cssText = `position: absolute; top: 0; left: 0; pointer-events: none;`;
+    const cctx = crackCanvas.getContext('2d');
+    if (cctx) {
+      cctx.strokeStyle = '#e0c890';
+      cctx.lineWidth = 1.5;
+      cctx.beginPath();
+      cctx.moveTo(8, 6);
+      cctx.lineTo(18, 16);
+      cctx.lineTo(12, 22);
+      cctx.lineTo(24, 34);
+      cctx.moveTo(18, 16);
+      cctx.lineTo(30, 10);
+      cctx.moveTo(24, 34);
+      cctx.lineTo(34, 30);
+      cctx.stroke();
+    }
+    wrap.appendChild(crackCanvas);
   }
 
   return wrap;

@@ -149,6 +149,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'stairs_1x1', label: '1×1 Stairs', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isStairsItem: 1 },
   { id: 'stairs_1x2', label: '1×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isStairsItem: 1 },
   { id: 'stairs_2x2', label: '2×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isStairsItem: 1 },
+  { id: 'pillar_half_width', label: 'Half-width Pillar', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPillarHalfWidthItem: 1 },
   { id: 'spike_1x1', label: '1×1 Spike',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSpikeItem: 1, spikeSize: '1x1' },
   { id: 'spike_2x2', label: '2×2 Spike',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSpikeItem: 1, spikeSize: '2x2' },
   // Enemies
@@ -236,6 +237,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Objects (interactive world objects)
   { id: 'lambda_anchor', label: 'Lambda Anchor', category: 'objects', isLambdaAnchorItem: 1 },
   { id: 'dust_boost_jar', label: 'Dust Jar (Object)', category: 'objects', isDustBoostJarItem: 1 },
+  { id: 'firefly_jar', label: 'Firefly Jar', category: 'objects' },
   // ── Lighting layer ─────────────────────────────────────────────────────────
   // Designer-facing authoring for the unified ambient lighting system.
   // See `RoomAmbientLightBlockerDef` / `RoomLightSourceDef` in roomDef.ts.
@@ -267,6 +269,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'zip_move_toward', label: 'Zip Block — Toward', category: 'specialBlocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3, zipMoveBlockVariant: 'toward' },
   { id: 'zip_move_away', label: 'Zip Block — Away', category: 'specialBlocks', defaultWidthBlocks: 3, defaultHeightBlocks: 3, zipMoveBlockVariant: 'away' },
   { id: 'phantasmal_block', label: 'Phantasmal Block', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPhantasmalTileItem: 1 },
+  { id: 'springboard', label: 'Springboard', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'breakable_block_1x1', label: 'Breakable Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
+  { id: 'breakable_block_2x2', label: 'Breakable Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
   // ── Ice blocks (static wall theme with ice-surface physics) ───────────────
   { id: 'ice_block_1x1', label: 'Ice Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'iceBlock' },
   { id: 'ice_block_2x2', label: 'Ice Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'iceBlock' },
