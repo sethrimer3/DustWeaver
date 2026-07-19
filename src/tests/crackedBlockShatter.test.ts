@@ -354,6 +354,7 @@ test('two cracked blocks hit in the same collision sweep both shatter safely', (
   });
 
   assert.equal(world.isCrumbleBlockActiveFlag[a.crumbleIndex], 0);
+  assert.equal(world.isCrumbleBlockActiveFlag[b.crumbleIndex], 0);
 });
 
 // ── Particle palette + quality-bounded counts ────────────────────────────────
@@ -394,7 +395,6 @@ test('particle counts scale up (bounded) with a larger footprint and higher spee
   const big = new CrackedBlockShatterRenderer();
   big.notifyShatter(0, 0, BLOCK_SIZE_MEDIUM * 2, BLOCK_SIZE_MEDIUM * 2, 0, 0, -1, 0, 0, MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 3);
 
-  let smallCount = 0, bigCount = 0;
   const stubCtx = (counterRef: { n: number }) => ({
     save() {}, restore() {}, translate() {}, rotate() {}, fillRect() { counterRef.n++; },
   } as unknown as CanvasRenderingContext2D);
@@ -402,8 +402,8 @@ test('particle counts scale up (bounded) with a larger footprint and higher spee
   const bigCounter = { n: 0 };
   small.render(stubCtx(smallCounter), 0, 0, 1);
   big.render(stubCtx(bigCounter), 0, 0, 1);
-  smallCount = smallCounter.n;
-  bigCount = bigCounter.n;
+  const smallCount = smallCounter.n;
+  const bigCount = bigCounter.n;
 
   assert.ok(bigCount > smallCount, `larger/faster shatter should spawn more particles (small=${smallCount}, big=${bigCount})`);
   assert.ok(bigCount <= 220, 'particle count must stay bounded even for large/fast shatters');
