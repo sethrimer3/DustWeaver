@@ -431,7 +431,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   combatText.render(ctx, ox, oy, zoom, nowMs);
 
   // ── Speedrun timer (top-right corner) ─────────────────────────────────────
-  // Always visible during gameplay. Uses monospace format MM:SS.mmm / H:MM:SS.mmm.
+  // Opt-in setting, off by default. Uses monospace format MM:SS.mmm / H:MM:SS.mmm.
   {
     const timerText = formatRunTimer(r.runTimerMs);
     const timerPaddingRight = 6;

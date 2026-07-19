@@ -59,7 +59,6 @@ import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometerOverlayRenderer';
 import { PlayerSpeedGraphOverlayRenderer } from '../render/ui/playerSpeedGraphOverlayRenderer';
-import { debugPanelVisibility, isPanelVisible } from '../ui/debugPanelManager';
 import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
 import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
