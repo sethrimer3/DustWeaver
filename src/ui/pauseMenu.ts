@@ -38,6 +38,7 @@ import {
   getAirCurrentsDebugEnabled,
   setAirCurrentsDebugEnabled,
 } from './renderSettings';
+import { createSlideReveal } from './slideReveal';
 import {
   getSpriteAtlasConfigState,
   getSpriteAtlasUseSetting,
@@ -384,40 +385,41 @@ export function showPauseMenu(
       speedometerCheckbox.addEventListener('change', () => {
         const enabled = speedometerCheckbox.checked;
         setPixelSpeedometerEnabled(enabled);
-        buildOptionsContent();
+        speedometerOptions.setExpanded(enabled);
       });
       speedometerRow.appendChild(speedometerCheckbox);
       speedometerRow.appendChild(speedometerLabel);
       optionsPanel.appendChild(speedometerRow);
-      if (speedometerEnabled) {
-        optionsPanel.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
-        optionsPanel.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
-        optionsPanel.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
-        optionsPanel.appendChild(makeCheckboxRow('Speed graph', getPixelSpeedGraphEnabled(), (enabled) => {
+      const speedometerOptions = createSlideReveal(speedometerEnabled);
+      speedometerOptions.content.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+      speedometerOptions.content.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+      speedometerOptions.content.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+      const speedGraphEnabled = getPixelSpeedGraphEnabled();
+      const speedGraphOptions = createSlideReveal(speedGraphEnabled);
+      speedometerOptions.content.appendChild(makeCheckboxRow('Speed graph', speedGraphEnabled, (enabled) => {
           setPixelSpeedGraphEnabled(enabled);
-          buildOptionsContent();
+          speedGraphOptions.setExpanded(enabled);
         }));
-        if (getPixelSpeedGraphEnabled()) {
-          optionsPanel.appendChild(makeSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
-        }
-        const placementSelect = document.createElement('select');
-        placementSelect.style.cssText = `
+      speedGraphOptions.content.appendChild(makeSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+      speedometerOptions.content.appendChild(speedGraphOptions.element);
+      const placementSelect = document.createElement('select');
+      placementSelect.style.cssText = `
           display: block; width: 100%; margin: 0 0 8px 0; padding: 8px 10px;
           color: ${GOLD}; background: rgba(30,28,22,0.9); border: 1px solid ${PANEL_BORDER};
           border-radius: 4px; font-family: 'Cinzel', serif; cursor: pointer;
         `;
-        for (const [value, label] of [['over-player', 'On player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+      for (const [value, label] of [['over-player', 'Speedometer on player'], ['on-top', 'Speedometer at top'], ['both', 'Speedometer on both']] as const) {
           const option = document.createElement('option');
           option.value = value;
           option.textContent = label;
           option.selected = getPixelSpeedometerPlacement() === value;
           placementSelect.appendChild(option);
         }
-        placementSelect.addEventListener('change', () => {
+      placementSelect.addEventListener('change', () => {
           setPixelSpeedometerPlacement(placementSelect.value as 'over-player' | 'on-top' | 'both');
         });
-        optionsPanel.appendChild(placementSelect);
-      }
+      speedometerOptions.content.appendChild(placementSelect);
+      optionsPanel.appendChild(speedometerOptions.element);
       optionsPanel.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     }
 

@@ -45,6 +45,7 @@ import {
   getAdvancedWallJumpsEnabled,
   setAdvancedWallJumpsEnabled,
 } from './renderSettings';
+import { createSlideReveal } from './slideReveal';
 import {
   getSpriteAtlasConfigState,
   getSpriteAtlasUseSetting,
@@ -517,37 +518,39 @@ export function buildSettingsUI(
         setDoubleJumpToGrappleEnabled(enabled);
       }),
     );
+    const speedometerEnabled = getPixelSpeedometerEnabled();
+    const speedometerOptions = createSlideReveal(speedometerEnabled);
     tabContent.appendChild(
-      makeCheckboxRow('Pixel speedometer', getPixelSpeedometerEnabled(), (enabled) => {
+      makeCheckboxRow('Pixel speedometer', speedometerEnabled, (enabled) => {
         setPixelSpeedometerEnabled(enabled);
-        buildGameplayTab();
+        speedometerOptions.setExpanded(enabled);
       }),
     );
-    if (getPixelSpeedometerEnabled()) {
-      tabContent.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
-      tabContent.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
-      tabContent.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
-      tabContent.appendChild(makeCheckboxRow('Speed graph', getPixelSpeedGraphEnabled(), (enabled) => {
+    speedometerOptions.content.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+    speedometerOptions.content.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+    speedometerOptions.content.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+    const speedGraphEnabled = getPixelSpeedGraphEnabled();
+    const speedGraphOptions = createSlideReveal(speedGraphEnabled);
+    speedometerOptions.content.appendChild(makeCheckboxRow('Speed graph', speedGraphEnabled, (enabled) => {
         setPixelSpeedGraphEnabled(enabled);
-        buildGameplayTab();
+        speedGraphOptions.setExpanded(enabled);
       }));
-      if (getPixelSpeedGraphEnabled()) {
-        tabContent.appendChild(makeSettingsSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
-      }
-      const placementSelect = document.createElement('select');
-      placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: 'Cinzel', serif;`;
-      for (const [value, label] of [['over-player', 'On player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+    speedGraphOptions.content.appendChild(makeSettingsSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+    speedometerOptions.content.appendChild(speedGraphOptions.element);
+    const placementSelect = document.createElement('select');
+    placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: 'Cinzel', serif;`;
+    for (const [value, label] of [['over-player', 'Speedometer on player'], ['on-top', 'Speedometer at top'], ['both', 'Speedometer on both']] as const) {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
         option.selected = getPixelSpeedometerPlacement() === value;
         placementSelect.appendChild(option);
       }
-      placementSelect.addEventListener('change', () => {
+    placementSelect.addEventListener('change', () => {
         setPixelSpeedometerPlacement(placementSelect.value as 'over-player' | 'on-top' | 'both');
       });
-      tabContent.appendChild(placementSelect);
-    }
+    speedometerOptions.content.appendChild(placementSelect);
+    tabContent.appendChild(speedometerOptions.element);
     tabContent.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     tabContent.appendChild(
       makeCheckboxRow('Advanced Wall Jumps', getAdvancedWallJumpsEnabled(), (enabled) => {
