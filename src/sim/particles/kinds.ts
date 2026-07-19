@@ -1,28 +1,28 @@
 /** Each kind has a distinct motion signature driven by its ElementProfile. */
 export enum ParticleKind {
-  // ── Collectible dust types — equippable by the player ──────────────────────
-  Golden    = 0,   // Golden Dust — dense gold motes, the starting dust type (legacy "Golden")
-  Fire      = 1,   // Fire Dust — scorching embers
+  // ── Stable serialized particle kinds (player roster is EQUIPPABLE_KINDS) ───
+  Golden    = 0,   // Golden Dust — retains the legacy "Physical" numeric value
+  Fire      = 1,   // Internal fire particles
   Ice       = 2,   // Ice Dust — frozen crystals
-  Lightning = 3,   // Lightning Dust — crackling sparks
-  Poison    = 4,   // Poison Dust — toxic spores
-  Arcane    = 5,   // Arcane Dust — mysterious energy
-  Wind      = 6,   // Wind Dust — whirling gusts
-  Holy      = 7,   // Holy Dust — sacred motes
-  Shadow    = 8,   // Shadow Dust — tendrils of darkness
-  Metal     = 9,   // Metal Dust — razor shards
-  Earth     = 10,  // Earth Dust — heavy stone fragments
+  Lightning = 3,   // Internal lightning particles
+  Poison    = 4,   // Internal poison particles
+  Arcane    = 5,   // Internal arcane particles
+  Wind      = 6,   // Internal wind particles
+  Holy      = 7,   // Internal holy particles
+  Shadow    = 8,   // Internal shadow particles
+  Metal     = 9,   // Internal metal particles
+  Earth     = 10,  // Internal earth particles
   Nature    = 11,  // Nature Dust — living spores
-  Crystal   = 12,  // Crystal Dust — glittering shards
+  Crystal   = 12,  // Internal crystal particles
   Void      = 13,  // Void Dust — unstable matter from beyond
   // Background / environmental (not collectible by players)
   Fluid     = 14,  // Background fluid particle — invisible until disturbed
-  Water     = 15,  // Water Dust — flowing droplets (collectible)
-  Lava      = 16,  // Lava Dust — molten fragments (collectible)
-  Stone     = 17,  // Stone Dust — ancient worn fragments (collectible)
-  // Special / ability particles (not equippable)
+  Water     = 15,  // Internal water particles
+  Lava      = 16,  // Internal lava particles
+  Stone     = 17,  // Internal stone particles
+  // Special / ability particles
   Gold      = 18,  // Grappling hook chain — bright golden diamond sparkles
-  Light     = 19,  // Boss light chains — radiant white-gold glow
+  Light     = 19,  // Boss light chains and collectible Light Dust share this value
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */

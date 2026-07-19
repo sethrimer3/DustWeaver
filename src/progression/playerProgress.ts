@@ -3,7 +3,7 @@
  *
  * Cleanly separates:
  *   - Passive techniques (e.g., Cycle) — always active once unlocked
- *   - Dust types (e.g., Golden Dust, Fire Dust) — unlocked independently
+ *   - Player dust types (Golden, Ice, Nature, Void, Light) — unlocked independently
  *   - Active weaves (e.g., Spire, Aegis) — bound to LMB/RMB
  *   - Dust containers — each grants 4 capacity; different dust types cost different amounts
  */

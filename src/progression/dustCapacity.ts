@@ -8,7 +8,7 @@
  * Example:
  *   2 containers = 8 total capacity
  *   Golden Dust costs 1 capacity → 8 particles
- *   Fire Dust costs 2 capacity → 4 particles
+ *   Internal legacy kinds retain their historical costs for effect compatibility.
  */
 
 import { ParticleKind } from '../sim/particles/kinds';

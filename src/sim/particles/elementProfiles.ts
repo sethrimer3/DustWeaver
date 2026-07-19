@@ -19,7 +19,7 @@ export type { ElementProfile } from './elementProfileTypes';
 import type { ElementProfile } from './elementProfileTypes';
 
 import {
-  PHYSICAL, FIRE, ICE, LIGHTNING, POISON, ARCANE, WIND, HOLY,
+  GOLDEN, FIRE, ICE, LIGHTNING, POISON, ARCANE, WIND, HOLY,
   SHADOW, METAL, EARTH, NATURE, CRYSTAL, VOID,
 } from './elementProfiles/equippableProfiles';
 
@@ -34,7 +34,7 @@ import {
  * Must stay in sync with the ParticleKind enum order.
  */
 export const ELEMENT_PROFILES: ElementProfile[] = [
-  PHYSICAL,   // 0  — ParticleKind.Golden
+  GOLDEN,     // 0  — ParticleKind.Golden
   FIRE,       // 1  — ParticleKind.Fire
   ICE,        // 2  — ParticleKind.Ice
   LIGHTNING,  // 3  — ParticleKind.Lightning
@@ -58,7 +58,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
 
 /** Returns the profile for `kind`, falling back to Golden if out of range. */
 export function getElementProfile(kind: number): ElementProfile {
-  return ELEMENT_PROFILES[kind] ?? PHYSICAL;
+  return ELEMENT_PROFILES[kind] ?? GOLDEN;
 }
 
 /** Colour-palette hint for external tooling that reads this module. */
