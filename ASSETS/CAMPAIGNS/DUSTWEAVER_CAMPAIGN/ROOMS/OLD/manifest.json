@@ -1,7 +1,134 @@
-[
-  "boss_radiant_tether_room.json",
-  "lobby_room.json",
-  "long_hall_room.json",
-  "seal_chamber_room.json",
-  "w1_room1_room.json"
-]
+{
+  "campaignId": "DUSTWEAVER_CAMPAIGN",
+  "campaignName": "DustWeaver",
+  "campaignHash": "95bcac8d0f326d04",
+  "campaignVersion": 7,
+  "campaignSchemaVersion": 1,
+  "roomCacheVersion": 1,
+  "exportedAt": "2026-07-18T19:51:21.298Z",
+  "rooms": {
+    "lobby": {
+      "roomId": "lobby",
+      "file": "lobby_room.json",
+      "hash": "1a06c418a65e160a",
+      "updatedAt": "2026-07-12T06:25:17.263Z"
+    },
+    "seal_chamber": {
+      "roomId": "seal_chamber",
+      "file": "seal_chamber_room.json",
+      "hash": "2ac820feeb66afe2",
+      "updatedAt": "2026-07-12T06:25:17.263Z"
+    },
+    "boss_radiant_tether": {
+      "roomId": "boss_radiant_tether",
+      "file": "boss_radiant_tether_room.json",
+      "hash": "a9d671b14b5fe14e",
+      "updatedAt": "2026-07-12T06:25:17.263Z"
+    },
+    "long_hall": {
+      "roomId": "long_hall",
+      "file": "long_hall_room.json",
+      "hash": "6647bf7a2e1dc0ec",
+      "updatedAt": "2026-07-18T19:51:21.298Z"
+    },
+    "the_fall": {
+      "roomId": "the_fall",
+      "file": "the_fall_room.json",
+      "hash": "0666ce0b178a328a",
+      "updatedAt": "2026-07-18T19:51:21.298Z"
+    },
+    "interesting_room": {
+      "roomId": "interesting_room",
+      "file": "interesting_room_room.json",
+      "hash": "9e4d3ff239a0029e",
+      "updatedAt": "2026-07-12T06:25:17.263Z"
+    },
+    "dark_tunnel": {
+      "roomId": "dark_tunnel",
+      "file": "dark_tunnel_room.json",
+      "hash": "30e8ff17488352b1",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
+    },
+    "chasm": {
+      "roomId": "chasm",
+      "file": "chasm_room.json",
+      "hash": "31e75eec1c094526",
+      "updatedAt": "2026-07-17T04:31:36.592Z"
+    },
+    "tall_shaft": {
+      "roomId": "tall_shaft",
+      "file": "tall_shaft_room.json",
+      "hash": "28dc0602ab2a6d18",
+      "updatedAt": "2026-07-18T19:51:21.298Z"
+    },
+    "Cozy_Chamber": {
+      "roomId": "Cozy_Chamber",
+      "file": "Cozy_Chamber_room.json",
+      "hash": "bb6e4b399c25d96e",
+      "updatedAt": "2026-07-12T06:25:17.263Z"
+    }
+  },
+  "adjacency": {
+    "seal_chamber": {
+      "roomId": "seal_chamber",
+      "targets": [
+        "boss_radiant_tether",
+        "long_hall",
+        "tall_shaft",
+        "Cozy_Chamber"
+      ]
+    },
+    "boss_radiant_tether": {
+      "roomId": "boss_radiant_tether",
+      "targets": [
+        "seal_chamber"
+      ]
+    },
+    "long_hall": {
+      "roomId": "long_hall",
+      "targets": [
+        "the_fall",
+        "seal_chamber"
+      ]
+    },
+    "the_fall": {
+      "roomId": "the_fall",
+      "targets": [
+        "long_hall",
+        "interesting_room",
+        "dark_tunnel"
+      ]
+    },
+    "interesting_room": {
+      "roomId": "interesting_room",
+      "targets": [
+        "the_fall"
+      ]
+    },
+    "dark_tunnel": {
+      "roomId": "dark_tunnel",
+      "targets": [
+        "the_fall",
+        "chasm"
+      ]
+    },
+    "chasm": {
+      "roomId": "chasm",
+      "targets": [
+        "dark_tunnel"
+      ]
+    },
+    "tall_shaft": {
+      "roomId": "tall_shaft",
+      "targets": [
+        "seal_chamber"
+      ]
+    },
+    "Cozy_Chamber": {
+      "roomId": "Cozy_Chamber",
+      "targets": [
+        "seal_chamber"
+      ]
+    }
+  }
+}
