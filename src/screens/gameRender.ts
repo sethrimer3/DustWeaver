@@ -40,6 +40,7 @@ import type { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import type { EnvironmentalDustLayer } from '../render/environmentalDust';
 import type { SkidDebrisRenderer } from '../render/skidDebrisRenderer';
 import type { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
+import type { CrackedBlockShatterRenderer } from '../render/crackedBlockShatterRenderer';
 import type { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import type { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import type { SkillTombRenderer } from '../render/skillTombRenderer';
@@ -127,6 +128,8 @@ export interface RenderFrameContext {
   environmentalDust: EnvironmentalDustLayer;
   skidDebris: SkidDebrisRenderer;
   crumbleDebris: CrumbleDebrisRenderer;
+  /** Momentum-speed cracked-block shatter burst — sprite-palette-sampled fragments. */
+  crackedBlockShatter: CrackedBlockShatterRenderer;
   /** Fragile custom-block break debris (Phase 2C — material-tinted, one burst per logical placement). */
   breakEffects: BreakEffectRenderer;
   /** Weak wall jump cascade debris — spawns on 3rd+ consecutive wall jump. */
@@ -297,7 +300,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, crumbleDebris, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
@@ -588,6 +591,7 @@ export function renderFrame(r: RenderFrameContext): void {
   guideDustPathRenderer.render(ctx, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   skidDebris.render(ctx, ox, oy, zoom);
   crumbleDebris.render(ctx, ox, oy, zoom);
+  crackedBlockShatter.render(ctx, ox, oy, zoom);
   breakEffects.render(ctx, ox, oy, zoom);
   weakWallJumpDebris.render(ctx, ox, oy, zoom);
   // Falling block groups — tiles + dust effects

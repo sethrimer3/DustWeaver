@@ -25,6 +25,30 @@ import {
 import { KINETIC_BLOCK_BOOST_SPEED_WORLD } from '../kineticBlocks/kineticBlockTypes';
 import { aabbOverlapsWallSolid } from '../stairsWorldGeometry';
 import { isPlainRectOrientationIndex, isRampOrientationIndex } from '../../levels/stairsGeometry';
+import { tryShatterCrumbleBlockAtWall } from '../crackedBlockShatter';
+
+/**
+ * Checks whether wall `wi` is a cracked (crumble) block that should shatter
+ * instead of stopping the cluster, given the canonical momentum-invulnerability
+ * predicate on `cluster.isHighVelocityAttacking` (set once per tick by
+ * `updateMomentumCombatState` — the single source of truth reused here, not
+ * duplicated). Only the player cluster can trigger a shatter.
+ */
+function tryShatterOnImpact(
+  cluster: ClusterState,
+  world: WorldState,
+  wallIndex: number,
+  normalX: number,
+  normalY: number,
+): boolean {
+  if (cluster.isPlayerFlag !== 1) return false;
+  if (cluster.isHighVelocityAttacking !== 1) return false;
+  if (world.wallCrumbleBlockIndex[wallIndex] < 0) return false;
+  return tryShatterCrumbleBlockAtWall(
+    world, wallIndex, cluster.positionXWorld, cluster.positionYWorld, normalX, normalY,
+    Math.abs(cluster.velocityXWorld),
+  );
+}
 
 /** Set to true to log bounce pad events to the console for debugging. */
 const DEBUG_BOUNCE_PADS = false;
@@ -302,6 +326,8 @@ export function resolveWallsX(
 
     // Determine push direction from previous position
     if (prevRight <= wallLeft + COLLISION_EPSILON) {
+      // Cracked block hit at momentum speed: shatter instead of stopping/stepping.
+      if (tryShatterOnImpact(cluster, world, wi, -1, 0)) continue;
       // Step-up is disabled for kinetic blocks so the boost always fires rather than silently stepping.
       if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, 1, wasGrounded)) continue;
       // Was to the left of wall — push out left
@@ -321,6 +347,7 @@ export function resolveWallsX(
         if (cluster.isPlayerFlag === 1) cluster.isTouchingWallRightFlag = 1;
       }
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
+      if (tryShatterOnImpact(cluster, world, wi, 1, 0)) continue;
       if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, -1, wasGrounded)) continue;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
@@ -456,6 +483,8 @@ export function resolveWallsY(
 
     // Determine push direction from previous position
     if (prevBottom <= wallTop + COLLISION_EPSILON && cluster.velocityYWorld >= 0) {
+      // Cracked block landed on at momentum speed: shatter instead of landing.
+      if (tryShatterOnImpact(cluster, world, wi, 0, -1)) continue;
       // Was above wall — land on top
       cluster.positionYWorld = wallTop - hh;
       if (isKinetic) {
@@ -477,6 +506,8 @@ export function resolveWallsY(
         landed = true;
       }
     } else if (prevTop >= wallBottom - COLLISION_EPSILON && cluster.velocityYWorld <= 0) {
+      // Cracked block struck from below (ceiling) at momentum speed: shatter.
+      if (tryShatterOnImpact(cluster, world, wi, 0, 1)) continue;
       // Was below wall — bonked ceiling moving upward.
       // Attempt jump corner correction before committing to the ceiling response.
       if (!isBounce && !isKinetic && tryJumpCornerCorrection(cluster, world, wallLeft, wallRight)) {

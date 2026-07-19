@@ -97,6 +97,11 @@ export function tick(world: WorldState): void {
   if (world.grappleRechargeRingTicksLeft > 0) world.grappleRechargeRingTicksLeft -= 1;
   if (world.grappleIceBounceTicksLeft > 0) world.grappleIceBounceTicksLeft -= 1;
 
+  // Drain last tick's cracked-block shatter events before this tick's
+  // collision sweep (in applyClusterMovement, below) can record new ones.
+  // gameScreen reads world.shatterEvent* right after tick() returns.
+  world.shatterEventCount = 0;
+
   // Capture the player's downward velocity BEFORE movement/collision zeroes it
   // on landing.  The tough falling block trigger reads this to detect hard landings.
   {

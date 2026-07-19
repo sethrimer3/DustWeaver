@@ -34,6 +34,8 @@ export {
 
 /** Maximum number of axis-aligned wall rectangles supported per world. */
 export const MAX_WALLS = 6000;
+/** Maximum number of cracked-block shatter events recorded in a single tick. */
+export const MAX_SHATTER_EVENTS = 16;
 /** Maximum number of simultaneously fading web strands. */
 export const MAX_FADING_WEBS = 24;
 /** Maximum number of ropes per room. */
@@ -175,6 +177,38 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * -1 if this wall is not a kinetic block.
    */
   wallKineticBlockIndex: Int16Array;
+  /**
+   * Index into the crumble block arrays in HazardWorldState for this wall.
+   * -1 if this wall is not a crumble ("cracked") block. Used by the collision
+   * resolver to detect momentum-speed impacts and trigger an instant shatter.
+   */
+  wallCrumbleBlockIndex: Int16Array;
+
+  // ---- Cracked-block shatter events (visual-only, drained each tick) -----
+  /** Number of shatter events recorded this tick. Reset to 0 at the start of applyHazards. */
+  shatterEventCount: number;
+  /** World-space center X of the destroyed block's footprint. */
+  shatterEventXWorld: Float32Array;
+  /** World-space center Y of the destroyed block's footprint. */
+  shatterEventYWorld: Float32Array;
+  /** World-space footprint width. */
+  shatterEventWWorld: Float32Array;
+  /** World-space footprint height. */
+  shatterEventHWorld: Float32Array;
+  /** World-space X of the point of impact (player position at moment of shatter). */
+  shatterEventImpactXWorld: Float32Array;
+  /** World-space Y of the point of impact. */
+  shatterEventImpactYWorld: Float32Array;
+  /** Impacted surface normal X (-1, 0, or 1) — burst is biased away from this. */
+  shatterEventNormalX: Float32Array;
+  /** Impacted surface normal Y (-1, 0, or 1). */
+  shatterEventNormalY: Float32Array;
+  /** Crumble block theme index at time of destruction (see wallThemeIndex). */
+  shatterEventThemeIndex: Uint8Array;
+  /** Crumble block variant index at time of destruction (see crumbleBlockVariant). */
+  shatterEventVariantIndex: Uint8Array;
+  /** Player horizontal speed (world units/sec) at the moment of shatter — used to scale particle energy/count. */
+  shatterEventSpeedWorld: Float32Array;
 
   /** Width of background wall grid (in block units). */
   bgWallGridWidth: number;
@@ -566,6 +600,19 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsRocketBlockFlag: new Uint8Array(MAX_WALLS),
     wallIsKineticBlockFlag:           new Uint8Array(MAX_WALLS),
     wallKineticBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
+    wallCrumbleBlockIndex:            new Int16Array(MAX_WALLS).fill(-1),
+    shatterEventCount: 0,
+    shatterEventXWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventYWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventWWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventHWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventImpactXWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventImpactYWorld: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventNormalX: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventNormalY: new Float32Array(MAX_SHATTER_EVENTS),
+    shatterEventThemeIndex: new Uint8Array(MAX_SHATTER_EVENTS),
+    shatterEventVariantIndex: new Uint8Array(MAX_SHATTER_EVENTS),
+    shatterEventSpeedWorld: new Float32Array(MAX_SHATTER_EVENTS),
     bgWallGridWidth: 0,
     bgWallGridHeight: 0,
     bgWallGrid: new Uint8Array(0),
