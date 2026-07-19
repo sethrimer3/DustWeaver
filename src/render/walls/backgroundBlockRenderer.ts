@@ -26,12 +26,9 @@ import type { RoomDef } from '../../levels/roomDef';
 import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 import {
   isFolderBasedTheme,
-  getFolderThemeSpriteKey,
-  getTheme1x1SpriteShaded,
+  getTheme1x1SpriteDarkened,
 } from './folderBlockThemes';
-import { drawAtlasSprite } from '../atlases/drawAtlasSprite';
-import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
-import { getAtlasSprite, recordSpriteAtlasDisabledBypass, recordSpriteAtlasLegacyDraw } from '../atlases/spriteAtlasLoader';
+import { recordSpriteAtlasLegacyDraw } from '../atlases/spriteAtlasLoader';
 import { OPEN_AIR_ALL_SIDES } from './blockEdgeShading';
 import {
   RoomChunkCache,
@@ -233,29 +230,25 @@ function _makeBgBuildChunkFn(
 
       if (isFolderBasedTheme(themeId)) {
         const folderThemeId = themeId as string;
-        const atlasSprite = isSpriteAtlasEnabled()
-          ? getAtlasSprite(folderThemeId, getFolderThemeSpriteKey(folderThemeId, col, row, seed))
-          : null;
-        if (atlasSprite === null && !isSpriteAtlasEnabled()) recordSpriteAtlasDisabledBypass();
-        if (atlasSprite !== null) {
-          drawAtlasSprite(chunkCtx, atlasSprite, sx, sy, sw, sw);
+        // Background blocks always render the darkened-sprite path (rather than
+        // the sprite-atlas fast path used for foreground walls) so the 40%
+        // darkening is applied deterministically to the exact source art with
+        // the source alpha channel preserved.
+        const sprite = getTheme1x1SpriteDarkened(
+          folderThemeId,
+          col,
+          row,
+          seed,
+          OPEN_AIR_ALL_SIDES,
+          CELL_SIZE_WORLD,
+        );
+        if (sprite !== null) {
+          recordSpriteAtlasLegacyDraw();
+          chunkCtx.drawImage(sprite, sx, sy, sw, sw);
         } else {
-          const sprite = getTheme1x1SpriteShaded(
-            folderThemeId,
-            col,
-            row,
-            seed,
-            OPEN_AIR_ALL_SIDES,
-            CELL_SIZE_WORLD,
-          );
-          if (sprite !== null) {
-            recordSpriteAtlasLegacyDraw();
-            chunkCtx.drawImage(sprite, sx, sy, sw, sw);
-          } else {
-            chunkCtx.fillStyle = FALLBACK_FILL;
-            chunkCtx.fillRect(sx, sy, sw, sw);
-            hadFallbacks = true;
-          }
+          chunkCtx.fillStyle = FALLBACK_FILL;
+          chunkCtx.fillRect(sx, sy, sw, sw);
+          hadFallbacks = true;
         }
       } else {
         chunkCtx.fillStyle = FALLBACK_FILL;
@@ -521,10 +514,12 @@ export function renderBackgroundBlocks(
   const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, seed, zoom);
 
   ctx.save();
-  // Background blocks are rendered at 50 % opacity.  The chunk canvases are
-  // drawn at full alpha internally; globalAlpha = 0.5 is applied when
-  // ctx.drawImage(chunkCanvas) is called during blitting.
-  ctx.globalAlpha = 0.5;
+  // Background blocks are rendered at full opacity (globalAlpha = 1). The
+  // "background" visual read comes from the sprite itself being pre-darkened
+  // to 60% of its source RGB brightness (see getTheme1x1SpriteDarkened) —
+  // never from faking darkness via transparency/blending, which would also
+  // incorrectly wash out the source sprite's own alpha channel.
+  ctx.globalAlpha = 1;
 
   _bgChunkCache.renderVisibleChunks(
     ctx,

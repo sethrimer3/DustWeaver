@@ -451,7 +451,43 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
+    // ── Background modifier on ordinary blocks (visual-only, no collision) ───
+    // "Background" is a block modifier (see editorUI.ts's Block Modifier
+    // panel), not a standalone palette item any more. When active, placing an
+    // ordinary 1×1/2×2 (non-platform, non-ramp, non-stairs) block creates a
+    // visual-only background block using the currently selected block theme
+    // and footprint instead of a collidable wall. Incompatible with
+    // cracked/falling — those are mutually exclusive via
+    // pendingBlockPlacementModifier already holding a single value.
+    if (
+      item.category === 'blocks' &&
+      item.isBackgroundBlockItem !== 1 &&
+      item.isPlatformItem !== 1 &&
+      item.isRampItem !== 1 &&
+      item.isStairsItem !== 1 &&
+      state.pendingBlockPlacementModifier === 'background'
+    ) {
+      const bgW = getPlacementWidth(item, state.placementRotationSteps);
+      const bgH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, bgW, bgH)) return;
+      if (!room.backgroundBlocks) room.backgroundBlocks = [];
+      room.backgroundBlocks.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock: bgW,
+        hBlock: bgH,
+        blockTheme: placementBlockTheme,
+        isLightBlockingFlag: state.pendingBackgroundBlocksLight ? 1 : 0,
+      });
+      return;
+    }
+
     // ── Background blocks (visual-only, no collision) ────────────────────────
+    // Legacy path: no palette item sets isBackgroundBlockItem any more (see
+    // editorPaletteItems.ts), but this branch is preserved so any code that
+    // still constructs a PaletteItem with the flag (e.g. future migrations)
+    // keeps working.
     if (item.isBackgroundBlockItem === 1) {
       const bgW = getPlacementWidth(item, state.placementRotationSteps);
       const bgH = getPlacementHeight(item, state.placementRotationSteps);
