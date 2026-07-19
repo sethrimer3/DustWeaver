@@ -270,10 +270,8 @@ function cellOverlapsEditorPoints(
  * per gameRoomHazards.ts): grapple-carry blocks, phantasmal tiles. Sand may
  * be placed through/inside them because runtime sand can too.
  *
- * NOTE: "breakable blocks" also become wall entries at runtime, but are not
- * currently authorable through the editor (no `EditorRoomData.breakableBlocks`
- * field exists), so there is nothing to check here yet — add a branch if that
- * ever becomes editor-authorable.
+ * Generic breakable blocks (`EditorRoomData.breakableBlocks`) are checked at
+ * block-cell granularity below, same as crumble blocks / bounce pads.
  */
 export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number, yPixel: number): boolean {
   for (const w of room.interiorWalls) {
@@ -308,6 +306,7 @@ export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number
     bx < kb.xBlock + kb.wBlock && bx + 1 > kb.xBlock && by < kb.yBlock + kb.hBlock && by + 1 > kb.yBlock,
   )) return true;
   if (isFallingBlockAt(room, bx, by)) return true;
+  if ((room.breakableBlocks ?? []).some(b => b.xBlock === bx && b.yBlock === by)) return true;
   return false;
 }
 

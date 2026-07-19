@@ -205,6 +205,25 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: a.yBlock,
     }));
   }
+  if ((data.fireflyJars ?? []).length > 0) {
+    json.fireflyJars = data.fireflyJars!.map(j => ({
+      xBlock: j.xBlock,
+      yBlock: j.yBlock,
+    }));
+  }
+  if ((data.springboards ?? []).length > 0) {
+    json.springboards = data.springboards!.map(s => ({
+      xBlock: s.xBlock,
+      yBlock: s.yBlock,
+    }));
+  }
+  if ((data.breakableBlocks ?? []).length > 0) {
+    json.breakableBlocks = data.breakableBlocks!.map(b => ({
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      ...(b.groupId !== undefined ? { groupId: b.groupId } : {}),
+    }));
+  }
   if (data.dustPiles.length > 0) {
     json.dustPiles = data.dustPiles.map(p => ({
       xBlock: p.xBlock,

@@ -378,6 +378,45 @@ export function drawEditorCollectibles(
     drawMarker(ctx, a.xBlock, a.yBlock, offsetXPx, offsetYPx, zoom, color, 'λ');
   }
 
+  // Firefly Jars (decorative jar emitting fireflies)
+  const FIREFLY_JAR_COLOR    = 'rgba(255, 200, 60, 0.55)';
+  const FIREFLY_JAR_SELECTED = 'rgba(255, 225, 120, 0.95)';
+  for (const j of (room.fireflyJars ?? [])) {
+    const sel = isSelected('fireflyJar', j.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'fireflyJar' && state.hoverElement.uid === j.uid;
+    const color = sel ? FIREFLY_JAR_SELECTED : FIREFLY_JAR_COLOR;
+    drawObjectFootprint(ctx, j.xBlock, j.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
+    drawMarker(ctx, j.xBlock, j.yBlock, offsetXPx, offsetYPx, zoom, color, '✺');
+  }
+
+  // Springboards (directional launch pad, distinct from bounce pads)
+  const SPRINGBOARD_COLOR    = 'rgba(90, 220, 140, 0.55)';
+  const SPRINGBOARD_SELECTED = 'rgba(130, 255, 180, 0.95)';
+  for (const s of (room.springboards ?? [])) {
+    const sel = isSelected('springboard', s.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'springboard' && state.hoverElement.uid === s.uid;
+    const color = sel ? SPRINGBOARD_SELECTED : SPRINGBOARD_COLOR;
+    drawObjectFootprint(ctx, s.xBlock, s.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
+    drawMarker(ctx, s.xBlock, s.yBlock, offsetXPx, offsetYPx, zoom, color, '⬆');
+  }
+
+  // Breakable blocks (generic fracture-on-impact block)
+  const BREAKABLE_COLOR    = 'rgba(210, 150, 90, 0.55)';
+  const BREAKABLE_SELECTED = 'rgba(240, 190, 130, 0.95)';
+  for (const b of (room.breakableBlocks ?? [])) {
+    const sel = isSelected('breakableBlock', b.uid);
+    const isHovered = state.hoverElement !== null &&
+      state.hoverElement.type === 'breakableBlock' && state.hoverElement.uid === b.uid;
+    const color = sel ? BREAKABLE_SELECTED : BREAKABLE_COLOR;
+    drawObjectFootprint(ctx, b.xBlock, b.yBlock, 1, 1,
+      offsetXPx, offsetYPx, zoom, color, sel || isHovered ? 2 : 1);
+    drawMarker(ctx, b.xBlock, b.yBlock, offsetXPx, offsetYPx, zoom, color, '✕');
+  }
+
   // Dust piles (unowned Gold Dust for Storm Weave attraction)
   for (const p of room.dustPiles) {
     const sel = isSelected('dustPile', p.uid);

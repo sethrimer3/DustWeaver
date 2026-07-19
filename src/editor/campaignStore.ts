@@ -76,6 +76,9 @@ function computeMaxUidPlusOne(roomData: EditorRoomData, startUid: number): numbe
   for (const d of (roomData.dustBoostJars ?? [])) track(d.uid);
   for (const d of (roomData.dustSwarms ?? [])) track(d.uid);
   for (const d of (roomData.lambdaAnchors ?? [])) track(d.uid);
+  for (const d of (roomData.fireflyJars ?? [])) track(d.uid);
+  for (const d of (roomData.springboards ?? [])) track(d.uid);
+  for (const d of (roomData.breakableBlocks ?? [])) track(d.uid);
   for (const d of (roomData.grasshopperAreas ?? [])) track(d.uid);
   for (const d of (roomData.fireflyAreas ?? [])) track(d.uid);
   for (const d of (roomData.sceneLights ?? [])) track(d.uid);

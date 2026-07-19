@@ -24,6 +24,7 @@ import type {
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
+  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
   EditorFallingBlock, EditorDialogueTrigger, EditorBackgroundBlock, EditorSceneLight,
   EditorGuideDustPath,
   RoomSongId,
@@ -379,6 +380,25 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     yBlock: a.yBlock,
   }));
 
+  const fireflyJars: EditorFireflyJar[] = (json.fireflyJars ?? []).map(j => ({
+    uid: uid++,
+    xBlock: j.xBlock,
+    yBlock: j.yBlock,
+  }));
+
+  const springboards: EditorSpringboard[] = (json.springboards ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+  }));
+
+  const breakableBlocks: EditorBreakableBlock[] = (json.breakableBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    groupId: b.groupId,
+  }));
+
   const dustPiles: EditorDustPile[] = (json.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -625,6 +645,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       dustBoostJars,
       dustSwarms,
       lambdaAnchors,
+      fireflyJars,
+      springboards,
+      breakableBlocks,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,

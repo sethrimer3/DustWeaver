@@ -12,6 +12,7 @@ import {
   EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorCrumbleBlock, EditorSpike, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
+  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
   SelectedElement, allocateUid, EditorRoomData, EditorGuideDustPath,
   EditorChallengeRect, EditorChallengeTotem, EditorGate,
   EditorZipMoveBlock,
@@ -68,6 +69,15 @@ export function storeDragStartPositions(
     } else if (el.type === 'lambdaAnchor') {
       const a = (s.roomData.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
       if (a) positions.set(key, { xBlock: a.xBlock, yBlock: a.yBlock });
+    } else if (el.type === 'fireflyJar') {
+      const j = (s.roomData.fireflyJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) positions.set(key, { xBlock: j.xBlock, yBlock: j.yBlock });
+    } else if (el.type === 'springboard') {
+      const sp = (s.roomData.springboards ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) positions.set(key, { xBlock: sp.xBlock, yBlock: sp.yBlock });
+    } else if (el.type === 'breakableBlock') {
+      const b = (s.roomData.breakableBlocks ?? []).find(b2 => b2.uid === el.uid);
+      if (b) positions.set(key, { xBlock: b.xBlock, yBlock: b.yBlock });
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) positions.set(key, { xBlock: p.xBlock, yBlock: p.yBlock });
@@ -181,6 +191,15 @@ export function moveSelectedElements(
     } else if (el.type === 'lambdaAnchor') {
       const a = (s.roomData.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
       if (a) { a.xBlock = orig.xBlock + deltaX; a.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'fireflyJar') {
+      const j = (s.roomData.fireflyJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) { j.xBlock = orig.xBlock + deltaX; j.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'springboard') {
+      const sp = (s.roomData.springboards ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) { sp.xBlock = orig.xBlock + deltaX; sp.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'breakableBlock') {
+      const b = (s.roomData.breakableBlocks ?? []).find(b2 => b2.uid === el.uid);
+      if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'dustPile') {
       const p = s.roomData.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) { p.xBlock = orig.xBlock + deltaX; p.yBlock = orig.yBlock + deltaY; }
@@ -275,6 +294,9 @@ export function serializeSelectedElements(
     dustBoostJars: EditorDustBoostJar[];
     dustSwarms: EditorDustSwarm[];
     lambdaAnchors: EditorLambdaAnchor[];
+    fireflyJars: EditorFireflyJar[];
+    springboards: EditorSpringboard[];
+    breakableBlocks: EditorBreakableBlock[];
     dustPiles: EditorDustPile[];
     decorations: EditorDecoration[];
     lightSources: EditorLightSource[];
@@ -293,6 +315,7 @@ export function serializeSelectedElements(
     dustContainers: [], dustContainerPieces: [], dustBoostJars: [],
     dustSwarms: [],
     lambdaAnchors: [],
+    fireflyJars: [], springboards: [], breakableBlocks: [],
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], crumbleBlocks: [],
     spikes: [],
@@ -341,6 +364,15 @@ export function serializeSelectedElements(
     } else if (el.type === 'lambdaAnchor') {
       const a = (room.lambdaAnchors ?? []).find(a2 => a2.uid === el.uid);
       if (a) data.lambdaAnchors.push({ ...a });
+    } else if (el.type === 'fireflyJar') {
+      const j = (room.fireflyJars ?? []).find(j2 => j2.uid === el.uid);
+      if (j) data.fireflyJars.push({ ...j });
+    } else if (el.type === 'springboard') {
+      const sp = (room.springboards ?? []).find(sp2 => sp2.uid === el.uid);
+      if (sp) data.springboards.push({ ...sp });
+    } else if (el.type === 'breakableBlock') {
+      const b = (room.breakableBlocks ?? []).find(b2 => b2.uid === el.uid);
+      if (b) data.breakableBlocks.push({ ...b });
     } else if (el.type === 'dustPile') {
       const p = room.dustPiles.find(p2 => p2.uid === el.uid);
       if (p) data.dustPiles.push({ ...p });
@@ -406,6 +438,9 @@ export function pasteFromClipboard(s: EditorState): void {
     dustBoostJars?: EditorDustBoostJar[];
     dustSwarms?: EditorDustSwarm[];
     lambdaAnchors?: EditorLambdaAnchor[];
+    fireflyJars?: EditorFireflyJar[];
+    springboards?: EditorSpringboard[];
+    breakableBlocks?: EditorBreakableBlock[];
     dustPiles: EditorDustPile[];
     decorations?: EditorDecoration[];
     lightSources?: EditorLightSource[];
@@ -437,6 +472,7 @@ export function pasteFromClipboard(s: EditorState): void {
     ...(data.dustContainers ?? []), ...(data.dustContainerPieces ?? []), ...(data.dustBoostJars ?? []),
     ...(data.dustSwarms ?? []),
     ...(data.lambdaAnchors ?? []),
+    ...(data.fireflyJars ?? []), ...(data.springboards ?? []), ...(data.breakableBlocks ?? []),
     ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.crumbleBlocks ?? []),
@@ -577,6 +613,48 @@ export function pasteFromClipboard(s: EditorState): void {
       yBlock: a.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'lambdaAnchor', uid: newUid });
+  }
+  for (const j of (data.fireflyJars ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.fireflyJars) s.roomData.fireflyJars = [];
+    s.roomData.fireflyJars.push({
+      ...j,
+      uid: newUid,
+      xBlock: j.xBlock - minX + offsetX,
+      yBlock: j.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'fireflyJar', uid: newUid });
+  }
+  for (const sp of (data.springboards ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.springboards) s.roomData.springboards = [];
+    s.roomData.springboards.push({
+      ...sp,
+      uid: newUid,
+      xBlock: sp.xBlock - minX + offsetX,
+      yBlock: sp.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'springboard', uid: newUid });
+  }
+  {
+    const groupIdRemap = new Map<number, number>();
+    for (const b of (data.breakableBlocks ?? [])) {
+      const newUid = allocateUid(s);
+      if (!s.roomData.breakableBlocks) s.roomData.breakableBlocks = [];
+      let newGroupId: number | undefined;
+      if (b.groupId !== undefined) {
+        if (!groupIdRemap.has(b.groupId)) groupIdRemap.set(b.groupId, allocateUid(s));
+        newGroupId = groupIdRemap.get(b.groupId);
+      }
+      s.roomData.breakableBlocks.push({
+        ...b,
+        uid: newUid,
+        groupId: newGroupId,
+        xBlock: b.xBlock - minX + offsetX,
+        yBlock: b.yBlock - minY + offsetY,
+      });
+      newElements.push({ type: 'breakableBlock', uid: newUid });
+    }
   }
   for (const p of (data.dustPiles ?? [])) {
     const newUid = allocateUid(s);

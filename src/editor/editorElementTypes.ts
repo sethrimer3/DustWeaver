@@ -405,6 +405,29 @@ export interface EditorLambdaAnchor {
   yBlock: number;
 }
 
+/** Firefly Jar — a decorative object emitting fireflies from a fixed position. */
+export interface EditorFireflyJar {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** Springboard — a directional launch pad, visually/mechanically distinct from bounce pads. */
+export interface EditorSpringboard {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+}
+
+/** A generic breakable block cell (distinct from crumble/falling/custom-block fragile paths). */
+export interface EditorBreakableBlock {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Shared group id for multi-cell placements (e.g. 2x2), so they select/move/delete together. */
+  groupId?: number;
+}
+
 export interface EditorDustPile {
   uid: number;
   xBlock: number;
@@ -616,6 +639,12 @@ export interface EditorRoomData {
   dustSwarms: EditorDustSwarm[];
   /** Lambda Anchors — golden λ-glyph poles acting as temporary recall points. */
   lambdaAnchors: EditorLambdaAnchor[];
+  /** Firefly jars placed in this room. */
+  fireflyJars?: EditorFireflyJar[];
+  /** Springboards placed in this room. */
+  springboards?: EditorSpringboard[];
+  /** Generic breakable blocks placed in this room. */
+  breakableBlocks?: EditorBreakableBlock[];
   dustPiles: EditorDustPile[];
   grasshopperAreas: EditorGrasshopperArea[];
   /** Firefly spawn areas (free-roaming fireflies, not jar-based). */
@@ -664,7 +693,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock' | 'fireflyJar' | 'springboard' | 'breakableBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

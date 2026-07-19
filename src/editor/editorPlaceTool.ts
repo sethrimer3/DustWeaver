@@ -627,6 +627,45 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       xBlock: bx,
       yBlock: by,
     });
+  } else if (item.id === 'firefly_jar') {
+    if (!room.fireflyJars) room.fireflyJars = [];
+    if (room.fireflyJars.some(a => a.xBlock === bx && a.yBlock === by)) return;
+    room.fireflyJars.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
+  } else if (item.id === 'springboard') {
+    if (!room.springboards) room.springboards = [];
+    if (room.springboards.some(a => a.xBlock === bx && a.yBlock === by)) return;
+    room.springboards.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
+  } else if (item.id === 'breakable_block_1x1') {
+    if (!room.breakableBlocks) room.breakableBlocks = [];
+    if (room.breakableBlocks.some(a => a.xBlock === bx && a.yBlock === by)) return;
+    room.breakableBlocks.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+    });
+  } else if (item.id === 'breakable_block_2x2') {
+    if (!room.breakableBlocks) room.breakableBlocks = [];
+    const groupId = allocateUid(state);
+    const cells: Array<[number, number]> = [[bx, by], [bx + 1, by], [bx, by + 1], [bx + 1, by + 1]];
+    for (const [cx, cy] of cells) {
+      if (room.breakableBlocks.some(a => a.xBlock === cx && a.yBlock === cy)) return;
+    }
+    for (const [cx, cy] of cells) {
+      room.breakableBlocks.push({
+        uid: allocateUid(state),
+        xBlock: cx,
+        yBlock: cy,
+        groupId,
+      });
+    }
   } else if (item.id === 'dust_pile' || item.id === 'dust_pile_small' || item.id === 'dust_pile_medium' || item.id === 'dust_pile_large') {
     let dustCount: number;
     if (item.id === 'dust_pile_small') {

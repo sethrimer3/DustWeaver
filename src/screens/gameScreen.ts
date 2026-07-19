@@ -5,7 +5,7 @@ import { createRng } from '../sim/rng';
 import { createReusableSnapshot, updateSnapshotInPlace } from '../render/snapshot';
 import { PlayerCloak } from '../render/clusters/playerCloak';
 import { MomentumTrail } from '../render/clusters/momentumTrail';
-import { StormweaveLifeMotes, getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
+import { StormweaveLifeMotes, getStormweaveMoteCount } from '../sim/stormweave/lifeMotes';
 import { deactivateShieldWeave, updateShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { HudState } from '../render/hud/overlay';
@@ -663,18 +663,6 @@ export function startGameScreen(
 
   // ── Dust container state (armor system) ─────────────────────────────────
   /** Number of dust particles the player currently has. */
-  function getPlayerDustCount(): number {
-    const player = world.clusters[0];
-    if (player === undefined || player.isAliveFlag === 0) return 0;
-    let count = 0;
-    for (let i = 0; i < world.particleCount; i++) {
-      if (world.ownerEntityId[i] === player.entityId && world.isAliveFlag[i] === 1 && world.isTransientFlag[i] === 0) {
-        count++;
-      }
-    }
-    return count;
-  }
-
   // ── DEV-only transition profiler helpers ─────────────────────────────────
   /** Build the room-content counters surfaced in transition summaries. */
   function _buildRoomCounts(room: RoomDef): TP.TransitionProfileRoomCounts {
@@ -1503,12 +1491,12 @@ export function startGameScreen(
       tick(world);
       const stormweavePlayer = world.clusters[0];
       if (stormweavePlayer !== undefined && stormweavePlayer.isAliveFlag === 1) {
-        const fullLifeContainerCount = getFullLifeContainerCount(stormweavePlayer.healthPoints);
-        if (world.shieldWeave.isActive && world.shieldWeave.moteCount !== fullLifeContainerCount) {
+        const currentMoteCount = getStormweaveMoteCount(stormweavePlayer.healthPoints);
+        if (world.shieldWeave.isActive && world.shieldWeave.moteCount !== currentMoteCount) {
           updateShieldWeaveState(
             world.shieldWeave,
             0,
-            fullLifeContainerCount,
+            currentMoteCount,
             stormweavePlayer.positionXWorld,
             stormweavePlayer.positionYWorld,
             stormweavePlayer.halfHeightWorld * 2,
@@ -1517,7 +1505,7 @@ export function startGameScreen(
           );
         }
         stormweaveLifeMotes.reconcile(
-          fullLifeContainerCount,
+          currentMoteCount,
           stormweavePlayer.positionXWorld,
           stormweavePlayer.positionYWorld,
         );
@@ -1726,8 +1714,6 @@ export function startGameScreen(
       linkedAnchorRoomId: lambdaAnchorState.linkedAnchorRoomId,
       teleportFlashAlpha: lambdaAnchorState.teleportFlashAlpha,
       setTeleportFlashAlpha: lambdaAnchorState.setTeleportFlashAlpha,
-      getPlayerDustCount,
-      playerContainerCount: progress?.dustContainerCount ?? 0,
       runTimerMs: runTimer.getCurrentMs(),
       graphicsQuality: pauseController.state.pauseMenuState.graphicsQuality,
       isAdaptiveReductionActive: aqState.isAdaptiveReductionActive,

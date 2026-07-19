@@ -13,7 +13,7 @@ const HORIZONTAL_POSITION_EPSILON_WORLD = 0.01;
 
 import type { ChallengeModeState } from './challengeMode';
 import { consumeChallengeReturn } from './challengeMode';
-import { getFullLifeContainerCount } from './stormweave/lifeMotes';
+import { getPlayerMoteCount, normalizeMoteCount } from './playerMoteLife';
 
 
 const INVULNERABILITY_DURATION_TICKS = 90;
@@ -63,7 +63,7 @@ export function applyPlayerDamageWithKnockback(
   if (player.isHighVelocityAttacking === 1 && options?.bypassMomentumInvulnerability !== true) return false; // momentum combat invulnerability
   if (player.challengeReturnGuard === 1) return false;
 
-  const damageToApply = Math.max(0, damagePoints);
+  const damageToApply = normalizeMoteCount(Math.ceil(damagePoints));
   if (damageToApply <= 0) return false;
 
   const challenge = options?.challengeState ?? player.challengeMode ?? undefined;
@@ -81,20 +81,15 @@ export function applyPlayerDamageWithKnockback(
     return true;
   }
 
-  // A partial dust container is not a life mote. Once no full container
-  // remains, the next otherwise-valid hit is fatal through this canonical
-  // damage path (rather than through visual Stormweave state).
-  if (getFullLifeContainerCount(player.healthPoints) === 0) {
+  // Reaching zero motes is survivable. A subsequent otherwise-valid damage
+  // event at zero is fatal through this canonical pipeline.
+  if (getPlayerMoteCount(player) === 0) {
     player.healthPoints = 0;
     player.isAliveFlag = 0;
     return true;
   }
 
-  player.healthPoints -= damageToApply;
-  if (player.healthPoints <= 0) {
-    player.healthPoints = 0;
-    player.isAliveFlag = 0;
-  }
+  player.healthPoints = Math.max(0, getPlayerMoteCount(player) - damageToApply);
 
   // Horizontal knockback direction based solely on whether the source is to
   // the left or right of the player — prevents diagonal sources from pushing

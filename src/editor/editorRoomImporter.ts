@@ -23,6 +23,7 @@ import type {
   EditorDustBoostJar,
   EditorDustSwarm,
   EditorLambdaAnchor,
+  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
   EditorDustPile,
   EditorGrasshopperArea,
   EditorFireflyArea,
@@ -247,6 +248,34 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     yBlock: a.yBlock,
   }));
 
+  const fireflyJars: EditorFireflyJar[] = (room.fireflyJars ?? []).map(j => ({
+    uid: uid++,
+    xBlock: j.xBlock,
+    yBlock: j.yBlock,
+  }));
+
+  const springboards: EditorSpringboard[] = (room.springboards ?? []).map(s => ({
+    uid: uid++,
+    xBlock: s.xBlock,
+    yBlock: s.yBlock,
+  }));
+
+  // Only import "plain" breakable-block cells here — cells carrying custom-
+  // block-derived properties (blockTheme/materialResponse/breakResistance/
+  // windResponse/liquidInteraction/windVentIndex) are re-synthesized from
+  // `customBlocks` on every editorRoomBuilder rebuild, so importing them too
+  // would duplicate them and lose their custom-block linkage.
+  const breakableBlocks: EditorBreakableBlock[] = (room.breakableBlocks ?? [])
+    .filter(b => b.blockTheme === undefined && b.materialResponse === undefined
+      && b.breakResistance === undefined && b.windResponse === undefined
+      && b.liquidInteraction === undefined && b.windVentIndex === undefined)
+    .map(b => ({
+      uid: uid++,
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      groupId: b.groupId,
+    }));
+
   const dustPiles: EditorDustPile[] = (room.dustPiles ?? []).map(p => ({
     uid: uid++,
     xBlock: p.xBlock,
@@ -442,6 +471,9 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       dustBoostJars,
       dustSwarms,
       lambdaAnchors,
+      fireflyJars,
+      springboards,
+      breakableBlocks,
       dustPiles,
       grasshopperAreas,
       fireflyAreas,

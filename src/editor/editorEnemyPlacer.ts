@@ -96,6 +96,29 @@ export function placeEnemyAtCursor(
       isIceBubbleFlag: 0,
       isSquareStampedeFlag: 0,
     });
+  } else if (item.id === 'enemy_grapple_hunter') {
+    room.enemies.push({
+      uid: allocateUid(state),
+      xBlock: bx,
+      yBlock: by,
+      kinds: ['Physical'],
+      particleCount: 18,
+      isBossFlag: 0,
+      isFlyingEyeFlag: 0,
+      isRollingEnemyFlag: 0,
+      rollingEnemySpriteIndex: 0,
+      isRockElementalFlag: 0,
+      isRadiantTetherFlag: 0,
+      isRadiantWebFlag: 0,
+      isGrappleHunterFlag: 1,
+      isSlimeFlag: 0,
+      isLargeSlimeFlag: 0,
+      isWheelEnemyFlag: 0,
+      isBeetleFlag: 0,
+      isBubbleEnemyFlag: 0,
+      isIceBubbleFlag: 0,
+      isSquareStampedeFlag: 0,
+    });
   } else if (item.id === 'enemy_slime') {
     room.enemies.push({
       uid: allocateUid(state),

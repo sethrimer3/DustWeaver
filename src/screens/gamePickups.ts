@@ -13,6 +13,7 @@ import type { PlayerProgress } from '../progression/playerProgress';
 import type { RngState } from '../sim/rng';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from './gameSpawn';
+import { grantDustContainerMotes, grantPlayerMotes } from '../sim/playerMoteLife';
 import {
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD,
@@ -41,8 +42,8 @@ export function processRoomPickups(
   roomOriginYWorld = 0,
 ): void {
   // ── Dust container pickups ─────────────────────────────────────────────────
-  // Grants +1 dust container (+4 particle capacity). Containers do not grant
-  // usable dust particles; dust/weave access is controlled by progression.
+  // One permanent Dust Container adds four mote-capacity slots and fills all
+  // four new slots in one atomic pickup transaction.
   const roomDustContainers = currentRoom.dustContainers ?? [];
   for (let i = 0; i < roomDustContainers.length; i++) {
     const pickupKey = `${currentRoom.id}:container:${i}`;
@@ -56,6 +57,7 @@ export function processRoomPickups(
     const dy = player.positionYWorld - cy;
     if (dx * dx + dy * dy <= DUST_CONTAINER_PICKUP_RADIUS_WORLD * DUST_CONTAINER_PICKUP_RADIUS_WORLD) {
       collectedKeySet.add(pickupKey);
+      grantDustContainerMotes(player);
       if (progress) {
         progress.dustContainerCount += 1;
         if (!progress.collectedDustContainerKeys.includes(pickupKey)) {
@@ -65,7 +67,8 @@ export function processRoomPickups(
     }
   }
 
-  // Grants one shard; every four shards forge into one permanent container.
+  // A Dust Shard restores one current mote. The existing persistent four-shard
+  // forging rule remains; forging grants the resulting Container atomically.
   const roomDustContainerPieces = currentRoom.dustContainerPieces ?? [];
   for (let i = 0; i < roomDustContainerPieces.length; i++) {
     const pickupKey = `${currentRoom.id}:containerShard:${i}`;
@@ -78,6 +81,7 @@ export function processRoomPickups(
     const dy = player.positionYWorld - cy;
     if (dx * dx + dy * dy <= DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD * DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD) {
       collectedKeySet.add(pickupKey);
+      grantPlayerMotes(player, 1);
       if (progress) {
         progress.dustContainerPieces += 1;
         if (!progress.collectedDustContainerKeys.includes(pickupKey)) {
@@ -86,6 +90,7 @@ export function processRoomPickups(
         if (progress.dustContainerPieces >= DUST_CONTAINER_SHARDS_PER_CONTAINER) {
           const forgedContainerCount = Math.floor(progress.dustContainerPieces / DUST_CONTAINER_SHARDS_PER_CONTAINER);
           progress.dustContainerCount += forgedContainerCount;
+          grantDustContainerMotes(player, forgedContainerCount);
           progress.dustContainerPieces %= DUST_CONTAINER_SHARDS_PER_CONTAINER;
         }
       }

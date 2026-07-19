@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 import {
   StormweaveLifeMotes,
   STORMWEAVE_RESTING_REGION_WORLD,
-  getFullLifeContainerCount,
+  getStormweaveMoteCount,
   getStormweaveAttractionAcceleration,
 } from '../sim/stormweave/lifeMotes';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
@@ -25,30 +25,28 @@ function makeDamageTarget(healthPoints: number): PlayerDamageTarget {
   };
 }
 
-describe('Stormweave life-container synchronization', () => {
-  test('one visual mote exists per full canonical life container', () => {
+describe('Stormweave current-mote synchronization', () => {
+  test('one visual Stormweave mote exists per canonical current mote', () => {
     const cloud = new StormweaveLifeMotes();
-    for (const [health, expected] of [[0, 0], [4, 1], [16, 4]] as const) {
-      cloud.reconcile(getFullLifeContainerCount(health), 20, 30);
+    for (const [health, expected] of [[0, 0], [4, 4], [16, 16]] as const) {
+      cloud.reconcile(getStormweaveMoteCount(health), 20, 30);
       assert.equal(cloud.moteCount, expected);
     }
   });
 
-  test('partial container fill does not add an extra mote', () => {
-    assert.equal(getFullLifeContainerCount(3), 0);
-    assert.equal(getFullLifeContainerCount(7), 1);
-    assert.equal(getFullLifeContainerCount(11.99), 2);
+  test('fractional legacy values normalize to individual whole motes', () => {
+    assert.equal(getStormweaveMoteCount(3), 3);
+    assert.equal(getStormweaveMoteCount(7), 7);
+    assert.equal(getStormweaveMoteCount(11.99), 11);
   });
 
   test('motes are added and removed exactly as health crosses container boundaries', () => {
     const cloud = new StormweaveLifeMotes();
-    cloud.reconcile(getFullLifeContainerCount(12), 0, 0);
+    cloud.reconcile(getStormweaveMoteCount(3), 0, 0);
     assert.equal(cloud.moteCount, 3);
-    cloud.reconcile(getFullLifeContainerCount(15), 0, 0);
-    assert.equal(cloud.moteCount, 3, 'partial healing is not a completed container');
-    cloud.reconcile(getFullLifeContainerCount(16), 0, 0);
+    cloud.reconcile(getStormweaveMoteCount(4), 0, 0);
     assert.equal(cloud.moteCount, 4);
-    cloud.reconcile(getFullLifeContainerCount(11), 0, 0);
+    cloud.reconcile(getStormweaveMoteCount(2), 0, 0);
     assert.equal(cloud.moteCount, 2);
   });
 
@@ -131,15 +129,18 @@ describe('Stormweave high-speed trails', () => {
   });
 });
 
-describe('canonical zero-container damage rule', () => {
-  test('the next valid damage event is fatal when only a partial container remains', () => {
-    const player = makeDamageTarget(3);
+describe('canonical zero-mote damage rule', () => {
+  test('reaching zero motes does not kill; the next valid hit does', () => {
+    const player = makeDamageTarget(1);
     assert.equal(applyPlayerDamageWithKnockback(player, 1, 0, 0), true);
     assert.equal(player.healthPoints, 0);
+    assert.equal(player.isAliveFlag, 1);
+    player.invulnerabilityTicks = 0;
+    assert.equal(applyPlayerDamageWithKnockback(player, 1, 0, 0), true);
     assert.equal(player.isAliveFlag, 0);
   });
 
-  test('damage retains the existing decrement model while a full container remains', () => {
+  test('damage removes the existing number of individual motes', () => {
     const player = makeDamageTarget(8);
     assert.equal(applyPlayerDamageWithKnockback(player, 1, 0, 0), true);
     assert.equal(player.healthPoints, 7);

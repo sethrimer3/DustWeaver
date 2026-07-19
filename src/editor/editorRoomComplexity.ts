@@ -45,7 +45,10 @@ export function countEditorRoomDataCategories(room: EditorRoomData): RoomComplex
       room.dustSwarms.length +
       (room.guideDustPaths?.length ?? 0) +
       room.grasshopperAreas.length +
-      room.fireflyAreas.length,
+      room.fireflyAreas.length +
+      (room.fireflyJars?.length ?? 0) +
+      (room.springboards?.length ?? 0) +
+      (room.breakableBlocks?.length ?? 0),
     enemies: room.enemies.length,
     enemyParticles: room.enemies.reduce((sum, e) => sum + e.particleCount, 0),
     dustCells: room.pixelMaterials?.length ?? 0,

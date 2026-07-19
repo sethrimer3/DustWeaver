@@ -77,6 +77,21 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(rect, room.widthBlocks, room.heightBlocks);
   }
 
+  for (const jar of (room.fireflyJars ?? [])) {
+    jar.xBlock = Math.min(Math.max(0, jar.xBlock), maxX);
+    jar.yBlock = Math.min(Math.max(0, jar.yBlock), maxY);
+  }
+
+  for (const sb of (room.springboards ?? [])) {
+    sb.xBlock = Math.min(Math.max(0, sb.xBlock), maxX);
+    sb.yBlock = Math.min(Math.max(0, sb.yBlock), maxY);
+  }
+
+  for (const bb of (room.breakableBlocks ?? [])) {
+    bb.xBlock = Math.min(Math.max(0, bb.xBlock), maxX);
+    bb.yBlock = Math.min(Math.max(0, bb.yBlock), maxY);
+  }
+
   for (const pile of room.dustPiles) {
     pile.xBlock = Math.min(Math.max(0, pile.xBlock), maxX);
     pile.yBlock = Math.min(Math.max(0, pile.yBlock), maxY);
@@ -236,6 +251,24 @@ export function applyEdgeResize(
     ]) {
       element.xBlock += shiftX;
       element.yBlock += shiftY;
+    }
+
+    // Shift firefly jars
+    for (const jar of (room.fireflyJars ?? [])) {
+      jar.xBlock += shiftX;
+      jar.yBlock += shiftY;
+    }
+
+    // Shift springboards
+    for (const sb of (room.springboards ?? [])) {
+      sb.xBlock += shiftX;
+      sb.yBlock += shiftY;
+    }
+
+    // Shift breakable blocks
+    for (const bb of (room.breakableBlocks ?? [])) {
+      bb.xBlock += shiftX;
+      bb.yBlock += shiftY;
     }
 
     // Shift dust piles

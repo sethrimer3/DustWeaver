@@ -333,7 +333,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     walls: allWalls,
-    breakableBlocks: customBlockBreakables.length > 0 ? customBlockBreakables : undefined,
+    breakableBlocks: (customBlockBreakables.length > 0 || (data.breakableBlocks ?? []).length > 0)
+      ? [
+          ...customBlockBreakables,
+          ...(data.breakableBlocks ?? []).map(b => ({ xBlock: b.xBlock, yBlock: b.yBlock, groupId: b.groupId })),
+        ]
+      : undefined,
     contactDamageBlocks: customBlockContactDamage.length > 0 ? customBlockContactDamage : undefined,
     windTransmissionBlocks: customBlockWindTransmission.length > 0 ? customBlockWindTransmission : undefined,
     liquidInteractionBlocks: customBlockLiquidInteraction.length > 0 ? customBlockLiquidInteraction : undefined,
@@ -373,6 +378,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       xBlock: a.xBlock,
       yBlock: a.yBlock,
     })),
+    fireflyJars: (data.fireflyJars ?? []).length > 0
+      ? data.fireflyJars!.map(j => ({ xBlock: j.xBlock, yBlock: j.yBlock }))
+      : undefined,
+    springboards: (data.springboards ?? []).length > 0
+      ? data.springboards!.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }))
+      : undefined,
     dustPiles: data.dustPiles.map(p => ({ xBlock: p.xBlock, yBlock: p.yBlock, dustCount: p.dustCount, spreadBlocks: p.spreadBlocks ?? 0 })),
     pixelMaterials: (data.pixelMaterials ?? []).map(p => ({ xPixel: p.xPixel, yPixel: p.yPixel, material: p.material })),
     grasshopperAreas: data.grasshopperAreas.map(a => ({

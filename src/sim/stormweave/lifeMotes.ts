@@ -6,8 +6,8 @@
  */
 
 import { getShieldMoteAngleRad, type ShieldArcGeometry } from './shieldWeave';
+import { normalizeMoteCount } from '../playerMoteLife';
 
-export const LIFE_DUST_UNITS_PER_CONTAINER = 4;
 export const STORMWEAVE_RESTING_REGION_WORLD = 15;
 
 const MAX_LIFE_MOTES = 32;
@@ -19,9 +19,8 @@ const MAX_CATCH_UP_SPEED_WORLD_PER_SEC = 155;
 const SEPARATION_RADIUS_WORLD = 7;
 const SEPARATION_ACCEL_PER_SEC2 = 72;
 
-export function getFullLifeContainerCount(healthPoints: number): number {
-  if (!Number.isFinite(healthPoints) || healthPoints <= 0) return 0;
-  return Math.min(MAX_LIFE_MOTES, Math.floor(healthPoints / LIFE_DUST_UNITS_PER_CONTAINER));
+export function getStormweaveMoteCount(currentMoteCount: number): number {
+  return Math.min(MAX_LIFE_MOTES, normalizeMoteCount(currentMoteCount));
 }
 
 /** Smooth near-player falloff used by the steering simulation and direct tests. */

@@ -111,6 +111,27 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check firefly jars
+  for (const j of (room.fireflyJars ?? [])) {
+    if (hitTestPoint(j.xBlock, j.yBlock, bx, by)) {
+      return { type: 'fireflyJar', uid: j.uid };
+    }
+  }
+
+  // Check springboards
+  for (const s of (room.springboards ?? [])) {
+    if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) {
+      return { type: 'springboard', uid: s.uid };
+    }
+  }
+
+  // Check breakable blocks
+  for (const b of (room.breakableBlocks ?? [])) {
+    if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
+      return { type: 'breakableBlock', uid: b.uid };
+    }
+  }
+
   // Check dust piles
   for (const p of room.dustPiles) {
     if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) {
@@ -464,6 +485,21 @@ export function getAllElementsInRect(
   for (const a of (room.lambdaAnchors ?? [])) {
     if (a.xBlock >= minX && a.xBlock <= maxX && a.yBlock >= minY && a.yBlock <= maxY) {
       results.push({ type: 'lambdaAnchor', uid: a.uid });
+    }
+  }
+  for (const j of (room.fireflyJars ?? [])) {
+    if (j.xBlock >= minX && j.xBlock <= maxX && j.yBlock >= minY && j.yBlock <= maxY) {
+      results.push({ type: 'fireflyJar', uid: j.uid });
+    }
+  }
+  for (const s of (room.springboards ?? [])) {
+    if (s.xBlock >= minX && s.xBlock <= maxX && s.yBlock >= minY && s.yBlock <= maxY) {
+      results.push({ type: 'springboard', uid: s.uid });
+    }
+  }
+  for (const b of (room.breakableBlocks ?? [])) {
+    if (b.xBlock >= minX && b.xBlock <= maxX && b.yBlock >= minY && b.yBlock <= maxY) {
+      results.push({ type: 'breakableBlock', uid: b.uid });
     }
   }
   for (const p of room.dustPiles) {

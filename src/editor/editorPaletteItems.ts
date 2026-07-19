@@ -155,6 +155,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },
   { id: 'enemy_rock_elemental', label: 'Rock Elemental', category: 'enemies' },
+  { id: 'enemy_grapple_hunter', label: 'Grapple Hunter', category: 'enemies' },
   { id: 'enemy_slime', label: 'Slime', category: 'enemies' },
   { id: 'enemy_slime_large', label: 'Dust Slime (L)', category: 'enemies' },
   { id: 'enemy_wheel', label: 'Wheel Enemy', category: 'enemies' },

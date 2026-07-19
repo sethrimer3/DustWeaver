@@ -226,6 +226,50 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
     }
   }
 
+  // Check firefly jars
+  const fireflyJars = room.fireflyJars ?? [];
+  for (let i = 0; i < fireflyJars.length; i++) {
+    if (hitTestPoint(fireflyJars[i].xBlock, fireflyJars[i].yBlock, bx, by)) {
+      const removedUid = fireflyJars[i].uid;
+      fireflyJars.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check springboards
+  const springboards = room.springboards ?? [];
+  for (let i = 0; i < springboards.length; i++) {
+    if (hitTestPoint(springboards[i].xBlock, springboards[i].yBlock, bx, by)) {
+      const removedUid = springboards[i].uid;
+      springboards.splice(i, 1);
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
+  // Check breakable blocks (removing an entire shared group at once)
+  const breakableBlocks = room.breakableBlocks ?? [];
+  for (let i = 0; i < breakableBlocks.length; i++) {
+    if (hitTestPoint(breakableBlocks[i].xBlock, breakableBlocks[i].yBlock, bx, by)) {
+      const groupId = breakableBlocks[i].groupId;
+      const removedUids = new Set<number>();
+      if (groupId !== undefined) {
+        for (let j = breakableBlocks.length - 1; j >= 0; j--) {
+          if (breakableBlocks[j].groupId === groupId) {
+            removedUids.add(breakableBlocks[j].uid);
+            breakableBlocks.splice(j, 1);
+          }
+        }
+      } else {
+        removedUids.add(breakableBlocks[i].uid);
+        breakableBlocks.splice(i, 1);
+      }
+      state.selectedElements = state.selectedElements.filter(e => !removedUids.has(e.uid));
+      return;
+    }
+  }
+
   // Check dust piles
   for (let i = 0; i < room.dustPiles.length; i++) {
     if (hitTestPoint(room.dustPiles[i].xBlock, room.dustPiles[i].yBlock, bx, by)) {

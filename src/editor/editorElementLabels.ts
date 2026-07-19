@@ -26,6 +26,9 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     dustBoostJar:     'dust_jar',
     dustSwarm:        'dust_swarm',
     lambdaAnchor:     'lambda_anchor',
+    fireflyJar:       'firefly_jar',
+    springboard:      'springboard',
+    breakableBlock:   'breakable_block',
     dustPile:         'dust_pile',
     grasshopperArea:  'grasshopper_area',
     fireflyArea:      'firefly_area',
@@ -119,6 +122,9 @@ export function buildElementTypeName(
     pixelMaterial:      'Sand Pixel',
     rope:               'Rope',
     customBlock:        'Custom Block',
+    fireflyJar:         'Firefly Jar',
+    springboard:        'Springboard',
+    breakableBlock:     'Breakable Block',
   };
   if (type === 'dustBoostJar') {
     const j = (room.dustBoostJars ?? []).find(x => x.uid === uid);

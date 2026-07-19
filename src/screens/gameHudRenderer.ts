@@ -13,7 +13,15 @@ import type { WorldState } from '../sim/world';
 import type { HudState } from '../render/hud/overlay';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
-import { DUST_PARTICLES_PER_CONTAINER } from './gameSpawn';
+import { getPlayerMoteCapacity, getPlayerMoteCount } from '../sim/playerMoteLife';
+import {
+  getMoteLifeColumnCount,
+  getMoteLifeSlotPosition,
+  MOTE_LIFE_ORIGIN_Y_PX,
+  MOTE_LIFE_SLOT_GAP_PX,
+  MOTE_LIFE_SLOT_ROWS,
+  MOTE_LIFE_SLOT_SIZE_PX,
+} from '../render/hud/moteLifeSlots';
 import {
   MOTE_STATE_AVAILABLE,
   BASE_MOTE_REGENERATION_TICKS,
@@ -29,7 +37,6 @@ const HUD_HEALTH_BAR_X_PX     = 8;
 const HUD_HEALTH_BAR_Y_PX     = 8;
 const HUD_HEALTH_BAR_WIDTH_PX = 60;
 const HUD_HEALTH_BAR_HEIGHT_PX = 6;
-const HUD_HEALTH_DUST_GAP_PX  = 4;
 
 // Health fraction thresholds for visual escalation
 const HEALTH_THRESHOLD_DANGER_FRACTION   = 0.40;  // below this → amber warning
@@ -76,11 +83,6 @@ export interface HudRenderContext {
   healthBarDisplayUntilTick: Map<number, number>;
   combatText: CombatTextSystem;
   prevLastPlayerBlockedTick: { value: number };
-  getPlayerDustCount: () => number;
-  /** Number of dust containers the player owns (from progress.dustContainerCount).
-   * Drives the number of container outlines shown in the HUD regardless of whether
-   * any dust type is currently unlocked or any live particles are present. */
-  playerContainerCount: number;
   /** When provided, the render profiler panel is drawn in the top-right corner. */
   renderProfiler?: RenderProfiler;
   /** Current speedrun timer value in milliseconds (0 = not started).
@@ -136,13 +138,12 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     ctx, world, ox, oy, zoom,
     prevHealthMap, healthBarDisplayUntilTick,
     combatText, prevLastPlayerBlockedTick,
-    getPlayerDustCount, playerContainerCount,
   } = r;
 
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
   {
     const playerForHealth = world.clusters[0];
-    if (playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
+    if (false && playerForHealth !== undefined && playerForHealth.isAliveFlag === 1) {
       const healthFraction = playerForHealth.healthPoints / playerForHealth.maxHealthPoints;
       const healthBarAlpha = r.isChallengeModeActive ? 1 : getHealthBarAlpha(
         playerForHealth.entityId,
@@ -239,46 +240,35 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   // persist even when no dust type is unlocked or no live particles exist.
   // Quadrant fills come from live particle count so they reflect the current
   // in-world dust amount.
-  const dustCount = getPlayerDustCount();
-  const fullContainersFromParticles = Math.floor(dustCount / DUST_PARTICLES_PER_CONTAINER);
-  const partialDust = dustCount % DUST_PARTICLES_PER_CONTAINER;
-  // Total slots to draw: at least the owned containers, but also cover any
-  // extra live particles that exceed the recorded container count (edge case).
-  const totalContainerSlots = Math.max(
-    playerContainerCount,
-    fullContainersFromParticles + (partialDust > 0 ? 1 : 0),
-  );
-  const dustSquareSize = 8;
-  const dustPadding = 2;
+  const playerForMoteLife = world.clusters[0];
+  const currentMoteCount = playerForMoteLife ? getPlayerMoteCount(playerForMoteLife) : 0;
+  const maxMoteCapacity = playerForMoteLife ? getPlayerMoteCapacity(playerForMoteLife) : 0;
+  const dustSquareSize = MOTE_LIFE_SLOT_SIZE_PX;
   const dustStartX = 8;
-  const dustStartY = HUD_HEALTH_BAR_Y_PX + HUD_HEALTH_BAR_HEIGHT_PX + HUD_HEALTH_DUST_GAP_PX;
+  const dustStartY = MOTE_LIFE_ORIGIN_Y_PX
+    + MOTE_LIFE_SLOT_ROWS * MOTE_LIFE_SLOT_SIZE_PX
+    + (MOTE_LIFE_SLOT_ROWS - 1) * MOTE_LIFE_SLOT_GAP_PX;
 
   ctx.save();
-  for (let containerSlotIndex = 0; containerSlotIndex < totalContainerSlots; containerSlotIndex++) {
-    const squareX = dustStartX + containerSlotIndex * (dustSquareSize + dustPadding);
+  for (let moteIndex = 0; moteIndex < maxMoteCapacity; moteIndex++) {
+    const slot = getMoteLifeSlotPosition(moteIndex);
+    const isFilled = moteIndex < currentMoteCount;
     // Determine how many quadrants (0–4) to fill for this slot from live particles.
-    const slotParticleStart = containerSlotIndex * DUST_PARTICLES_PER_CONTAINER;
-    const remaining = Math.max(0, dustCount - slotParticleStart);
-    const quadrantsActive = Math.min(remaining, DUST_PARTICLES_PER_CONTAINER);
-
-    // Draw square background
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(squareX, dustStartY, dustSquareSize, dustSquareSize);
-
-    // Draw quadrants (2x2 grid) - direct indexing to avoid allocation
-    const halfSize = dustSquareSize / 2;
-
-    for (let q = 0; q < quadrantsActive; q++) {
-      const qx = (q % 2) * halfSize;
-      const qy = Math.floor(q / 2) * halfSize;
-      ctx.fillStyle = 'rgba(212,168,75,0.9)'; // golden dust color
-      ctx.fillRect(squareX + qx + 0.5, dustStartY + qy + 0.5, halfSize - 1, halfSize - 1);
-    }
-
-    // Draw border
-    ctx.strokeStyle = 'rgba(212,168,75,0.6)';
+    ctx.fillStyle = isFilled ? 'rgba(92,65,8,0.96)' : 'rgba(12,10,7,0.88)';
+    ctx.fillRect(slot.xPx, slot.yPx, dustSquareSize, dustSquareSize);
+    ctx.strokeStyle = isFilled ? '#d4a84b' : 'rgba(105,82,35,0.7)';
     ctx.lineWidth = 1;
-    ctx.strokeRect(squareX + 0.5, dustStartY + 0.5, dustSquareSize - 1, dustSquareSize - 1);
+    ctx.strokeRect(slot.xPx + 0.5, slot.yPx + 0.5, dustSquareSize - 1, dustSquareSize - 1);
+    if (isFilled) {
+      ctx.fillStyle = '#ffd85a';
+      ctx.fillRect(slot.xPx + 2, slot.yPx + 2, 2, 2);
+      ctx.fillStyle = '#fff2ad';
+      ctx.fillRect(slot.xPx + 2, slot.yPx + 1, 2, 1);
+    }
+  }
+  const moteLifeColumnCount = getMoteLifeColumnCount(maxMoteCapacity);
+  if (r.isChallengeModeActive && moteLifeColumnCount > 0) {
+    drawChallengeHudShield(ctx, dustStartX + moteLifeColumnCount * 8 + 4, MOTE_LIFE_ORIGIN_Y_PX + 6);
   }
   ctx.restore();
 

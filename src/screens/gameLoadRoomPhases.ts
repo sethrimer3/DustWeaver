@@ -79,7 +79,6 @@ import {
   spawnAllDustPiles,
   PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
-  PLAYER_INITIAL_HEALTH,
 } from './gameSpawn';
 import { spawnEnemyClusters } from './gameEnemySpawn';
 import {
@@ -133,7 +132,8 @@ import {
 } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
 import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
-import { getFullLifeContainerCount } from '../sim/stormweave/lifeMotes';
+import { getStormweaveMoteCount } from '../sim/stormweave/lifeMotes';
+import { getPlayerMoteCapacityForContainerCount } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 
 /**
@@ -460,7 +460,7 @@ function applyRoomEnvironmentAndScheduling(
     stormweavePlayer?.positionYWorld ?? 0,
     stormweavePlayer === undefined
       ? 0
-      : getFullLifeContainerCount(stormweavePlayer.healthPoints),
+      : getStormweaveMoteCount(stormweavePlayer.healthPoints),
   );
 
   decorationWaveState.reset(room.decorations?.length ?? 0);
@@ -619,7 +619,8 @@ export function* makeLoadRoomPhases(
   const { blockerKeys, darkBlockerKeys, roomWidthWorld, roomHeightWorld } =
     applyRoomPresentationState(ctx, room, { logLabel: 'loadRoom', recordPhaseSteps: true });
 
-  let carryHealthPoints = PLAYER_INITIAL_HEALTH;
+  const playerMoteCapacity = getPlayerMoteCapacityForContainerCount(progress?.dustContainerCount ?? 0);
+  let carryHealthPoints = playerMoteCapacity;
   if (
     world.clusters.length > 0 &&
     world.clusters[0].isPlayerFlag === 1 &&
@@ -629,7 +630,7 @@ export function* makeLoadRoomPhases(
     carryHealthPoints = world.clusters[0].healthPoints;
   } else if (world.clusters.length === 0 && progress?.startingHealth !== undefined) {
     // First room load of a new campaign session — use campaign spawn's starting health.
-    carryHealthPoints = Math.max(1, Math.min(progress.startingHealth, PLAYER_INITIAL_HEALTH));
+    carryHealthPoints = Math.max(1, Math.min(progress.startingHealth, playerMoteCapacity));
   }
 
   world.tick = 0;
@@ -649,7 +650,7 @@ export function* makeLoadRoomPhases(
   // ── Phase B: spawn player + particles + mote queue ───────────────────
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, PLAYER_INITIAL_HEALTH);
+  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, playerMoteCapacity);
   playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
   world.clusters.push(playerCluster);
 
@@ -984,7 +985,9 @@ export function applyResidentRoomActivation(
   // ── Phase B equivalent: insert player at clusters[0] ─────────────────────
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, Math.min(carryHealthPoints, PLAYER_INITIAL_HEALTH));
+  const playerMoteCapacity = getPlayerMoteCapacityForContainerCount(progress?.dustContainerCount ?? 0);
+  const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, playerMoteCapacity);
+  playerCluster.healthPoints = Math.min(carryHealthPoints, playerMoteCapacity);
   // Preserve sprite facing direction from the outgoing room so the player
   // does not snap to the default (right-facing) on entry.
   if (playerTransfer !== undefined) {

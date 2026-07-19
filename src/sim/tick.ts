@@ -83,7 +83,7 @@ import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSo
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
 import { applyCustomBlockWindVents } from './pixelMaterials/customBlockWindVents';
 import { updateShieldWeaveState } from './stormweave/shieldWeave';
-import { getFullLifeContainerCount } from './stormweave/lifeMotes';
+import { getStormweaveMoteCount } from './stormweave/lifeMotes';
 
 export function tick(world: WorldState): void {
   // Sync world.combatMode from the module singleton (which is updated by the pause menu toggle).
@@ -160,7 +160,7 @@ export function tick(world: WorldState): void {
       updateShieldWeaveState(
         world.shieldWeave,
         world.dtMs * 0.001,
-        getFullLifeContainerCount(player.healthPoints),
+        getStormweaveMoteCount(player.healthPoints),
         player.positionXWorld,
         player.positionYWorld,
         player.halfHeightWorld * 2,
