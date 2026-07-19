@@ -692,7 +692,7 @@ export interface ClusterState {
   /**
    * 1 if this cluster is a bee swarm — 10 bees that orbit a spawn area until
    * the player comes close or the swarm takes damage, then charge the player.
-   * Each bee can be killed by 1 golden mote (1 Physical particle hit).
+   * Each bee can be killed by 1 golden mote (1 Golden particle hit).
    */
   isBeeSwarmFlag: 0 | 1;
   /**

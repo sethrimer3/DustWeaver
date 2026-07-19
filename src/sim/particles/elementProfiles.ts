@@ -34,7 +34,7 @@ import {
  * Must stay in sync with the ParticleKind enum order.
  */
 export const ELEMENT_PROFILES: ElementProfile[] = [
-  PHYSICAL,   // 0  — ParticleKind.Physical
+  PHYSICAL,   // 0  — ParticleKind.Golden
   FIRE,       // 1  — ParticleKind.Fire
   ICE,        // 2  — ParticleKind.Ice
   LIGHTNING,  // 3  — ParticleKind.Lightning
@@ -56,7 +56,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   LIGHT,      // 19 — ParticleKind.Light
 ];
 
-/** Returns the profile for `kind`, falling back to Physical if out of range. */
+/** Returns the profile for `kind`, falling back to Golden if out of range. */
 export function getElementProfile(kind: number): ElementProfile {
   return ELEMENT_PROFILES[kind] ?? PHYSICAL;
 }

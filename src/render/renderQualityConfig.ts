@@ -42,7 +42,7 @@ export interface RenderQualityConfig {
   maxDynamicLightCount: number;
   /**
    * Maximum number of particle-based point lights submitted to the overlay.
-   * Physical/Gold dust particles each contribute a tiny glow in DarkRoom mode.
+   * Player-owned available Light Dust motes illuminate DarkRoom mode.
    */
   maxParticleLightCount: number;
 

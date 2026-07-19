@@ -118,8 +118,8 @@ describe('applyCampaignStartingOptions — dustContainerCount', () => {
 describe('applyCampaignStartingOptions — dust types', () => {
   it('valid dust type name unlocks the kind', () => {
     const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustTypes: ['Physical'] }, 'fresh');
-    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Physical));
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustTypes: ['Golden'] }, 'fresh');
+    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Golden));
   });
 
   it('unknown dust type name is silently ignored', () => {
@@ -130,16 +130,16 @@ describe('applyCampaignStartingOptions — dust types', () => {
 
   it('duplicate names do not create duplicate entries', () => {
     const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustTypes: ['Physical', 'Physical'] }, 'fresh');
-    const count = p.unlockedDustKinds.filter(k => k === ParticleKind.Physical).length;
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustTypes: ['Golden', 'Golden'] }, 'fresh');
+    const count = p.unlockedDustKinds.filter(k => k === ParticleKind.Golden).length;
     assert.strictEqual(count, 1);
   });
 
   it('existing unlocked kinds remain after applying options', () => {
     const p = createDefaultProgress();
-    p.unlockedDustKinds.push(ParticleKind.Physical);
+    p.unlockedDustKinds.push(ParticleKind.Golden);
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustTypes: ['Fire'] }, 'fresh');
-    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Physical));
+    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Golden));
   });
 
   it('absent/empty startingDustTypes does nothing', () => {
@@ -230,13 +230,13 @@ describe('applyCampaignStartingOptions — combined', () => {
       roomId: 'r', xBlock: 0, yBlock: 0,
       startingHealth: 7,
       startingDustContainerCount: 3,
-      startingDustTypes: ['Physical'],
+      startingDustTypes: ['Golden'],
       startingWeaves: ['storm'],
     };
     applyCampaignStartingOptions(p, spawn, 'fresh');
     assert.strictEqual(p.startingHealth, 7);
     assert.strictEqual(p.dustContainerCount, 3);
-    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Physical));
+    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Golden));
     assert.ok(p.unlockedActiveWeaves.includes('storm'));
   });
 
@@ -254,18 +254,18 @@ describe('applyCampaignStartingOptions — combined', () => {
   it('merge mode preserves existing progression on top of configured additions', () => {
     const p = createDefaultProgress();
     p.dustContainerCount = 4;
-    p.unlockedDustKinds.push(ParticleKind.Physical);
+    p.unlockedDustKinds.push(ParticleKind.Golden);
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustContainerCount: 2, startingDustTypes: ['Fire'] }, 'merge');
     assert.strictEqual(p.dustContainerCount, 4); // not reduced
-    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Physical)); // still there
+    assert.ok(p.unlockedDustKinds.includes(ParticleKind.Golden)); // still there
   });
 
   it('fresh mode begins from createDefaultProgress with only configured additions', () => {
     const p = createDefaultProgress();
     // default progress has 0 containers, no dust, no weaves
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustContainerCount: 2, startingDustTypes: ['Physical'], startingWeaves: ['storm'] }, 'fresh');
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingDustContainerCount: 2, startingDustTypes: ['Golden'], startingWeaves: ['storm'] }, 'fresh');
     assert.strictEqual(p.dustContainerCount, 2);
-    assert.deepStrictEqual(p.unlockedDustKinds, [ParticleKind.Physical]);
+    assert.deepStrictEqual(p.unlockedDustKinds, [ParticleKind.Golden]);
     assert.deepStrictEqual(p.unlockedActiveWeaves, ['storm']);
   });
 
@@ -275,7 +275,7 @@ describe('applyCampaignStartingOptions — combined', () => {
       roomId: 'r', xBlock: 0, yBlock: 0,
       startingHealth: 5,
       startingDustContainerCount: 2,
-      startingDustTypes: ['Physical'],
+      startingDustTypes: ['Golden'],
       startingWeaves: ['storm'],
     });
     assert.doesNotThrow(() => applyCampaignStartingOptions(p, spawn, 'fresh'));

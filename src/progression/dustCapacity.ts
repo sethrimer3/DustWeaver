@@ -7,7 +7,7 @@
  *
  * Example:
  *   2 containers = 8 total capacity
- *   Golden Dust (Physical) costs 1 capacity → 8 particles
+ *   Golden Dust costs 1 capacity → 8 particles
  *   Fire Dust costs 2 capacity → 4 particles
  */
 

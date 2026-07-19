@@ -1,4 +1,4 @@
-import { WorldState, MAX_PARTICLES, MAX_DUST_ECHOES, MAX_MOTES_PER_DE, MAX_MOTES_PER_DL } from '../world';
+﻿import { WorldState, MAX_PARTICLES, MAX_DUST_ECHOES, MAX_MOTES_PER_DE, MAX_MOTES_PER_DL } from '../world';
 import { nextFloat } from '../rng';
 import { applyPlayerDamageWithKnockback } from '../playerDamage';
 import { ParticleKind } from '../particles/kinds';
@@ -92,7 +92,7 @@ function _setEchoState(cluster: WorldState['clusters'][number], state: number): 
 }
 
 function _emitBurst(world: WorldState, cx: number, cy: number, count: number): void {
-  const profile = getElementProfile(ParticleKind.Physical);
+  const profile = getElementProfile(ParticleKind.Golden);
   let spawned = 0;
   for (let pi = 0; pi < MAX_PARTICLES && spawned < count; pi++) {
     if (world.isAliveFlag[pi] === 1) continue;
@@ -107,7 +107,7 @@ function _emitBurst(world: WorldState, cx: number, cy: number, count: number): v
     world.massKg[pi] = profile.massKg;
     world.chargeUnits[pi] = 0;
     world.isAliveFlag[pi] = 1;
-    world.kindBuffer[pi] = ParticleKind.Physical;
+    world.kindBuffer[pi] = ParticleKind.Golden;
     world.ownerEntityId[pi] = -1;
     world.anchorAngleRad[pi] = 0;
     world.anchorRadiusWorld[pi] = 0;

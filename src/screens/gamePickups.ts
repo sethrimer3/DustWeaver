@@ -11,7 +11,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { ClusterState } from '../sim/clusters/state';
 import type { PlayerProgress } from '../progression/playerProgress';
 import type { RngState } from '../sim/rng';
-import { ParticleKind } from '../sim/particles/kinds';
+import { ParticleKind, isEquippableParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from './gameSpawn';
 import { grantDustContainerMotes, grantPlayerMotes } from '../sim/playerMoteLife';
 import {
@@ -105,6 +105,7 @@ export function processRoomPickups(
     if (world.isDustBoostJarActiveFlag[i] === 0 && !collectedKeySet.has(jarKey)) {
       collectedKeySet.add(jarKey);
       const dustKind = world.dustBoostJarKind[i] as ParticleKind;
+      if (!isEquippableParticleKind(dustKind)) continue;
       const dustCount = world.dustBoostJarDustCount[i];
       spawnClusterParticles(
         world,

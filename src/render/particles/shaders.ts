@@ -9,7 +9,7 @@
  *  - Per-element colour selected in the fragment shader from a_kind.
  *  - Alpha fades to 0 as normalizedAge → 1 (particle nearing end of life).
  *  - Point size shrinks slightly with age (visual decay cue).
- *  - Shape clipping via gl_PointCoord — non-Physical kinds render as polygons.
+ *  - Shape clipping via gl_PointCoord — non-Golden kinds render as polygons.
  *  - Radial glow falloff for circle kinds; edge highlight for polygon kinds.
  *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom.
  *  - Fluid particles (kind 14) are normally transparent; disturbanceFactor
@@ -61,7 +61,7 @@ export const PARTICLE_VERTEX_SHADER_SRC = `
 /**
  * Fragment shader:
  *   • Shape clipping: each kind maps to a geometric shape via kindShape().
- *   • Physical/Nature → circle (radial glow); all others → polygon outline.
+ *   • Golden/Nature → circle (radial glow); all others → polygon outline.
  *   • Element colour looked up via v_kind (integer-rounded float).
  *   • Alpha multiplied by (1 − normalizedAge) so particles fade out.
  *
@@ -112,7 +112,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
     if (ki == 18) return vec3(1.00, 0.84, 0.00);  // Gold      — bright golden yellow
     if (ki == 19) return vec3(1.00, 0.99, 0.88);  // Light     — radiant white-gold
-    return vec3(1.00, 0.84, 0.00);                // Physical  — bright golden yellow
+    return vec3(1.00, 0.84, 0.00);                // Golden  — bright golden yellow
   }
 
   // Maps a ParticleKind to a shape index (0–7).
@@ -138,7 +138,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return 3.0; // Stone     → Triangle (rocky, jagged)
     if (ki == 18) return 1.0; // Gold      → Diamond (sparkle)
     if (ki == 19) return 0.0; // Light     → Circle (radiant glow)
-    return 2.0;               // Physical  → Square (gold dust mote)
+    return 2.0;               // Golden  → Square (gold dust mote)
   }
 
   // Returns true if the point coord (in [-0.5, 0.5] space) lies outside the
@@ -232,7 +232,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
       color += vec3(core * 1.0, core * 0.6, core * 0.1);
       alpha = glow * ageFade * 1.1;
     } else if (shape == 0) {
-      // Circle: radial soft-glow with bright white-hot core (Physical, Nature).
+      // Circle: radial soft-glow with bright white-hot core (Golden, Nature).
       float glow = pow(1.0 - dist * 2.0, 1.8);
       float core = pow(max(0.0, 1.0 - dist * 6.0), 2.5);
       color += vec3(core * 0.7);

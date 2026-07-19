@@ -35,7 +35,7 @@ const _blockKindSlotIdx    = new Uint16Array(PARTICLE_KIND_COUNT);
 /** Returns the per-element speed and spread parameters for the attack launch. */
 export function getAttackParams(kind: number): { speedWorld: number; halfSpreadRad: number; loopStrength: number } {
   switch (kind as ParticleKind) {
-    case ParticleKind.Physical:  return { speedWorld: 420, halfSpreadRad: 0.10, loopStrength: 0.0  };
+    case ParticleKind.Golden:  return { speedWorld: 420, halfSpreadRad: 0.10, loopStrength: 0.0  };
     case ParticleKind.Fire:      return { speedWorld: 220, halfSpreadRad: 0.40, loopStrength: 1.0  }; // fire loops
     case ParticleKind.Ice:       return { speedWorld: 320, halfSpreadRad: 1.05, loopStrength: 0.0  }; // wide arc ~120° total
     case ParticleKind.Lightning: return { speedWorld: 750, halfSpreadRad: 0.08, loopStrength: 0.0  }; // tight streak
@@ -228,7 +228,7 @@ export function computeShieldTarget(
   const slotOffset = (particleIndex - halfCount) * SHIELD_SPACING_WORLD;
 
   switch (kind as ParticleKind) {
-    case ParticleKind.Physical: {
+    case ParticleKind.Golden: {
       // Semicircular arc in front — distribute over ±45° around block direction
       const arcAngle = Math.atan2(blockDirYWorld, blockDirXWorld);
       const spread = Math.PI * 0.5; // ±45°

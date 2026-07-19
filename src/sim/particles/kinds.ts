@@ -1,7 +1,7 @@
 /** Each kind has a distinct motion signature driven by its ElementProfile. */
 export enum ParticleKind {
   // ── Collectible dust types — equippable by the player ──────────────────────
-  Physical  = 0,   // Golden Dust — dense gold motes, the starting dust type
+  Golden    = 0,   // Golden Dust — dense gold motes, the starting dust type (legacy "Golden")
   Fire      = 1,   // Fire Dust — scorching embers
   Ice       = 2,   // Ice Dust — frozen crystals
   Lightning = 3,   // Lightning Dust — crackling sparks
@@ -30,43 +30,36 @@ export const PARTICLE_KIND_COUNT = 20;
 
 /**
  * Ordered list of particle kinds that players can collect and equip.
- * All 17 elemental dust types are equippable. Fluid, Gold, and Light
- * are special/internal kinds that are NOT collectible by the player.
+ * Internal particle kinds retain their serialized values but are deliberately
+ * excluded from this player-facing roster.
  */
 export const EQUIPPABLE_KINDS: readonly ParticleKind[] = [
-  ParticleKind.Physical,
-  ParticleKind.Fire,
+  ParticleKind.Golden,
   ParticleKind.Ice,
-  ParticleKind.Lightning,
-  ParticleKind.Poison,
-  ParticleKind.Arcane,
-  ParticleKind.Wind,
-  ParticleKind.Holy,
-  ParticleKind.Shadow,
-  ParticleKind.Metal,
-  ParticleKind.Earth,
   ParticleKind.Nature,
-  ParticleKind.Crystal,
   ParticleKind.Void,
-  ParticleKind.Water,
-  ParticleKind.Lava,
-  ParticleKind.Stone,
+  ParticleKind.Light,
 ];
 
 /**
  * Number of kinds that players can equip.
  * Equals EQUIPPABLE_KINDS.length; use this for iteration counts.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 17
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 5
+
+/** True only for dust kinds that may appear in player progression/loadouts. */
+export function isEquippableParticleKind(kind: unknown): kind is ParticleKind {
+  return typeof kind === 'number' && EQUIPPABLE_KINDS.includes(kind as ParticleKind);
+}
 
 /**
  * Particle shape enum — controls how each particle kind is rendered.
- * Physical uses Circle; all other kinds use non-circle polygons.
+ * Golden uses a square; other kinds use their material-specific shapes.
  */
 export enum ParticleShape {
   Circle   = 0,  // Nature, Fluid, Water, Light
   Diamond  = 1,  // Lightning, Wind, Gold
-  Square   = 2,  // Physical, Shadow, Metal
+  Square   = 2,  // Golden, Shadow, Metal
   Triangle = 3,  // Fire, Earth
   Hexagon  = 4,  // Ice, Crystal
   Cross    = 5,  // Holy
@@ -76,7 +69,7 @@ export enum ParticleShape {
 
 /** Maps each ParticleKind to its rendered shape. */
 export const KIND_SHAPE: ParticleShape[] = [
-  ParticleShape.Square,   // Physical — square gold dust mote
+  ParticleShape.Square,   // Golden — square gold dust mote
   ParticleShape.Triangle, // Fire
   ParticleShape.Hexagon,  // Ice
   ParticleShape.Diamond,  // Lightning

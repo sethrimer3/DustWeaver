@@ -323,7 +323,7 @@ export function tick(world: WorldState): void {
   //      stone shatter events are processed here too.
   applyWallBounce(world);
 
-  // 6.8. Floor settle — hard-snap unowned Physical (gold dust pile) particles
+  // 6.8. Floor settle — hard-snap unowned Golden (gold dust pile) particles
   //      to the nearest wall surface so they don't fall through block seams.
   settleFloorDust(world);
 

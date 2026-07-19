@@ -440,8 +440,10 @@ function buildWeavesColumn(
 function buildMoteTypesColumn(progress: PlayerProgress): HTMLElement {
   const { box, body } = createColBox('Mote Types');
 
-  const kinds: readonly ParticleKind[] =
-    progress.isDevModeDustUnlocked ? EQUIPPABLE_KINDS : progress.unlockedDustKinds;
+  const unlockedKinds = new Set(progress.unlockedDustKinds);
+  const kinds: readonly ParticleKind[] = progress.isDevModeDustUnlocked
+    ? EQUIPPABLE_KINDS
+    : EQUIPPABLE_KINDS.filter(kind => unlockedKinds.has(kind));
 
   if (kinds.length === 0) {
     const msg = document.createElement('p');
@@ -459,6 +461,9 @@ function buildMoteTypesColumn(progress: PlayerProgress): HTMLElement {
   for (let k = 0; k < kinds.length; k++) {
     const kind = kinds[k];
     const dustDef = getDustDefinition(kind);
+    const dustDisplayName = dustDef.nickname
+      ? `${dustDef.displayName} — “${dustDef.nickname}”`
+      : dustDef.displayName;
 
     const tile = document.createElement('div');
     tile.style.cssText = `
@@ -477,7 +482,7 @@ function buildMoteTypesColumn(progress: PlayerProgress): HTMLElement {
     const nameLbl = document.createElement('div');
     nameLbl.style.cssText = `color: ${dustDef.colorHex}; font-size: 0.65rem;
       font-family: 'Cinzel', serif; font-weight: 400; text-align: center; word-break: break-word;`;
-    nameLbl.textContent = dustDef.displayName;
+    nameLbl.textContent = dustDisplayName;
     tile.appendChild(nameLbl);
 
     const slotBadge = document.createElement('div');

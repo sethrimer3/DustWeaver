@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
@@ -399,7 +399,7 @@ test('full editor JSON round trip preserves Shadow and Needle Urchin', async () 
     {
       xBlock: 8,
       yBlock: 5,
-      kinds: ['Physical'],
+      kinds: ['Golden'],
       particleCount: 3,
       isBoss: false,
       isNeedleUrchin: true,
@@ -416,8 +416,8 @@ test('full editor JSON round trip preserves Shadow and Needle Urchin', async () 
 test('runtime room conversion preserves both flags and old JSON defaults them off', () => {
   const source = makePersistenceRoom([
     { xBlock: 4, yBlock: 5, kinds: ['Void'], particleCount: 1, isBoss: false, isShadowEnemy: true },
-    { xBlock: 8, yBlock: 5, kinds: ['Physical'], particleCount: 3, isBoss: false, isNeedleUrchin: true },
-    { xBlock: 10, yBlock: 5, kinds: ['Physical'], particleCount: 2, isBoss: false },
+    { xBlock: 8, yBlock: 5, kinds: ['Golden'], particleCount: 3, isBoss: false, isNeedleUrchin: true },
+    { xBlock: 10, yBlock: 5, kinds: ['Golden'], particleCount: 2, isBoss: false },
   ]);
   const runtime = roomJsonDefToRoomDef(source);
   assert.equal(runtime.enemies[0].isShadowEnemyFlag, 1);
@@ -436,7 +436,7 @@ test('compact schema preserves urchin identity', () => {
   const flags = enemyTypeToFlags(type, {
     xBlock: 1,
     yBlock: 1,
-    kinds: ['Physical'],
+    kinds: ['Golden'],
     particleCount: 3,
     isBoss: false,
   });

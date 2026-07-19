@@ -418,7 +418,7 @@ export interface RoomLambdaAnchorDef {
 export interface RoomDustSwarmDef {
   xBlock: number;
   yBlock: number;
-  /** ParticleKind string name (e.g. 'Fire', 'Ice', 'Physical'). */
+  /** ParticleKind string name (e.g. 'Fire', 'Ice', 'Golden'). */
   dustKind: string;
   /** Number of dust particles granted on collection. */
   dustCount: number;

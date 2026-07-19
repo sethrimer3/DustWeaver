@@ -12,6 +12,7 @@
 import { ParticleKind, EQUIPPABLE_KINDS, EQUIPPABLE_PARTICLE_KIND_COUNT } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerProgress } from '../progression/playerProgress';
+import { getDustDefinition } from '../sim/weaves/dustDefinition';
 
 export interface LoadoutCallbacks {
   onConfirm: (loadout: ParticleKind[]) => void;
@@ -27,12 +28,17 @@ interface KindMeta {
 }
 
 /**
- * Indexed in the same order as EQUIPPABLE_KINDS (Physical only).
+ * Indexed in the same order as EQUIPPABLE_KINDS.
  * Must stay in sync with EQUIPPABLE_KINDS.
  */
-const KIND_META: KindMeta[] = [
-  { name: 'Golden Dust',  colorHex: '#ffd700', description: 'Dense golden motes with a bright metallic glow.' },
-];
+const KIND_META: KindMeta[] = EQUIPPABLE_KINDS.map(kind => {
+  const def = getDustDefinition(kind);
+  return {
+    name: def.nickname ? `${def.displayName} � �${def.nickname}�` : def.displayName,
+    colorHex: def.colorHex,
+    description: def.description,
+  };
+});
 
 if (KIND_META.length !== EQUIPPABLE_KINDS.length) {
   throw new Error(
@@ -61,7 +67,7 @@ function drawShapePreview(canvas: HTMLCanvasElement, kind: ParticleKind, colorHe
   ctx.lineWidth = 1.5;
 
   switch (kind) {
-    case ParticleKind.Physical:
+    case ParticleKind.Golden:
     case ParticleKind.Nature:
       ctx.beginPath();
       ctx.arc(cx, cy, r, 0, Math.PI * 2);

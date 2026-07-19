@@ -29,7 +29,7 @@ import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { roomJsonDefToRoomDef } from './roomJsonLoader';
 import type { RoomDef } from './roomDef';
 import type { CustomBlockSourceDef } from './customBlocks';
-import { DUST_KIND_OPTIONS } from '../editor/editorDropdownData';
+import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from '../progression/passiveTechniques';
 
@@ -71,7 +71,7 @@ export interface CampaignSpawnData {
   /**
    * Optional list of collectible dust type names the player starts with.
    * Names must match the string keys in the ParticleKind name map
-   * (e.g., "Physical", "Fire", "Ice", "Void").
+   * (e.g., "Golden", "Fire", "Ice", "Void").
    * Unknown names are silently ignored.
    */
   startingDustTypes?: string[];
@@ -385,8 +385,13 @@ export function validateSavedCampaign(data: unknown): string[] {
           }
         }
 
-        const dustKindSet = new Set<string>(DUST_KIND_OPTIONS as readonly string[]);
-        validateIdArray('startingDustTypes', s['startingDustTypes'], id => dustKindSet.has(id));
+        validateIdArray('startingDustTypes', s['startingDustTypes'], id => {
+          // Recognized legacy/internal names remain structurally loadable so
+          // old campaigns reach the starting-options sanitizer. The editor
+          // emits only DUST_KIND_OPTIONS, and application grants only the five
+          // equippable kinds.
+          return stringToParticleKind(id) !== null;
+        });
         validateIdArray('startingWeaves', s['startingWeaves'], id => WEAVE_REGISTRY.has(id));
         validateIdArray('startingPassives', s['startingPassives'], id => PASSIVE_TECHNIQUE_DEFINITIONS.has(id as PassiveTechniqueId));
       }

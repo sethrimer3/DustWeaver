@@ -263,7 +263,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       const k = stringToParticleKind(name);
       if (k !== null) kinds.push(k);
     }
-    if (kinds.length === 0) kinds.push(ParticleKind.Physical);
+    if (kinds.length === 0) kinds.push(ParticleKind.Golden);
     return {
       xBlock: e.xBlock,
       yBlock: e.yBlock,

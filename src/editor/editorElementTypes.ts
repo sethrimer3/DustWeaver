@@ -379,7 +379,7 @@ export interface EditorDustBoostJar {
   uid: number;
   xBlock: number;
   yBlock: number;
-  /** The ParticleKind string name of the dust inside (e.g. 'Physical', 'Fire'). */
+  /** The ParticleKind string name of the dust inside (e.g. 'Golden', 'Fire'). */
   dustKind: string;
   /** Number of temporary dust particles granted when broken. */
   dustCount: number;
@@ -393,7 +393,7 @@ export interface EditorDustSwarm {
   uid: number;
   xBlock: number;
   yBlock: number;
-  /** The ParticleKind string name of the dust (e.g. 'Fire', 'Ice', 'Physical'). */
+  /** The ParticleKind string name of the dust (e.g. 'Fire', 'Ice', 'Golden'). */
   dustKind: string;
   /** Number of dust particles granted on collection. */
   dustCount: number;

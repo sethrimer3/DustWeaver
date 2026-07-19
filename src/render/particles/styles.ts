@@ -12,7 +12,7 @@ export interface ParticleStyle {
 // ---- Per-element colour palette (matches ELEMENT_COLORS in webglRenderer) -
 
 const STYLES: ParticleStyle[] = [
-  { colorHex: '#ffd700', radiusPx: 1 }, // Physical  — bright golden yellow
+  { colorHex: '#ffd700', radiusPx: 1 }, // Golden — bright golden yellow
   { colorHex: '#ff5500', radiusPx: 1 }, // Fire      — hot orange
   { colorHex: '#88ddff', radiusPx: 1 }, // Ice       — cool light blue
   { colorHex: '#ffff44', radiusPx: 1 }, // Lightning — electric yellow
@@ -49,7 +49,7 @@ export function getParticleStyle(kind: number): ParticleStyle {
 
 /** Red component of each kind's neon colour (Float32, indexed by ParticleKind). */
 export const KIND_COLOR_R = new Float32Array([
-  1.00, // Physical  — bright golden yellow
+  1.00, // Golden — bright golden yellow
   1.00, // Fire      — hot orange
   0.53, // Ice       — cool blue
   1.00, // Lightning — electric yellow
@@ -73,7 +73,7 @@ export const KIND_COLOR_R = new Float32Array([
 
 /** Green component of each kind's neon colour (Float32, indexed by ParticleKind). */
 export const KIND_COLOR_G = new Float32Array([
-  0.84, // Physical
+  0.84, // Golden
   0.33, // Fire
   0.87, // Ice
   1.00, // Lightning
@@ -97,7 +97,7 @@ export const KIND_COLOR_G = new Float32Array([
 
 /** Blue component of each kind's neon colour (Float32, indexed by ParticleKind). */
 export const KIND_COLOR_B = new Float32Array([
-  0.00, // Physical
+  0.00, // Golden
   0.00, // Fire
   1.00, // Ice
   0.27, // Lightning

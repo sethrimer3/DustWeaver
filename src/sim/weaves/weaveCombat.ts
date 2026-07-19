@@ -79,15 +79,15 @@ function applyStormAttraction(world: WorldState): void {
     isTransientFlag, weaveSlotId,
   } = world;
 
-  const profile = getElementProfile(ParticleKind.Physical);
+  const profile = getElementProfile(ParticleKind.Golden);
   const attractRadSq = STORM_ATTRACT_RADIUS_WORLD * STORM_ATTRACT_RADIUS_WORLD;
   const claimRadSq = STORM_CLAIM_RADIUS_WORLD * STORM_CLAIM_RADIUS_WORLD;
 
   for (let i = 0; i < world.particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
-    // Only attract unowned Gold Dust (Physical kind)
+    // Only attract unowned Gold Dust (Golden kind)
     if (ownerEntityId[i] !== -1) continue;
-    if (kindBuffer[i] !== ParticleKind.Physical) continue;
+    if (kindBuffer[i] !== ParticleKind.Golden) continue;
 
     const dx = playerX - positionXWorld[i];
     const dy = playerY - positionYWorld[i];

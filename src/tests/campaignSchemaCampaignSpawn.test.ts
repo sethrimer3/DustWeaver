@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   validateSavedCampaign,
@@ -46,7 +46,7 @@ test('campaigns without a Campaign Spawn use the original initialRoomId fallback
 });
 
 test('valid campaignSpawn passes validation', () => {
-  const campaign = makeCampaign({ roomId: 'room2', xBlock: 2, yBlock: 2, startingHealth: 0, startingDustContainerCount: 3, startingDustTypes: ['Physical'], startingWeaves: ['storm'], startingPassives: ['cycle'] });
+  const campaign = makeCampaign({ roomId: 'room2', xBlock: 2, yBlock: 2, startingHealth: 0, startingDustContainerCount: 3, startingDustTypes: ['Golden'], startingWeaves: ['storm'], startingPassives: ['cycle'] });
   const errors = validateSavedCampaign(campaign);
   assert.ok(!errors.some(e => e.includes('campaignSpawn')), `unexpected campaignSpawn errors: ${errors.join('; ')}`);
   assert.equal(getCampaignStartRoomId(campaign as never), 'room2');

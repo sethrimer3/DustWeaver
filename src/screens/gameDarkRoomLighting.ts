@@ -2,7 +2,7 @@
  * gameDarkRoomLighting.ts — DarkRoom overlay lighting pass for the game renderer.
  *
  * Collects all light sources for the current frame (decoration glows, authored
- * room lights, player lantern, Physical dust particles, transition bubbles) and
+ * room lights, player lantern, player-owned Light Dust, transition bubbles) and
  * feeds them to DarkRoomOverlay.render() to punch radial light holes in the
  * near-opaque darkness mask.
  *
@@ -10,7 +10,6 @@
  * Scratch buffers are reset at the start of each renderDarkRoomLighting() call.
  */
 
-import { ParticleKind } from '../sim/particles/kinds';
 import {
   LIGHT_BUFFER_STRIDE,
   MAX_LIGHT_BUFFER_COUNT,
@@ -22,6 +21,13 @@ import type { WorldSnapshot } from '../render/snapshot';
 import { BLOCK_SIZE_SMALL, type RoomDef } from '../levels/roomDef';
 import { STAGE_LIGHTING, type RenderProfiler } from '../render/hud/renderProfiler';
 import type { RenderQualityConfig } from '../render/renderQualityConfig';
+import {
+  LIGHT_DUST_BASE_RADIUS_WORLD,
+  LIGHT_DUST_INTENSITY_PER_MOTE,
+  LIGHT_DUST_MAX_RADIUS_WORLD,
+  LIGHT_DUST_RADIUS_PER_AVAILABLE_MOTE,
+  isAvailablePlayerLightDust,
+} from './gameLightDustIllumination';
 
 // ── Module-level scratch buffers (allocation-free hot path) ────────────────
 // Allocated once and reused every frame to collect light sources and shadow
@@ -154,20 +160,36 @@ export function renderDarkRoomLighting(r: DarkRoomLightingContext, qc: RenderQua
     );
   }
 
-  // Alive Physical (golden) dust particles each contribute a small light,
-  // capped by the quality-tier particle light limit.
+  // Available player-owned Light Dust follows its actual motes. Enemy/boss
+  // Light particles fail the owner check; depleted mote slots fail availability.
+  let availableLightDustCount = 0;
+  if (playerSnap !== undefined) {
+    for (let pi = 0; pi < snapshot.particles.particleCount; pi++) {
+      if (isAvailablePlayerLightDust(snapshot.particles, pi, playerSnap.entityId)) {
+        availableLightDustCount++;
+      }
+    }
+  }
+  const lightDustRadiusWorld = Math.min(
+    LIGHT_DUST_MAX_RADIUS_WORLD,
+    LIGHT_DUST_BASE_RADIUS_WORLD
+      + Math.max(0, availableLightDustCount - 1) * LIGHT_DUST_RADIUS_PER_AVAILABLE_MOTE,
+  );
+  const lightDustInnerFraction = Math.min(
+    0.3,
+    0.06 + availableLightDustCount * LIGHT_DUST_INTENSITY_PER_MOTE,
+  );
   let particleLightCount = 0;
   const parts = snapshot.particles;
   for (let pi = 0; pi < parts.particleCount && particleLightCount < qc.maxParticleLightCount; pi++) {
-    if (parts.isAliveFlag[pi] === 0) continue;
-    if (parts.kindBuffer[pi] !== ParticleKind.Physical) continue;
+    if (playerSnap === undefined || !isAvailablePlayerLightDust(parts, pi, playerSnap.entityId)) continue;
     const plx = parts.positionXWorld[pi] * zoom + ox;
     const ply = parts.positionYWorld[pi] * zoom + oy;
-    const plr = 11 * zoom;
+    const plr = lightDustRadiusWorld * zoom;
     // Viewport cull particle lights.
     if (plx + plr < 0 || plx - plr > virtualWidthPx) continue;
     if (ply + plr < 0 || ply - plr > virtualHeightPx) continue;
-    _pushLight(plx, ply, plr, 0.05);
+    _pushLight(plx, ply, plr, lightDustInnerFraction, 255, 244, 176);
     particleLightCount++;
   }
 

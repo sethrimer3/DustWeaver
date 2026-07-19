@@ -109,9 +109,9 @@ export function drawParticleGlow(
     if (particles.isAliveFlag[i] === 0) continue;
     // Grapple chain particles are excluded — drawGrappleBloom() handles their glow.
     if (particles.behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
-    // Only glow gold dust (Physical) particles
+    // Only glow gold dust (Golden) particles
     const kind = particles.kindBuffer[i];
-    if (kind !== ParticleKind.Physical && kind !== ParticleKind.Gold) continue;
+    if (kind !== ParticleKind.Golden && kind !== ParticleKind.Gold) continue;
 
     const lt = particles.lifetimeTicks[i];
     const normAge = lt > 0 ? Math.min(1.0, particles.ageTicks[i] / lt) : 0.0;

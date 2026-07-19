@@ -1,13 +1,13 @@
 /**
- * Equippable element profiles — Physical through Void (ParticleKind indices 0–13).
+ * Equippable element profiles — Golden through Void (ParticleKind indices 0–13).
  *
- * Only Physical (Gold Dust) is player-equippable now.
+ * Only Golden (Gold Dust) is player-equippable now.
  * The remaining profiles are legacy — enemies may still reference them.
  */
 
 import type { ElementProfile } from '../elementProfileTypes';
 
-/** Physical — heavy, grounded, dense.  Slow decay, moderate orbit. */
+/** Golden — heavy, grounded, dense.  Slow decay, moderate orbit. */
 export const PHYSICAL: ElementProfile = {
   massKg:               2.5,
   drag:                 2.2,

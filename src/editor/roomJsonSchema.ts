@@ -12,7 +12,7 @@ import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness,
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
 const KIND_NAME_MAP: Record<string, ParticleKind> = {
-  Physical:  ParticleKind.Physical,
+  Golden:    ParticleKind.Golden,
   Fire:      ParticleKind.Fire,
   Ice:       ParticleKind.Ice,
   Lightning: ParticleKind.Lightning,
@@ -29,6 +29,7 @@ const KIND_NAME_MAP: Record<string, ParticleKind> = {
   Water:     ParticleKind.Water,
   Lava:      ParticleKind.Lava,
   Stone:     ParticleKind.Stone,
+  Light:     ParticleKind.Light,
 };
 
 const KIND_ENUM_TO_NAME: Record<number, string> = {};
@@ -37,11 +38,18 @@ for (const [name, val] of Object.entries(KIND_NAME_MAP)) {
 }
 
 export function particleKindToString(kind: ParticleKind): string {
-  return KIND_ENUM_TO_NAME[kind] ?? 'Physical';
+  return KIND_ENUM_TO_NAME[kind] ?? 'Golden';
 }
 
 export function stringToParticleKind(name: string): ParticleKind | null {
-  return KIND_NAME_MAP[name] ?? null;
+  const normalized = name.trim().toLowerCase();
+  if (normalized === 'physical' || normalized === 'physical dust' || normalized === 'golden dust') {
+    return ParticleKind.Golden;
+  }
+  for (const [kindName, kind] of Object.entries(KIND_NAME_MAP)) {
+    if (kindName.toLowerCase() === normalized) return kind;
+  }
+  return null;
 }
 
 // ── JSON schema types ────────────────────────────────────────────────────────

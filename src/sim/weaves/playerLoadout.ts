@@ -7,7 +7,7 @@
  *   - Which dust types are bound to each Weave
  */
 
-import { ParticleKind } from '../particles/kinds';
+import { ParticleKind, isEquippableParticleKind } from '../particles/kinds';
 import { WeaveId, getWeaveDefinition, WEAVE_STORM, WEAVE_NONE } from './weaveDefinition';
 import { getDustSlotCost } from './dustDefinition';
 
@@ -127,7 +127,7 @@ function _sanitizeBoundDust(
   const sanitized: ParticleKind[] = [];
   for (let i = 0; i < boundDust.length; i++) {
     const kind = boundDust[i];
-    if (_isDustUnlockedForGameplay(kind, progress)) {
+    if (isEquippableParticleKind(kind) && _isDustUnlockedForGameplay(kind, progress)) {
       sanitized.push(kind);
     }
   }

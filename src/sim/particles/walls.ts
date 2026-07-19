@@ -58,9 +58,9 @@ export function applyWallForces(world: WorldState): void {
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
 
-    // Unowned Physical (floor dust) particles skip soft repulsion forces —
+    // Unowned Golden (floor dust) particles skip soft repulsion forces —
     // they rely on settleFloorDust for hard surface snapping instead.
-    if (ownerEntityId[i] === -1 && kindBuffer[i] === ParticleKind.Physical) continue;
+    if (ownerEntityId[i] === -1 && kindBuffer[i] === ParticleKind.Golden) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];
@@ -311,7 +311,7 @@ const FLOOR_DUST_REST_OFFSET_WORLD = 1.0;
 const FLOOR_DUST_HORIZONTAL_DAMP = 0.88;
 
 /**
- * Hard floor-settle pass for unowned Physical (gold dust pile) particles —
+ * Hard floor-settle pass for unowned Golden (gold dust pile) particles —
  * step 6.8 of the tick pipeline, after wall bounce.
  *
  * These particles skip the soft wall-repulsion forces (applyWallForces) so
@@ -335,7 +335,7 @@ export function settleFloorDust(world: WorldState): void {
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
     if (ownerEntityId[i] !== -1) continue;
-    if (kindBuffer[i] !== ParticleKind.Physical) continue;
+    if (kindBuffer[i] !== ParticleKind.Golden) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];

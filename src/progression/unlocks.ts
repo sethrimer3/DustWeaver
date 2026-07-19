@@ -11,7 +11,7 @@
 
 import { PlayerProgress } from './playerProgress';
 import { PassiveTechniqueId, isPassiveTechniqueUnlocked } from './passiveTechniques';
-import { ParticleKind } from '../sim/particles/kinds';
+import { ParticleKind, isEquippableParticleKind } from '../sim/particles/kinds';
 import { CAPACITY_PER_CONTAINER, getMaxParticlesForDust } from './dustCapacity';
 import { WeaveId } from '../sim/weaves/weaveDefinition';
 
@@ -42,6 +42,7 @@ export function unlockDustType(
   progress: PlayerProgress,
   kind: ParticleKind,
 ): boolean {
+  if (!isEquippableParticleKind(kind)) return false;
   if (progress.unlockedDustKinds.indexOf(kind) !== -1) {
     return false;
   }
@@ -83,7 +84,7 @@ export function grantDustContainers(
 /**
  * Performs the initial early-game auto-assignment:
  *   - Grants 2 dust containers (8 total capacity)
- *   - Unlocks Golden Dust (ParticleKind.Physical)
+ *   - Unlocks Golden Dust (ParticleKind.Golden)
  *   - Unlocks Cycle passive technique
  *   - Sets hasCompletedEarlyAutoAssignment = true
  *
@@ -97,7 +98,7 @@ export function performEarlyAutoAssignment(progress: PlayerProgress): number {
   if (progress.hasCompletedEarlyAutoAssignment) {
     // Already done — return current capacity
     return getMaxParticlesForDust(
-      ParticleKind.Physical,
+      ParticleKind.Golden,
       progress.dustContainerCount * CAPACITY_PER_CONTAINER,
     );
   }
@@ -109,14 +110,14 @@ export function performEarlyAutoAssignment(progress: PlayerProgress): number {
   grantDustContainers(progress, 2);
 
   // Unlock Golden Dust
-  unlockDustType(progress, ParticleKind.Physical);
+  unlockDustType(progress, ParticleKind.Golden);
 
   // Mark auto-assignment as complete
   progress.hasCompletedEarlyAutoAssignment = true;
 
   // Return the number of Golden Dust particles (8 capacity / 1 cost = 8 particles)
   return getMaxParticlesForDust(
-    ParticleKind.Physical,
+    ParticleKind.Golden,
     progress.dustContainerCount * CAPACITY_PER_CONTAINER,
   );
 }

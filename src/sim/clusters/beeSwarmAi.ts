@@ -7,7 +7,7 @@
  *
  * Each bee is a 4×2 world-unit sprite (halfWidth=2, halfHeight=1).
  * Alive bee count = cluster.healthPoints (starts at BEES_PER_SWARM).
- * Each Physical particle hit deals 1 damage → kills one bee.
+ * Each Golden particle hit deals 1 damage → kills one bee.
  *
  * State machine:
  *   0 = swarming — bees drift around the spawn origin via a per-bee

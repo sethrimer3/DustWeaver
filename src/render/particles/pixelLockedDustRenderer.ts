@@ -12,7 +12,7 @@
  *  - 1×1 fillRect for normal/shield motes (behaviorMode 0, 2)
  *  - 2×2 multi-tone fillRect cluster for attack motes (behaviorMode 1)
  *  - Optional single-pixel glint for shimmery dust kinds (Gold, Crystal,
- *    Ice, Holy, Light, Metal, Physical)
+ *    Ice, Holy, Light, Metal, Golden)
  *  - imageSmoothingEnabled must be false on the receiving canvas context
  *
  * Excluded kinds (handled elsewhere):
@@ -46,7 +46,7 @@ const GLINT_AGE_THRESHOLD = 0.55;
  * This is a bitmask over ParticleKind values (kind < 32 so a plain number works).
  */
 const GLINT_KIND_MASK = (
-  (1 << ParticleKind.Physical) |
+  (1 << ParticleKind.Golden) |
   (1 << ParticleKind.Ice)      |
   (1 << ParticleKind.Holy)     |
   (1 << ParticleKind.Metal)    |
@@ -89,7 +89,7 @@ const SEED_NORMALISE = 65536.0;
 // ---------------------------------------------------------------------------
 
 const KIND_PALETTE_RAMPS: readonly (readonly string[])[] = [
-  // Physical (0) — dense gold motes
+  // Golden (0) — dense gold motes
   ['#7a5000', '#c48c00', '#ffd700', '#fff5cc'],
   // Fire (1) — scorching embers
   ['#7a1500', '#cc3300', '#ff6600', '#ffbb88'],
@@ -131,7 +131,7 @@ const KIND_PALETTE_RAMPS: readonly (readonly string[])[] = [
   ['#887755', '#ccbb99', '#fffaee', '#ffffff'],
 ];
 
-/** Safe palette lookup — returns Physical ramp if kind is out of range. */
+/** Safe palette lookup — returns the Golden ramp if kind is out of range. */
 function getPalette(kind: number): readonly string[] {
   return KIND_PALETTE_RAMPS[kind] ?? KIND_PALETTE_RAMPS[0];
 }

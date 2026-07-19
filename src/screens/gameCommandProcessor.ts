@@ -29,9 +29,10 @@ import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RngState } from '../sim/rng';
-import { ParticleKind } from '../sim/particles/kinds';
+import { isEquippableParticleKind } from '../sim/particles/kinds';
 import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { spawnClusterParticles } from './gameSpawn';
+import { getDustDefinition } from '../sim/weaves/dustDefinition';
 
 /** Radius within which the player can collect a dust swarm by pressing F. */
 const DUST_SWARM_COLLECT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
@@ -357,9 +358,13 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
           const sdx = playerForInteract.positionXWorld - swCx;
           const sdy = playerForInteract.positionYWorld - swCy;
           if (sdx * sdx + sdy * sdy <= DUST_SWARM_COLLECT_RADIUS_WORLD * DUST_SWARM_COLLECT_RADIUS_WORLD) {
-            collectedDustSwarmKeySet.add(swarmKey);
             const rawKind = stringToParticleKind(sw.dustKind);
-            const dustKind = rawKind !== null ? rawKind : ParticleKind.Physical;
+            // Legacy rooms may contain kinds that remain valid internally but
+            // are no longer player collectibles. Leave authored data untouched
+            // while preventing those swarms from entering progression/loadouts.
+            if (rawKind === null || !isEquippableParticleKind(rawKind)) continue;
+            const dustKind = rawKind;
+            collectedDustSwarmKeySet.add(swarmKey);
             // Permanently unlock this dust type in the player's progression.
             if (progress) {
               unlockDustType(progress, dustKind);
@@ -377,11 +382,11 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
               sw.dustCount,
               levelRng,
             );
-            const kindName = sw.dustKind;
+            const kindName = getDustDefinition(dustKind).displayName;
             combatText.spawnLabel(
               playerForInteract.positionXWorld,
               playerForInteract.positionYWorld - 10,
-              `+${sw.dustCount} ${kindName} Dust`,
+              `+${sw.dustCount} ${kindName}`,
               nowMs,
             );
           }

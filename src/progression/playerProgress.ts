@@ -8,7 +8,7 @@
  *   - Dust containers — each grants 4 capacity; different dust types cost different amounts
  */
 
-import { ParticleKind } from '../sim/particles/kinds';
+import { ParticleKind, isEquippableParticleKind } from '../sim/particles/kinds';
 import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { PassiveTechniqueId } from './passiveTechniques';
@@ -153,6 +153,28 @@ export function createDefaultProgress(): PlayerProgress {
     collectedDustContainerKeys: [],
     permanentlyOpenGateKeys: [],
   };
+}
+
+/**
+ * Migrates player-owned dust state without changing internal/environmental particles.
+ * Numeric kind 0 already maps to Golden, so legacy numeric saves need no count conversion.
+ */
+export function sanitizePlayerDustProgress(progress: PlayerProgress): void {
+  const sanitize = (value: unknown): ParticleKind[] => {
+    if (!Array.isArray(value)) return [];
+    const result: ParticleKind[] = [];
+    for (const kind of value) {
+      if (isEquippableParticleKind(kind) && !result.includes(kind)) result.push(kind);
+    }
+    return result;
+  };
+
+  progress.unlockedDustKinds = sanitize(progress.unlockedDustKinds);
+  progress.loadout = sanitize(progress.loadout);
+  const primary = progress.weaveLoadout?.primary;
+  const secondary = progress.weaveLoadout?.secondary;
+  if (primary) primary.boundDust = sanitize(primary.boundDust);
+  if (secondary) secondary.boundDust = sanitize(secondary.boundDust);
 }
 
 /**

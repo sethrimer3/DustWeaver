@@ -5,7 +5,7 @@
  * Three save slots are available (indices 0–2).
  */
 
-import { PlayerProgress, createDefaultProgress } from './playerProgress';
+import { PlayerProgress, createDefaultProgress, sanitizePlayerDustProgress } from './playerProgress';
 
 /** Total number of save slots. */
 export const SAVE_SLOT_COUNT = 3;
@@ -70,6 +70,7 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (!Array.isArray(parsed.progress.collectedDustSwarmKeys)) parsed.progress.collectedDustSwarmKeys = [];
     if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
     if (!Array.isArray(parsed.progress.permanentlyOpenGateKeys)) parsed.progress.permanentlyOpenGateKeys = [];
+    sanitizePlayerDustProgress(parsed.progress);
     // Migrate timer fields (added for speedrun timer feature).
     if (typeof parsed.runTimerMs !== 'number' || !isFinite(parsed.runTimerMs) || parsed.runTimerMs < 0) {
       parsed.runTimerMs = 0;

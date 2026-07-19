@@ -71,7 +71,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       const k = stringToParticleKind(name);
       if (k !== null) kinds.push(k);
     }
-    if (kinds.length === 0) kinds.push(ParticleKind.Physical);
+    if (kinds.length === 0) kinds.push(ParticleKind.Golden);
     return {
       xBlock: e.xBlock,
       yBlock: e.yBlock,
@@ -174,7 +174,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     return {
       xBlock: j.xBlock,
       yBlock: j.yBlock,
-      dustKind: kind ?? ParticleKind.Physical,
+      dustKind: kind ?? ParticleKind.Golden,
       dustCount: j.dustCount,
     };
   });

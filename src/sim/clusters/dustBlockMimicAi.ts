@@ -106,7 +106,7 @@ function _emitBurst(
   count: number,
   speed: number,
 ): void {
-  const profile = getElementProfile(ParticleKind.Physical);
+  const profile = getElementProfile(ParticleKind.Golden);
   for (let i = 0; i < count; i++) {
     if (world.particleCount >= MAX_PARTICLES) break;
     const idx = world.particleCount++;
@@ -121,7 +121,7 @@ function _emitBurst(
     world.massKg[idx] = profile.massKg;
     world.chargeUnits[idx] = 0;
     world.isAliveFlag[idx] = 1;
-    world.kindBuffer[idx] = ParticleKind.Physical;
+    world.kindBuffer[idx] = ParticleKind.Golden;
     world.ownerEntityId[idx] = -1;
     world.anchorAngleRad[idx] = 0;
     world.anchorRadiusWorld[idx] = 0;

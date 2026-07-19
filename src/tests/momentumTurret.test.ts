@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+﻿import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createClusterState } from '../sim/clusters/state';
 import { createWorldState } from '../sim/world';
@@ -56,7 +56,7 @@ test('dead turrets do not target and live turrets remain stationary', () => {
 });
 test('compact room schema round-trips turret facing', () => {
   const type = enemyFlagsToType({ isMomentumTurret: true, momentumTurretFacingIndex: 3 } as RoomJsonEnemy); assert.equal(type, 'momentumTurret');
-  const restored = enemyTypeToFlags(type, { xBlock: 1, yBlock: 2, kinds: ['Physical'], particleCount: 0, isBoss: false, momentumTurretFacingIndex: 3 }); assert.equal(restored.isMomentumTurret, true); assert.equal(restored.momentumTurretFacingIndex, 3);
+  const restored = enemyTypeToFlags(type, { xBlock: 1, yBlock: 2, kinds: ['Golden'], particleCount: 0, isBoss: false, momentumTurretFacingIndex: 3 }); assert.equal(restored.isMomentumTurret, true); assert.equal(restored.momentumTurretFacingIndex, 3);
 });
 test('existing momentum overlap kills turret', () => {
   const { world, player, turret } = fixture(); player.positionXWorld = turret.positionXWorld; player.positionYWorld = turret.positionYWorld; player.velocityXWorld = 400; updateMomentumCombatState(world); applyMomentumCombatCollisionDamage(world); assert.equal(turret.isAliveFlag, 0);

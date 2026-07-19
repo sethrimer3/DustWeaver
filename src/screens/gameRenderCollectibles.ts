@@ -55,7 +55,7 @@ export function getDustKindColor(dustKind: string): string {
     case 'Water':     return '#2080ff';
     case 'Lava':      return '#ff4010';
     case 'Stone':     return '#909090';
-    default:          return '#d0c080'; // Physical / unknown
+    default:          return '#d0c080'; // Golden / unknown
   }
 }
 

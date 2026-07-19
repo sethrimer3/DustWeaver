@@ -113,7 +113,7 @@ export function applyElementForces(world: WorldState): void {
     // ---- 4. Upward / buoyancy bias ----------------------------------------
     // Force is applied in simulation/world space where Y increases downward.
     // A positive upwardBias produces an upward screen movement by subtracting
-    // from forceY.  Negative values (e.g. Physical, Shadow) create a sinking
+    // from forceY.  Negative values (e.g. Golden, Shadow) create a sinking
     // gravity-like pull.
     forceY[i] -= profile.upwardBias;
   }

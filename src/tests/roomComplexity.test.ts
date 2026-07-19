@@ -131,7 +131,7 @@ test('no double-counting: each RoomDef field contributes to exactly one category
   // entities (structural count vs. simulated payload), not a double-count of
   // the same metric.
   const room = makeRoom({
-    dustSwarms: [{ xBlock: 0, yBlock: 0, dustKind: 'Physical', dustCount: 30 }],
+    dustSwarms: [{ xBlock: 0, yBlock: 0, dustKind: 'Golden', dustCount: 30 }],
   });
   const counts = countRoomDefCategories(room);
   assert.equal(counts.objects, 1);

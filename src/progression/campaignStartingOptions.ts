@@ -17,6 +17,7 @@ import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from './passiveTechniques';
 import { normalizeMoteCount } from '../sim/playerMoteLife';
+import { isEquippableParticleKind } from '../sim/particles/kinds';
 
 export type CampaignStartingOptionsMode = 'merge' | 'fresh';
 
@@ -46,7 +47,7 @@ export function applyCampaignStartingOptions(
   if (Array.isArray(spawn.startingDustTypes)) {
     for (const name of spawn.startingDustTypes) {
       const kind = stringToParticleKind(name);
-      if (kind !== null) unlockDustType(progress, kind);
+      if (kind !== null && isEquippableParticleKind(kind)) unlockDustType(progress, kind);
     }
   }
 

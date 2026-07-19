@@ -330,7 +330,7 @@ export interface RoomEnemyDef {
   /**
    * 1 if this enemy is a bee swarm — 10 bees that orbit a spawn area until the
    * player comes close or the swarm takes damage, then charge the player.
-   * Each bee is killed by 1 golden mote (1 Physical particle hit).
+   * Each bee is killed by 1 golden mote (1 Golden particle hit).
    */
   isBeeSwarmFlag?: 0 | 1;
   /**

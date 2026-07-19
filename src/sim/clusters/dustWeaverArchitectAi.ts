@@ -288,7 +288,7 @@ function _emitBlockBurst(world: WorldState, cx: number, cy: number): void {
     world.positionYWorld[pi]  = cy;
     world.velocityXWorld[pi]  = Math.cos(angle) * speed;
     world.velocityYWorld[pi]  = Math.sin(angle) * speed;
-    world.kindBuffer[pi]      = ParticleKind.Physical;
+    world.kindBuffer[pi]      = ParticleKind.Golden;
     world.isAliveFlag[pi]     = 1;
     world.ageTicks[pi]        = 0;
     world.lifetimeTicks[pi]   = 18 + Math.floor(nextFloat(world.rng) * 12);
