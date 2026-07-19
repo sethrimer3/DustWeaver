@@ -62,6 +62,7 @@ import {
   syncCampaignSpawnToSessionAfterDelete,
   placeCampaignSpawn,
   showCampaignSpawnReplaceModal,
+  pushCampaignSpawnSnapshot,
 } from './editorCampaignSpawn';
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
@@ -459,6 +460,7 @@ export function createEditorController(
           if (prop.startsWith('campaignSpawn.')) {
             // Campaign spawn properties are not stored in room data — update state + session directly.
             if (state.campaignSpawnBlock !== null && activeCampaignSession.campaign?.campaign != null) {
+              pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
               const spawn = activeCampaignSession.campaign.campaign.campaignSpawn;
               const numVal = typeof value === 'number' ? value : parseInt(String(value));
               if (prop === 'campaignSpawn.xBlock' && !isNaN(numVal)) {
@@ -468,7 +470,10 @@ export function createEditorController(
                 state.campaignSpawnBlock = [state.campaignSpawnBlock[0], numVal];
                 if (spawn) spawn.yBlock = numVal;
               } else if (prop === 'campaignSpawn.startingHealth' && spawn) {
-                if (!isNaN(numVal) && numVal >= 1) {
+                // "startingHealth" is the wire field name (kept for backward-compat
+                // with existing saved campaigns) but represents starting dust motes,
+                // which have no upper cap and may legitimately be zero.
+                if (!isNaN(numVal) && numVal >= 0) {
                   spawn.startingHealth = numVal;
                 } else {
                   delete spawn.startingHealth;
@@ -506,6 +511,17 @@ export function createEditorController(
                 }
                 if (state.campaignSpawnStartingOptions) {
                   state.campaignSpawnStartingOptions.startingWeaves = spawn.startingWeaves;
+                }
+              } else if (prop === 'campaignSpawn.startingPassives' && spawn) {
+                const strVal = String(value);
+                try {
+                  const parsed = JSON.parse(strVal);
+                  spawn.startingPassives = Array.isArray(parsed) ? parsed : undefined;
+                } catch {
+                  spawn.startingPassives = undefined;
+                }
+                if (state.campaignSpawnStartingOptions) {
+                  state.campaignSpawnStartingOptions.startingPassives = spawn.startingPassives;
                 }
               }
             }
@@ -1257,7 +1273,7 @@ export function createEditorController(
     state.cursorBlockY = Math.floor(worldY / BS);
 
     // Keyboard shortcuts (tool keys, rotation/flip, map toggles, ESC, undo/redo, copy/paste)
-    handleEditorKeyboardShortcuts(state, inputState, history, openWorldMap, openVisualMap, applyEdits);
+    handleEditorKeyboardShortcuts(state, inputState, history, openWorldMap, openVisualMap, applyEdits, campaignSpawnCtx);
 
     // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
@@ -1372,10 +1388,12 @@ export function createEditorController(
             if (existingSpawn !== undefined && !isInCurrentRoom) {
                 // Spawn exists in a different room — ask before replacing.
                 // Auto-select happens inside the modal's confirm callback (see
-                // editorCampaignSpawn.ts), not here — nothing has moved yet.
-              showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by);
+                // editorCampaignSpawn.ts), which also pushes the undo snapshot
+                // atomically right before mutating — nothing has moved yet here.
+              showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by, history);
             } else {
                 // Either no spawn yet, or spawn is already in this room — update silently.
+              pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
               placeCampaignSpawn(campaignSpawnCtx, bx, by);
               // Auto-select the marker so the inspector shows it immediately.
               state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
@@ -1474,7 +1492,7 @@ export function createEditorController(
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
-          pushSnapshot(history, state.roomData);
+          pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
           deleteAtCursorBrushed(state);
           syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
           applyEdits('placement');
@@ -1489,7 +1507,7 @@ export function createEditorController(
     // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
       if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
-        pushSnapshot(history, state.roomData);
+        pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
         if (state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           // Pixel-material tool: right-click erases the exact native pixel
           // under the cursor, not whatever block-grid element deleteAtCursor

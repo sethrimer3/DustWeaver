@@ -29,6 +29,7 @@ import {
 import { makeBtn } from './editorUIHelpers';
 import { GREEN, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
+import { ALL_PASSIVE_TECHNIQUE_IDS, PASSIVE_TECHNIQUE_DEFINITIONS } from '../progression/passiveTechniques';
 import { buildDialogueTriggerInspector } from './editorDialogueTriggerInspector';
 
 const KIND_OPTIONS: { label: string; value: string }[] = DUST_KIND_OPTIONS.map(k => ({ label: k, value: k }));
@@ -198,7 +199,7 @@ export function updateInspector(
       sectionLabel.style.cssText = `font-size: 11px; color: ${GREEN}; margin-top: 8px; margin-bottom: 4px; font-weight: bold;`;
       div.appendChild(sectionLabel);
 
-      addNumberField(div, 'Health', opts?.startingHealth ?? 10, 1, 10,
+      addNumberField(div, 'Starting Dust Motes', opts?.startingHealth ?? 10, 0, 999999,
         v => callbacks?.onPropertyChange('campaignSpawn.startingHealth', v));
       addNumberField(div, 'Containers', opts?.startingDustContainerCount ?? 0, 0, 20,
         v => callbacks?.onPropertyChange('campaignSpawn.startingDustContainerCount', v));
@@ -279,6 +280,48 @@ export function updateInspector(
         weavesGrid.appendChild(chip);
       }
       div.appendChild(weavesGrid);
+
+      // Starting Passive Techniques — checkbox list
+      const passivesLabel = document.createElement('div');
+      passivesLabel.textContent = 'Starting Passives';
+      passivesLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      div.appendChild(passivesLabel);
+
+      const currentPassives = new Set<string>(opts?.startingPassives ?? []);
+      const passivesGrid = document.createElement('div');
+      passivesGrid.style.cssText = `display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;`;
+      for (const passiveId of ALL_PASSIVE_TECHNIQUE_IDS) {
+        const passiveDef = PASSIVE_TECHNIQUE_DEFINITIONS.get(passiveId);
+        const passiveName = passiveDef?.displayName ?? passiveId;
+        const isPassiveChecked = currentPassives.has(passiveId);
+
+        const chip = document.createElement('label');
+        chip.style.cssText = `
+          display: flex; align-items: center; gap: 3px;
+          background: rgba(0,0,0,0.3); border: 1px solid ${isPassiveChecked ? GREEN : PANEL_BORDER};
+          border-radius: 3px; padding: 2px 5px; cursor: pointer;
+          font-size: 10px; color: ${isPassiveChecked ? GREEN : TEXT_COLOR};
+        `;
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = isPassiveChecked;
+        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.addEventListener('click', e => e.stopPropagation());
+        cb.addEventListener('change', () => {
+          if (cb.checked) {
+            currentPassives.add(passiveId);
+          } else {
+            currentPassives.delete(passiveId);
+          }
+          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
+          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          callbacks?.onPropertyChange('campaignSpawn.startingPassives', JSON.stringify([...currentPassives]));
+        });
+        chip.appendChild(cb);
+        chip.appendChild(document.createTextNode(passiveName));
+        passivesGrid.appendChild(chip);
+      }
+      div.appendChild(passivesGrid);
     }
   } else if (el.type === 'playerSpawn') {
     addField(div, 'xBlock', String(room.playerSpawnBlock[0]),

@@ -16,22 +16,43 @@ describe('applyCampaignStartingOptions — health', () => {
     assert.strictEqual(p.startingHealth, before);
   });
 
-  it('startingHealth below 1 is clamped to 1', () => {
-    const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: -5 }, 'merge');
-    assert.strictEqual(p.startingHealth, 1);
-  });
-
-  it('startingHealth above PLAYER_INITIAL_HEALTH is capped', () => {
+  it('startingHealth (dust motes) is interpreted with no upper cap, unlike the legacy [1,PLAYER_INITIAL_HEALTH] health clamp', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: PLAYER_INITIAL_HEALTH + 99 }, 'merge');
-    assert.strictEqual(p.startingHealth, PLAYER_INITIAL_HEALTH);
+    assert.strictEqual(p.startingHealth, PLAYER_INITIAL_HEALTH + 99);
   });
 
-  it('valid startingHealth within range is preserved exactly', () => {
+  it('negative startingHealth (dust motes) normalizes to 0, not 1', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: -5 }, 'merge');
+    assert.strictEqual(p.startingHealth, 0);
+  });
+
+  it('zero starting dust motes is accepted as a legal value', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 0 }, 'fresh');
+    assert.strictEqual(p.startingHealth, 0);
+  });
+
+  it('valid startingHealth within legacy range is preserved exactly', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 5 }, 'fresh');
     assert.strictEqual(p.startingHealth, 5);
+  });
+
+  it('legacy campaigns authored under the old 1-10 health interpretation still load and apply correctly', () => {
+    // Old campaigns wrote startingHealth in [1,10] under the "health" semantics.
+    // The wire field name and shape are unchanged, so these values still apply
+    // — just interpreted as a starting dust-mote count with no upper clamp.
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 10 }, 'merge');
+    assert.strictEqual(p.startingHealth, 10);
+  });
+
+  it('fractional startingHealth is floored', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 7.9 }, 'fresh');
+    assert.strictEqual(p.startingHealth, 7);
   });
 });
 
@@ -161,6 +182,42 @@ describe('applyCampaignStartingOptions — weaves', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingWeaves: [] }, 'fresh');
     assert.strictEqual(p.unlockedActiveWeaves.length, 0);
+  });
+});
+
+// ---- Passives ----------------------------------------------------------------
+
+describe('applyCampaignStartingOptions — passives', () => {
+  it('known passive technique ID unlocks the technique', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle'] }, 'fresh');
+    assert.ok(p.unlockedPassiveTechniques.includes('cycle'));
+  });
+
+  it('unknown passive technique ID is silently ignored', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['notAPassive'] }, 'fresh');
+    assert.strictEqual(p.unlockedPassiveTechniques.length, 0);
+  });
+
+  it('duplicate passive IDs do not create duplicate entries', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle', 'cycle'] }, 'fresh');
+    const count = p.unlockedPassiveTechniques.filter(t => t === 'cycle').length;
+    assert.strictEqual(count, 1);
+  });
+
+  it('already-unlocked passives remain after applying options', () => {
+    const p = createDefaultProgress();
+    p.unlockedPassiveTechniques.push('cycle');
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle'] }, 'fresh');
+    assert.deepStrictEqual(p.unlockedPassiveTechniques, ['cycle']);
+  });
+
+  it('absent/empty startingPassives does nothing', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: [] }, 'fresh');
+    assert.strictEqual(p.unlockedPassiveTechniques.length, 0);
   });
 });
 

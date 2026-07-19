@@ -10,12 +10,29 @@
 
 import type { EditorState } from './editorState';
 import type { EditableCampaignSession } from './editableCampaignSession';
+import type { EditorHistory } from './editorHistory';
+import { pushSnapshot } from './editorHistory';
 
 /** Shared dependencies injected into all campaign-spawn helpers. */
 export interface CampaignSpawnContext {
   state: EditorState;
   campaignSession: EditableCampaignSession | null | undefined;
   uiRoot: HTMLElement;
+}
+
+/**
+ * Pushes an undo/redo snapshot that captures both the current room data AND
+ * the current campaign spawn metadata (campaignSpawn + initialRoomId), so
+ * that undo/redo correctly round-trips campaign-spawn placement, movement,
+ * deletion, and starting-option edits. Call this immediately before any
+ * mutation that may affect campaign spawn state.
+ */
+export function pushCampaignSpawnSnapshot(ctx: CampaignSpawnContext, history: EditorHistory): void {
+  const { state, campaignSession } = ctx;
+  if (!state.roomData) return;
+  const spawn = campaignSession?.campaign.campaign.campaignSpawn;
+  const initialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+  pushSnapshot(history, state.roomData, spawn, initialRoomId, true);
 }
 
 /**
@@ -33,6 +50,7 @@ export function syncCampaignSpawnBlockFromSession(ctx: CampaignSpawnContext): vo
       startingDustContainerCount: spawn.startingDustContainerCount,
       startingDustTypes: spawn.startingDustTypes,
       startingWeaves: spawn.startingWeaves,
+      startingPassives: spawn.startingPassives,
     };
   } else {
     state.campaignSpawnBlock = null;
@@ -62,7 +80,8 @@ export function syncCampaignSpawnToSessionAfterDelete(ctx: CampaignSpawnContext)
  * clearing any old campaign spawn from other rooms, and updates the session.
  * Preserves any existing starting options (startingHealth, startingDustContainerCount,
  * startingDustTypes, startingWeaves) from a previously placed spawn.
- * Does NOT push a history snapshot (the caller's Place tool branch does that).
+ * Does NOT push a history snapshot — the caller must call
+ * pushCampaignSpawnSnapshot(ctx, history) before invoking this.
  */
 export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number, newYBlock: number): void {
   const { state, campaignSession } = ctx;
@@ -75,6 +94,7 @@ export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number,
     startingDustContainerCount: prevSpawn.startingDustContainerCount,
     startingDustTypes: prevSpawn.startingDustTypes,
     startingWeaves: prevSpawn.startingWeaves,
+    startingPassives: prevSpawn.startingPassives,
   } : {};
   state.campaignSpawnBlock = [newXBlock, newYBlock];
   state.campaignSpawnStartingOptions = {
@@ -82,6 +102,7 @@ export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number,
     startingDustContainerCount: prevOptions.startingDustContainerCount,
     startingDustTypes: prevOptions.startingDustTypes,
     startingWeaves: prevOptions.startingWeaves,
+    startingPassives: prevOptions.startingPassives,
   };
   campaignSession.campaign.campaign.campaignSpawn = {
     roomId,
@@ -97,7 +118,12 @@ export function placeCampaignSpawn(ctx: CampaignSpawnContext, newXBlock: number,
  * Shows the "This will remove the current campaign spawn, proceed?" confirmation
  * modal and then places the new campaign spawn when the user clicks Yes.
  */
-export function showCampaignSpawnReplaceModal(ctx: CampaignSpawnContext, newXBlock: number, newYBlock: number): void {
+export function showCampaignSpawnReplaceModal(
+  ctx: CampaignSpawnContext,
+  newXBlock: number,
+  newYBlock: number,
+  history: EditorHistory,
+): void {
   const { uiRoot, state } = ctx;
   const backdrop = document.createElement('div');
   backdrop.style.cssText = [
@@ -148,6 +174,7 @@ export function showCampaignSpawnReplaceModal(ctx: CampaignSpawnContext, newXBlo
 
   yesBtn.addEventListener('click', () => {
     dismiss();
+    pushCampaignSpawnSnapshot(ctx, history);
     placeCampaignSpawn(ctx, newXBlock, newYBlock);
     // Auto-select the marker so the inspector shows it immediately.
     state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];

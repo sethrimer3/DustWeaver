@@ -108,6 +108,7 @@ export interface EditorState {
     startingDustContainerCount?: number;
     startingDustTypes?: string[];
     startingWeaves?: string[];
+    startingPassives?: string[];
   } | null;
   /** Next unique ID for placed elements. */
   nextUid: number;

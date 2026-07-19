@@ -1,24 +1,57 @@
 /**
  * Editor undo/redo history system.
- * Stores snapshots of EditorRoomData for undo/redo operations.
+ * Stores snapshots of EditorRoomData (and, when relevant, campaign-spawn
+ * metadata) for undo/redo operations.
  */
 
 import type { EditorRoomData } from './editorState';
+import type { CampaignSpawnData } from '../levels/campaignSchema';
 
 const MAX_HISTORY_SIZE = 50;
 
+/**
+ * A single undo/redo snapshot. `campaignSpawn`/`initialRoomId` are only
+ * populated when the mutation being snapshotted could affect campaign-spawn
+ * placement; callers that don't touch campaign spawn state may omit them,
+ * in which case undo/redo leaves the current campaign spawn untouched.
+ */
+export interface HistorySnapshot {
+  roomData: EditorRoomData;
+  /** Present only for snapshots that touch campaign spawn state. */
+  campaignSpawn?: CampaignSpawnData;
+  initialRoomId?: string;
+  /** Distinguishes "no campaign spawn" (undefined campaignSpawn + tracked) from "untracked". */
+  campaignSpawnTracked?: boolean;
+}
+
 export interface EditorHistory {
-  undoStack: EditorRoomData[];
-  redoStack: EditorRoomData[];
+  undoStack: HistorySnapshot[];
+  redoStack: HistorySnapshot[];
 }
 
 export function createEditorHistory(): EditorHistory {
   return { undoStack: [], redoStack: [] };
 }
 
-export function pushSnapshot(history: EditorHistory, data: EditorRoomData): void {
+export function pushSnapshot(
+  history: EditorHistory,
+  data: EditorRoomData,
+  campaignSpawn?: CampaignSpawnData,
+  initialRoomId?: string,
+  campaignSpawnTracked?: boolean,
+): void {
   const t0 = import.meta.env.DEV ? performance.now() : 0;
-  history.undoStack.push(structuredClone(data) as EditorRoomData);
+  const snapshot: HistorySnapshot = {
+    roomData: structuredClone(data) as EditorRoomData,
+  };
+  if (campaignSpawnTracked) {
+    snapshot.campaignSpawnTracked = true;
+    snapshot.campaignSpawn = campaignSpawn !== undefined
+      ? (structuredClone(campaignSpawn) as CampaignSpawnData)
+      : undefined;
+    snapshot.initialRoomId = initialRoomId;
+  }
+  history.undoStack.push(snapshot);
   if (import.meta.env.DEV) {
     const elapsedMs = performance.now() - t0;
     const wallCount = data.interiorWalls.length;
@@ -37,20 +70,60 @@ export function pushSnapshot(history: EditorHistory, data: EditorRoomData): void
   history.redoStack.length = 0;
 }
 
-export function undo(history: EditorHistory, currentData: EditorRoomData): EditorRoomData | null {
+function cloneCurrent(
+  currentData: EditorRoomData,
+  currentCampaignSpawn: CampaignSpawnData | undefined,
+  currentInitialRoomId: string | undefined,
+  currentCampaignSpawnTracked: boolean | undefined,
+): HistorySnapshot {
+  const snapshot: HistorySnapshot = { roomData: structuredClone(currentData) as EditorRoomData };
+  if (currentCampaignSpawnTracked) {
+    snapshot.campaignSpawnTracked = true;
+    snapshot.campaignSpawn = currentCampaignSpawn !== undefined
+      ? (structuredClone(currentCampaignSpawn) as CampaignSpawnData)
+      : undefined;
+    snapshot.initialRoomId = currentInitialRoomId;
+  }
+  return snapshot;
+}
+
+function materialize(snapshot: HistorySnapshot): HistorySnapshot {
+  return {
+    roomData: structuredClone(snapshot.roomData) as EditorRoomData,
+    campaignSpawnTracked: snapshot.campaignSpawnTracked,
+    campaignSpawn: snapshot.campaignSpawn !== undefined
+      ? (structuredClone(snapshot.campaignSpawn) as CampaignSpawnData)
+      : undefined,
+    initialRoomId: snapshot.initialRoomId,
+  };
+}
+
+export function undo(
+  history: EditorHistory,
+  currentData: EditorRoomData,
+  currentCampaignSpawn?: CampaignSpawnData,
+  currentInitialRoomId?: string,
+  currentCampaignSpawnTracked?: boolean,
+): HistorySnapshot | null {
   if (history.undoStack.length === 0) return null;
   const snapshot = history.undoStack.pop();
   if (snapshot === undefined) return null;
-  history.redoStack.push(structuredClone(currentData) as EditorRoomData);
-  return structuredClone(snapshot) as EditorRoomData;
+  history.redoStack.push(cloneCurrent(currentData, currentCampaignSpawn, currentInitialRoomId, currentCampaignSpawnTracked));
+  return materialize(snapshot);
 }
 
-export function redo(history: EditorHistory, currentData: EditorRoomData): EditorRoomData | null {
+export function redo(
+  history: EditorHistory,
+  currentData: EditorRoomData,
+  currentCampaignSpawn?: CampaignSpawnData,
+  currentInitialRoomId?: string,
+  currentCampaignSpawnTracked?: boolean,
+): HistorySnapshot | null {
   if (history.redoStack.length === 0) return null;
   const snapshot = history.redoStack.pop();
   if (snapshot === undefined) return null;
-  history.undoStack.push(structuredClone(currentData) as EditorRoomData);
-  return structuredClone(snapshot) as EditorRoomData;
+  history.undoStack.push(cloneCurrent(currentData, currentCampaignSpawn, currentInitialRoomId, currentCampaignSpawnTracked));
+  return materialize(snapshot);
 }
 
 export function clearHistory(history: EditorHistory): void {

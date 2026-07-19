@@ -17,6 +17,8 @@ import { EditorHistory, undo, redo, pushSnapshot } from './editorHistory';
 import { cancelTransitionLink } from './transitionLinker';
 import { rotateSelectedElement, flipSelectedTransition } from './editorTools';
 import { serializeSelectedElements, pasteFromClipboard } from './editorDragCopyPaste';
+import type { CampaignSpawnContext } from './editorCampaignSpawn';
+import { syncCampaignSpawnBlockFromSession } from './editorCampaignSpawn';
 
 /**
  * Process all keyboard shortcut inputs for one editor frame.
@@ -39,6 +41,7 @@ export function handleEditorKeyboardShortcuts(
   openWorldMap: () => void | Promise<void>,
   openVisualMap: () => void | Promise<void>,
   applyEdits: () => void,
+  campaignSpawnCtx?: CampaignSpawnContext,
 ): void {
   // Tool key shortcuts (1 = Select, 2 = Place, 3 = Delete)
   if (inputState.toolKeyPressed === 1) state.activeTool = EditorTool.Select;
@@ -106,19 +109,47 @@ export function handleEditorKeyboardShortcuts(
 
   // Undo (Ctrl+Z)
   if (inputState.isUndoPressed && state.roomData) {
-    const restored = undo(history, state.roomData);
+    const campaignSession = campaignSpawnCtx?.campaignSession;
+    const currentSpawn = campaignSession?.campaign.campaign.campaignSpawn;
+    const currentInitialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+    const restored = undo(history, state.roomData, currentSpawn, currentInitialRoomId, true);
     if (restored) {
-      state.roomData = restored;
+      state.roomData = restored.roomData;
       state.selectedElements = [];
+      if (restored.campaignSpawnTracked && campaignSession) {
+        if (restored.campaignSpawn !== undefined) {
+          campaignSession.campaign.campaign.campaignSpawn = restored.campaignSpawn;
+        } else {
+          delete campaignSession.campaign.campaign.campaignSpawn;
+        }
+        if (restored.initialRoomId !== undefined) {
+          campaignSession.campaign.campaign.initialRoomId = restored.initialRoomId;
+        }
+        if (campaignSpawnCtx) syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
+      }
       applyEdits();
     }
   }
   // Redo (Ctrl+Y)
   if (inputState.isRedoPressed && state.roomData) {
-    const restored = redo(history, state.roomData);
+    const campaignSession = campaignSpawnCtx?.campaignSession;
+    const currentSpawn = campaignSession?.campaign.campaign.campaignSpawn;
+    const currentInitialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+    const restored = redo(history, state.roomData, currentSpawn, currentInitialRoomId, true);
     if (restored) {
-      state.roomData = restored;
+      state.roomData = restored.roomData;
       state.selectedElements = [];
+      if (restored.campaignSpawnTracked && campaignSession) {
+        if (restored.campaignSpawn !== undefined) {
+          campaignSession.campaign.campaign.campaignSpawn = restored.campaignSpawn;
+        } else {
+          delete campaignSession.campaign.campaign.campaignSpawn;
+        }
+        if (restored.initialRoomId !== undefined) {
+          campaignSession.campaign.campaign.initialRoomId = restored.initialRoomId;
+        }
+        if (campaignSpawnCtx) syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
+      }
       applyEdits();
     }
   }

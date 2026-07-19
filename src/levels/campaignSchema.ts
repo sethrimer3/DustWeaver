@@ -29,6 +29,9 @@ import { isSavedRoomV2, hydrateV2Room } from './roomSchemaV2';
 import { roomJsonDefToRoomDef } from './roomJsonLoader';
 import type { RoomDef } from './roomDef';
 import type { CustomBlockSourceDef } from './customBlocks';
+import { DUST_KIND_OPTIONS } from '../editor/editorDropdownData';
+import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
+import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from '../progression/passiveTechniques';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA VERSION
@@ -78,6 +81,11 @@ export interface CampaignSpawnData {
    * Unknown IDs are silently ignored.
    */
   startingWeaves?: string[];
+  /**
+   * Optional list of passive technique IDs unlocked at campaign start
+   * (e.g., "cycle"). Unknown IDs are silently ignored.
+   */
+  startingPassives?: string[];
 }
 
 export interface SavedCampaignMetadata {
@@ -307,6 +315,84 @@ export function validateSavedCampaign(data: unknown): string[] {
     }
   }
 
+  // ── campaignSpawn ───────────────────────────────────────────────────────
+  if (typeof meta === 'object' && meta !== null) {
+    const m = meta as Record<string, unknown>;
+    const spawn = m['campaignSpawn'];
+    if (spawn !== undefined) {
+      if (typeof spawn !== 'object' || spawn === null) {
+        errors.push('campaignSpawn must be a non-null object when present');
+      } else {
+        const s = spawn as Record<string, unknown>;
+        const roomId = s['roomId'];
+        let spawnRoom: SavedRoomV2 | null = null;
+        if (typeof roomId !== 'string' || roomId.trim().length === 0) {
+          errors.push('campaignSpawn.roomId must be a non-empty string');
+        } else if (!roomIds.has(roomId)) {
+          errors.push(`campaignSpawn.roomId "${roomId}" does not exist in rooms[]`);
+        } else {
+          spawnRoom = rooms.find((r: unknown) => isSavedRoomV2(r) && r.id === roomId) as SavedRoomV2 ?? null;
+        }
+
+        const xBlock = s['xBlock'];
+        const yBlock = s['yBlock'];
+        if (typeof xBlock !== 'number' || !Number.isInteger(xBlock)) {
+          errors.push('campaignSpawn.xBlock must be a finite integer');
+        }
+        if (typeof yBlock !== 'number' || !Number.isInteger(yBlock)) {
+          errors.push('campaignSpawn.yBlock must be a finite integer');
+        }
+        if (spawnRoom !== null && typeof xBlock === 'number' && Number.isInteger(xBlock) &&
+            typeof yBlock === 'number' && Number.isInteger(yBlock)) {
+          const [rw, rh] = spawnRoom.size;
+          if (xBlock < 0 || xBlock >= rw) {
+            errors.push(`campaignSpawn.xBlock ${xBlock} out of room bounds [0, ${rw})`);
+          }
+          if (yBlock < 0 || yBlock >= rh) {
+            errors.push(`campaignSpawn.yBlock ${yBlock} out of room bounds [0, ${rh})`);
+          }
+        }
+
+        for (const [field, val] of [
+          ['startingHealth', s['startingHealth']],
+          ['startingDustContainerCount', s['startingDustContainerCount']],
+        ] as const) {
+          if (val !== undefined && (typeof val !== 'number' || !Number.isInteger(val) || val < 0)) {
+            errors.push(`campaignSpawn.${field} must be a non-negative integer when present`);
+          }
+        }
+
+        function validateIdArray(field: string, val: unknown, isKnown: (id: string) => boolean): void {
+          if (val === undefined) return;
+          if (!Array.isArray(val)) {
+            errors.push(`campaignSpawn.${field} must be an array when present`);
+            return;
+          }
+          const seen = new Set<string>();
+          for (const item of val) {
+            if (typeof item !== 'string') {
+              errors.push(`campaignSpawn.${field} must contain only strings`);
+              continue;
+            }
+            if (seen.has(item)) {
+              errors.push(`campaignSpawn.${field} contains duplicate id "${item}"`);
+              continue;
+            }
+            seen.add(item);
+            if (!isKnown(item)) {
+              errors.push(`campaignSpawn.${field} contains unknown id "${item}"`);
+            }
+          }
+        }
+
+        const dustKindSet = new Set<string>(DUST_KIND_OPTIONS as readonly string[]);
+        validateIdArray('startingDustTypes', s['startingDustTypes'], id => dustKindSet.has(id));
+        validateIdArray('startingWeaves', s['startingWeaves'], id => WEAVE_REGISTRY.has(id));
+        validateIdArray('startingPassives', s['startingPassives'], id => PASSIVE_TECHNIQUE_DEFINITIONS.has(id as PassiveTechniqueId));
+      }
+    }
+  }
+
   return errors;
 }
 
@@ -369,6 +455,18 @@ export function validateSavedCampaignTopLevel(data: unknown): string[] {
 
   if (initialRoomId.length > 0 && !roomIds.has(initialRoomId)) {
     errors.push(`campaign.initialRoomId "${initialRoomId}" does not exist in rooms[]`);
+  }
+
+  if (typeof campaign === 'object' && campaign !== null) {
+    const spawn = (campaign as Record<string, unknown>)['campaignSpawn'];
+    if (spawn !== undefined && typeof spawn === 'object' && spawn !== null) {
+      const spawnRoomId = (spawn as Record<string, unknown>)['roomId'];
+      if (typeof spawnRoomId !== 'string' || spawnRoomId.trim().length === 0) {
+        errors.push('campaignSpawn.roomId must be a non-empty string');
+      } else if (!roomIds.has(spawnRoomId)) {
+        errors.push(`campaignSpawn.roomId "${spawnRoomId}" does not exist in rooms[]`);
+      }
+    }
   }
 
   return errors;
