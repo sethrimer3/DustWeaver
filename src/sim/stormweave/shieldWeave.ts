@@ -1,6 +1,6 @@
 /** Pure geometry and deterministic gameplay state for the directional Shield Weave. */
 
-export const SHIELD_EXTRA_DIAMETER_WORLD = 4;
+export const SHIELD_EXTRA_DIAMETER_WORLD = 8;
 export const SHIELD_MIN_ARC_LENGTH_WORLD = 10;
 export const SHIELD_ARC_LENGTH_PER_EXTRA_MOTE_WORLD = 3;
 export const SHIELD_COLLISION_HALF_THICKNESS_WORLD = 2;

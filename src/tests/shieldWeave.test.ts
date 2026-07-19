@@ -67,10 +67,10 @@ describe('Shield Weave activation and geometry', () => {
     assert.ok(released.some(command => command.kind === CommandKind.ShieldWeaveEnd));
   });
 
-  test('diameter is canonical player collision height plus four pixels', () => {
+  test('diameter is canonical player collision height plus eight pixels', () => {
     const playerHeight = PLAYER_HALF_HEIGHT_WORLD * 2;
-    assert.equal(getShieldRadiusWorld(playerHeight) * 2, playerHeight + 4);
-    assert.equal(getShieldRadiusWorld(playerHeight), 12);
+    assert.equal(getShieldRadiusWorld(playerHeight) * 2, playerHeight + 8);
+    assert.equal(getShieldRadiusWorld(playerHeight), 14);
   });
 
   test('one mote gives 10 pixels and every additional mote adds exactly 3', () => {
