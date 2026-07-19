@@ -315,7 +315,7 @@ export class StormweaveLifeMotes {
       this.velocityXWorld[i] *= damping;
       this.velocityYWorld[i] *= damping;
       const speed = Math.hypot(this.velocityXWorld[i], this.velocityYWorld[i]);
-      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * this.followResponseScale[i];
+      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * (isShieldActive ? 1 : this.followResponseScale[i]);
       if (speed > maxCatchUpSpeed) {
         const scale = maxCatchUpSpeed / speed;
         this.velocityXWorld[i] *= scale;
