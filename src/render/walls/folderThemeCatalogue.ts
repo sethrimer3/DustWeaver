@@ -24,14 +24,20 @@
 // so those environments get an empty catalogue instead of a hard crash.
 // Keep each glob as a direct call with a literal pattern: Vite only transforms
 // that exact syntax and cannot statically discover calls made through an alias.
-const _BLOCKS_GLOB = typeof import.meta.glob === 'function'
+// Do not use `typeof import.meta.glob` as the runtime guard. Vite replaces the
+// direct glob call with the generated module map, but it does not define a
+// runtime `import.meta.glob` function, so that guard evaluates false in the
+// browser and discards every discovered texture.
+const _IS_VITE_RUNTIME = import.meta.env?.BASE_URL !== undefined;
+
+const _BLOCKS_GLOB = _IS_VITE_RUNTIME
   ? import.meta.glob(
       '/ASSETS/SPRITES/BLOCKS/**/*.{png,webp,jpg,jpeg}',
       { query: '?url', import: 'default' },
     )
   : {};
 
-const _SPECIAL_BLOCKS_GLOB = typeof import.meta.glob === 'function'
+const _SPECIAL_BLOCKS_GLOB = _IS_VITE_RUNTIME
   ? import.meta.glob(
       '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
       { query: '?url', import: 'default' },

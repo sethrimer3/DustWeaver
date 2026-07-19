@@ -7,7 +7,10 @@ import type { BackgroundId } from '../levels/roomDef';
 // behavior is unchanged.
 const BASE = import.meta.env?.BASE_URL ?? '/';
 
-const BACKGROUND_GLOB: Record<string, unknown> = typeof import.meta.glob === 'function'
+// Vite statically replaces the direct glob call, but does not expose a
+// runtime `import.meta.glob` function. Guard on Vite's environment instead so
+// the generated catalogue is retained in-game while plain Node tests stay safe.
+const BACKGROUND_GLOB: Record<string, unknown> = import.meta.env?.BASE_URL !== undefined
   ? import.meta.glob(
       '/ASSETS/SPRITES/BACKGROUNDS/*/*.{png,webp,jpg,jpeg}',
       { query: '?url', import: 'default' },
