@@ -36,6 +36,12 @@ import {
   getPixelSpeedometerPlacement,
   setPixelSpeedometerEnabled,
   setPixelSpeedometerPlacement,
+  getPixelSpeedometerTotalEnabled, setPixelSpeedometerTotalEnabled,
+  getPixelSpeedometerHorizontalEnabled, setPixelSpeedometerHorizontalEnabled,
+  getPixelSpeedometerVerticalEnabled, setPixelSpeedometerVerticalEnabled,
+  getPixelSpeedGraphEnabled, setPixelSpeedGraphEnabled,
+  getPixelSpeedGraphOpacity, setPixelSpeedGraphOpacity,
+  getSpeedrunTimerEnabled, setSpeedrunTimerEnabled,
   getAdvancedWallJumpsEnabled,
   setAdvancedWallJumpsEnabled,
 } from './renderSettings';
@@ -518,9 +524,19 @@ export function buildSettingsUI(
       }),
     );
     if (getPixelSpeedometerEnabled()) {
+      tabContent.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+      tabContent.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+      tabContent.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+      tabContent.appendChild(makeCheckboxRow('Speed graph', getPixelSpeedGraphEnabled(), (enabled) => {
+        setPixelSpeedGraphEnabled(enabled);
+        buildGameplayTab();
+      }));
+      if (getPixelSpeedGraphEnabled()) {
+        tabContent.appendChild(makeSettingsSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+      }
       const placementSelect = document.createElement('select');
       placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: 'Cinzel', serif;`;
-      for (const [value, label] of [['over-player', 'Over Player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+      for (const [value, label] of [['over-player', 'On player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
@@ -532,6 +548,7 @@ export function buildSettingsUI(
       });
       tabContent.appendChild(placementSelect);
     }
+    tabContent.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     tabContent.appendChild(
       makeCheckboxRow('Advanced Wall Jumps', getAdvancedWallJumpsEnabled(), (enabled) => {
         setAdvancedWallJumpsEnabled(enabled);

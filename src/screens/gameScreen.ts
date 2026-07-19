@@ -1744,7 +1744,6 @@ export function startGameScreen(
     playerSpeedGraphOverlay.update({
       world,
       nowMs: timestampMs,
-      visible: pauseController.state.isDebugMode && isPanelVisible('speedGraph', debugPanelVisibility),
     });
     FP.recordRenderMs(import.meta.env.DEV ? performance.now() - _renderT0 : 0);
 

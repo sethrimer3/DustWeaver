@@ -22,6 +22,12 @@ import {
   setPixelSpeedometerEnabled,
   getPixelSpeedometerPlacement,
   setPixelSpeedometerPlacement,
+  getPixelSpeedometerTotalEnabled, setPixelSpeedometerTotalEnabled,
+  getPixelSpeedometerHorizontalEnabled, setPixelSpeedometerHorizontalEnabled,
+  getPixelSpeedometerVerticalEnabled, setPixelSpeedometerVerticalEnabled,
+  getPixelSpeedGraphEnabled, setPixelSpeedGraphEnabled,
+  getPixelSpeedGraphOpacity, setPixelSpeedGraphOpacity,
+  getSpeedrunTimerEnabled, setSpeedrunTimerEnabled,
   saveCombatModeToStorage,
   WORLD_VIEW_PRESETS, setWorldViewPresetId, getActiveWorldViewPreset,
   type WorldViewPresetId,
@@ -384,13 +390,23 @@ export function showPauseMenu(
       speedometerRow.appendChild(speedometerLabel);
       optionsPanel.appendChild(speedometerRow);
       if (speedometerEnabled) {
+        optionsPanel.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+        optionsPanel.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+        optionsPanel.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+        optionsPanel.appendChild(makeCheckboxRow('Speed graph', getPixelSpeedGraphEnabled(), (enabled) => {
+          setPixelSpeedGraphEnabled(enabled);
+          buildOptionsContent();
+        }));
+        if (getPixelSpeedGraphEnabled()) {
+          optionsPanel.appendChild(makeSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+        }
         const placementSelect = document.createElement('select');
         placementSelect.style.cssText = `
           display: block; width: 100%; margin: 0 0 8px 0; padding: 8px 10px;
           color: ${GOLD}; background: rgba(30,28,22,0.9); border: 1px solid ${PANEL_BORDER};
           border-radius: 4px; font-family: 'Cinzel', serif; cursor: pointer;
         `;
-        for (const [value, label] of [['over-player', 'Over Player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
+        for (const [value, label] of [['over-player', 'On player'], ['on-top', 'On top'], ['both', 'Both']] as const) {
           const option = document.createElement('option');
           option.value = value;
           option.textContent = label;
@@ -402,6 +418,7 @@ export function showPauseMenu(
         });
         optionsPanel.appendChild(placementSelect);
       }
+      optionsPanel.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     }
 
     // Back button

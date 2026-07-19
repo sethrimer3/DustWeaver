@@ -11,6 +11,7 @@
  */
 
 import type { WorldState } from '../../sim/world';
+import { getPixelSpeedGraphEnabled, getPixelSpeedGraphOpacity, getPixelSpeedometerEnabled } from '../../ui/renderSettings';
 
 const SPEED_GRAPH_WINDOW_MS = 10_000;
 const GRAPH_CSS_WIDTH = 260;
@@ -28,7 +29,6 @@ interface SpeedSample {
 export interface PlayerSpeedGraphOverlayUpdate {
   readonly world: WorldState;
   readonly nowMs: number;
-  readonly visible: boolean;
 }
 
 export class PlayerSpeedGraphOverlayRenderer {
@@ -69,7 +69,7 @@ export class PlayerSpeedGraphOverlayRenderer {
   }
 
   update(params: PlayerSpeedGraphOverlayUpdate): void {
-    if (!params.visible) {
+    if (!getPixelSpeedometerEnabled() || !getPixelSpeedGraphEnabled()) {
       this.hide();
       return;
     }
@@ -90,6 +90,7 @@ export class PlayerSpeedGraphOverlayRenderer {
     }
 
     this._canvas.style.display = 'block';
+    this._canvas.style.opacity = getPixelSpeedGraphOpacity().toString();
     this._draw(params.nowMs);
   }
 

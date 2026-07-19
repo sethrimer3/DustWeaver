@@ -56,6 +56,12 @@ const INFLUENCE_HIGHLIGHT_WIDTH_STORAGE_KEY = 'dustweaver-influence-highlight-wi
 const DOUBLE_JUMP_TO_GRAPPLE_STORAGE_KEY = 'dustweaver-double-jump-to-grapple';
 const PIXEL_SPEEDOMETER_STORAGE_KEY = 'dustweaver-pixel-speedometer-enabled';
 const PIXEL_SPEEDOMETER_PLACEMENT_STORAGE_KEY = 'dustweaver-pixel-speedometer-placement';
+const PIXEL_SPEEDOMETER_TOTAL_STORAGE_KEY = 'dustweaver-pixel-speedometer-total-enabled';
+const PIXEL_SPEEDOMETER_HORIZONTAL_STORAGE_KEY = 'dustweaver-pixel-speedometer-horizontal-enabled';
+const PIXEL_SPEEDOMETER_VERTICAL_STORAGE_KEY = 'dustweaver-pixel-speedometer-vertical-enabled';
+const PIXEL_SPEED_GRAPH_STORAGE_KEY = 'dustweaver-pixel-speed-graph-enabled';
+const PIXEL_SPEED_GRAPH_OPACITY_STORAGE_KEY = 'dustweaver-pixel-speed-graph-opacity';
+const SPEEDRUN_TIMER_STORAGE_KEY = 'dustweaver-speedrun-timer-enabled';
 const AIR_CURRENTS_DEBUG_STORAGE_KEY = 'dustweaver-air-currents-debug-enabled';
 const DEFAULT_RENDER_SIZE_ID = '1080p';
 
@@ -227,6 +233,29 @@ export function getPixelSpeedometerPlacement(): PixelSpeedometerPlacement {
 export function setPixelSpeedometerPlacement(placement: PixelSpeedometerPlacement): void {
   localStorage.setItem(PIXEL_SPEEDOMETER_PLACEMENT_STORAGE_KEY, placement);
 }
+
+function getDefaultOnBoolean(storageKey: string): boolean {
+  return localStorage.getItem(storageKey) !== '0';
+}
+
+function setStoredBoolean(storageKey: string, enabled: boolean): void {
+  localStorage.setItem(storageKey, enabled ? '1' : '0');
+}
+
+export function getPixelSpeedometerTotalEnabled(): boolean { return getDefaultOnBoolean(PIXEL_SPEEDOMETER_TOTAL_STORAGE_KEY); }
+export function setPixelSpeedometerTotalEnabled(enabled: boolean): void { setStoredBoolean(PIXEL_SPEEDOMETER_TOTAL_STORAGE_KEY, enabled); }
+export function getPixelSpeedometerHorizontalEnabled(): boolean { return getDefaultOnBoolean(PIXEL_SPEEDOMETER_HORIZONTAL_STORAGE_KEY); }
+export function setPixelSpeedometerHorizontalEnabled(enabled: boolean): void { setStoredBoolean(PIXEL_SPEEDOMETER_HORIZONTAL_STORAGE_KEY, enabled); }
+export function getPixelSpeedometerVerticalEnabled(): boolean { return getDefaultOnBoolean(PIXEL_SPEEDOMETER_VERTICAL_STORAGE_KEY); }
+export function setPixelSpeedometerVerticalEnabled(enabled: boolean): void { setStoredBoolean(PIXEL_SPEEDOMETER_VERTICAL_STORAGE_KEY, enabled); }
+export function getPixelSpeedGraphEnabled(): boolean { return localStorage.getItem(PIXEL_SPEED_GRAPH_STORAGE_KEY) === '1'; }
+export function setPixelSpeedGraphEnabled(enabled: boolean): void { setStoredBoolean(PIXEL_SPEED_GRAPH_STORAGE_KEY, enabled); }
+export function getPixelSpeedGraphOpacity(): number { return getStoredFloat(PIXEL_SPEED_GRAPH_OPACITY_STORAGE_KEY, 0.55, 0.1, 1); }
+export function setPixelSpeedGraphOpacity(opacity: number): void { setStoredFloat(PIXEL_SPEED_GRAPH_OPACITY_STORAGE_KEY, opacity, 0.1, 1); }
+
+/** The gameplay speedrun timer is opt-in and defaults to hidden on a fresh install. */
+export function getSpeedrunTimerEnabled(): boolean { return localStorage.getItem(SPEEDRUN_TIMER_STORAGE_KEY) === '1'; }
+export function setSpeedrunTimerEnabled(enabled: boolean): void { setStoredBoolean(SPEEDRUN_TIMER_STORAGE_KEY, enabled); }
 
 /**
  * Shows the "Air Currents" debug overlay (arrows visualizing the pixel-material

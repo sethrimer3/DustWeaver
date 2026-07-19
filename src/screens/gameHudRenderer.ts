@@ -29,6 +29,7 @@ import {
 } from '../sim/motes/orderedMoteQueue';
 import { formatRunTimer } from '../progression/saveSlots';
 import { drawChallengeHudShield } from '../render/challengeElementRenderer';
+import { getSpeedrunTimerEnabled } from '../ui/renderSettings';
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   } = r;
 
   // ── Player health bar in HUD (top-left, above dust display) ─────────────
-  {
+  if (getSpeedrunTimerEnabled()) {
     const playerForHealth = world.clusters[0];
     // Retained temporarily for legacy health-bar tuning reference; runtime
     // player ticks are non-negative, so only the mote-slot HUD below is drawn.

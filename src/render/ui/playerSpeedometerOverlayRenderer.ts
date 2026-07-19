@@ -1,4 +1,10 @@
-import { getPixelSpeedometerEnabled } from '../../ui/renderSettings';
+import {
+  getPixelSpeedometerEnabled,
+  getPixelSpeedometerHorizontalEnabled,
+  getPixelSpeedometerPlacement,
+  getPixelSpeedometerTotalEnabled,
+  getPixelSpeedometerVerticalEnabled,
+} from '../../ui/renderSettings';
 import type { WorldState } from '../../sim/world';
 import {
   nativeGamePointToOverlayCssPoint,
@@ -124,6 +130,8 @@ export class PlayerSpeedometerOverlayRenderer {
   private readonly _root: HTMLElement;
   private readonly _horizontalEl: HTMLDivElement;
   private readonly _verticalEl: HTMLDivElement;
+  private readonly _totalEl: HTMLDivElement;
+  private readonly _topEl: HTMLDivElement;
   private _lastHorizontalText = '';
   private _lastVerticalText = '';
 
@@ -135,6 +143,12 @@ export class PlayerSpeedometerOverlayRenderer {
     this._verticalEl = document.createElement('div');
     this._verticalEl.style.cssText = SPEEDOMETER_CSS;
     uiRoot.appendChild(this._verticalEl);
+    this._totalEl = document.createElement('div');
+    this._totalEl.style.cssText = SPEEDOMETER_CSS;
+    uiRoot.appendChild(this._totalEl);
+    this._topEl = document.createElement('div');
+    this._topEl.style.cssText = `${SPEEDOMETER_CSS} left: 50%; top: 8px; transform: translateX(-50%);`;
+    uiRoot.appendChild(this._topEl);
   }
 
   update(params: PlayerSpeedometerOverlayUpdate): void {
@@ -150,6 +164,7 @@ export class PlayerSpeedometerOverlayRenderer {
     const displayVelocity = getDisplayVelocityComponents(player.velocityXWorld, player.velocityYWorld);
     const horizontalText = formatDisplayVelocity(displayVelocity.x);
     const verticalText = formatDisplayVelocity(displayVelocity.y);
+    const totalText = formatDisplayVelocity(Math.hypot(displayVelocity.x, displayVelocity.y));
     if (horizontalText !== this._lastHorizontalText) {
       this._horizontalEl.textContent = horizontalText;
       this._lastHorizontalText = horizontalText;
@@ -158,6 +173,20 @@ export class PlayerSpeedometerOverlayRenderer {
       this._verticalEl.textContent = verticalText;
       this._lastVerticalText = verticalText;
     }
+
+    const placement = getPixelSpeedometerPlacement();
+    const showOnPlayer = placement === 'over-player' || placement === 'both';
+    const showOnTop = placement === 'on-top' || placement === 'both';
+    const showTotal = getPixelSpeedometerTotalEnabled();
+    const showHorizontal = getPixelSpeedometerHorizontalEnabled();
+    const showVertical = getPixelSpeedometerVerticalEnabled();
+    this._totalEl.textContent = totalText;
+    const topParts: string[] = [];
+    if (showTotal) topParts.push(`Total ${totalText}`);
+    if (showHorizontal) topParts.push(`X ${horizontalText}`);
+    if (showVertical) topParts.push(`Y ${verticalText}`);
+    this._topEl.textContent = topParts.join('  ·  ');
+    this._topEl.style.display = showOnTop && topParts.length > 0 ? 'block' : 'none';
 
     const anchors = calculatePlayerSpeedometerNativeAnchors({
       playerRenderXWorld: params.playerRenderXWorld,
@@ -180,8 +209,9 @@ export class PlayerSpeedometerOverlayRenderer {
         overlayCssRect: rootRect,
       });
 
-    this._horizontalEl.style.display = 'block';
-    this._verticalEl.style.display = 'block';
+    this._horizontalEl.style.display = showOnPlayer && showHorizontal ? 'block' : 'none';
+    this._verticalEl.style.display = showOnPlayer && showVertical ? 'block' : 'none';
+    this._totalEl.style.display = showOnPlayer && showTotal ? 'block' : 'none';
     const positions = calculatePlayerSpeedometerCssPositions({
       horizontalAnchor: toOverlayPoint(anchors.horizontal),
       verticalAnchor: toOverlayPoint(anchors.vertical),
@@ -195,15 +225,24 @@ export class PlayerSpeedometerOverlayRenderer {
     this._horizontalEl.style.top = `${positions.horizontal.yCss}px`;
     this._verticalEl.style.left = `${positions.vertical.xCss}px`;
     this._verticalEl.style.top = `${positions.vertical.yCss}px`;
+    if (showOnPlayer && showTotal) {
+      const totalAnchor = toOverlayPoint({ x: anchors.horizontal.x, y: anchors.vertical.y - player.halfHeightWorld * params.zoom });
+      this._totalEl.style.left = `${snapCssPixelToDevicePixel(totalAnchor.xCss - this._totalEl.offsetWidth * 0.5, window.devicePixelRatio || 1)}px`;
+      this._totalEl.style.top = `${snapCssPixelToDevicePixel(totalAnchor.yCss - this._totalEl.offsetHeight - PLAYER_SPEEDOMETER_GAP_CSS_PX, window.devicePixelRatio || 1)}px`;
+    }
   }
 
   hide(): void {
     this._horizontalEl.style.display = 'none';
     this._verticalEl.style.display = 'none';
+    this._totalEl.style.display = 'none';
+    this._topEl.style.display = 'none';
   }
 
   destroy(): void {
     this._horizontalEl.remove();
     this._verticalEl.remove();
+    this._totalEl.remove();
+    this._topEl.remove();
   }
 }
