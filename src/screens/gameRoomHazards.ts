@@ -71,6 +71,11 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.breakEventCount = 0;
   world.contactDamageBlockCount = 0;
   world.crumbleBlockCount = 0;
+  // Full reset (not just [0, wallCount)) — hazard wall slots are reused across
+  // room transitions in a different order/count each load, so a stale >= 0
+  // value here could otherwise make an unrelated wall (e.g. a bounce pad that
+  // now occupies a slot a crumble block used last room) falsely shatterable.
+  world.wallCrumbleBlockIndex.fill(-1);
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
   world.grappleCarryBlockCount = 0;
@@ -329,6 +334,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;
     world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'];
+    if (wallIdx >= 0) world.wallCrumbleBlockIndex[wallIdx] = ci;
   }
 
   // ── Bounce pads ──────────────────────────────────────────────────────────
