@@ -17,6 +17,7 @@ import {
 } from './arrowWeave';
 import { tickSwordWeave } from './swordWeave';
 import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
+import { isDustSwitchBehaviorMode } from '../particles/dustSwitchBehaviorMode';
 
 // ── Storm Weave constants ───────────────────────────────────────────────────
 
@@ -188,6 +189,9 @@ function applyShieldCrescent(
     const pidx = world.moteSlotParticleIndex[slot];
     if (pidx < 0 || pidx >= world.particleCount) continue;
     if (world.isAliveFlag[pidx] === 0) continue;
+    // Mid dust-switch transition — excluded from the shield crescent so it
+    // cannot intercept attacks while recalling/returning.
+    if (isDustSwitchBehaviorMode(world.behaviorMode[pidx])) continue;
 
     // Center-out arc position: rank 0 = center, rank 1 = above, rank 2 = below …
     const arcPosition = _centerOutArcT(rank, total);

@@ -92,6 +92,13 @@ export function initMoteQueueFromParticles(world: WorldState, playerEntityId: nu
   world.moteSlotCooldownTicksLeft.fill(0);
   world.moteSlotParticleIndex.fill(-1);
   world.moteRegenFlashTicksLeft.fill(0);
+  // Discard any stale dust-switch transition state from the previous room —
+  // the mote queue (and its particles) is being rebuilt from scratch, so a
+  // switch cannot legitimately still be "in progress" across this boundary.
+  world.dustSwitchPhase.fill(0); // DUST_SWITCH_PHASE_NORMAL
+  world.dustSwitchActiveSlotCount = 0;
+  world.dustSwitchTrailActiveCount.fill(0);
+  world.dustSwitchTrailWriteIndex.fill(0);
 
   for (let i = 0; i < world.particleCount; i++) {
     if (world.ownerEntityId[i] !== playerEntityId) continue;

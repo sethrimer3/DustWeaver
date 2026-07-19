@@ -110,6 +110,9 @@ import {
   updateCameraFollow,
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
+import { DustSelectionWheelController, isDustWheelAvailable } from './gameDustSelectionState';
+import { createDustWheelGestureState, updateDustWheelGesture } from '../input/dustWheelInput';
+import { cancelAllDustTypeSwitches } from '../sim/weaves/dustTypeSwitch';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import {
   applyGameEditorRoomActivation,
@@ -887,6 +890,12 @@ export function startGameScreen(
   const inputState = createInputState();
   const detachInput = attachInputListeners(canvas, inputState);
 
+  // ── Dust selection wheel ────────────────────────────────────────────────
+  const dustWheelController = new DustSelectionWheelController();
+  const dustWheelGestureState = createDustWheelGestureState();
+  const onDustWheelBlur = (): void => { dustWheelController.cancel(performance.now()); };
+  window.addEventListener('blur', onDustWheelBlur);
+
   function preloadAdjacentCurrentRoomAssets(): void {
     preloadAdjacentRoomAssets(currentRoom);
   }
@@ -1303,6 +1312,27 @@ export function startGameScreen(
     // ── Dialogue advance input (capture before collectCommands drains the flag)
     const dialogueAdvanceRequested = inputState.isDialogueAdvanceTriggeredFlag;
 
+    // ── Dust selection wheel: Interact gesture recognition ─────────────────
+    // Runs before collectCommands (called inside processPlayerCommands) so a
+    // wheel-open/cancel decision is already resolved into inputState by the
+    // time normal command collection sees it.
+    {
+      const isWheelEligible = isDustWheelAvailable(world, progress);
+      const wasWheelOpen = dustWheelController.isOpen();
+      // Escape cancels the open wheel without changing dust, and must not
+      // also open the pause menu this frame.
+      if (wasWheelOpen && inputState.isEscapePressed) {
+        dustWheelController.cancel(timestampMs);
+        inputState.isEscapePressed = false;
+      }
+      const gestureResult = updateDustWheelGesture(
+        dustWheelGestureState, inputState, timestampMs, isWheelEligible, dustWheelController.isOpen(),
+      );
+      if (gestureResult.cancelWheel) dustWheelController.cancel(timestampMs);
+      if (gestureResult.openWheel) dustWheelController.open(progress, timestampMs);
+      if (gestureResult.fireNormalInteract) inputState.isInteractTriggeredFlag = true;
+    }
+
     const commandResult = processPlayerCommands({
         inputState, world, canvas,
         offsetXPx, offsetYPx, zoom,
@@ -1320,6 +1350,7 @@ export function startGameScreen(
         setLambdaAnchorLink: lambdaAnchorState.setLambdaAnchorLink,
         clearLambdaAnchorLink: lambdaAnchorState.clearLambdaAnchorLink,
         lambdaTeleportFlash: lambdaAnchorState.lambdaTeleportFlash,
+        dustWheel: dustWheelController,
       });
     const { moveDx, jumpTriggered, openPause, interactInputPulseTrigger, grappleFireTriggered } = commandResult;
     let { interactTriggered } = commandResult;
@@ -1351,6 +1382,7 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      dustWheelController.cancel(timestampMs);
       deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
@@ -1361,6 +1393,7 @@ export function startGameScreen(
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      dustWheelController.cancel(timestampMs);
       deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
@@ -1401,8 +1434,12 @@ export function startGameScreen(
       true, // isCrossingInactive: always true (instant transitions only)
       preTransVX,
       preTransVY,
-      (room, spawnXBlock, spawnYBlock, vx, vy, dir) =>
-        transitionCoordinator.submitTransition(room, spawnXBlock, spawnYBlock, vx, vy, dir),
+      (room, spawnXBlock, spawnYBlock, vx, vy, dir) => {
+        // A room transition beginning always closes the wheel safely — the
+        // new room's mote queue is rebuilt from scratch on load anyway.
+        dustWheelController.cancel(timestampMs);
+        transitionCoordinator.submitTransition(room, spawnXBlock, spawnYBlock, vx, vy, dir);
+      },
       resolveSpawnBlock,
       camera,
       currentRoomOriginXWorld,
@@ -1436,6 +1473,8 @@ export function startGameScreen(
         currentRoom, firedDialogueTriggerUids, cachedRoomConversations,
         dialogueState, dialogueRenderer,
       );
+      // Dialogue opening (via trigger or otherwise) closes an open wheel safely.
+      if (dialogueState.isDialogueActiveFlag) dustWheelController.cancel(timestampMs);
     }
 
     // During active dialogue, freeze player movement (suppress moveDx/jump inputs).
@@ -1569,6 +1608,10 @@ export function startGameScreen(
       && playerForDeath.isAliveFlag === 0
       && !gameOverlayController.state.isPlayerDead) {
       gameOverlayController.showPlayerDeathScreen();
+      dustWheelController.cancel(timestampMs);
+      // Resolve any in-progress mote transformation immediately rather than
+      // leaving particles frozen mid-recall behind the death screen.
+      cancelAllDustTypeSwitches(world);
     }
 
     // ── Update skill tomb renderer ──────────────────────────────────────────
@@ -1695,6 +1738,9 @@ export function startGameScreen(
     }
 
     const _renderT0 = import.meta.env.DEV ? performance.now() : 0;
+    // Advance the wheel's cosmetic open/close animation for this render.
+    dustWheelController.tick(timestampMs);
+
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
@@ -1734,6 +1780,7 @@ export function startGameScreen(
       crossingUnionMaxYWorld: roomHeightWorld,
       alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       stagedRoom: null,
+      dustWheel: dustWheelController,
     });
     playerSpeedometerOverlay.update({
       world,
@@ -1997,6 +2044,7 @@ export function startGameScreen(
     editorController.destroy();
     editorDebugControls?.destroy();
     detachInput();
+    window.removeEventListener('blur', onDustWheelBlur);
     webglRenderer.dispose();
     dialogueRenderer.destroy();
     playerSpeedometerOverlay.destroy();

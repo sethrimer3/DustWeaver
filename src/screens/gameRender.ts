@@ -28,6 +28,9 @@ import { applyVoidLensDistortion } from '../render/effects/voidLensDistortion';
 import { renderHazards } from '../render/hazards';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
+import { renderDustSwitchTrails } from '../render/effects/dustSwitchTrailRenderer';
+import { renderDustSelectionWheel } from '../render/effects/dustSelectionWheelRenderer';
+import type { DustSelectionWheelController } from './gameDustSelectionState';
 import {
   tickPlayerRocketChargeParticles,
   drawPlayerRocketChargeParticles,
@@ -290,6 +293,9 @@ export interface RenderFrameContext {
    * screen-space rect.  Null when no staging is active (always null now).
    */
   stagedRoom: StagedRoomBgInfo | null;
+
+  /** Dust selection wheel controller — drives the in-canvas radial UI. */
+  dustWheel: DustSelectionWheelController;
 }
 
 /**
@@ -313,6 +319,7 @@ export function renderFrame(r: RenderFrameContext): void {
     isAdaptiveReductionActive,
     isDeepReductionActive,
     renderProfiler,
+    dustWheel,
   } = r;
 
   const nowMs = performance.now();
@@ -535,6 +542,9 @@ export function renderFrame(r: RenderFrameContext): void {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }
 
+  // Dust-switch trail + participating motes — drawn behind the player sprite.
+  renderDustSwitchTrails(ctx, world, ox, oy, zoom, graphicsQuality);
+
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
   if (playerForSunrayDust !== null) {
     tickPlayerRocketChargeParticles(
@@ -671,6 +681,21 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
   renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
+
+  // ── Dust selection wheel (screen-space overlay, unclipped by room bounds,
+  //     drawn on top of world content but still in virtual-canvas pixel
+  //     space so it upscales identically to everything else). No-ops
+  //     cheaply when the wheel is fully closed.
+  {
+    const wheelPlayer = world.clusters[0];
+    if (wheelPlayer !== undefined) {
+      renderDustSelectionWheel(
+        ctx, dustWheel,
+        wheelPlayer.positionXWorld, wheelPlayer.positionYWorld,
+        ox, oy, zoom,
+      );
+    }
+  }
 
   // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_HUD);

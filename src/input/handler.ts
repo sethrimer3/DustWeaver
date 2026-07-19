@@ -73,6 +73,29 @@ export interface InputState {
   isGrappleZipRequestedFlag: 0 | 1;
   /** Set to true for one collectCommands call to trigger an interact (F key). */
   isInteractTriggeredFlag: boolean;
+  /**
+   * True while the Interact key is physically held down (between keydown and
+   * keyup). Ignores browser key-repeat — only the initial press sets this.
+   */
+  isInteractDownFlag: boolean;
+  /**
+   * performance.now() timestamp of the most recent Interact keydown edge.
+   * Valid only while isInteractDownFlag is true. Read by the dust wheel
+   * gesture logic to measure hold duration; never used by deterministic sim code.
+   */
+  interactDownTimeMs: number;
+  /**
+   * Set to true for one gesture-update call on the Interact keydown edge
+   * (ignores key-repeat). Consumed and cleared by dustWheelInput.ts, not by
+   * collectCommands — normal-tap semantics are decided downstream once hold
+   * duration / double-tap timing are known.
+   */
+  isInteractPressEdgeFlag: boolean;
+  /**
+   * Set to true for one gesture-update call on the Interact keyup edge.
+   * Consumed and cleared by dustWheelInput.ts.
+   */
+  isInteractReleaseEdgeFlag: boolean;
   /** Set to true for one collectCommands call to toggle fullscreen. */
   isFullscreenToggleTriggeredFlag: boolean;
   /** Set to true for one collectCommands call to open the world map (M key). */
@@ -125,6 +148,10 @@ export function createInputState(): InputState {
     grappleAimYPx: 0,
     isGrappleZipRequestedFlag: 0,
     isInteractTriggeredFlag: false,
+    isInteractDownFlag: false,
+    interactDownTimeMs: 0,
+    isInteractPressEdgeFlag: false,
+    isInteractReleaseEdgeFlag: false,
     isFullscreenToggleTriggeredFlag: false,
     isMapKeyTriggeredFlag: false,
     isDialogueAdvanceTriggeredFlag: false,
@@ -189,7 +216,12 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
       state.isJumpHeldFlag = true;
     }
     if (keyMatches(e.key, b.interact) && !e.repeat) {
-      state.isInteractTriggeredFlag = true;
+      // Normal-tap vs. hold-to-open-wheel vs. double-tap is resolved downstream
+      // by dustWheelInput.ts, which needs the raw press edge + hold duration.
+      // Guarding on !e.repeat ensures holding the key never re-fires this edge.
+      state.isInteractDownFlag = true;
+      state.interactDownTimeMs = performance.now();
+      state.isInteractPressEdgeFlag = true;
     }
     if (keyMatches(e.key, b.toggleFullscreen) && !e.repeat) {
       state.isFullscreenToggleTriggeredFlag = true;
@@ -211,6 +243,12 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     if (e.key === 'Escape') state.isEscapePressed = false;
     if (keyMatches(e.key, b.jump) || e.key === ' ' || e.key === 'ArrowUp') {
       state.isJumpHeldFlag = false;
+    }
+    if (keyMatches(e.key, b.interact)) {
+      if (state.isInteractDownFlag) {
+        state.isInteractReleaseEdgeFlag = true;
+      }
+      state.isInteractDownFlag = false;
     }
   }
   function onMouseMove(e: MouseEvent): void {
@@ -337,6 +375,12 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isBlockingFlag = 0;
     state.isRightMouseDownFlag = 0;
     state.isMouseDownFlag = 0;
+    // Interact: the keyup may never fire across a focus loss (alt-tab) — reset
+    // the held/edge state directly rather than emitting a release edge, since
+    // the dust wheel is force-closed separately on blur (gameScreen.ts).
+    state.isInteractDownFlag = false;
+    state.isInteractPressEdgeFlag = false;
+    state.isInteractReleaseEdgeFlag = false;
   }
 
   function onTouchEnd(e: TouchEvent): void {

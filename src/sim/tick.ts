@@ -78,6 +78,7 @@ import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
 import { tickZipMoveBlocks } from './zipMoveBlocks/zipMoveBlockSim';
 import { tickIceMoteAura } from './iceMoteAura';
+import { tickDustTypeSwitch } from './weaves/dustTypeSwitch';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
@@ -318,6 +319,10 @@ export function tick(world: WorldState): void {
 
   // 6. Euler integration with per-element drag
   integrateParticles(world);
+
+  // 6.05. Dust type switch — custom recall steering (bypassed by integration
+  //        above for recalling motes) and post-transform return bookkeeping.
+  tickDustTypeSwitch(world);
 
   // 6.5. Wall velocity bounce — reflect particles off wall faces with damping;
   //      stone shatter events are processed here too.

@@ -24,6 +24,7 @@
 import type { WorldSnapshot } from '../snapshot';
 import { ParticleKind } from '../../sim/particles/kinds';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
+import { isDustSwitchBehaviorMode } from '../../sim/particles/dustSwitchBehaviorMode';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -180,6 +181,10 @@ export function renderPixelLockedDust(
     // ── Exclusions ──────────────────────────────────────────────────────────
     // Grapple-chain particles are owned by grappleRenderer.ts.
     if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
+    // Dust-switch motes (recalling/returning) are drawn behind the player by
+    // dustSwitchTrailRenderer.ts instead — skip them here so they don't also
+    // render in front via the normal pass.
+    if (isDustSwitchBehaviorMode(behaviorMode[i])) continue;
 
     const kind = kindBuffer[i];
 

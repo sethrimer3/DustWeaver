@@ -112,6 +112,12 @@ export function performEarlyAutoAssignment(progress: PlayerProgress): number {
   // Unlock Golden Dust
   unlockDustType(progress, ParticleKind.Golden);
 
+  // Golden Dust is the player's first-ever dust type — auto-select it so
+  // ordinary motes have a deterministic kind from the very start.
+  if (progress.selectedDustKind === null) {
+    progress.selectedDustKind = ParticleKind.Golden;
+  }
+
   // Mark auto-assignment as complete
   progress.hasCompletedEarlyAutoAssignment = true;
 

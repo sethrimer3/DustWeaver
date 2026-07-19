@@ -7,6 +7,7 @@
 
 import { WorldState } from '../world';
 import { ParticleKind, PARTICLE_KIND_COUNT } from './kinds';
+import { isDustSwitchBehaviorMode } from './dustSwitchBehaviorMode';
 
 // ---- Constants ----------------------------------------------------------
 
@@ -93,11 +94,13 @@ export function triggerAttackLaunch(world: WorldState): void {
   if (playerEntityId === -1) return;
 
   // Count per-kind particles to spread them within their spread arc
-  // (exclude transient particles — shards and trail fire)
+  // (exclude transient particles — shards and trail fire — and motes mid
+  // dust-switch transition, which cannot participate in this launch).
   _kindParticleIndex.fill(0);
   _kindTotal.fill(0);
   for (let i = 0; i < world.particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0) {
+    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0
+        && !isDustSwitchBehaviorMode(behaviorMode[i])) {
       const k = kindBuffer[i];
       if (k < PARTICLE_KIND_COUNT) _kindTotal[k]++;
     }
@@ -425,11 +428,14 @@ export function applyBlockForces(world: WorldState): void {
   }
   if (playerEntityId === -1) return;
 
-  // Count alive player (non-transient) particles per kind for slot indices
+  // Count alive player (non-transient) particles per kind for slot indices.
+  // Dust-switch motes (recalling/returning) are excluded — they must not be
+  // pulled into the shield formation while transitioning.
   _blockKindCount.fill(0);
   _blockKindSlotIdx.fill(0);
   for (let i = 0; i < particleCount; i++) {
-    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0) {
+    if (isAliveFlag[i] === 1 && ownerEntityId[i] === playerEntityId && isTransientFlag[i] === 0
+        && !isDustSwitchBehaviorMode(behaviorMode[i])) {
       const k = kindBuffer[i];
       if (k < PARTICLE_KIND_COUNT) _blockKindCount[k]++;
     }
@@ -439,6 +445,7 @@ export function applyBlockForces(world: WorldState): void {
     if (isAliveFlag[i] === 0) continue;
     if (ownerEntityId[i] !== playerEntityId) continue;
     if (isTransientFlag[i] === 1) continue;   // shards and trail fire stay in attack mode
+    if (isDustSwitchBehaviorMode(behaviorMode[i])) continue; // mid dust-switch transition
 
     behaviorMode[i] = 2;
 

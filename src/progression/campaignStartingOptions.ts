@@ -18,6 +18,7 @@ import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from './passiveTechniques';
 import { normalizeMoteCount } from '../sim/playerMoteLife';
 import { isEquippableParticleKind } from '../sim/particles/kinds';
+import { getUnlockedDustKindsInCanonicalOrder } from '../sim/weaves/dustWheelOptions';
 
 export type CampaignStartingOptionsMode = 'merge' | 'fresh';
 
@@ -49,6 +50,15 @@ export function applyCampaignStartingOptions(
       const kind = stringToParticleKind(name);
       if (kind !== null && isEquippableParticleKind(kind)) unlockDustType(progress, kind);
     }
+  }
+
+  // Deterministic initial selected dust: if nothing has been chosen yet (or
+  // the previous selection is no longer valid), pick the first unlocked kind
+  // in canonical order — never dependent on unlock/insertion order.
+  if (progress.selectedDustKind === null || !isEquippableParticleKind(progress.selectedDustKind)
+      || progress.unlockedDustKinds.indexOf(progress.selectedDustKind) === -1) {
+    const canonicalUnlocked = getUnlockedDustKindsInCanonicalOrder(progress);
+    if (canonicalUnlocked.length > 0) progress.selectedDustKind = canonicalUnlocked[0];
   }
 
   if (Array.isArray(spawn.startingWeaves)) {
