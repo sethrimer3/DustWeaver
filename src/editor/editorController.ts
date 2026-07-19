@@ -20,8 +20,11 @@ import { EditorState, createEditorState, EditorTool,
   BlockTheme,
   EditorTransition, EditorRoomData,
   selectBlockTheme,
+  activateBlockThemeSlot,
+  assignBlockThemeSlot,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
+import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
 import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput } from './editorCamera';
 import {
   createEditorInputState,
@@ -541,6 +544,14 @@ export function createEditorController(
         onBlockThemeChange: (theme: BlockTheme) => {
           selectBlockTheme(state, theme);
         },
+        onBlockThemeSlotActivate: (slotIndex: number) => {
+          activateBlockThemeSlot(state, slotIndex);
+          saveBlockThemeSlots(state.blockThemeSlots, state.activeBlockThemeSlotIndex);
+        },
+        onBlockThemeSlotAssign: (slotIndex: number, theme: BlockTheme) => {
+          assignBlockThemeSlot(state, slotIndex, theme);
+          saveBlockThemeSlots(state.blockThemeSlots, state.activeBlockThemeSlotIndex);
+        },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
           if (state.roomData) state.roomData.lightingEffect = lightingEffect;
           applyEdits('metadata');
@@ -665,7 +676,21 @@ export function createEditorController(
           state.pendingCrumbleVariant = variant;
         },
         onBlockPlacementModifierChange: (modifier) => {
+          // Enforce incompatible-modifier rules: Background must not produce
+          // cracked/falling/collidable blocks, so selecting 'background'
+          // clears the crumble-variant selection state's relevance and vice
+          // versa — only one of {cracked, tough, sensitive, crumbling,
+          // background} can be active at a time, which the single
+          // pendingBlockPlacementModifier field already guarantees. Toggling
+          // Background off (modifier -> 'none') also resets the light-block
+          // sub-flag so it doesn't silently linger for the next enable.
           state.pendingBlockPlacementModifier = modifier;
+          if (modifier !== 'background') {
+            state.pendingBackgroundBlocksLight = false;
+          }
+        },
+        onBackgroundBlocksLightChange: (blocksLight: boolean) => {
+          state.pendingBackgroundBlocksLight = blocksLight;
         },
         onDustBoostJarKindChange: (dustKind: string) => {
           state.pendingDustBoostJarKind = dustKind;

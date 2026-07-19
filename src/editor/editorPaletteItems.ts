@@ -281,11 +281,11 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Rocket blocks (grant Movement V2 rocket boost when jumped from) ───────────
   { id: 'rocket_block_1x1', label: 'Rocket Block 1×1', category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, blockThemeOverride: 'rocketBlock' },
   { id: 'rocket_block_2x2', label: 'Rocket Block 2×2', category: 'specialBlocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, blockThemeOverride: 'rocketBlock' },
-  // ── Background blocks (visual-only, no collision) ────────────────────────
-  { id: 'bg_block_1x1',       label: 'BG Block 1×1',              category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const },
-  { id: 'bg_block_2x2',       label: 'BG Block 2×2',              category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const },
-  { id: 'bg_block_light_1x1', label: 'BG Block Light-Block 1×1',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
-  { id: 'bg_block_light_2x2', label: 'BG Block Light-Block 2×2',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isBackgroundBlockItem: 1 as const, isLightBlockingBackgroundBlockItem: 1 as const },
+  // Background blocks are no longer standalone palette cards — they are now a
+  // "Background" checkbox in the Block Modifier panel (see editorUI.ts) applied
+  // to ordinary 1×1/2×2 block placement. isBackgroundBlockItem / a
+  // isLightBlockingBackgroundBlockItem live on here still for legacy palette-item
+  // shape compatibility, but no PALETTE_ITEMS entry sets them any more.
   { id: 'rope', label: 'Rope', category: 'ropes', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
   { id: 'guide_dust_path', label: 'Guide Dust Path', category: 'guidePaths', isGuideDustPathItem: 1 as const },
 ];

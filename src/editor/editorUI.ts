@@ -18,7 +18,7 @@ import {
 } from './editorFormWidgets';
 import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
 import {
-  makeBtn, makeEdgeBtn, makeThemeChip, makeThemePaletteButton,
+  makeBtn, makeEdgeBtn, makeThemeChip, makeThemeSlot,
   makeBlockPreviewCard,
 } from './editorUIHelpers';
 import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePreview';
@@ -459,7 +459,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   let renderedCategory: PaletteCategory | null = null;
   let lastRenderedBlockTheme = '';
   let lastRenderedRecentBlockThemes = '';
-  let isBlockThemePaletteOpen = false;
+  /** Which theme slot (0-3) currently has its replace palette open, or null. */
+  let themePaletteOpenForSlot: number | null = null;
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
 
   const specialItemPickers = createEditorSpecialItemPickers(() => callbacks);
@@ -509,6 +510,59 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     blockModifierDiv.appendChild(row);
   }
   for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label, opt.help);
+
+  // ── Background modifier + subordinate "Blocks Ambient Light" checkbox ─────
+  // Background is mutually exclusive with Cracked/Falling: it must never
+  // produce a cracked, falling, or collidable block. Since
+  // pendingBlockPlacementModifier is a single field, checking Background
+  // automatically clears whichever of Cracked/Falling was active (and vice
+  // versa) — see makeModifierRow's change handler and the row below.
+  const bgModifierRow = document.createElement('label');
+  bgModifierRow.style.cssText = 'display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; cursor: pointer;';
+  const bgModifierInput = document.createElement('input');
+  bgModifierInput.type = 'checkbox';
+  bgModifierInput.dataset.modifier = 'background';
+  bgModifierInput.addEventListener('click', (e) => e.stopPropagation());
+  bgModifierInput.addEventListener('change', () => {
+    callbacks?.onBlockPlacementModifierChange(bgModifierInput.checked ? 'background' : 'none');
+  });
+  modifierInputs.push(bgModifierInput);
+  bgModifierRow.appendChild(bgModifierInput);
+  const bgModifierText = document.createElement('span');
+  bgModifierText.textContent = 'Background';
+  bgModifierRow.appendChild(bgModifierText);
+  const bgModifierHelp = document.createElement('span');
+  bgModifierHelp.textContent = '(?)';
+  bgModifierHelp.title = 'Places a visual-only Background Block (no collision, drawn 40% darker '
+    + 'behind foreground walls) using the current block type\'s footprint and the active block '
+    + 'theme, instead of an ordinary wall. Incompatible with Cracked and Falling — enabling '
+    + 'Background clears those, since a background block can never be cracked, falling, or solid.';
+  bgModifierHelp.style.cssText = 'color: rgba(143,200,255,0.75); cursor: help; font-size: 10px;';
+  bgModifierHelp.addEventListener('click', (e) => e.preventDefault());
+  bgModifierRow.appendChild(bgModifierHelp);
+  blockModifierDiv.appendChild(bgModifierRow);
+
+  const bgLightRow = document.createElement('label');
+  bgLightRow.style.cssText = 'display: none; align-items: center; gap: 6px; margin: 3px 0 3px 18px; font-size: 11px; cursor: pointer;';
+  const bgLightInput = document.createElement('input');
+  bgLightInput.type = 'checkbox';
+  bgLightInput.addEventListener('click', (e) => e.stopPropagation());
+  bgLightInput.addEventListener('change', () => {
+    callbacks?.onBackgroundBlocksLightChange(bgLightInput.checked);
+  });
+  bgLightRow.appendChild(bgLightInput);
+  const bgLightText = document.createElement('span');
+  bgLightText.textContent = 'BLOCKS AMBIENT LIGHT';
+  bgLightRow.appendChild(bgLightText);
+  const bgLightHelp = document.createElement('span');
+  bgLightHelp.textContent = '(?)';
+  bgLightHelp.title = 'When enabled, this background block also blocks ambient light propagation, '
+    + 'same as the legacy light-blocking background blocks. Off by default.';
+  bgLightHelp.style.cssText = 'color: rgba(143,200,255,0.75); cursor: help; font-size: 10px;';
+  bgLightHelp.addEventListener('click', (e) => e.preventDefault());
+  bgLightRow.appendChild(bgLightHelp);
+  blockModifierDiv.appendChild(bgLightRow);
+
   const modifierCrumbleSelect = document.createElement('select');
   modifierCrumbleSelect.style.cssText = `
     width: 100%; margin-top: 6px; background: rgba(0,0,0,0.6);
@@ -650,7 +704,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
     // Update palette area — recreate when category changes OR when block theme changes
     const currentTheme = state.selectedBlockTheme;
-    const recentBlockThemeSignature = state.recentBlockThemes.join('|');
+    const recentBlockThemeSignature = state.recentBlockThemes.join('|') +
+      '|slots:' + state.blockThemeSlots.join(',') + '|active:' + state.activeBlockThemeSlotIndex;
     const currentLighting = state.roomData?.lightingEffect ?? 'DEFAULT';
     const needsPaletteRebuild = renderedCategory !== state.activeCategory ||
       (state.activeCategory === 'blocks' && (
@@ -666,7 +721,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       paletteItems = [];
 
       if (state.activeCategory === 'blocks') {
-        // ── Visual block theme selector ─────────────────────────────────────
+        // ── Block theme slots ────────────────────────────────────────────────
+        // 4 compact theme slots replace the old "Block Theme: All" interface.
+        // Clicking a slot's body activates its theme; the small "⇄" replace
+        // icon in the slot's corner opens the full theme palette below,
+        // scoped to that slot (picking a theme there assigns it to the slot,
+        // activates the slot, updates selectedBlockTheme, and closes the
+        // palette).
         const themeSection = document.createElement('div');
         themeSection.style.cssText = `margin-bottom: 8px;`;
         const themeTitle = document.createElement('div');
@@ -674,29 +735,38 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         themeTitle.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 5px;`;
         themeSection.appendChild(themeTitle);
 
-        const themeRow = document.createElement('div');
-        themeRow.style.cssText = `display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 4px;`;
-        for (const themeId of state.recentBlockThemes) {
-          const th = BLOCK_THEMES.find(t => t.id === themeId);
-          if (!th) continue;
-          const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === currentTheme, () => {
-            callbacks?.onBlockThemeChange(th.id as BlockTheme);
-          });
-          themeRow.appendChild(chip);
-        }
-        const paletteButton = makeThemePaletteButton(isBlockThemePaletteOpen, () => {
-          isBlockThemePaletteOpen = !isBlockThemePaletteOpen;
-          lastRenderedBlockTheme = '';
+        const slotRow = document.createElement('div');
+        slotRow.style.cssText = `display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;`;
+        state.blockThemeSlots.forEach((slotThemeId, slotIndex) => {
+          const th = BLOCK_THEMES.find(t => t.id === slotThemeId);
+          const label = th?.label ?? slotThemeId;
+          const isActiveSlot = slotIndex === state.activeBlockThemeSlotIndex;
+          const slot = makeThemeSlot(
+            slotThemeId,
+            label,
+            isActiveSlot,
+            () => callbacks?.onBlockThemeSlotActivate(slotIndex),
+            () => {
+              themePaletteOpenForSlot = themePaletteOpenForSlot === slotIndex ? null : slotIndex;
+              lastRenderedBlockTheme = '';
+            },
+          );
+          slotRow.appendChild(slot);
         });
-        themeRow.appendChild(paletteButton);
-        themeSection.appendChild(themeRow);
-        if (isBlockThemePaletteOpen) {
+        themeSection.appendChild(slotRow);
+
+        if (themePaletteOpenForSlot !== null) {
+          const targetSlot = themePaletteOpenForSlot;
+          const paletteHeader = document.createElement('div');
+          paletteHeader.textContent = 'Choose a theme to replace this slot:';
+          paletteHeader.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.6); margin-top: 6px; margin-bottom: 4px;`;
+          themeSection.appendChild(paletteHeader);
           const themePaletteGrid = document.createElement('div');
-          themePaletteGrid.style.cssText = `display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 5px;`;
+          themePaletteGrid.style.cssText = `display: grid; grid-template-columns: 1fr 1fr; gap: 4px;`;
           for (const th of BLOCK_THEMES) {
-            const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === currentTheme, () => {
-              callbacks?.onBlockThemeChange(th.id as BlockTheme);
-              isBlockThemePaletteOpen = false;
+            const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === state.blockThemeSlots[targetSlot], () => {
+              callbacks?.onBlockThemeSlotAssign(targetSlot, th.id as BlockTheme);
+              themePaletteOpenForSlot = null;
               lastRenderedBlockTheme = '';
             });
             themePaletteGrid.appendChild(chip);
@@ -921,6 +991,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       if (document.activeElement !== modifierCrumbleSelect) {
         modifierCrumbleSelect.value = state.pendingCrumbleVariant;
       }
+      const isBackgroundActive = state.pendingBlockPlacementModifier === 'background';
+      bgLightRow.style.display = isBackgroundActive ? 'flex' : 'none';
+      bgLightInput.checked = state.pendingBackgroundBlocksLight;
     }
 
     // Update inspector (only recreate when selected element changes)

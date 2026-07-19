@@ -311,6 +311,64 @@ export function getTheme1x1SpriteShaded(
   return shaded;
 }
 
+// ── Darkened (background block) sprite cache ───────────────────────────────────
+// Background blocks render the exact same tile art as their foreground
+// counterpart, but at 60% of source RGB brightness (i.e. 40% darker), with the
+// source alpha channel preserved untouched. Darkened canvases are derived from
+// the already-cached shaded canvas and keyed by that canvas's identity, so each
+// unique shaded variant is darkened at most once.
+const _darkenedCache = new WeakMap<HTMLCanvasElement, HTMLCanvasElement>();
+
+/** Fraction of original RGB brightness kept for background-block sprites (40% darker). */
+export const BACKGROUND_BLOCK_BRIGHTNESS = 0.6;
+
+function _darkenCanvas(src: HTMLCanvasElement): HTMLCanvasElement {
+  const cached = _darkenedCache.get(src);
+  if (cached !== undefined) return cached;
+  const w = src.width;
+  const h = src.height;
+  const out = document.createElement('canvas');
+  out.width = w;
+  out.height = h;
+  const octx = out.getContext('2d')!;
+  octx.imageSmoothingEnabled = false;
+  octx.drawImage(src, 0, 0);
+  const imgData = octx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i] = d[i] * BACKGROUND_BLOCK_BRIGHTNESS;
+    d[i + 1] = d[i + 1] * BACKGROUND_BLOCK_BRIGHTNESS;
+    d[i + 2] = d[i + 2] * BACKGROUND_BLOCK_BRIGHTNESS;
+    // Alpha (d[i + 3]) is intentionally left untouched — we darken color only.
+  }
+  octx.putImageData(imgData, 0, 0);
+  _darkenedCache.set(src, out);
+  return out;
+}
+
+/**
+ * Returns a 40%-darker (60% RGB brightness) version of the same 1×1 sprite
+ * {@link getTheme1x1SpriteShaded} would return, with the source alpha channel
+ * preserved. Used to render background blocks: identical art to the
+ * corresponding foreground tile, just visually darker, drawn at full
+ * `globalAlpha = 1` so translucent source pixels are not made more transparent.
+ *
+ * Returns null while the source image is still loading (same contract as
+ * {@link getTheme1x1SpriteShaded}).
+ */
+export function getTheme1x1SpriteDarkened(
+  themeId:          string | null,
+  col:              number,
+  row:              number,
+  seed:             number,
+  openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
+  blockSizePx:      number = 8,
+): HTMLCanvasElement | null {
+  const shaded = getTheme1x1SpriteShaded(themeId, col, row, seed, openAirSidesMask, blockSizePx);
+  if (shaded === null) return null;
+  return _darkenCanvas(shaded);
+}
+
 /**
  * Returns an edge-shaded 16×16 canvas for a folder-based 2×2 block group.
  *

@@ -15,12 +15,14 @@ import type { EditorState, EditorRoomData } from './editorState';
 import { EditorTool } from './editorState';
 import { ropeLineCrossesWall } from './editorHitTest';
 import { getMaterialFootprintSize, MATERIAL_VISUALS } from '../sim/pixelMaterials/pixelMaterialTypes';
+import { isFolderBasedTheme, getTheme1x1SpriteDarkened } from '../render/walls/folderBlockThemes';
+import { OPEN_AIR_ALL_SIDES } from '../render/walls/blockEdgeShading';
 import {
   ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
   GUIDE_DUST_PATH_COLOR, GUIDE_DUST_PATH_SELECTED, GUIDE_DUST_POINT_COLOR,
-  drawBlockRect, drawMarker,
+  drawMarker,
 } from './editorRendererHelpers';
 
 /** Helper type: function that returns whether a room element is selected. */
@@ -558,12 +560,14 @@ export function drawEditorDialogueTriggers(
 // Background blocks (visual-only, no collision)
 // ============================================================================
 
-/** Teal fill for normal background blocks in the editor overlay. */
-const BG_BLOCK_COLOR          = 'rgba(0, 200, 190, 0.20)';
-const BG_BLOCK_SELECTED       = 'rgba(0, 240, 220, 0.35)';
-/** Amber tint for light-blocking background blocks. */
-const BG_BLOCK_LIGHT_COLOR    = 'rgba(210, 140, 0, 0.22)';
-const BG_BLOCK_LIGHT_SELECTED = 'rgba(255, 190, 0, 0.40)';
+/** Fallback fill when the sprite for a background block's theme isn't loaded yet. */
+const BG_BLOCK_FALLBACK_FILL  = 'rgba(80, 80, 80, 0.35)';
+/** Selection/light-blocking indicators are drawn as outlines only — never a fill —
+ *  so the real (darkened) sprite art underneath stays visible. */
+const BG_BLOCK_OUTLINE            = 'rgba(0, 190, 180, 0.55)';
+const BG_BLOCK_OUTLINE_SELECTED   = 'rgba(0, 240, 220, 0.95)';
+const BG_BLOCK_LIGHT_OUTLINE          = 'rgba(200, 130, 0, 0.6)';
+const BG_BLOCK_LIGHT_OUTLINE_SELECTED = 'rgba(255, 200, 40, 0.95)';
 
 export function drawEditorBackgroundBlocks(
   ctx: CanvasRenderingContext2D,
@@ -576,23 +580,45 @@ export function drawEditorBackgroundBlocks(
   const blocks = room.backgroundBlocks ?? [];
   if (blocks.length === 0) return;
   const bs = BLOCK_SIZE_SMALL * zoom;
+  const seed = 0;
   for (const b of blocks) {
     const sel = isSelected('backgroundBlock', b.uid);
     const isLightBlocking = b.isLightBlockingFlag === 1;
-    const effectiveFillColor = isLightBlocking
-      ? (sel ? BG_BLOCK_LIGHT_SELECTED : BG_BLOCK_LIGHT_COLOR)
-      : (sel ? BG_BLOCK_SELECTED       : BG_BLOCK_COLOR);
-    drawBlockRect(
-      ctx,
-      b.xBlock, b.yBlock, b.wBlock, b.hBlock,
-      offsetXPx, offsetYPx, zoom,
-      effectiveFillColor,
-      sel ? 2 : 1,
-    );
+    const theme = (b.blockTheme ?? room.blockTheme ?? null) as string | null;
+
+    // Draw the real (40%-darkened) sprite art, cell by cell, at full opacity —
+    // no teal/amber fill placeholder.
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = 1;
+    for (let dy = 0; dy < b.hBlock; dy++) {
+      for (let dx = 0; dx < b.wBlock; dx++) {
+        const col = b.xBlock + dx;
+        const row = b.yBlock + dy;
+        const sx = col * bs + offsetXPx;
+        const sy = row * bs + offsetYPx;
+        let drawn = false;
+        if (isFolderBasedTheme(theme)) {
+          const sprite = getTheme1x1SpriteDarkened(theme, col, row, seed, OPEN_AIR_ALL_SIDES, BLOCK_SIZE_SMALL);
+          if (sprite !== null) {
+            ctx.drawImage(sprite, sx, sy, bs, bs);
+            drawn = true;
+          }
+        }
+        if (!drawn) {
+          ctx.fillStyle = BG_BLOCK_FALLBACK_FILL;
+          ctx.fillRect(sx, sy, bs, bs);
+        }
+      }
+    }
+    ctx.restore();
+
+    // Outline-only overlay for selection and the light-blocking indicator —
+    // never a fill, so the sprite art remains fully visible.
     ctx.save();
     ctx.strokeStyle = isLightBlocking
-      ? (sel ? 'rgba(255, 200, 40, 0.9)' : 'rgba(200, 130, 0, 0.55)')
-      : (sel ? 'rgba(0, 240, 220, 0.9)' : 'rgba(0, 190, 180, 0.55)');
+      ? (sel ? BG_BLOCK_LIGHT_OUTLINE_SELECTED : BG_BLOCK_LIGHT_OUTLINE)
+      : (sel ? BG_BLOCK_OUTLINE_SELECTED       : BG_BLOCK_OUTLINE);
     ctx.lineWidth = sel ? 2 : 1;
     ctx.setLineDash([3, 2]);
     ctx.strokeRect(b.xBlock * bs + offsetXPx, b.yBlock * bs + offsetYPx, b.wBlock * bs, b.hBlock * bs);

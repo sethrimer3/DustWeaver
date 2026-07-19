@@ -10,6 +10,7 @@
  */
 
 import { WEAVE_LIST } from '../sim/weaves/weaveDefinition';
+import { loadBlockThemeSlots } from './editorThemeSlotPreferences';
 import type { BlockTheme, BackgroundId, LightingEffect, AmbientLightDirection, CrumbleVariant, FallingBlockVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
 import type { LightType } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
@@ -57,7 +58,7 @@ export enum EditorTool {
   Delete = 'delete',
 }
 
-export type BlockPlacementModifier = 'none' | 'cracked' | FallingBlockVariant;
+export type BlockPlacementModifier = 'none' | 'cracked' | FallingBlockVariant | 'background';
 
 // ── Editor state ─────────────────────────────────────────────────────────────
 
@@ -143,6 +144,18 @@ export interface EditorState {
   /** Optional modifier applied when placing ordinary block boxes. */
   pendingBlockPlacementModifier: BlockPlacementModifier;
   /**
+   * When `pendingBlockPlacementModifier === 'background'`, whether the placed
+   * background block also blocks ambient light. Ignored for all other modifiers.
+   */
+  pendingBackgroundBlocksLight: boolean;
+  /**
+   * The 4 block-theme "slots" shown atop the Blocks palette category, plus
+   * which one is active. Persisted as an editor UI preference (see
+   * editorUIPreferences.ts) — NOT part of campaign/room data.
+   */
+  blockThemeSlots: BlockTheme[];
+  activeBlockThemeSlotIndex: number;
+  /**
    * Which dust kind a newly placed dust boost jar will contain.
    * Populated from the dust kind dropdown when dust_boost_jar is selected.
    */
@@ -212,14 +225,17 @@ export interface EditorState {
 }
 
 export function createEditorState(): EditorState {
+  const { slots: themeSlots, activeIndex: activeThemeSlotIndex } = loadBlockThemeSlots();
   return {
     isActive: false,
     activeTool: EditorTool.Select,
     activeCategory: 'blocks',
     selectedPaletteItem: null,
     selectedElements: [],
-    selectedBlockTheme: 'blackRock',
+    selectedBlockTheme: themeSlots[activeThemeSlotIndex] ?? 'blackRock',
     recentBlockThemes: [],
+    blockThemeSlots: themeSlots,
+    activeBlockThemeSlotIndex: activeThemeSlotIndex,
     placementRotationSteps: 0,
     placementFlipH: false,
     cursorBlockX: 0,
@@ -247,6 +263,7 @@ export function createEditorState(): EditorState {
     pendingSkillTombWeaveId: WEAVE_LIST[0] ?? 'storm',
     pendingCrumbleVariant: 'normal',
     pendingBlockPlacementModifier: 'none',
+    pendingBackgroundBlocksLight: false,
     pendingDustBoostJarKind: 'Physical',
     pendingDustBoostJarCount: 5,
     pendingDustSwarmKind: 'Physical',
@@ -290,6 +307,10 @@ export interface EditorUICallbacks {
   /** Add or remove one row/column from the given edge. delta is +1 (add) or -1 (remove). */
   onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
+  /** Called when the user clicks a theme slot's body — activates that slot. */
+  onBlockThemeSlotActivate: (slotIndex: number) => void;
+  /** Called when the user picks a theme from the full palette opened via a slot's replace icon. */
+  onBlockThemeSlotAssign: (slotIndex: number, theme: BlockTheme) => void;
   onLightingEffectChange: (effect: LightingEffect) => void;
   onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => void;
   onDirectionalBiasChange: (value: number) => void;
@@ -317,8 +338,10 @@ export interface EditorUICallbacks {
   onSkillTombWeaveChange: (weaveId: string) => void;
   /** Called when the user picks a different crumble variant in the crumble variant dropdown. */
   onCrumbleVariantChange: (variant: CrumbleVariant) => void;
-  /** Called when the user toggles the cracked/falling block placement modifier. */
+  /** Called when the user toggles the cracked/falling/background block placement modifier. */
   onBlockPlacementModifierChange: (modifier: BlockPlacementModifier) => void;
+  /** Called when the user toggles the subordinate "Blocks Ambient Light" checkbox (Background modifier only). */
+  onBackgroundBlocksLightChange: (blocksLight: boolean) => void;
   /** Called when the user picks a different dust kind for the dust boost jar. */
   onDustBoostJarKindChange: (dustKind: string) => void;
   /** Called when the user changes the dust count for the dust boost jar. */
@@ -353,4 +376,32 @@ export function selectBlockTheme(state: EditorState, theme: BlockTheme): void {
     if (recentTheme !== theme && nextRecent.length < 3) nextRecent.push(recentTheme);
   }
   state.recentBlockThemes = nextRecent;
+}
+
+/**
+ * Activates the block-theme slot at `slotIndex` — makes it the active slot
+ * and sets `selectedBlockTheme` to its assigned theme. Does NOT touch
+ * `selectedPaletteItem`, `activeTool`, `placementRotationSteps`, or any
+ * modifier state, per the "switching theme slots must not affect other
+ * placement state" requirement.
+ */
+export function activateBlockThemeSlot(state: EditorState, slotIndex: number): void {
+  if (slotIndex < 0 || slotIndex >= state.blockThemeSlots.length) return;
+  state.activeBlockThemeSlotIndex = slotIndex;
+  state.selectedBlockTheme = state.blockThemeSlots[slotIndex];
+}
+
+/**
+ * Assigns `theme` to the slot at `slotIndex`, makes that slot active, and
+ * updates `selectedBlockTheme` to match (used by the theme-palette "replace"
+ * flow: pick a theme → assign to slot → activate slot → update canonical
+ * placement theme).
+ */
+export function assignBlockThemeSlot(state: EditorState, slotIndex: number, theme: BlockTheme): void {
+  if (slotIndex < 0 || slotIndex >= state.blockThemeSlots.length) return;
+  const nextSlots = state.blockThemeSlots.slice();
+  nextSlots[slotIndex] = theme;
+  state.blockThemeSlots = nextSlots;
+  state.activeBlockThemeSlotIndex = slotIndex;
+  state.selectedBlockTheme = theme;
 }

@@ -142,6 +142,70 @@ export function makeThemePaletteButton(isOpen: boolean, onClick: () => void): HT
   return btn;
 }
 
+/**
+ * Creates one of the 4 compact block-theme "slots" shown atop the Blocks
+ * palette category. Each slot shows a tile-sprite thumbnail; clicking the
+ * slot body activates its theme, while a small "replace" icon button in the
+ * top-right corner (with its own click handler, `stopPropagation`'d so it
+ * never also triggers slot-body selection) opens the full theme palette.
+ */
+export function makeThemeSlot(
+  themeId: string,
+  label: string,
+  isActive: boolean,
+  onSelect: () => void,
+  onReplace: () => void,
+): HTMLDivElement {
+  const fill = THEME_FILL_COLOR[themeId] ?? '#555';
+  const slot = document.createElement('div');
+  slot.setAttribute('role', 'button');
+  slot.setAttribute('tabindex', '0');
+  slot.setAttribute('aria-label', `Theme slot: ${label}${isActive ? ' (active)' : ''}`);
+  slot.title = label;
+  slot.style.cssText = `
+    position: relative; width: 100%; aspect-ratio: 1 / 1; cursor: pointer;
+    border-radius: 4px; overflow: hidden; box-sizing: border-box;
+    background: ${fill};
+    border: 2px solid ${isActive ? GREEN : PANEL_BORDER};
+    box-shadow: ${isActive ? `0 0 0 2px rgba(0,220,120,0.55)` : 'none'};
+    transition: border-color 0.1s;
+  `;
+  const spriteUrl = THEME_BLOCK_SPRITE_URL[themeId] ?? '';
+  if (spriteUrl.length > 0) {
+    const img = document.createElement('img');
+    img.src = spriteUrl;
+    img.alt = '';
+    img.draggable = false;
+    img.style.cssText = `
+      position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+      image-rendering: pixelated; pointer-events: none;
+    `;
+    slot.appendChild(img);
+  }
+  slot.addEventListener('click', (e) => { e.stopPropagation(); onSelect(); });
+  slot.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); }
+  });
+
+  const replaceBtn = document.createElement('button');
+  replaceBtn.textContent = '⇄';
+  replaceBtn.title = `Replace theme in this slot (currently ${label})`;
+  replaceBtn.setAttribute('aria-label', `Replace theme in slot: ${label}`);
+  replaceBtn.style.cssText = `
+    position: absolute; top: 1px; right: 1px; width: 14px; height: 14px;
+    padding: 0; line-height: 1; font-size: 9px; cursor: pointer; border-radius: 2px;
+    background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.35);
+    color: ${TEXT_COLOR};
+  `;
+  replaceBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onReplace();
+  });
+  slot.appendChild(replaceBtn);
+
+  return slot;
+}
+
 // ── Block palette card helpers ────────────────────────────────────────────────
 
 /**
