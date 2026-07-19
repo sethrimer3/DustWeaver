@@ -60,7 +60,7 @@ describe('Stormweave current-mote synchronization', () => {
     cloud.reset(50, 60, 4);
     cloud.update(DT_SEC, 50, 60, 0, 0, true);
     assert.equal(cloud.moteCount, 4);
-    assert.ok(cloud.trailSampleCount > 0);
+    assert.equal(cloud.trailSampleCount, 0, 'reset begins with a trail rebase window');
     cloud.reset(5, 6, 1);
     assert.equal(cloud.moteCount, 1);
     assert.equal(cloud.trailSampleCount, 0);
@@ -135,7 +135,9 @@ describe('Stormweave high-quality persistent trails', () => {
     assert.equal(cloud.trailSampleCount, 0);
     cloud.update(DT_SEC, 10, 20, 0, 0, true);
     assert.equal(cloud.isTrailEmitting, true);
-    assert.equal(cloud.trailSampleCount, 2);
+    assert.equal(cloud.trailSampleCount, 0, 'startup warm-up should not record spawn convergence');
+    for (let i = 0; i < 45; i++) cloud.update(DT_SEC, 10, 20, 0, 0, true);
+    assert.ok(cloud.trailSampleCount >= 2);
   });
 
   test('zero speed has nonzero baseline widths and widths grow smoothly with speed', () => {
@@ -173,9 +175,21 @@ describe('Stormweave high-quality persistent trails', () => {
   test('discontinuous player movement clears and rebases trail history', () => {
     const cloud = new StormweaveLifeMotes();
     cloud.reset(0, 0, 1);
-    for (let i = 0; i < 12; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
+    for (let i = 0; i < 55; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
     assert.ok(cloud.trailSampleCount > 1);
     cloud.update(DT_SEC, 500, 500, 0, 0, true);
+    assert.equal(cloud.getTrailPointCount(0), 0);
+    for (let i = 0; i < 30; i++) cloud.update(DT_SEC, 500, 500, 0, 0, true);
+    assert.equal(cloud.getTrailPointCount(0), 0, 'teleport destination should remain in its rebase window');
+  });
+
+  test('a discontinuous mote sample rebases instead of drawing a long ribbon', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 50; i++) cloud.update(DT_SEC, 0, 0, 0, 0, true);
+    assert.ok(cloud.getTrailPointCount(0) > 0);
+    cloud.setMoteState(0, 200, 200);
+    cloud.update(DT_SEC, 0, 0, 0, 0, true);
     assert.equal(cloud.getTrailPointCount(0), 1);
   });
 });

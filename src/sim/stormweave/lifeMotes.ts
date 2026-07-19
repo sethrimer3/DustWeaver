@@ -17,6 +17,8 @@ export const STORMWEAVE_TRAIL_LIFETIME_SEC = 0.68;
 export const STORMWEAVE_TRAIL_SAMPLE_SPACING_WORLD = 1.5;
 export const STORMWEAVE_TRAIL_SAMPLES_PER_MOTE = 32;
 const TRAIL_STATIONARY_SAMPLE_INTERVAL_SEC = 0.05;
+const TRAIL_REBASE_DURATION_SEC = STORMWEAVE_TRAIL_LIFETIME_SEC;
+const TRAIL_SAMPLE_DISCONTINUITY_WORLD = 10;
 const PLAYER_DISCONTINUITY_DISTANCE_WORLD = 80;
 const ATTRACTION_PER_SEC2 = 7.5;
 const VELOCITY_DAMPING_PER_SEC = 4.8;
@@ -97,6 +99,7 @@ export class StormweaveLifeMotes {
   private readonly trailCountByMote = new Uint8Array(MAX_LIFE_MOTES);
   private readonly trailWriteByMote = new Uint8Array(MAX_LIFE_MOTES);
   private readonly lastTrailSampleTimeSec = new Float32Array(MAX_LIFE_MOTES);
+  private readonly trailReadyTimeSec = new Float32Array(MAX_LIFE_MOTES);
   private trailsHighQuality = false;
   private visualIntensity = 0;
   private previousPlayerXWorld = 0;
@@ -179,6 +182,7 @@ export class StormweaveLifeMotes {
       this.trailCountByMote[i] = 0;
       this.trailWriteByMote[i] = 0;
       this.lastTrailSampleTimeSec[i] = this.elapsedSec;
+      this.trailReadyTimeSec[i] = this.elapsedSec + TRAIL_REBASE_DURATION_SEC;
       const serial = this.spawnSerial++;
       const [ux, uy] = deterministicUnit(i, serial);
       const spawnRadius = 22 + ((serial * 11 + i * 7) % 13);
@@ -306,18 +310,36 @@ export class StormweaveLifeMotes {
     this.trailCountByMote.fill(0);
     this.trailWriteByMote.fill(0);
     this.lastTrailSampleTimeSec.fill(this.elapsedSec);
+    this.trailReadyTimeSec.fill(this.elapsedSec + TRAIL_REBASE_DURATION_SEC);
   }
 
   private sampleMoteTrail(moteIndex: number): void {
+    if (this.elapsedSec < this.trailReadyTimeSec[moteIndex]) {
+      this.trailCountByMote[moteIndex] = 0;
+      this.trailWriteByMote[moteIndex] = 0;
+      this.lastTrailSampleTimeSec[moteIndex] = this.elapsedSec;
+      return;
+    }
     const count = this.trailCountByMote[moteIndex];
     let shouldSample = count === 0;
     if (!shouldSample) {
       const newest = this.getTrailStorageIndex(moteIndex, count - 1);
       const distance = Math.hypot(this.xWorld[moteIndex] - this.trailXWorld[newest], this.yWorld[moteIndex] - this.trailYWorld[newest]);
+      if (distance > TRAIL_SAMPLE_DISCONTINUITY_WORLD) {
+        this.trailCountByMote[moteIndex] = 0;
+        this.trailWriteByMote[moteIndex] = 0;
+        this.lastTrailSampleTimeSec[moteIndex] = this.elapsedSec;
+        this.writeMoteTrailSample(moteIndex, 0);
+        return;
+      }
       shouldSample = distance >= STORMWEAVE_TRAIL_SAMPLE_SPACING_WORLD
         || this.elapsedSec - this.lastTrailSampleTimeSec[moteIndex] >= TRAIL_STATIONARY_SAMPLE_INTERVAL_SEC;
     }
     if (!shouldSample) return;
+    this.writeMoteTrailSample(moteIndex, count);
+  }
+
+  private writeMoteTrailSample(moteIndex: number, count: number): void {
     const local = this.trailWriteByMote[moteIndex];
     const storage = moteIndex * STORMWEAVE_TRAIL_SAMPLES_PER_MOTE + local;
     this.trailXWorld[storage] = this.xWorld[moteIndex];
