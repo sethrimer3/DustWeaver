@@ -21,10 +21,17 @@ export { roomJsonDefToRoomDef } from './roomJsonToRoomDef';
 
 // ── Async loader — fetches room JSON files at startup ────────────────────────
 
-const DISCOVERED_ROOM_FILE_PATHS = Object.keys(import.meta.glob('/ASSETS/CAMPAIGNS/*/ROOMS/*.json', {
-  query: '?url',
-  import: 'default',
-}));
+// `import.meta.glob` is a Vite build-time feature and is unavailable when this
+// module is loaded outside Vite (e.g. under the plain Node test runner via
+// tsx). Guard it so non-Vite consumers that only need type-level or
+// non-room-loading exports from this module chain (such as campaignSchema.ts's
+// validation functions) don't crash at import time.
+const DISCOVERED_ROOM_FILE_PATHS = Object.keys(
+  import.meta.glob?.('/ASSETS/CAMPAIGNS/*/ROOMS/*.json', {
+    query: '?url',
+    import: 'default',
+  }) ?? {},
+);
 
 function discoverRoomFilenames(campaignFolderNames: readonly string[]): string[] {
   const campaignFolderSet = new Set(campaignFolderNames);

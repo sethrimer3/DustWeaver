@@ -40,7 +40,7 @@ export function pushSnapshot(
   initialRoomId?: string,
   campaignSpawnTracked?: boolean,
 ): void {
-  const t0 = import.meta.env.DEV ? performance.now() : 0;
+  const t0 = import.meta.env?.DEV ? performance.now() : 0;
   const snapshot: HistorySnapshot = {
     roomData: structuredClone(data) as EditorRoomData,
   };
@@ -52,7 +52,7 @@ export function pushSnapshot(
     snapshot.initialRoomId = initialRoomId;
   }
   history.undoStack.push(snapshot);
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     const elapsedMs = performance.now() - t0;
     const wallCount = data.interiorWalls.length;
     if (elapsedMs > 50) {

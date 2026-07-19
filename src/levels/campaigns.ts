@@ -8,7 +8,7 @@ export interface CampaignMeta {
   initialRoomImagePath: string | null;
 }
 
-const BASE = import.meta.env.BASE_URL;
+const BASE = import.meta.env?.BASE_URL ?? '/';
 export { MAIN_CAMPAIGN_ID, getActiveCampaignId, setActiveCampaignId } from './campaignIdentity';
 
 function normalizeCampaignMeta(folderName: string, rawInfo: string): CampaignMeta {
