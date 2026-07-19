@@ -15,6 +15,7 @@ import { CampaignSpawnData } from '../levels/campaignSchema';
 import { unlockDustType, unlockActiveWeave, unlockPassiveTechnique } from './unlocks';
 import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
+import { expandLegacyWeaveId } from './weaveMigration';
 import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from './passiveTechniques';
 import { normalizeMoteCount } from '../sim/playerMoteLife';
 import { isEquippableParticleKind } from '../sim/particles/kinds';
@@ -63,7 +64,15 @@ export function applyCampaignStartingOptions(
 
   if (Array.isArray(spawn.startingWeaves)) {
     for (const weaveId of spawn.startingWeaves) {
-      if (WEAVE_REGISTRY.has(weaveId)) unlockActiveWeave(progress, weaveId);
+      if (!WEAVE_REGISTRY.has(weaveId)) continue;
+      // Old campaigns may specify a single mutually-exclusive legacy weave
+      // value (e.g. 'shield_sword'). Expand it to the full independent
+      // unlock set (sword + shield) rather than granting only the combo id,
+      // so Sword/Shield/Bow can be unlocked as independent subsets going
+      // forward. Non-legacy ids (storm/shield/arrow) expand to themselves.
+      for (const expandedId of expandLegacyWeaveId(weaveId)) {
+        unlockActiveWeave(progress, expandedId);
+      }
     }
   }
 

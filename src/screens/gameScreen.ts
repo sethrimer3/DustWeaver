@@ -111,6 +111,7 @@ import {
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
 import { DustSelectionWheelController, isDustWheelAvailable } from './gameDustSelectionState';
+import { cancelSecondaryWeaveGesture } from '../input/secondaryWeaveGesture';
 import { createDustWheelGestureState, updateDustWheelGesture } from '../input/dustWheelInput';
 import { cancelAllDustTypeSwitches } from '../sim/weaves/dustTypeSwitch';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';

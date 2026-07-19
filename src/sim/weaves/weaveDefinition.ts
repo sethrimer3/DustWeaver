@@ -27,6 +27,19 @@ export const WEAVE_SHIELD       = 'shield';
 export const WEAVE_ARROW        = 'arrow';
 export const WEAVE_SHIELD_SWORD = 'shield_sword';
 export const WEAVE_NONE         = 'none';
+/**
+ * Independent Sword unlock (Stage 1 of the Sword/Shield/Bow Weave rework).
+ * Not yet an equippable/rendered weave in its own right — presently it only
+ * exists as an unlock flag granted alongside the legacy `shield_sword` combo
+ * (see `src/progression/weaveMigration.ts`), plus a placeholder
+ * `WEAVE_REGISTRY` entry so campaign configs / save sanitization can
+ * validate and retain it as a known id. It has a real registry entry (so
+ * `WEAVE_REGISTRY.has()` checks used by save/campaign sanitization treat it
+ * as known and don't strip it) but is deliberately left out of `WEAVE_LIST`
+ * so it cannot be selected via the existing loadout/editor UI, and no
+ * combat/render code reads it yet — that wiring belongs to a later stage.
+ */
+export const WEAVE_SWORD        = 'sword';
 
 // ---- Weave Activation Role -------------------------------------------------
 
@@ -129,6 +142,25 @@ const SHIELD_SWORD_DEF: WeaveDefinition = {
   spreadRad: Math.PI * 0.75,
 };
 
+/**
+ * Placeholder definition for the independent Sword unlock. No timing/pattern
+ * data is meaningful yet — this exists only so `WEAVE_REGISTRY.has(WEAVE_SWORD)`
+ * is true for save/campaign sanitization. Not in `WEAVE_LIST`, so it is not
+ * selectable via the loadout/editor UI. Later stages will replace this with
+ * a real standalone Sword Weave definition.
+ */
+const SWORD_DEF: WeaveDefinition = {
+  id: WEAVE_SWORD,
+  displayName: 'Sword Weave',
+  description: 'Unlocked — not yet independently equippable (see Shield Sword Weave).',
+  role: WeaveRole.SecondaryOnly,
+  dustSlotCapacity: 0,
+  durationTicks: 0,
+  cooldownTicks: 0,
+  deploySpeedWorld: 0,
+  spreadRad: 0,
+};
+
 const NONE_DEF: WeaveDefinition = {
   id: WEAVE_NONE,
   displayName: 'None',
@@ -149,6 +181,7 @@ export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
   [WEAVE_SHIELD,       SHIELD_DEF],
   [WEAVE_ARROW,        ARROW_DEF],
   [WEAVE_SHIELD_SWORD, SHIELD_SWORD_DEF],
+  [WEAVE_SWORD,        SWORD_DEF],
   [WEAVE_NONE,         NONE_DEF],
 ]);
 

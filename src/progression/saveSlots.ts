@@ -6,6 +6,7 @@
  */
 
 import { PlayerProgress, createDefaultProgress, sanitizePlayerDustProgress } from './playerProgress';
+import { migrateLegacyWeaveUnlocks } from './weaveMigration';
 
 /** Total number of save slots. */
 export const SAVE_SLOT_COUNT = 3;
@@ -71,6 +72,10 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
     if (!Array.isArray(parsed.progress.permanentlyOpenGateKeys)) parsed.progress.permanentlyOpenGateKeys = [];
     sanitizePlayerDustProgress(parsed.progress);
+    // Migrate legacy shield_sword secondary-weave saves to grant the new
+    // independent Sword + Shield unlocks (idempotent; never removes an
+    // ability the save already has — see weaveMigration.ts).
+    migrateLegacyWeaveUnlocks(parsed.progress);
     // Migrate timer fields (added for speedrun timer feature).
     if (typeof parsed.runTimerMs !== 'number' || !isFinite(parsed.runTimerMs) || parsed.runTimerMs < 0) {
       parsed.runTimerMs = 0;
