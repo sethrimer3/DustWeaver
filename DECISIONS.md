@@ -1044,3 +1044,56 @@ transition from re-triggering immediately when the player spawns near it.
   camera reveal) still runs during normal gameplay for the small edge-extension
   reveal effect, but is now only relevant when `ENABLE_EDGE_EXTENSION_RENDERING`
   or `ENABLE_NEXT_ROOM_EDGE_PREVIEW` is re-enabled.
+
+## Render Adjacent Rooms (Optional Radius-1 Connected View)
+
+An optional, **render-only** view that draws the current room plus its directly
+transition-linked (radius-1) neighbours so the world reads as continuous at room
+edges. Exposed as a child option ("RENDER ADJACENT ROOMS") beneath the renamed
+"CAMERA ALWAYS CENTERED" pause-menu option.
+
+Decisions:
+
+- **Instant/resident room activation remains the gameplay model.** This feature
+  does not reintroduce seamless crossing, staged simulation, or union-bounds
+  camera logic. It sits on top of the current instant/resident architecture.
+- **Adjacent-room rendering is a separate, optional, render-only radius-1 view.**
+  It is gated by the effective setting `cameraAlwaysCentered && renderAdjacentRooms`
+  (`getEffectiveRenderAdjacentRooms()` in `ui/renderSettings.ts`). The child
+  setting is stored independently under `dustweaver-render-adjacent-rooms`
+  (default off) so its checked state survives the parent being toggled; turning
+  the parent off immediately disables the effective state without clearing the
+  child. When the effective setting is off, no adjacency work is performed.
+- **The legacy two-room-crossing state machine remains disabled.**
+  `ENABLE_TWO_ROOM_CAMERA_CROSSING` stays `false`; `twoRoomCrossing.ts`,
+  `gameSeamlessStaging.ts`, and the `transitionPreviewContext` staging path are
+  reference-only. The new view is built fresh in `src/render/adjacent/` and does
+  not reactivate any legacy flag. The pure opening-alignment math
+  (`computeConnectedRoomOrigin` / `computeTransitionOpeningOffset`) is reused
+  from `transitionPreviewTypes.ts`.
+- **Neighbour simulation remains frozen.** Adjacent rooms never tick, run AI,
+  emit audio, damage the player, activate triggers, or otherwise affect
+  gameplay. They render terrain/presentation only — never the player, enemies,
+  collectibles, hazards, ropes, gameplay particles, HUD, or player-owned
+  effects. Ambiguous render passes default to active-room-only.
+- **Long transitions and unrevealed secret transitions are excluded.** Long
+  transitions keep their teleport-style presentation and never show the
+  destination as an adjacent room. Secret transitions are only shown once the
+  player has actually used them, tracked with a session-scoped discovered set
+  (no persistent campaign-schema change).
+- **Camera continuity via render-coordinate rebase.** When the active room
+  changes through a visible connected transition, the destination becomes origin
+  0, the outgoing room becomes adjacent at `-O`, and the camera centre becomes
+  `C - O`, preserving every screen-space position (`connectedCameraRebase.ts`).
+  Non-transition activations (death/respawn, save load, editor jumps, teleports,
+  debug warps, campaign start, long/failed transitions) clear connected state
+  and keep ordinary snap behaviour.
+- **Entity crossfade is gameplay-clock timed.** On a normal rendered transition,
+  the incoming room's non-player entity layer fades 0→1 (~180 ms eased) while the
+  outgoing room's non-player entities fade 1→0 from a bounded read-only snapshot;
+  the player never fades and terrain never fades. Timing advances on gameplay
+  delta so pausing freezes the fade (`adjacentEntityFade.ts`).
+
+New central modules (all pure / Node-tested): `src/render/adjacent/`
+`connectedRoomLayout.ts`, `connectedCameraRebase.ts`, `adjacentEntityFade.ts`,
+`adjacentRoomView.ts`.

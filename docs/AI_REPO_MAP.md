@@ -63,6 +63,12 @@ Important files and roles:
 - `src/render/walls/roomRenderCacheStore.ts`: render-state key and memoization.
 - `src/render/walls/roomRenderState.ts`: single source of truth for RoomDef → render-state params (defaults, render-state key, WallPrewarmContext, wall-template snapshot adapter). Pure, Node-testable. Change defaults here only deliberately — they feed the prewarm/adopt key.
 - `src/render/mapSketchRenderer.ts`: world/room sketch output. Marked regression-prone in planning notes.
+- `src/render/adjacent/`: optional, render-only radius-1 connected-room view ("Render Adjacent Rooms"). Pure, Node-tested modules:
+  - `connectedRoomLayout.ts`: resolves eligible transitions → keyed adjacent-room instances with integer world origins (reuses `computeConnectedRoomOrigin`/`computeTransitionOpeningOffset`); handles reciprocal ambiguity, one-way/missing/long/secret cases, and viewport culling. Returns empty and does zero neighbour lookups when the effective setting is off.
+  - `connectedCameraRebase.ts`: render-coordinate rebase preserving screen-space position when the active room changes through a visible connection.
+  - `adjacentEntityFade.ts`: gameplay-clock-timed entity crossfade controller (incoming 0→1 / outgoing ghost 1→0, player excluded, pause-safe, rapid-replacement-safe).
+  - `adjacentRoomView.ts`: `AdjacentRoomView`/`ConnectedRoomRenderState` types, adjacent-room cache key, and frozen-resident `builtForRoomId` pairing check.
+  - Setting: `getEffectiveRenderAdjacentRooms()` in `src/ui/renderSettings.ts` (`cameraAlwaysCentered && renderAdjacentRooms`).
 
 ## Room and world loading
 
