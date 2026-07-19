@@ -25,11 +25,10 @@ test('formats rounded signed component values in px/s', () => {
   assert.equal(formatDisplayVelocity(-123.6), '-124 px/s');
 });
 
-test('requires debug mode, the setting, and a living player for visibility', () => {
-  assert.equal(shouldShowPlayerSpeedometer(true, true, true), true);
-  assert.equal(shouldShowPlayerSpeedometer(true, false, true), false);
-  assert.equal(shouldShowPlayerSpeedometer(false, true, true), false);
-  assert.equal(shouldShowPlayerSpeedometer(true, true, false), false);
+test('requires the setting and a living player for visibility', () => {
+  assert.equal(shouldShowPlayerSpeedometer(true, true), true);
+  assert.equal(shouldShowPlayerSpeedometer(false, true), false);
+  assert.equal(shouldShowPlayerSpeedometer(true, false), false);
 });
 
 test('calculates sprite-edge anchors from interpolated world-to-screen coordinates', () => {

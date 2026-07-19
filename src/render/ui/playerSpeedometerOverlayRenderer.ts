@@ -57,10 +57,9 @@ export function formatDisplayVelocity(valuePxPerSec: number): string {
 
 export function shouldShowPlayerSpeedometer(
   enabled: boolean,
-  isDebugMode: boolean,
   hasLivingPlayer: boolean,
 ): boolean {
-  return enabled && isDebugMode && hasLivingPlayer;
+  return enabled && hasLivingPlayer;
 }
 
 export interface PlayerSpeedometerNativeAnchors {
@@ -110,7 +109,6 @@ export function calculatePlayerSpeedometerCssPositions(params: {
 
 export interface PlayerSpeedometerOverlayUpdate {
   readonly world: WorldState;
-  readonly isDebugMode: boolean;
   /** Interpolated render position used by the player sprite this frame. */
   readonly playerRenderXWorld: number;
   readonly playerRenderYWorld: number;
@@ -143,7 +141,6 @@ export class PlayerSpeedometerOverlayRenderer {
     const player = params.world.clusters[0];
     if (!shouldShowPlayerSpeedometer(
       getPixelSpeedometerEnabled(),
-      params.isDebugMode,
       player !== undefined && player.isAliveFlag === 1,
     ) || player === undefined) {
       this.hide();

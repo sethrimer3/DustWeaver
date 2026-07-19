@@ -5,8 +5,13 @@ import {
   STORMWEAVE_RESTING_REGION_WORLD,
   getStormweaveMoteCount,
   getStormweaveAttractionAcceleration,
+  getStormweaveTrailSizing,
+  getStormweaveTrailTargetIntensity,
+  STORMWEAVE_TRAIL_LIFETIME_SEC,
+  STORMWEAVE_TRAIL_SAMPLES_PER_MOTE,
 } from '../sim/stormweave/lifeMotes';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
+import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from '../sim/momentumCombatConfig';
 
 const DT_SEC = 1 / 60;
 
@@ -121,23 +126,57 @@ describe('Stormweave life-mote steering', () => {
   });
 });
 
-describe('Stormweave high-speed trails', () => {
-  test('canonical invulnerability-speed flag activates emission and samples actual motes', () => {
+describe('Stormweave high-quality persistent trails', () => {
+  test('trails are active only on High graphics and sample each mote', () => {
     const cloud = new StormweaveLifeMotes();
     cloud.reset(10, 20, 2);
-    cloud.update(DT_SEC, 10, 20, 220, 0, true);
+    cloud.update(DT_SEC, 10, 20, 0, 0, false);
+    assert.equal(cloud.isTrailEmitting, false);
+    assert.equal(cloud.trailSampleCount, 0);
+    cloud.update(DT_SEC, 10, 20, 0, 0, true);
     assert.equal(cloud.isTrailEmitting, true);
     assert.equal(cloud.trailSampleCount, 2);
   });
 
-  test('emission stops below the canonical condition and history stays bounded', () => {
+  test('zero speed has nonzero baseline widths and widths grow smoothly with speed', () => {
+    const zero = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(0, 0));
+    const middle = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 0.5, 0));
+    const near = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 0.51, 0));
+    assert.ok(zero.coreHeadWidth > 0 && zero.goldHeadWidth > 0 && zero.glowHeadWidth > 0);
+    assert.ok(middle.glowHeadWidth > zero.glowHeadWidth);
+    assert.ok(near.glowHeadWidth > middle.glowHeadWidth);
+    assert.ok(near.glowHeadWidth - middle.glowHeadWidth < 0.2);
+  });
+
+  test('maximum width begins exactly at the canonical threshold and stays capped above it', () => {
+    const atThreshold = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED, 0));
+    const aboveThreshold = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 4, 0));
+    assert.deepEqual(atThreshold, { coreHeadWidth: 2, goldHeadWidth: 4.5, glowHeadWidth: 9, headGlowRadius: 7 });
+    assert.deepEqual(aboveThreshold, atThreshold);
+  });
+
+  test('intensity uses total Cartesian speed', () => {
+    const diagonalComponent = MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED / Math.sqrt(2);
+    assert.equal(getStormweaveTrailTargetIntensity(diagonalComponent, diagonalComponent), 1);
+    assert.ok(getStormweaveTrailTargetIntensity(0, MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 0.5) > 0);
+  });
+
+  test('history expires by elapsed time and remains bounded per mote', () => {
     const cloud = new StormweaveLifeMotes();
-    cloud.reset(0, 0, 4);
-    for (let i = 0; i < 300; i++) cloud.update(DT_SEC, i, 0, 240, 0, true);
-    assert.equal(cloud.trailSampleCount, cloud.trailCapacity);
-    cloud.update(DT_SEC, 300, 0, 20, 0, false);
-    assert.equal(cloud.isTrailEmitting, false);
-    assert.equal(cloud.trailSampleCount, cloud.trailCapacity);
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 180; i++) cloud.update(DT_SEC, i * 2, 0, 120, 0, true);
+    assert.ok(cloud.getTrailPointCount(0) <= STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
+    assert.ok(cloud.getTrailPointCount(0) > 1);
+    assert.ok(cloud.getTrailPointAgeSec(0, 0) < STORMWEAVE_TRAIL_LIFETIME_SEC);
+  });
+
+  test('discontinuous player movement clears and rebases trail history', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 12; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
+    assert.ok(cloud.trailSampleCount > 1);
+    cloud.update(DT_SEC, 500, 500, 0, 0, true);
+    assert.equal(cloud.getTrailPointCount(0), 1);
   });
 });
 

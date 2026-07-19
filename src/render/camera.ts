@@ -14,6 +14,19 @@ export const CAMERA_DEFAULT_ZOOM = 1.0;
 /** Lerp speed per second (0 = no follow, 1 = instant snap). */
 const CAMERA_FOLLOW_SPEED = 8.0;
 
+/**
+ * Below this distance (world units) from the target, snap the camera
+ * exactly onto it instead of continuing the asymptotic lerp.
+ *
+ * The lerp `center += (target - center) * t` never reaches `target`
+ * exactly — it only approaches it. When the player is standing still,
+ * that leftover sub-pixel delta keeps nudging the camera offset back
+ * and forth across a `Math.round()` boundary in the renderer, making
+ * the player sprite flicker between two adjacent screen pixels. Snapping
+ * once the delta is negligible removes that residual drift.
+ */
+const CAMERA_SNAP_EPSILON_WORLD = 0.01;
+
 export interface CameraState {
   /** Camera center X in world units. */
   centerXWorld: number;
@@ -67,6 +80,8 @@ export function updateCamera(
   const t = Math.min(1.0, CAMERA_FOLLOW_SPEED * dtSec);
   camera.centerXWorld += (targetXWorld - camera.centerXWorld) * t;
   camera.centerYWorld += (targetYWorld - camera.centerYWorld) * t;
+  if (Math.abs(targetXWorld - camera.centerXWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerXWorld = targetXWorld;
+  if (Math.abs(targetYWorld - camera.centerYWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerYWorld = targetYWorld;
   clampCameraToRoom(camera, roomWidthWorld, roomHeightWorld, viewportWidthPx, viewportHeightPx);
 }
 
@@ -125,6 +140,8 @@ export function updateCameraWithBounds(
   const t = Math.min(1.0, CAMERA_FOLLOW_SPEED * dtSec);
   camera.centerXWorld += (targetXWorld - camera.centerXWorld) * t;
   camera.centerYWorld += (targetYWorld - camera.centerYWorld) * t;
+  if (Math.abs(targetXWorld - camera.centerXWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerXWorld = targetXWorld;
+  if (Math.abs(targetYWorld - camera.centerYWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerYWorld = targetYWorld;
 
   const halfViewW = viewportWidthPx  / (2 * camera.zoom);
   const halfViewH = viewportHeightPx / (2 * camera.zoom);
@@ -164,6 +181,8 @@ export function updateCameraUnclamped(
   const t = Math.min(1.0, CAMERA_FOLLOW_SPEED * dtSec);
   camera.centerXWorld += (targetXWorld - camera.centerXWorld) * t;
   camera.centerYWorld += (targetYWorld - camera.centerYWorld) * t;
+  if (Math.abs(targetXWorld - camera.centerXWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerXWorld = targetXWorld;
+  if (Math.abs(targetYWorld - camera.centerYWorld) < CAMERA_SNAP_EPSILON_WORLD) camera.centerYWorld = targetYWorld;
 }
 
 /**
