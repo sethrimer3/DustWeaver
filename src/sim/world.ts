@@ -45,6 +45,8 @@ export const MAX_ROPE_SEGMENTS = 32;
 
 /** Maximum number of logical mote slots (equals PARTICLE_COUNT_PER_CLUSTER). */
 export const MAX_MOTE_SLOTS = 20;
+/** Fixed trail-sample history capacity per mote slot for the dust-switch trail effect. */
+export const DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT = 6;
 /** Maximum simultaneous arrows in flight or stuck. */
 export const MAX_ARROWS = 8;
 
@@ -479,6 +481,37 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   moteGrappleDisplayRadiusWorld: number;
 
+  // ── Dust Type Switch (dust selection wheel transformation) ────────────────
+  // See sim/weaves/dustTypeSwitch.ts for the state machine that drives these
+  // per-slot fields. Indexed by mote slot (MAX_MOTE_SLOTS entries), mirroring
+  // the Ordered Mote Queue arrays above.
+  /**
+   * Per-slot switch phase: 0 = normal, 1 = recalling to player center,
+   * 2 = transformed, returning to orbit. See DUST_SWITCH_PHASE_* in
+   * dustTypeSwitch.ts.
+   */
+  dustSwitchPhase: Uint8Array;
+  /** Dust kind this slot is switching to (valid while phase !== normal). */
+  dustSwitchTargetKind: Uint8Array;
+  /** Dust kind this slot switched from — used for the trail's pre-transform color. */
+  dustSwitchSourceKind: Uint8Array;
+  /** Ticks remaining in the post-transform "returning" grace period. */
+  dustSwitchReturnTicksLeft: Uint8Array;
+  /** Number of slots currently not in the normal phase — 0 means no switch in progress. */
+  dustSwitchActiveSlotCount: number;
+  /** Fixed-size per-slot trail sample history: world-space X (see dustTypeSwitch.ts). */
+  dustSwitchTrailXWorld: Float32Array;
+  /** Trail sample history: world-space Y. */
+  dustSwitchTrailYWorld: Float32Array;
+  /** Trail sample history: age in ticks since the sample was recorded. */
+  dustSwitchTrailAgeTicks: Float32Array;
+  /** Trail sample history: 0 = pre-transform (source color), 1 = post-transform (target color). */
+  dustSwitchTrailIsPostTransformFlag: Uint8Array;
+  /** Ring-buffer write cursor per slot. */
+  dustSwitchTrailWriteIndex: Uint8Array;
+  /** Number of valid trail samples currently stored per slot (≤ DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT). */
+  dustSwitchTrailActiveCount: Uint8Array;
+
   // ── Phase 8: Storm / Inventory source flag ─────────────────────────────────
   /**
    * 1 when the player's primary weave is Storm (motes orbit passively).
@@ -704,6 +737,18 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
     // initMoteQueueFromParticles() will correct this on the first room load.
     moteGrappleDisplayRadiusWorld: 96.0,
+    // ── Dust Type Switch ──────────────────────────────────────────────
+    dustSwitchPhase:              new Uint8Array(MAX_MOTE_SLOTS),
+    dustSwitchTargetKind:         new Uint8Array(MAX_MOTE_SLOTS),
+    dustSwitchSourceKind:         new Uint8Array(MAX_MOTE_SLOTS),
+    dustSwitchReturnTicksLeft:    new Uint8Array(MAX_MOTE_SLOTS),
+    dustSwitchActiveSlotCount:    0,
+    dustSwitchTrailXWorld:        new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
+    dustSwitchTrailYWorld:        new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
+    dustSwitchTrailAgeTicks:      new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
+    dustSwitchTrailIsPostTransformFlag: new Uint8Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
+    dustSwitchTrailWriteIndex:    new Uint8Array(MAX_MOTE_SLOTS),
+    dustSwitchTrailActiveCount:   new Uint8Array(MAX_MOTE_SLOTS),
     // Default: Storm Weave is the starting primary, so motes orbit from the start.
     isMoteSourceOrbitFlag:         1,
     // ── Falling blocks ────────────────────────────────────────────────────

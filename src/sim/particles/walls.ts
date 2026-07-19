@@ -19,6 +19,7 @@ import { WorldState } from '../world';
 import { ParticleKind } from './kinds';
 import { getElementProfile } from './elementProfiles';
 import { nextFloat } from '../rng';
+import { BEHAVIOR_MODE_DUST_SWITCH_RECALL } from './dustSwitchBehaviorMode';
 
 /** Distance at which wall repulsion starts (world units). */
 const WALL_MARGIN_WORLD = 18.0;
@@ -51,7 +52,7 @@ export function applyWallForces(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     forceX, forceY,
-    isAliveFlag, ownerEntityId, kindBuffer, particleCount,
+    isAliveFlag, ownerEntityId, kindBuffer, behaviorMode, particleCount,
     wallXWorld, wallYWorld, wallWWorld, wallHWorld, wallCount,
   } = world;
 
@@ -61,6 +62,9 @@ export function applyWallForces(world: WorldState): void {
     // Unowned Golden (floor dust) particles skip soft repulsion forces —
     // they rely on settleFloorDust for hard surface snapping instead.
     if (ownerEntityId[i] === -1 && kindBuffer[i] === ParticleKind.Golden) continue;
+    // Recalling dust-switch motes are custom-steered straight to the player
+    // center and must reach it unobstructed — skip wall repulsion.
+    if (behaviorMode[i] === BEHAVIOR_MODE_DUST_SWITCH_RECALL) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];
@@ -128,7 +132,7 @@ export function applyWallBounce(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     velocityXWorld, velocityYWorld,
-    isAliveFlag, kindBuffer, ownerEntityId,
+    isAliveFlag, kindBuffer, ownerEntityId, behaviorMode,
     particleCount, particleDurability, respawnDelayTicks,
     isTransientFlag,
     wallXWorld, wallYWorld, wallWWorld, wallHWorld, wallCount,
@@ -138,6 +142,8 @@ export function applyWallBounce(world: WorldState): void {
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
+    // Recalling dust-switch motes must not bounce off walls mid-flight.
+    if (behaviorMode[i] === BEHAVIOR_MODE_DUST_SWITCH_RECALL) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];

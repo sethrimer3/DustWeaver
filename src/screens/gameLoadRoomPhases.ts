@@ -72,6 +72,7 @@ import type { GraphicsQuality } from '../ui/renderSettings';
 import type { MusicManager } from '../audio/musicManager';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
+import { resolveEffectiveSelectedDustKind } from '../sim/weaves/dustWheelOptions';
 import {
   spawnClusterParticles,
   spawnWeaveLoadoutParticles,
@@ -662,11 +663,13 @@ export function* makeLoadRoomPhases(
 
     if (hasWeaveBoundDust) {
       spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-    } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
-      const dustKind = progress.unlockedDustKinds[0];
-      const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
-      if (particleCount > 0) {
-        spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+    } else if (progress && playerCapacity > 0) {
+      const dustKind = resolveEffectiveSelectedDustKind(progress);
+      if (dustKind !== null) {
+        const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+        if (particleCount > 0) {
+          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+        }
       }
     }
 
@@ -1012,13 +1015,13 @@ export function applyResidentRoomActivation(
       const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
         || effectiveWeaveLoadout.secondary.boundDust.length > 0;
 
+      const selectedDustKind = progress ? resolveEffectiveSelectedDustKind(progress) : null;
       if (hasWeaveBoundDust) {
         spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-      } else if (progress && progress.unlockedDustKinds.length > 0 && playerCapacity > 0) {
-        const dustKind = progress.unlockedDustKinds[0];
-        const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
+      } else if (playerCapacity > 0 && selectedDustKind !== null) {
+        const particleCount = getMaxParticlesForDust(selectedDustKind, playerCapacity);
         if (particleCount > 0) {
-          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
+          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, selectedDustKind, particleCount, levelRng);
         }
       }
     }

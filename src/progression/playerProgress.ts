@@ -13,6 +13,7 @@ import { getSlotCost, totalSlotCost } from '../sim/particles/slotCost';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
 import { PassiveTechniqueId } from './passiveTechniques';
 import { WeaveId } from '../sim/weaves/weaveDefinition';
+import { getUnlockedDustKindsInCanonicalOrder } from '../sim/weaves/dustWheelOptions';
 
 export { getSlotCost, totalSlotCost };
 
@@ -66,6 +67,13 @@ export interface PlayerProgress {
   unlockedDustKinds: ParticleKind[];
   /** Developer override: allow equipping all dust kinds in loadout UI. */
   isDevModeDustUnlocked: boolean;
+  /**
+   * The single dust type every ordinary player mote currently uses, chosen via
+   * the dust selection wheel. `null` means no valid selection yet (e.g. the
+   * player has nothing unlocked). Always validated against
+   * `unlockedDustKinds`/equippability — see `sanitizePlayerDustProgress`.
+   */
+  selectedDustKind: ParticleKind | null;
 
   // ---- Progression system fields (added for early-game rework) ----
 
@@ -142,6 +150,7 @@ export function createDefaultProgress(): PlayerProgress {
     characterId: 'knight',
     unlockedDustKinds: [],
     isDevModeDustUnlocked: false,
+    selectedDustKind: null,
     // New profile starts with nothing unlocked
     unlockedPassiveTechniques: [],
     unlockedActiveWeaves: [],
@@ -175,6 +184,19 @@ export function sanitizePlayerDustProgress(progress: PlayerProgress): void {
   const secondary = progress.weaveLoadout?.secondary;
   if (primary) primary.boundDust = sanitize(primary.boundDust);
   if (secondary) secondary.boundDust = sanitize(secondary.boundDust);
+
+  // Reconcile the selected dust kind against the (now-sanitized) unlocked set.
+  // Falls back to the first unlocked kind in canonical order; never unlocks a
+  // kind just because it was selected in old/malformed data.
+  const isSelectedValid = progress.isDevModeDustUnlocked === true
+    ? isEquippableParticleKind(progress.selectedDustKind)
+    : progress.selectedDustKind !== null
+      && isEquippableParticleKind(progress.selectedDustKind)
+      && progress.unlockedDustKinds.includes(progress.selectedDustKind);
+  if (!isSelectedValid) {
+    const canonicalUnlocked = getUnlockedDustKindsInCanonicalOrder(progress);
+    progress.selectedDustKind = canonicalUnlocked.length > 0 ? canonicalUnlocked[0] : null;
+  }
 }
 
 /**

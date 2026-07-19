@@ -12,6 +12,7 @@
 
 import { WorldState } from '../world';
 import { getElementProfile } from './elementProfiles';
+import { BEHAVIOR_MODE_DUST_SWITCH_RECALL } from './dustSwitchBehaviorMode';
 
 export function integrateParticles(world: WorldState): void {
   const {
@@ -19,7 +20,7 @@ export function integrateParticles(world: WorldState): void {
     velocityXWorld, velocityYWorld,
     forceX, forceY,
     massKg, kindBuffer,
-    isAliveFlag,
+    isAliveFlag, behaviorMode,
     particleCount,
     dtMs,
   } = world;
@@ -28,6 +29,10 @@ export function integrateParticles(world: WorldState): void {
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
+    // Recalling dust-switch motes are fully position/velocity-managed by
+    // dustTypeSwitch.ts's custom steering (with its own segment-crossing
+    // test) — skip normal integration so the two systems don't fight.
+    if (behaviorMode[i] === BEHAVIOR_MODE_DUST_SWITCH_RECALL) continue;
 
     const profile = getElementProfile(kindBuffer[i]);
 
