@@ -69,9 +69,9 @@ export function renderStormweaveLifeMotes(
     const sizing = getStormweaveTrailSizing(motes.trailIntensity);
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < motes.moteCount; i++) {
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, '#b75b08', 0.16);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, '#e9a521', 0.42);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, '#fff0a3', 0.82);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, '#b75b08', 0.13);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, '#e9a521', 0.37);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, '#fff0a3', 0.74);
     }
   }
   if (shield.isActive) {
@@ -109,12 +109,12 @@ export function renderStormweaveLifeMotes(
     if (graphicsQuality === 'high') {
       const radius = sizing.headGlowRadius * scalePx;
       ctx.globalCompositeOperation = 'lighter';
-      ctx.globalAlpha = 0.08 + motes.trailIntensity * 0.08;
+      ctx.globalAlpha = 0.07 + motes.trailIntensity * 0.06;
       ctx.fillStyle = '#d77d12';
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.18 + motes.trailIntensity * 0.12;
+      ctx.globalAlpha = 0.16 + motes.trailIntensity * 0.09;
       ctx.fillStyle = '#f2b632';
       ctx.beginPath();
       ctx.arc(x, y, radius * 0.55, 0, Math.PI * 2);

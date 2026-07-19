@@ -9,6 +9,7 @@ import {
   getStormweaveTrailTargetIntensity,
   STORMWEAVE_TRAIL_LIFETIME_SEC,
   STORMWEAVE_TRAIL_SAMPLES_PER_MOTE,
+  STORMWEAVE_GLOW_ATTACK_SEC,
 } from '../sim/stormweave/lifeMotes';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
 import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from '../sim/momentumCombatConfig';
@@ -153,7 +154,7 @@ describe('Stormweave high-quality persistent trails', () => {
   test('maximum width begins exactly at the canonical threshold and stays capped above it', () => {
     const atThreshold = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED, 0));
     const aboveThreshold = getStormweaveTrailSizing(getStormweaveTrailTargetIntensity(MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 4, 0));
-    assert.deepEqual(atThreshold, { coreHeadWidth: 2, goldHeadWidth: 4.5, glowHeadWidth: 9, headGlowRadius: 7 });
+    assert.deepEqual(atThreshold, { coreHeadWidth: 2, goldHeadWidth: 4.5, glowHeadWidth: 9, headGlowRadius: 6.2 });
     assert.deepEqual(aboveThreshold, atThreshold);
   });
 
@@ -161,6 +162,18 @@ describe('Stormweave high-quality persistent trails', () => {
     const diagonalComponent = MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED / Math.sqrt(2);
     assert.equal(getStormweaveTrailTargetIntensity(diagonalComponent, diagonalComponent), 1);
     assert.ok(getStormweaveTrailTargetIntensity(0, MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED * 0.5) > 0);
+  });
+
+  test('maximum glow requires three seconds at invulnerability speed', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    const ticksToMaximum = Math.round(STORMWEAVE_GLOW_ATTACK_SEC / DT_SEC);
+    for (let i = 0; i < ticksToMaximum - 1; i++) {
+      cloud.update(DT_SEC, 0, 0, MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED, 0, true);
+    }
+    assert.ok(cloud.trailIntensity < 1);
+    cloud.update(DT_SEC, 0, 0, MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED, 0, true);
+    assert.ok(Math.abs(cloud.trailIntensity - 1) < 1e-6);
   });
 
   test('history expires by elapsed time and remains bounded per mote', () => {

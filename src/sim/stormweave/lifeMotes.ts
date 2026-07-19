@@ -16,6 +16,7 @@ const MAX_PLAYER_PATH_SAMPLES = 256;
 export const STORMWEAVE_TRAIL_LIFETIME_SEC = 0.68;
 export const STORMWEAVE_TRAIL_SAMPLE_SPACING_WORLD = 1.5;
 export const STORMWEAVE_TRAIL_SAMPLES_PER_MOTE = 32;
+export const STORMWEAVE_GLOW_ATTACK_SEC = 3;
 const TRAIL_STATIONARY_SAMPLE_INTERVAL_SEC = 0.05;
 const TRAIL_REBASE_DURATION_SEC = STORMWEAVE_TRAIL_LIFETIME_SEC;
 const TRAIL_SAMPLE_DISCONTINUITY_WORLD = 10;
@@ -70,7 +71,7 @@ export function getStormweaveTrailSizing(intensity: number): StormweaveTrailSizi
     coreHeadWidth: 0.75 + (2 - 0.75) * t,
     goldHeadWidth: 1.75 + (4.5 - 1.75) * t,
     glowHeadWidth: 3.5 + (9 - 3.5) * t,
-    headGlowRadius: 2.5 + (7 - 2.5) * t,
+    headGlowRadius: 2.5 + (6.2 - 2.5) * t,
   };
 }
 
@@ -88,6 +89,12 @@ export class StormweaveLifeMotes {
   private readonly preferredOffsetX = new Float32Array(MAX_LIFE_MOTES);
   private readonly preferredOffsetY = new Float32Array(MAX_LIFE_MOTES);
   private readonly phase = new Float32Array(MAX_LIFE_MOTES);
+  private readonly waveAmplitudeWorld = new Float32Array(MAX_LIFE_MOTES);
+  private readonly waveAngularSpeed = new Float32Array(MAX_LIFE_MOTES);
+  private readonly secondaryWavePhase = new Float32Array(MAX_LIFE_MOTES);
+  private readonly baseDelaySamples = new Float32Array(MAX_LIFE_MOTES);
+  private readonly delayVariationSamples = new Float32Array(MAX_LIFE_MOTES);
+  private readonly followResponseScale = new Float32Array(MAX_LIFE_MOTES);
   private readonly pathXWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
   private readonly pathYWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
   private pathCount = 0;
@@ -196,6 +203,12 @@ export class StormweaveLifeMotes {
       this.preferredOffsetX[i] = offsetX * preferredRadius;
       this.preferredOffsetY[i] = offsetY * preferredRadius;
       this.phase[i] = ((i * 37 + serial * 13) % 101) / 101 * Math.PI * 2;
+      this.waveAmplitudeWorld[i] = 3.8 + ((i * 11 + serial * 7) % 17) * 0.28;
+      this.waveAngularSpeed[i] = 0.72 + ((i * 5 + serial * 11) % 13) * 0.105;
+      this.secondaryWavePhase[i] = ((i * 29 + serial * 17) % 97) / 97 * Math.PI * 2;
+      this.baseDelaySamples[i] = 4 + ((i * 19 + serial * 23) % 32);
+      this.delayVariationSamples[i] = 2 + ((i * 7 + serial * 5) % 8) * 0.6;
+      this.followResponseScale[i] = 0.72 + ((i * 13 + serial * 3) % 15) * 0.04;
     }
     while (this.count > targetCount) {
       this.count--;
@@ -230,8 +243,11 @@ export class StormweaveLifeMotes {
       this.trailsHighQuality = enableHighQualityTrails;
     }
     const targetIntensity = getStormweaveTrailTargetIntensity(playerVelocityXWorld, playerVelocityYWorld);
-    const response = targetIntensity > this.visualIntensity ? 18 : 7;
-    this.visualIntensity += (targetIntensity - this.visualIntensity) * (1 - Math.exp(-response * dt));
+    if (targetIntensity > this.visualIntensity) {
+      this.visualIntensity = Math.min(targetIntensity, this.visualIntensity + dt / STORMWEAVE_GLOW_ATTACK_SEC);
+    } else {
+      this.visualIntensity += (targetIntensity - this.visualIntensity) * (1 - Math.exp(-7 * dt));
+    }
     this.recordPlayerPath(playerXWorld, playerYWorld);
     this.separationX.fill(0, 0, this.count);
     this.separationY.fill(0, 0, this.count);
@@ -262,10 +278,11 @@ export class StormweaveLifeMotes {
 
     const damping = Math.exp(-VELOCITY_DAMPING_PER_SEC * dt);
     for (let i = 0; i < this.count; i++) {
-      const phase = this.phase[i] + this.elapsedSec * (1.35 + (i % 5) * 0.11);
+      const phase = this.phase[i] + this.elapsedSec * this.waveAngularSpeed[i];
       const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
       const livingOffset = isShieldActive ? Math.sin(phase) * 0.22 : 0;
-      const delaySamples = 5 + i * 1.35 + Math.sin(phase * 0.53) * 1.5;
+      const delaySamples = this.baseDelaySamples[i]
+        + Math.sin(phase * 0.31 + this.secondaryWavePhase[i]) * this.delayVariationSamples[i];
       const pathTarget = this.samplePlayerPath(delaySamples);
       const olderPathTarget = this.samplePlayerPath(delaySamples + 2);
       const pathDx = pathTarget[0] - olderPathTarget[0];
@@ -273,7 +290,9 @@ export class StormweaveLifeMotes {
       const pathLength = Math.hypot(pathDx, pathDy);
       const perpendicularX = pathLength > 0.0001 ? -pathDy / pathLength : 0;
       const perpendicularY = pathLength > 0.0001 ? pathDx / pathLength : 1;
-      const waveOffset = Math.sin(phase) * (2.1 + (i % 4) * 0.55);
+      const waveOffset = this.waveAmplitudeWorld[i] * (
+        Math.sin(phase) + Math.sin(phase * 0.43 + this.secondaryWavePhase[i]) * 0.38
+      );
       const targetX = isShieldActive
         ? shieldGeometry.centerXWorld + Math.cos(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
         : pathTarget[0] + this.preferredOffsetX[i] * 0.22 + perpendicularX * waveOffset;
@@ -283,7 +302,9 @@ export class StormweaveLifeMotes {
       const dx = targetX - this.xWorld[i];
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
-      const attraction = isShieldActive ? distance * 28 : getStormweaveAttractionAcceleration(distance);
+      const attraction = isShieldActive
+        ? distance * 28
+        : getStormweaveAttractionAcceleration(distance) * this.followResponseScale[i];
       if (distance > 0.000001) {
         this.velocityXWorld[i] += (dx / distance * attraction + this.separationX[i]) * dt;
         this.velocityYWorld[i] += (dy / distance * attraction + this.separationY[i]) * dt;
@@ -294,8 +315,9 @@ export class StormweaveLifeMotes {
       this.velocityXWorld[i] *= damping;
       this.velocityYWorld[i] *= damping;
       const speed = Math.hypot(this.velocityXWorld[i], this.velocityYWorld[i]);
-      if (speed > MAX_CATCH_UP_SPEED_WORLD_PER_SEC) {
-        const scale = MAX_CATCH_UP_SPEED_WORLD_PER_SEC / speed;
+      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * this.followResponseScale[i];
+      if (speed > maxCatchUpSpeed) {
+        const scale = maxCatchUpSpeed / speed;
         this.velocityXWorld[i] *= scale;
         this.velocityYWorld[i] *= scale;
       }
