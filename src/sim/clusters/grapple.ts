@@ -20,14 +20,10 @@
  *    pull their arms in — same physics.  The result feels like the player is
  *    winding up for a powerful launch.
  *
- * 3. Swing Damping
- *    A very subtle damping factor is applied to the tangential velocity each
- *    tick while grappling.  This models air resistance / rope friction and
- *    slowly bleeds energy so the player cannot swing forever without input.
- *    The damping only affects the tangential component — gravity's natural
- *    acceleration is not penalised.  At the default coefficient (0.12 per
- *    second) the player barely notices energy loss within a single swing but
- *    will feel it after 3–4 full oscillations.
+ * 3. Swing Momentum Preservation
+ *    Movement V2 applies no passive damping to tangential velocity. Swing
+ *    momentum persists indefinitely unless another gameplay force, collision,
+ *    or rope retraction changes it.
  *
  * 4. Jump Off Grapple
  *    While the grapple is active, pressing jump immediately releases the
@@ -57,7 +53,7 @@
  *     • Enforces the rope length: snaps the player back onto the rope circle
  *       and removes the outward radial velocity component.
  *     • Runs a post-constraint wall collision check to prevent ground clipping.
- *     • Applies subtle tangential damping.
+ *     • Preserves tangential velocity without passive damping.
  *
  *   updateGrappleChainParticles    (step 6.75, after particle integration)
  *     • Positions GRAPPLE_SEGMENT_COUNT Gold particles evenly along the rope

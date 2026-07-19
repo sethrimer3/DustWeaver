@@ -21,21 +21,22 @@
 // `import.meta.glob` is a Vite build-time construct — it doesn't exist when
 // this module is loaded outside a Vite bundle (e.g. by the plain `node
 // --import tsx` test runner used for src/tests/**/*.test.ts). Guard the call
-// so those environments get an empty catalogue instead of a hard crash; the
-// real Vite build always provides a function here, so production behavior is
-// unchanged.
-const _glob: (pattern: string, opts: { query: string; import: string }) => Record<string, unknown> =
-  typeof import.meta.glob === 'function' ? import.meta.glob : () => ({});
+// so those environments get an empty catalogue instead of a hard crash.
+// Keep each glob as a direct call with a literal pattern: Vite only transforms
+// that exact syntax and cannot statically discover calls made through an alias.
+const _BLOCKS_GLOB = typeof import.meta.glob === 'function'
+  ? import.meta.glob(
+      '/ASSETS/SPRITES/BLOCKS/**/*.{png,webp,jpg,jpeg}',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
-const _BLOCKS_GLOB = _glob(
-  '/ASSETS/SPRITES/BLOCKS/**/*.{png,webp,jpg,jpeg}',
-  { query: '?url', import: 'default' },
-);
-
-const _SPECIAL_BLOCKS_GLOB = _glob(
-  '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
-  { query: '?url', import: 'default' },
-);
+const _SPECIAL_BLOCKS_GLOB = typeof import.meta.glob === 'function'
+  ? import.meta.glob(
+      '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
 /** Subset of specialBLOCKS folders that are also valid wall themes. */
 // Only folders representing static wall textures are valid wall themes.

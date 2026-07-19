@@ -93,13 +93,6 @@ const GRAPPLE_MAX_RETRACT_SPEED_RATIO = 1.1;
  */
 const GRAPPLE_MAX_TANGENTIAL_SPEED_WORLD_PER_SEC = 540.0;
 
-/**
- * Tangential velocity damping coefficient (fraction of speed lost per second).
- * At 0.12 the player loses ~12% of tangential speed each second — subtle
- * enough that single swings feel lively, but energy decays visibly over 3–4
- * full oscillations.  Increase for more drag; decrease for a floatier feel.
- */
-const GRAPPLE_SWING_DAMPING_PER_SEC = 0.12;
 const GRAPPLE_CARRY_TENSION_SLACK_WORLD = 1.0;
 const GRAPPLE_CARRY_TENSION_PULL_SPEED_WORLD_PER_SEC = 36.0;
 const GRAPPLE_CARRY_REEL_PULL_SPEED_WORLD_PER_SEC = 44.0;
@@ -145,7 +138,8 @@ const GRAPPLE_JUMP_OFF_SPEED_WORLD = PLAYER_JUMP_SPEED_WORLD;
  *   6. Enforce rope length: if player distance > ropeLength, snap position
  *      onto the rope circle and remove the outward radial velocity component.
  *   7. Post-constraint wall collision check to prevent ground clipping.
- *   8. Apply subtle tangential damping (air resistance / friction).
+ *   8. Preserve tangential velocity indefinitely unless another gameplay
+ *      force, collision, or rope retraction changes it.
  */
 export function applyGrappleClusterConstraint(world: WorldState): void {
   if (world.isGrappleActiveFlag === 0) return;
@@ -406,18 +400,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     }
   }
 
-  // ── Swing damping (subtle air resistance on tangential velocity) ──────────
-  // Only the tangential component is damped so gravity's natural acceleration
-  // is not penalised.  The effect is subtle: enough that perpetual motion
-  // eventually decays, but not so strong that the swing feels dead.
-  // Movement V2: skip entirely while the player holds directional input —
-  // matching the free-air rule that input never decelerates the player.
-  if (world.playerMoveInputDxWorld === 0) {
-    const vRadial = player.velocityXWorld * nx + player.velocityYWorld * ny;
-    const vTangX  = player.velocityXWorld - vRadial * nx;
-    const vTangY  = player.velocityYWorld - vRadial * ny;
-    const dampFactor = Math.max(0.0, 1.0 - GRAPPLE_SWING_DAMPING_PER_SEC * dtSec);
-    player.velocityXWorld = vRadial * nx + vTangX * dampFactor;
-    player.velocityYWorld = vRadial * ny + vTangY * dampFactor;
-  }
+  // Movement V2 intentionally applies no passive swing damping. Tangential
+  // velocity persists until another gameplay force, collision, or retraction
+  // changes it.
 }
