@@ -18,6 +18,8 @@ import {
   setMusicVolume, setSfxVolume,
   setGraphicsQuality,
   setAlwaysCenterCamera,
+  getRenderAdjacentRooms,
+  setRenderAdjacentRooms,
   getPixelSpeedometerEnabled,
   setPixelSpeedometerEnabled,
   getPixelSpeedometerPlacement,
@@ -288,12 +290,26 @@ export function showPauseMenu(
       `;
       optionsPanel.appendChild(wvHint);
 
-      optionsPanel.appendChild(
-        makeCheckboxRow('Always Center Camera', state.alwaysCenterCamera, (enabled) => {
-          state.alwaysCenterCamera = enabled;
-          setAlwaysCenterCamera(enabled);
+      // "Camera Always Centered" parent option, with a child "Render Adjacent
+      // Rooms" checkbox that smoothly reveals/hides beneath it.  The child is
+      // stored independently (see renderSettings) so its checked state survives
+      // the parent being toggled; its effective runtime state is gated by the
+      // parent (parent && child) — see getEffectiveRenderAdjacentRooms().
+      const adjacentReveal = createSlideReveal(state.alwaysCenterCamera);
+      adjacentReveal.content.appendChild(
+        makeCheckboxRow('RENDER ADJACENT ROOMS', getRenderAdjacentRooms(), (enabled) => {
+          setRenderAdjacentRooms(enabled);
         }),
       );
+      optionsPanel.appendChild(
+        makeCheckboxRow('CAMERA ALWAYS CENTERED', state.alwaysCenterCamera, (enabled) => {
+          state.alwaysCenterCamera = enabled;
+          setAlwaysCenterCamera(enabled);
+          // Reveal/hide the child without altering its stored checked state.
+          adjacentReveal.setExpanded(enabled);
+        }),
+      );
+      optionsPanel.appendChild(adjacentReveal.element);
 
       // Sprite atlases remain experimental and opt-in.
       const atlasEnabled = getSpriteAtlasUseSetting();

@@ -327,6 +327,40 @@ export function setAlwaysCenterCamera(enabled: boolean): void {
   localStorage.setItem(ALWAYS_CENTER_CAMERA_STORAGE_KEY, enabled ? '1' : '0');
 }
 
+// ── Render Adjacent Rooms (child of Always Center Camera) ─────────────────────
+
+const RENDER_ADJACENT_ROOMS_STORAGE_KEY = 'dustweaver-render-adjacent-rooms';
+
+/**
+ * Child option of "Camera Always Centered".  When effective, the game renders
+ * the current room plus its directly transition-linked (radius-1) neighbours as
+ * a static, render-only view so the world reads as continuous at room edges.
+ *
+ * Stored independently from the parent so its checked state survives the parent
+ * being toggled off and on.  Default: false (off).  See
+ * {@link getEffectiveRenderAdjacentRooms} for the effective runtime gate.
+ */
+export function getRenderAdjacentRooms(): boolean {
+  return localStorage.getItem(RENDER_ADJACENT_ROOMS_STORAGE_KEY) === '1';
+}
+
+export function setRenderAdjacentRooms(enabled: boolean): void {
+  localStorage.setItem(RENDER_ADJACENT_ROOMS_STORAGE_KEY, enabled ? '1' : '0');
+}
+
+/**
+ * The effective adjacent-room rendering state.  Adjacent rendering only makes
+ * sense while the camera is unclamped/centred, so the child setting is gated by
+ * the parent:  `cameraAlwaysCentered && renderAdjacentRooms`.
+ *
+ * Turning the parent off immediately disables adjacent rendering while
+ * preserving the child's stored checked state (so it returns checked when the
+ * parent is re-enabled).
+ */
+export function getEffectiveRenderAdjacentRooms(): boolean {
+  return getAlwaysCenterCamera() && getRenderAdjacentRooms();
+}
+
 // ── Advanced Wall Jumps ──────────────────────────────────────────────────────
 
 const ADVANCED_WALL_JUMPS_STORAGE_KEY = 'dustweaver-advanced-wall-jumps';
