@@ -33,7 +33,11 @@ import { handleGateRoomExit, handleGateSaveCompleted, interactWithNearbyChalleng
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
-import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getCombatModeFromStorage } from '../ui/renderSettings';
+import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getCombatModeFromStorage, getEffectiveRenderAdjacentRooms } from '../ui/renderSettings';
+import { AdjacentRoomRenderCoordinator } from './adjacentRoomRenderCoordinator';
+import { productionAdjacentRoomDrawImpl } from './gameRenderAdjacentRoomsImpl';
+import type { AdjacentRoomDrawPorts } from './gameRenderAdjacentRooms';
+import { wallTemplateToSnapshot } from '../render/walls/roomRenderState';
 import { computeRenderViewportMetrics, resizeCanvasBackingStore } from '../render/canvasViewport';
 import { setCombatMode } from '../sim/combatMode';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
@@ -541,6 +545,40 @@ export function startGameScreen(
     enqueueResidentBuild: (id, priority, reason) => {
       residentBuildScheduler.enqueue({ roomId: id, priority, reason });
     },
+  };
+
+  // ── Adjacent-room render coordinator (render-only radius-1 view) ─────────
+  // Owns the live ConnectedRoomRenderState. Does zero work when the effective
+  // "Render Adjacent Rooms" setting (CAMERA ALWAYS CENTERED && the child) is
+  // off, so the normal render path is untouched by default.
+  const adjacentRoomCoordinator = new AdjacentRoomRenderCoordinator({
+    isEffectiveEnabled: () => getEffectiveRenderAdjacentRooms(),
+    resolveRoomDef: (id) => ROOM_REGISTRY.get(id) ?? null,
+    getResidentWorld: (id) => {
+      const res = residentRoomManager.getResident(id);
+      const w = res?.world;
+      if (res === undefined || w === undefined || w === null) return null;
+      return { builtForRoomId: w.builtForRoomId, runtimeReady: res.runtimeReady };
+    },
+    requestNeighborLoad: (id) => {
+      if (ROOM_REGISTRY.has(id)) {
+        residentBuildScheduler.enqueue({ roomId: id, priority: 3, reason: 'adjacent' });
+      }
+    },
+  });
+  // Draw-side ports: resolve each neighbour's non-building wall snapshot
+  // (runtime cache -> baked template; never a synchronous merge in a frame) and
+  // its background colour. Returns null to keep the void/transition look until
+  // safe render data exists.
+  const adjacentRoomDrawPorts: AdjacentRoomDrawPorts = {
+    resolveRoomDef: (id) => ROOM_REGISTRY.get(id) ?? null,
+    resolveWallSnapshot: (id, def) => {
+      const cached = roomRuntimeCache.get(id);
+      if (cached !== undefined) return wallTemplateToSnapshot(cached.wallTemplate);
+      if (def.bakedWallTemplate !== undefined) return wallTemplateToSnapshot(def.bakedWallTemplate);
+      return null;
+    },
+    resolveBgColor: (def) => worldBgColor(def.worldNumber),
   };
 
   // Handle for the current idle preload schedule so it can be cancelled when
@@ -1728,6 +1766,12 @@ export function startGameScreen(
       crossingUnionMaxYWorld: roomHeightWorld,
       alwaysCenterCamera: pauseController.state.pauseMenuState.alwaysCenterCamera,
       stagedRoom: null,
+      // Render-only radius-1 adjacent-room view. getRenderState is cached and
+      // returns the shared empty state (no work) when the effective setting is off.
+      connectedRoomState: adjacentRoomCoordinator.getRenderState(currentRoom),
+      adjacentRoomDrawPorts,
+      adjacentRoomDrawImpl: productionAdjacentRoomDrawImpl,
+      adjacentMaxChunksPerRoom: 6,
     });
     playerSpeedometerOverlay.update({
       world,
