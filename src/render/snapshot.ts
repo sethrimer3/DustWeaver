@@ -139,6 +139,23 @@ interface _ReusableBacking {
   swordWeaveHandAnchorXWorld: number;
   swordWeaveHandAnchorYWorld: number;
   swordWeaveLengthRatio: number;
+  currentWeaveDustKind: number;
+  hasSwordWeaveUnlockedFlag: 0 | 1;
+  hasShieldWeaveUnlockedFlag: 0 | 1;
+  hasBowWeaveUnlockedFlag: 0 | 1;
+  secondaryWeaveGesturePhase: number;
+  secondaryWeaveGestureHoldAimXWorld: number;
+  secondaryWeaveGestureHoldAimYWorld: number;
+  newSwordActiveFlag: 0 | 1;
+  newSwordCurrentAngleRad: number;
+  newSwordHandAnchorXWorld: number;
+  newSwordHandAnchorYWorld: number;
+  newSwordReachWorld: number;
+  newSwordTicksElapsed: number;
+  newSwordToShieldTransition01: number;
+  newBowChargingFlag: 0 | 1;
+  newBowTierMoteCount: number;
+  shieldWeaveIndependentActiveFlag: 0 | 1;
   moteGrappleDisplayRadiusWorld: number;
   isMoteSourceOrbitFlag: 0 | 1;
   grappleTensionFactor: number;
@@ -422,6 +439,7 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isArrowStuckFlag:           world.isArrowStuckFlag,
     isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
     arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
+    arrowDustKind:              world.arrowDustKind,
     // Shield Sword Weave
     playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
     swordWeaveStateEnum:           world.swordWeaveStateEnum,
@@ -432,6 +450,24 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
     swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
     swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
+    // Independent Sword/Shield/Bow Weaves (Stage 3/5)
+    currentWeaveDustKind:          0,
+    hasSwordWeaveUnlockedFlag:     world.hasSwordWeaveUnlockedFlag,
+    hasShieldWeaveUnlockedFlag:    world.hasShieldWeaveUnlockedFlag,
+    hasBowWeaveUnlockedFlag:       world.hasBowWeaveUnlockedFlag,
+    secondaryWeaveGesturePhase:        world.secondaryWeaveGesture.phase,
+    secondaryWeaveGestureHoldAimXWorld: world.secondaryWeaveGesture.holdAimXWorld,
+    secondaryWeaveGestureHoldAimYWorld: world.secondaryWeaveGesture.holdAimYWorld,
+    newSwordActiveFlag:            world.newSwordActiveFlag,
+    newSwordCurrentAngleRad:       world.newSwordCurrentAngleRad,
+    newSwordHandAnchorXWorld:      world.newSwordHandAnchorXWorld,
+    newSwordHandAnchorYWorld:      world.newSwordHandAnchorYWorld,
+    newSwordReachWorld:            world.newSwordReachWorld,
+    newSwordTicksElapsed:          world.newSwordTicksElapsed,
+    newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
+    newBowChargingFlag:            world.newBowChargingFlag,
+    newBowTierMoteCount:           world.newBowTierMoteCount,
+    shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
@@ -571,6 +607,37 @@ export function updateSnapshotInPlace(
   b.swordWeaveHandAnchorXWorld    = world.swordWeaveHandAnchorXWorld;
   b.swordWeaveHandAnchorYWorld    = world.swordWeaveHandAnchorYWorld;
   b.swordWeaveLengthRatio         = world.swordWeaveLengthRatio;
+
+  // Independent Sword/Shield/Bow Weaves (Stage 3/5) scalar fields
+  b.hasSwordWeaveUnlockedFlag     = world.hasSwordWeaveUnlockedFlag;
+  b.hasShieldWeaveUnlockedFlag    = world.hasShieldWeaveUnlockedFlag;
+  b.hasBowWeaveUnlockedFlag       = world.hasBowWeaveUnlockedFlag;
+  b.secondaryWeaveGesturePhase         = world.secondaryWeaveGesture.phase;
+  b.secondaryWeaveGestureHoldAimXWorld = world.secondaryWeaveGesture.holdAimXWorld;
+  b.secondaryWeaveGestureHoldAimYWorld = world.secondaryWeaveGesture.holdAimYWorld;
+  b.newSwordActiveFlag            = world.newSwordActiveFlag;
+  b.newSwordCurrentAngleRad       = world.newSwordCurrentAngleRad;
+  b.newSwordHandAnchorXWorld      = world.newSwordHandAnchorXWorld;
+  b.newSwordHandAnchorYWorld      = world.newSwordHandAnchorYWorld;
+  b.newSwordReachWorld            = world.newSwordReachWorld;
+  b.newSwordTicksElapsed          = world.newSwordTicksElapsed;
+  b.newSwordToShieldTransition01  = world.newSwordToShieldTransition01;
+  b.newBowChargingFlag            = world.newBowChargingFlag;
+  b.newBowTierMoteCount           = world.newBowTierMoteCount;
+  b.shieldWeaveIndependentActiveFlag = world.shieldWeaveIndependentActiveFlag;
+  // First available ordered-mote-queue slot's dust kind — same source used by
+  // fireNewBow() to capture arrowDustKind, so sword/shield/bow-preview theming
+  // matches whatever dust will actually be spent.
+  {
+    let dustKind = 0;
+    for (let s = 0; s < world.moteSlotCount; s++) {
+      if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) {
+        dustKind = world.moteSlotKind[s];
+        break;
+      }
+    }
+    b.currentWeaveDustKind = dustKind;
+  }
 
   // Ordered Mote Queue display
   b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
@@ -797,6 +864,7 @@ export function refreshSnapshotWorldArrayRefs(
   raw.isArrowStuckFlag               = world.isArrowStuckFlag;
   raw.isArrowHitEnemyFlag            = world.isArrowHitEnemyFlag;
   raw.arrowLifetimeTicksLeft         = world.arrowLifetimeTicksLeft;
+  raw.arrowDustKind                  = world.arrowDustKind;
   raw.grappleWrapPointXWorld         = world.grappleWrapPointXWorld;
   raw.grappleWrapPointYWorld         = world.grappleWrapPointYWorld;
   raw.ropeSegmentCount               = world.ropeSegmentCount;

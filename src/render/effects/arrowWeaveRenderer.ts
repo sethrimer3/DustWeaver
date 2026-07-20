@@ -22,6 +22,8 @@ import {
   ARROW_LIFETIME_3_TICKS,
   ARROW_LIFETIME_4_TICKS,
 } from '../../sim/weaves/arrowWeave';
+import { getDustDefinition } from '../../sim/weaves/dustDefinition';
+import { ParticleKind } from '../../sim/particles/kinds';
 
 // ── Bow visual constants ──────────────────────────────────────────────────────
 
@@ -306,11 +308,16 @@ export class ArrowWeaveRenderer {
     if (count === 0) return;
 
     ctx.save();
-    ctx.fillStyle = MOTE_COLOR;
 
     for (let i = 0; i < count; i++) {
       if (snapshot.arrowLifetimeTicksLeft[i] <= 0) continue;
       if (snapshot.isArrowHitEnemyFlag[i] === 1) continue; // invisible while playing enemy hit sequence
+
+      // Colour comes from the dust kind captured at fire time — NOT the
+      // player's currently-selected dust, which may have changed since.
+      const dustKind: ParticleKind = snapshot.arrowDustKind[i];
+      const arrowColor = getDustDefinition(dustKind).colorHex;
+      ctx.fillStyle = arrowColor;
 
       const moteCount = snapshot.arrowMoteCount[i];
       const tipXPx = snapshot.arrowXWorld[i] * zoom + ox;
@@ -344,15 +351,17 @@ export class ArrowWeaveRenderer {
         const mx = tipXPx - dirX * m * ARROW_MOTE_SPACING_WORLD * zoom;
         const my = tipYPx - dirY * m * ARROW_MOTE_SPACING_WORLD * zoom;
 
-        // Glow
+        // Glow — same white-overlay highlight derivation used elsewhere in the
+        // renderer codebase (see render/clusters/dustCoreVisual.ts) rather than
+        // inventing a new tint scheme.
         ctx.globalAlpha = moteAlpha * 0.3;
-        ctx.fillStyle = '#ffe680';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
         const glowSz = halfSz * 2.0;
         ctx.fillRect(mx - glowSz, my - glowSz, glowSz * 2, glowSz * 2);
 
         // Core
         ctx.globalAlpha = moteAlpha;
-        ctx.fillStyle = MOTE_COLOR;
+        ctx.fillStyle = arrowColor;
         ctx.fillRect(mx - halfSz, my - halfSz, halfSz * 2, halfSz * 2);
       }
     }

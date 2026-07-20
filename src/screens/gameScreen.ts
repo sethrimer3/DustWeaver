@@ -21,6 +21,8 @@ import { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
+import { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
+import { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners } from '../input/handler';
@@ -447,6 +449,8 @@ export function startGameScreen(
   const decorationWaveState = new DecorationWaveState();
   const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
+  const newSwordWeaveRenderer = new NewSwordWeaveRenderer();
+  const bowTrajectoryPreviewRenderer = new BowTrajectoryPreviewRenderer();
   const fallingBlockDust = new FallingBlockDustRenderer();
 
   // ── Dialogue system ──────────────────────────────────────────────────────
@@ -1757,6 +1761,7 @@ export function startGameScreen(
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
       playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,

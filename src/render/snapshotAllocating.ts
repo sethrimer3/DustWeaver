@@ -369,6 +369,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     isArrowStuckFlag:           world.isArrowStuckFlag,
     isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
     arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
+    arrowDustKind:              world.arrowDustKind,
     // Shield Sword Weave
     playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
     swordWeaveStateEnum:           world.swordWeaveStateEnum,
@@ -379,6 +380,29 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
     swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
     swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
+    // Independent Sword/Shield/Bow Weaves (Stage 3/5)
+    currentWeaveDustKind:          (() => {
+      for (let s = 0; s < world.moteSlotCount; s++) {
+        if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) return world.moteSlotKind[s];
+      }
+      return 0;
+    })(),
+    hasSwordWeaveUnlockedFlag:     world.hasSwordWeaveUnlockedFlag,
+    hasShieldWeaveUnlockedFlag:    world.hasShieldWeaveUnlockedFlag,
+    hasBowWeaveUnlockedFlag:       world.hasBowWeaveUnlockedFlag,
+    secondaryWeaveGesturePhase:        world.secondaryWeaveGesture.phase,
+    secondaryWeaveGestureHoldAimXWorld: world.secondaryWeaveGesture.holdAimXWorld,
+    secondaryWeaveGestureHoldAimYWorld: world.secondaryWeaveGesture.holdAimYWorld,
+    newSwordActiveFlag:            world.newSwordActiveFlag,
+    newSwordCurrentAngleRad:       world.newSwordCurrentAngleRad,
+    newSwordHandAnchorXWorld:      world.newSwordHandAnchorXWorld,
+    newSwordHandAnchorYWorld:      world.newSwordHandAnchorYWorld,
+    newSwordReachWorld:            world.newSwordReachWorld,
+    newSwordTicksElapsed:          world.newSwordTicksElapsed,
+    newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
+    newBowChargingFlag:            world.newBowChargingFlag,
+    newBowTierMoteCount:           world.newBowTierMoteCount,
+    shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
     isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,

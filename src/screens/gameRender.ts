@@ -56,6 +56,8 @@ import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer'
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
+import type { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
+import type { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
@@ -152,6 +154,10 @@ export interface RenderFrameContext {
   arrowWeaveRenderer: ArrowWeaveRenderer;
   /** Shield Sword Weave renderer — golden-crossguard sword and slash trail. */
   swordWeaveRenderer: SwordWeaveRenderer;
+  /** Independent (Stage 3/5) Sword Weave renderer — aimed crescent swipe + sword→shield fade. */
+  newSwordWeaveRenderer: NewSwordWeaveRenderer;
+  /** Independent (Stage 3/5) Bow Weave trajectory preview renderer. */
+  bowTrajectoryPreviewRenderer: BowTrajectoryPreviewRenderer;
   /** Pixel-art atmospheric sunbeam shafts. */
   sunbeamRenderer: SunbeamRenderer;
   sunraysRenderer: SunraysRenderer;
@@ -308,6 +314,7 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
     playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+    newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -573,6 +580,12 @@ export function renderFrame(r: RenderFrameContext): void {
   // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
   // of the player so the crossguard reads against the body).
   swordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
+  // Independent (Stage 3/5) Sword Weave — aimed crescent swipe, drawn on top
+  // of the player and above the legacy sword for the same reason.
+  newSwordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
+  // Independent (Stage 3/5) Bow Weave trajectory preview — thin fading line,
+  // visible through the whole held gesture (Sword + Shield phases included).
+  bowTrajectoryPreviewRenderer.render(ctx, snapshot, world, ox, oy, zoom);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_ENTITIES);
 
   // ── Bloom glow pass (skipped entirely on low quality) ────────────────────

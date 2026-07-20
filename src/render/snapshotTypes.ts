@@ -434,6 +434,28 @@ export interface WorldSnapshot {
    */
   readonly swordWeaveLengthRatio: number;
 
+  // ── Independent Sword/Shield/Bow Weaves (Stage 3/5) ──────────────────────
+  /** Dust kind (ParticleKind) currently at the front of the player's ordered mote queue — used to theme sword/shield/bow visuals. */
+  readonly currentWeaveDustKind: number;
+  /** Per-fired-arrow dust kind captured at fire time (ParticleKind). Shared view into WorldState. */
+  readonly arrowDustKind: Uint8Array;
+  readonly hasSwordWeaveUnlockedFlag: 0 | 1;
+  readonly hasShieldWeaveUnlockedFlag: 0 | 1;
+  readonly hasBowWeaveUnlockedFlag: 0 | 1;
+  readonly secondaryWeaveGesturePhase: number;
+  readonly secondaryWeaveGestureHoldAimXWorld: number;
+  readonly secondaryWeaveGestureHoldAimYWorld: number;
+  readonly newSwordActiveFlag: 0 | 1;
+  readonly newSwordCurrentAngleRad: number;
+  readonly newSwordHandAnchorXWorld: number;
+  readonly newSwordHandAnchorYWorld: number;
+  readonly newSwordReachWorld: number;
+  readonly newSwordTicksElapsed: number;
+  readonly newSwordToShieldTransition01: number;
+  readonly newBowChargingFlag: 0 | 1;
+  readonly newBowTierMoteCount: number;
+  readonly shieldWeaveIndependentActiveFlag: 0 | 1;
+
   // ── Ordered Mote Queue display ────────────────────────────────────────────
   /**
    * Smoothed grapple influence circle radius (world units).
