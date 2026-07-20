@@ -488,9 +488,9 @@ test('default combat mode applies sword damage exactly once per hit, and the leg
   assert.equal(world.isPlayerSecondaryWeaveActiveFlag, 0, 'legacy secondary-weave-active flag must never be touched by the default-mode coordinator path');
 });
 
-// ---- Item 12: cancellation clears a LATCHED PENDING bow release too --------
+// ---- Item 12: cancellation of pending Bow fire on every modal/teardown path -
 
-test('cancellation while a pending bow release is latched (mid-swipe) clears it without firing', () => {
+test('cancellation while the button is still held mid-charge aborts the bow charge before any release/pending-release can latch', () => {
   const { world, player } = makeFixture(6);
   world.hasSwordWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
@@ -498,19 +498,57 @@ test('cancellation while a pending bow release is latched (mid-swipe) clears it 
   press(world, player.positionXWorld + 20, player.positionYWorld);
   for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.newSwordActiveFlag, 1, 'sword still swinging');
-
-  release(world, player.positionXWorld + 5, player.positionYWorld + 30);
-  assert.equal(world.newBowPendingReleaseFlag, 1, 'pending release latched before sword finished');
+  assert.equal(world.newBowChargingFlag, 1, 'bow still charging');
 
   // Simulate a modal/teardown/death/room-transition cancellation while the
-  // pending release is still latched and the sword hasn't finished.
+  // button is still physically held (this is the real shape every call site
+  // in gameScreen.ts / gameCommandProcessor.ts uses — see cancelSecondaryWeaveGesture
+  // call sites for death, room transition, modal open, and window blur).
   cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
   applyPlayerWeaveCombat(world);
 
-  assert.equal(world.newBowPendingReleaseFlag, 0, 'latched pending release must be cleared by cancellation');
-  assert.equal(world.newSwordActiveFlag, 0, 'sword swipe must also be aborted by cancellation');
+  assert.equal(world.newSwordActiveFlag, 0, 'sword swipe must be aborted by cancellation');
+  assert.equal(world.newBowChargingFlag, 0, 'bow charge must be cancelled, not left charging');
+  assert.equal(world.newBowPendingReleaseFlag, 0, 'no pending release can have latched — cancellation happened before any release event');
 
-  // Let additional ticks pass — no deferred fire must ever occur.
+  // Physically releasing the button after the cancellation (as a real
+  // window-blur / pause teardown would eventually see) must not resurrect a
+  // charge or fire an arrow — full physical release + a fresh press is
+  // required for any new gesture to begin.
+  release(world, player.positionXWorld + 20, player.positionYWorld);
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 5; i++) idleTick(world);
-  assert.equal(world.arrowCount, 0, 'no arrow must fire from a cancelled pending release');
+  assert.equal(world.arrowCount, 0, 'no arrow must fire purely from a cancelled charge');
+});
+
+/**
+ * By-design nuance (see the coordinator's own `awaitingNeutral` doc comment):
+ * once a pending Bow release has legitimately latched via a NORMAL release
+ * event (button physically let go, sword still finishing its swipe), the
+ * gesture settling to Idle on the next tick must NOT be treated as a cancel
+ * and must NOT drop that pending release — otherwise every ordinary
+ * quick-release-during-swipe interaction (already covered by the
+ * "sword+bow: quick release during the swipe" test above) would silently
+ * eat the player's arrow. `cancelSecondaryWeaveGesture` only sets
+ * `awaitingNeutral = true` when the button is still PHYSICALLY held at
+ * cancel time (see secondaryWeaveGesture.ts) — after a real release the flag
+ * is false, so calling cancel again post-release is a correct no-op here,
+ * not a bug. This test documents that intentional behavior explicitly.
+ */
+test('a cancel call issued AFTER a normal release does not retroactively drop an already-latched pending bow release (by design)', () => {
+  const { world, player } = makeFixture(6);
+  world.hasSwordWeaveUnlockedFlag = 1;
+  world.hasBowWeaveUnlockedFlag = 1;
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  release(world, player.positionXWorld + 5, player.positionYWorld + 30);
+  assert.equal(world.newBowPendingReleaseFlag, 1, 'pending release latched before sword finished');
+  assert.equal(world.secondaryWeaveGesture.awaitingNeutral, false, 'awaitingNeutral is false after a normal physical release');
+
+  cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
+  applyPlayerWeaveCombat(world);
+  assert.equal(world.newBowPendingReleaseFlag, 1, 'a cancel call after the button was already released must not retroactively cancel the legitimately-latched pending arrow');
+
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) idleTick(world);
+  assert.equal(world.arrowCount, 1, 'the legitimately-queued arrow must still fire once the sword finishes');
 });
