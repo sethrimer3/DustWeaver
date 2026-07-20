@@ -206,16 +206,16 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   const ay = (world.isGrappleWrappingEnabled === 1 && world.grappleWrapPointCount > 0)
     ? world.grappleWrapPointYWorld[world.grappleWrapPointCount - 1]
     : world.grappleAnchorYWorld;
-  let dx = player.positionXWorld - ax;
-  let dy = player.positionYWorld - ay;
-  let dist = Math.sqrt(dx * dx + dy * dy);
+  const dx = player.positionXWorld - ax;
+  const dy = player.positionYWorld - ay;
+  const dist = Math.sqrt(dx * dx + dy * dy);
 
   if (dist < 1.0) return; // degenerate — player at anchor point
 
-  let invDist = 1.0 / dist;
+  const invDist = 1.0 / dist;
   // Unit vector pointing from anchor toward player (outward / radial direction)
-  let nx = dx * invDist;
-  let ny = dy * invDist;
+  const nx = dx * invDist;
+  const ny = dy * invDist;
 
   // ── Rope retraction (hold down / S) ───────────────────────────────────────
   // While the down key is held the rope shortens, and angular momentum is
@@ -366,15 +366,6 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
       player.velocityYWorld -= velDotN * ny;
     }
   }
-
-  // Recompute radial direction after potential wall correction
-  dx = player.positionXWorld - ax;
-  dy = player.positionYWorld - ay;
-  dist = Math.sqrt(dx * dx + dy * dy);
-  if (dist < 1.0) return;
-  invDist = 1.0 / dist;
-  nx = dx * invDist;
-  ny = dy * invDist;
 
   // ── Phase 9: Out-of-range tension break ──────────────────────────────────
   // While attached, if motes are depleted mid-swing the effective grapple range

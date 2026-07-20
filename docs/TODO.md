@@ -23,7 +23,6 @@ Keep this file short and actionable. It is not a design document or changelog.
 
 - [ ] Migrate/remove the legacy ordered combat-mote queue, Storm-as-equipped-primary gating, Arrow Weave, and Sword Weave without disturbing the health-derived Stormweave/Shield Weave collection; choose replacement controls before exposing legacy secondary abilities again.
 - [ ] Extend Shield Weave collision adapters for lava surfing and laser reflection only after those systems define directional contact/reflection contracts; do not approximate them through the current ordinary-projectile blocker.
-- [ ] Fix the 2 pre-existing `no-useless-assignment` lint errors in `src/sim/clusters/playerWallJump.ts` at lines 541 and 546 (`npm run lint` fails on them).
 - [ ] Implement `evictStalePrewarmedChunks` with an LRU or memory cap if warmed chunk memory growth is observed.
 - [ ] Make radius-3 render chunk warming more adaptive by incorporating frame-time checks, if needed.
 - [ ] Expose the prewarm debug panel in pause-menu debug UI if useful.

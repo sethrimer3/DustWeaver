@@ -523,7 +523,7 @@ export function computeWallJumpXSpeedWorld(
  */
 export function attemptWallJump(cluster: ClusterState, world: WorldState): boolean {
   const wjCandidate = getWallJumpCandidate(cluster, world);
-  let canJumpFromLeft  = wjCandidate.canJumpFromLeft;
+  const canJumpFromLeft  = wjCandidate.canJumpFromLeft;
   let canJumpFromRight = wjCandidate.canJumpFromRight;
 
   if (!canJumpFromLeft && !canJumpFromRight) {
@@ -535,16 +535,8 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
   if (canJumpFromLeft && canJumpFromRight) {
     const leftDist  = wjCandidate.leftDistWorld;
     const rightDist = wjCandidate.rightDistWorld;
-    if (leftDist < rightDist) {
+    if (leftDist < rightDist || (leftDist === rightDist && cluster.velocityXWorld < 0)) {
       canJumpFromRight = false;
-    } else if (rightDist < leftDist) {
-      canJumpFromLeft = false;
-    } else {
-      if (cluster.velocityXWorld < 0) {
-        canJumpFromRight = false; // moving left → prefer left wall
-      } else {
-        canJumpFromLeft = false;  // moving right or stationary → prefer right wall
-      }
     }
   }
 

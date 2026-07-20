@@ -90,7 +90,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   confirmCancelBar.appendChild(confirmBtn);
 
   let isCancelConfirmationPending = false;
-  let cancelBtn: HTMLButtonElement;
   const saveBtn = makeBtn('✔ Save', () => {
     isCancelConfirmationPending = false;
     cancelBtn.textContent = '✕ Cancel';
@@ -102,7 +101,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   confirmCancelBar.appendChild(saveBtn);
 
-  cancelBtn = makeBtn('✕ Cancel', () => {
+  const cancelBtn = makeBtn('✕ Cancel', () => {
     if (!isCancelConfirmationPending) {
       isCancelConfirmationPending = true;
       cancelBtn.textContent = 'Confirm?';
