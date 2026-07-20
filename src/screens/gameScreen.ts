@@ -961,6 +961,8 @@ export function startGameScreen(
     );
   }, () => {
     // Called when editor closes (confirm or cancel)
+    // Prevent an editor M-key press from leaking into gameplay and opening the map.
+    inputState.isMapKeyTriggeredFlag = false;
     editorDebugControls?.handleEditorClosed();
   }, campaignSession ?? null);
 
