@@ -2,7 +2,18 @@
  * Per-element visual style for the Canvas 2D fallback renderer.
  * The WebGL renderer picks colours directly in the vertex packing step
  * (see webglRenderer.ts + shaders.ts → kindColor()).
+ *
+ * For the *equippable player mote* kinds, the per-channel RGB values below are
+ * synchronized with the centralized mote-type configuration
+ * (`sim/motes/moteTypeConfig.ts`), which is the authoritative source for a
+ * mote type's body / glow / trail / particle colour. The accompanying
+ * regression test asserts the two never drift apart, so changing a player mote
+ * type's colour in one place is enough. Internal / environmental kinds keep
+ * their bespoke values here.
  */
+
+import { ParticleKind } from '../../sim/particles/kinds';
+import { getMoteTypeVisual, hasMoteTypeConfig } from '../../sim/motes/moteTypeConfig';
 
 export interface ParticleStyle {
   colorHex: string;
@@ -118,3 +129,27 @@ export const KIND_COLOR_B = new Float32Array([
   0.00, // Gold
   0.88, // Light
 ]);
+
+// ── Sync equippable player-mote colours from the centralized config ──────────
+//
+// For each equippable player mote type that declares an explicit config, the
+// authoritative body/trail colour comes from `moteTypeConfig.ts`. We copy it
+// into the per-channel tables (and the Canvas hex styles) at module load so the
+// renderer's mote body, glow, trail, and particle colours all follow the
+// selected mote type from a single source. Internal / environmental kinds are
+// untouched. The regression test asserts these stay numerically identical to
+// the legacy hand-authored values, so this is a consolidation, not a recolour.
+
+for (const kind of [
+  ParticleKind.Golden,
+  ParticleKind.Ice,
+  ParticleKind.Nature,
+  ParticleKind.Void,
+  ParticleKind.Light,
+]) {
+  if (!hasMoteTypeConfig(kind)) continue;
+  const trail = getMoteTypeVisual(kind).trail;
+  KIND_COLOR_R[kind] = trail.r;
+  KIND_COLOR_G[kind] = trail.g;
+  KIND_COLOR_B[kind] = trail.b;
+}
