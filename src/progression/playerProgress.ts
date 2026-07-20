@@ -107,6 +107,16 @@ export interface PlayerProgress {
    * save/load, or game restart.
    */
   collectedDustContainerKeys: string[];
+  /**
+   * Keys of skill-tomb books (Sword/Shield/Bow Weave Skill Books, etc.) the
+   * player has permanently collected, in the format
+   * `${roomId}:${xBlock}:${yBlock}`. Persisted so a collected book stays
+   * consumed (does not reappear or re-grant its weave) after save/load or
+   * game restart. Collecting the weave itself is idempotent via
+   * `unlockedActiveWeaves`; this set only governs the visible/consumed
+   * state of the book.
+   */
+  collectedSkillTombKeys: string[];
   /** Permanently opened gates keyed by campaign, room, and stable gate UID. */
   permanentlyOpenGateKeys: string[];
   /**
@@ -160,6 +170,7 @@ export function createDefaultProgress(): PlayerProgress {
     hasCompletedEarlyAutoAssignment: false,
     collectedDustSwarmKeys: [],
     collectedDustContainerKeys: [],
+    collectedSkillTombKeys: [],
     permanentlyOpenGateKeys: [],
   };
 }

@@ -152,7 +152,7 @@ const SHIELD_SWORD_DEF: WeaveDefinition = {
 const SWORD_DEF: WeaveDefinition = {
   id: WEAVE_SWORD,
   displayName: 'Sword Weave',
-  description: 'Unlocked — not yet independently equippable (see Shield Sword Weave).',
+  description: 'Press the secondary action to sweep your dust through enemies in an aimed crescent.',
   role: WeaveRole.SecondaryOnly,
   dustSlotCapacity: 0,
   durationTicks: 0,
@@ -191,6 +191,7 @@ export const WEAVE_LIST: readonly WeaveId[] = [
   WEAVE_SHIELD,
   WEAVE_ARROW,
   WEAVE_SHIELD_SWORD,
+  WEAVE_SWORD,
 ];
 
 /**

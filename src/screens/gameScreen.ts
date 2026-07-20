@@ -332,8 +332,10 @@ export function startGameScreen(
    * Initialized from progress.collectedDustSwarmKeys so swarms stay collected after save/load. */
   const collectedDustSwarmKeySet: Set<string> = new Set(progress?.collectedDustSwarmKeys ?? []);
 
-  /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs. */
-  const consumedSkillTombKeySet: Set<string> = new Set();
+  /** Keys in the format `${roomId}:${xBlock}:${yBlock}` for already-consumed skill tombs.
+   * Initialized from progress.collectedSkillTombKeys so collected skill books stay
+   * consumed (and never re-grant their weave) after save/load. */
+  const consumedSkillTombKeySet: Set<string> = new Set(progress?.collectedSkillTombKeys ?? []);
 
   /** Initialises (or re-initialises) world state for the given room.
    *

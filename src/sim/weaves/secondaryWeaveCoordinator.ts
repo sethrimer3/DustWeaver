@@ -72,14 +72,18 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
   const gesture = world.secondaryWeaveGesture;
   const player = _findPlayer(world);
 
-  // ── Cancellation: gesture forced back to Idle (pause/dialogue/blur/etc.) ──
-  // Detect via: gesture is Idle AND (nothing in our state still thinks a
-  // gesture is active). This also naturally covers the case where the
-  // gesture's own `consumedByOtherSystem` (grapple zip) voided the press —
-  // our state was never armed for that gesture id in the first place because
-  // we gate on `pressEventFlag`, which the coordinator layer never sets for
-  // a consumed press.
-  if (gesture.phase === SecondaryWeaveGesturePhase.Idle) {
+  // ── Cancellation: gesture forced back to Idle mid-hold (pause/dialogue/
+  // blur/dust-wheel/death/room-transition/grapple-consume — see
+  // secondaryWeaveGesture.ts) ────────────────────────────────────────────
+  // `awaitingNeutral` is the reliable signal here: it is set true ONLY by
+  // `cancelSecondaryWeaveGesture` / `markSecondaryWeaveGestureConsumedByOtherSystem`
+  // when the button was still held at the moment of cancellation, and it is
+  // explicitly false again after a NORMAL release-then-settle-to-neutral
+  // sequence (see tickSecondaryWeaveGesture's steady-neutral branch). This
+  // lets us tell a real cancel apart from the ordinary Idle a gesture
+  // reaches one tick after its own release event — which must NOT abort an
+  // in-progress Sword swipe or drop a latched pending Bow release.
+  if (gesture.phase === SecondaryWeaveGesturePhase.Idle && gesture.awaitingNeutral) {
     if (world.newSwordActiveFlag === 1) resetSwordOnly(world);
     if (world.newBowChargingFlag === 1) cancelNewBowCharge(world);
     if (world.newBowPendingReleaseFlag === 1) clearPendingBowRelease(world);

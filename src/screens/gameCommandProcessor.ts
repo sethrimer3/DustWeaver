@@ -26,6 +26,7 @@ import type { PlayerProgress } from '../progression/playerProgress';
 import type { CombatTextSystem } from '../render/hud/combatText';
 import { unlockActiveWeave, unlockDustType } from '../progression/unlocks';
 import { getWeaveDefinition } from '../sim/weaves/weaveDefinition';
+import { expandLegacyWeaveId } from '../progression/weaveMigration';
 import type { RoomDef } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RngState } from '../sim/rng';
@@ -439,8 +440,18 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
           const consumedKey = `${currentRoomId}:${tombPositionKey}`;
           if (!consumedSkillTombKeySet.has(consumedKey)) {
             const weaveId = skillTombEffectRenderer.getTombWeaveId(nearbySkillTombIndex);
-            unlockActiveWeave(progress, weaveId);
+            // Expand legacy combo ids (e.g. the old `shield_sword` book) into
+            // every independent weave they imply so old room data still
+            // grants both Sword and Shield — never silently drops an
+            // ability. Unknown ids fall back to granting themselves as-is so
+            // malformed authored data never throws.
+            const grantedWeaveIds = expandLegacyWeaveId(weaveId);
+            const idsToGrant = grantedWeaveIds.length > 0 ? grantedWeaveIds : [weaveId];
+            for (const id of idsToGrant) unlockActiveWeave(progress, id);
             consumedSkillTombKeySet.add(consumedKey);
+            if (progress.collectedSkillTombKeys.indexOf(consumedKey) === -1) {
+              progress.collectedSkillTombKeys.push(consumedKey);
+            }
             skillTombEffectRenderer.removeTomb(nearbySkillTombIndex);
             const weaveName = getWeaveDefinition(weaveId)?.displayName ?? 'Unknown Weave';
             combatText.spawnLabel(

@@ -70,6 +70,7 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (!Array.isArray(parsed.progress.disabledPassiveWeaves)) parsed.progress.disabledPassiveWeaves = [];
     if (!Array.isArray(parsed.progress.collectedDustSwarmKeys)) parsed.progress.collectedDustSwarmKeys = [];
     if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
+    if (!Array.isArray(parsed.progress.collectedSkillTombKeys)) parsed.progress.collectedSkillTombKeys = [];
     if (!Array.isArray(parsed.progress.permanentlyOpenGateKeys)) parsed.progress.permanentlyOpenGateKeys = [];
     sanitizePlayerDustProgress(parsed.progress);
     // Migrate legacy shield_sword secondary-weave saves to grant the new
