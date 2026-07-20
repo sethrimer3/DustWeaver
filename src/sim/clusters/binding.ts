@@ -83,11 +83,37 @@ const TRAIL_OFFSET_MAX_WORLD = 23.0;
 /** Fraction of normal orbitalStrength applied while an attack is in flight. */
 const ATTACK_ORBITAL_SCALE = 2.5;
 
+/**
+ * Velocity-matching gain (1/s) for player orbit motes (task section 2 — faster
+ * Storm follow).
+ *
+ * A pure position spring tracking a moving anchor lags by a steady-state offset
+ * proportional to player speed (offset ≈ v·drag·mass / attractionStrength). For
+ * Gold Dust's heavy/weak profile that offset exceeds the influence radius at
+ * grapple/zip/launch speeds, so motes detach and are left far behind.
+ *
+ * This feed-forward drives each mote's *velocity* toward the player's velocity.
+ * The applied force is scaled by the mote's mass so the resulting acceleration
+ * — (playerVel − moteVel)·gain — is mass-independent, giving every mote type the
+ * same small, bounded velocity deficit (≈ drag/gain of player speed) instead of
+ * a large positional lag. At steady state the term vanishes, so it adds no
+ * offset and does not fight the orbital swirl; it only removes systematic lag.
+ *
+ * Explicit-Euler stability: gain·dtSec = 40/60 ≈ 0.67 ≪ 2, so it is
+ * well-damped and cannot oscillate/overshoot at the fixed 60 Hz step.
+ *
+ * Gated to when the player is actually moving (speed above the standing-still
+ * threshold), so the idle hovering halo is byte-for-byte unchanged.
+ */
+const PLAYER_FOLLOW_VELOCITY_MATCH_GAIN = 40.0;
+
 export function applyBindingForces(world: WorldState): void {
   const {
     clusters,
     positionXWorld, positionYWorld,
+    velocityXWorld, velocityYWorld,
     forceX, forceY,
+    massKg,
     ownerEntityId, isAliveFlag,
     kindBuffer,
     anchorAngleRad, anchorRadiusWorld,
@@ -246,6 +272,20 @@ export function applyBindingForces(world: WorldState): void {
       const tangentY =  toOwnerX * invDist;
       forceX[particleIndex] += tangentX * profile.orbitalStrength * orbitalScale;
       forceY[particleIndex] += tangentY * profile.orbitalStrength * orbitalScale;
+    }
+
+    // ---- 3. Player-follow velocity matching (task section 2) -------------
+    // Drive the mote's velocity toward the player's so it keeps pace during
+    // fast movement (grapple, zip, fall, launch, invulnerability dash) instead
+    // of lagging behind by the position spring's large steady-state offset.
+    // Mass-scaled so the acceleration is mass-independent; gated to a moving
+    // player so the idle halo is unchanged.
+    if (isPlayerParticle && playerSpeedWorld >= STANDING_STILL_SPEED_WORLD) {
+      const massScale = massKg[particleIndex] > 0 ? massKg[particleIndex] : 1.0;
+      forceX[particleIndex] +=
+        (playerVelXWorld - velocityXWorld[particleIndex]) * PLAYER_FOLLOW_VELOCITY_MATCH_GAIN * massScale;
+      forceY[particleIndex] +=
+        (playerVelYWorld - velocityYWorld[particleIndex]) * PLAYER_FOLLOW_VELOCITY_MATCH_GAIN * massScale;
     }
   }
 }
