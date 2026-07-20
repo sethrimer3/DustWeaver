@@ -765,6 +765,14 @@ export interface RoomDef {
   waterZones?: readonly RoomZoneDef[];
   /** Lava zones that damage the player. */
   lavaZones?: readonly RoomZoneDef[];
+  /**
+   * TimeStop Field zones — non-solid, dynamic, translucent tiles. Adjacent
+   * (4-connected) tiles form one connected gameplay region: entering it
+   * suspends the player's current velocity (captured once, added back on
+   * exit) and inverts the screen outside the field. Purely authoring data —
+   * no runtime state (momentum, overlap, contours) is stored here.
+   */
+  timeStopFields?: readonly RoomZoneDef[];
   /** Breakable blocks that shatter from high-momentum player impact. */
   breakableBlocks?: readonly RoomBreakableBlockDef[];
   /** Solid custom-block cells that damage the player on contact (Phase 2D). */

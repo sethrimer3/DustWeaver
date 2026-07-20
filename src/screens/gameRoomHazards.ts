@@ -20,6 +20,7 @@ import {
 } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+import { markTimeStopFieldsDirty } from '../sim/timeStopField/timeStopFieldCache';
 import {
   type RoomDef,
   type CrumbleVariant,
@@ -67,6 +68,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.waterZoneCount = 0;
   world.lavaZoneCount = 0;
   world.lavaInvulnTicks = 0;
+  world.timeStopFieldCount = 0;
   world.breakableBlockCount = 0;
   world.breakEventCount = 0;
   world.contactDamageBlockCount = 0;
@@ -194,6 +196,22 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.lavaZoneWWorld[li] = l.wBlock * BLOCK_SIZE_MEDIUM;
     world.lavaZoneHWorld[li] = l.hBlock * BLOCK_SIZE_MEDIUM;
   }
+
+  // ── TimeStop Field tiles ──────────────────────────────────────────────────
+  const timeStopFieldDefs = room.timeStopFields ?? [];
+  for (
+    let i = 0;
+    i < timeStopFieldDefs.length && world.timeStopFieldCount < world.timeStopFieldXWorld.length;
+    i++
+  ) {
+    const t = timeStopFieldDefs[i];
+    const ti = world.timeStopFieldCount++;
+    world.timeStopFieldXWorld[ti] = t.xBlock * BLOCK_SIZE_MEDIUM;
+    world.timeStopFieldYWorld[ti] = t.yBlock * BLOCK_SIZE_MEDIUM;
+    world.timeStopFieldWWorld[ti] = t.wBlock * BLOCK_SIZE_MEDIUM;
+    world.timeStopFieldHWorld[ti] = t.hBlock * BLOCK_SIZE_MEDIUM;
+  }
+  markTimeStopFieldsDirty();
 
   // Invalidate the liquid body render cache whenever zones are (re)loaded.
   markLiquidBodiesDirty();

@@ -115,6 +115,10 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
   }
 
+  for (const z of (room.timeStopFields ?? [])) {
+    clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
+  }
+
   for (const b of (room.crumbleBlocks ?? [])) {
     clampZoneToDimensions(b, room.widthBlocks, room.heightBlocks);
   }
@@ -297,6 +301,12 @@ export function applyEdgeResize(
 
     // Shift lava zones
     for (const z of (room.lavaZones ?? [])) {
+      z.xBlock += shiftX;
+      z.yBlock += shiftY;
+    }
+
+    // Shift TimeStop Field tiles
+    for (const z of (room.timeStopFields ?? [])) {
       z.xBlock += shiftX;
       z.yBlock += shiftY;
     }

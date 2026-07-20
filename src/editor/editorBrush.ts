@@ -11,6 +11,7 @@ import {
   isCellOccupiedByTile,
   isCellCoveredByWaterZone,
   isCellCoveredByLavaZone,
+  isCellCoveredByTimeStopField,
   isInsideRoom,
 } from './editorHitTest';
 
@@ -20,8 +21,11 @@ import {
  * blockers). `'water'`/`'lava'` are editor fill-occupancy semantics for
  * liquid painting: existing water AND existing lava both act as flood-fill
  * boundaries, matching neither runtime solidity nor `isCellOccupiedByTile`.
+ * `'timeStop'` is the analogous policy for the independent TimeStop Field
+ * layer: existing TimeStop tiles (and solid tiles) act as flood-fill
+ * boundaries.
  */
-export type FillKind = 'tile' | 'water' | 'lava';
+export type FillKind = 'tile' | 'water' | 'lava' | 'timeStop';
 
 export interface BrushCell {
   x: number;
@@ -116,6 +120,9 @@ export function getBrushCells(
  */
 export function getFillCellClass(room: EditorRoomData, x: number, y: number, fillKind: FillKind): boolean {
   if (fillKind === 'tile') return isCellOccupiedByTile(room, x, y);
+  if (fillKind === 'timeStop') {
+    return isCellOccupiedByTile(room, x, y) || isCellCoveredByTimeStopField(room, x, y);
+  }
   return isCellOccupiedByTile(room, x, y)
     || isCellCoveredByWaterZone(room, x, y)
     || isCellCoveredByLavaZone(room, x, y);

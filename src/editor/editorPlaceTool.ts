@@ -33,6 +33,7 @@ import {
   canPlacePhantasmalTileAt,
   isCellCoveredByWaterZone,
   isCellCoveredByLavaZone,
+  isCellCoveredByTimeStopField,
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
@@ -101,12 +102,15 @@ export function placeAtCursor(state: EditorState): void {
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
+    item.category === 'timeStop' ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   if (isBrushable && state.brushMode === 'fill') {
     let fillKind: FillKind = 'tile';
     if (item.category === 'liquids') {
       fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
+    } else if (item.category === 'timeStop') {
+      fillKind = 'timeStop';
     }
     const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
     for (const cell of cells) {
@@ -232,6 +236,19 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       room.lavaZones.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     }
     markLiquidBodiesDirty();
+    return;
+  }
+
+  // ── TimeStop Field layer ────────────────────────────────────────────────
+  // Non-solid paintable 1×1 tiles, independent of the water/lava layer.
+  // Painting the same cell twice is idempotent — no duplicates created.
+  if (item.category === 'timeStop') {
+    const wBlock = item.defaultWidthBlocks ?? 1;
+    const hBlock = item.defaultHeightBlocks ?? 1;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
+    if (isCellCoveredByTimeStopField(room, bx, by)) return;
+    if (!room.timeStopFields) room.timeStopFields = [];
+    room.timeStopFields.push({ uid: allocateUid(state), xBlock: bx, yBlock: by, wBlock, hBlock });
     return;
   }
 

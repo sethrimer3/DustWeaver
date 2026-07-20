@@ -402,6 +402,22 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
     }
   }
 
+  // Check TimeStop Field tiles. Same split-instead-of-remove behaviour as
+  // water/lava zones.
+  const timeStopFields = room.timeStopFields ?? [];
+  for (let i = 0; i < timeStopFields.length; i++) {
+    const zone = timeStopFields[i];
+    if (hitTestZone(zone, bx, by)) {
+      const removedUid = zone.uid;
+      timeStopFields.splice(i, 1);
+      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
+        timeStopFields.push({ uid: allocateUid(state), ...piece });
+      }
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+      return;
+    }
+  }
+
   // Check crumble blocks
   const crumbleBlocks = room.crumbleBlocks ?? [];
   for (let i = 0; i < crumbleBlocks.length; i++) {

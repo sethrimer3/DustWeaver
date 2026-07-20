@@ -163,6 +163,13 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     hBlock: z.hBlock,
   }));
 
+  const timeStopFields: RoomZoneDef[] | undefined = json.timeStopFields?.map(z => ({
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
   const breakableBlocks: RoomBreakableBlockDef[] | undefined = json.breakableBlocks?.map(b => ({
     xBlock: b.xBlock,
     yBlock: b.yBlock,
@@ -238,6 +245,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (springboards && springboards.length > 0) room.springboards = springboards;
   if (waterZones && waterZones.length > 0) room.waterZones = waterZones;
   if (lavaZones && lavaZones.length > 0) room.lavaZones = lavaZones;
+  if (timeStopFields && timeStopFields.length > 0) room.timeStopFields = timeStopFields;
   if (breakableBlocks && breakableBlocks.length > 0) room.breakableBlocks = breakableBlocks;
   if (dustBoostJars && dustBoostJars.length > 0) room.dustBoostJars = dustBoostJars;
   if (fireflyJars && fireflyJars.length > 0) room.fireflyJars = fireflyJars;

@@ -9,6 +9,10 @@ import { NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX } from './pixelMaterials/pixelMateria
 import { createChallengeModeState, type ChallengeModeState } from './challengeMode';
 import type { RuntimeGate } from './gates/gateState';
 import { createShieldWeaveState, type ShieldWeaveState } from './stormweave/shieldWeave';
+import {
+  createTimeStopFieldPlayerState,
+  type TimeStopFieldPlayerState,
+} from './timeStopField/timeStopFieldPlayerState';
 import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
@@ -57,6 +61,11 @@ export const MOMENTUM_TRAIL_MAX_POINTS = 8;
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
   /** Directional Shield Weave collision state, derived from canonical player life. */
   shieldWeave: ShieldWeaveState;
+  /**
+   * Player suspended-momentum + connected-region-membership state for the
+   * TimeStop Field mechanic. See sim/timeStopField/timeStopFieldPlayerState.ts.
+   */
+  timeStopField: TimeStopFieldPlayerState;
   /**
    * Physical-gesture state of the secondary action button (RMB / equivalent),
    * shared by Sword/Shield/Bow Weaves. Owns press/hold/release detection and
@@ -670,6 +679,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     shieldWeave: createShieldWeaveState(),
+    timeStopField: createTimeStopFieldPlayerState(),
     secondaryWeaveGesture: createSecondaryWeaveGestureState(),
     secondaryWeaveHandledCancellationId: 0,
     combatMode: DEFAULT_COMBAT_MODE,

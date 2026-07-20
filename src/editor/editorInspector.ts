@@ -746,6 +746,18 @@ export function updateInspector(
       addField(div, 'hBlock', String(zone.hBlock),
         v => callbacks?.onPropertyChange('lavaZone.hBlock', parseInt(v)));
     }
+  } else if (el.type === 'timeStopField') {
+    const zone = (room.timeStopFields ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('timeStopField.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('timeStopField.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('timeStopField.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('timeStopField.hBlock', parseInt(v)));
+    }
   } else if (el.type === 'crumbleBlock') {
     const block = (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
     if (block) {

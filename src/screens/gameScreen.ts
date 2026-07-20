@@ -158,6 +158,7 @@ import {
   type RoomPreloadAnticipationPorts,
 } from './roomPreloadAnticipationPolicy';
 import { createGameRunTimer } from './gameRunTimer';
+import { releaseTimeStopFieldMomentumIfActive } from '../sim/timeStopField/timeStopFieldPlayerState';
 
 const FIXED_DT_MS = 16.666;
 
@@ -1441,6 +1442,11 @@ export function startGameScreen(
     );
 
     // ── Room transition check ──────────────────────────────────────────────
+    // A TimeStop Field region cannot span two rooms, so a room transition is
+    // treated as an implicit field exit: release any stored momentum into
+    // velocity BEFORE it is captured below as the carried-over transition
+    // velocity, so player-earned momentum is never silently discarded.
+    releaseTimeStopFieldMomentumIfActive(world);
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
 

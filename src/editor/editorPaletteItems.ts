@@ -23,6 +23,7 @@ export const PALETTE_CATEGORIES = [
   'environment',
   'dust',
   'liquids',
+  'timeStop',
   'objects',
   'lighting',
   'ropes',
@@ -42,6 +43,7 @@ export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> 
   environment: 'Environment',
   dust: 'Dust',
   liquids: 'Liquids',
+  timeStop: 'Time Stop',
   objects: 'Objects',
   lighting: 'Lighting',
   ropes: 'Ropes',
@@ -78,6 +80,8 @@ export interface PaletteItem {
   isSunbeamItem?: 1;
   /** 1 if this palette item places a liquid zone (water or lava). */
   isLiquidZoneItem?: 1;
+  /** 1 if this palette item places a TimeStop Field tile (non-solid, connected gameplay volume). */
+  isTimeStopFieldItem?: 1;
   /** 1 if this palette item places a crumble block (collapses on first contact). */
   isCrumbleBlockItem?: 1;
   /** 1 if this palette item places a bounce pad (reflects player velocity). */
@@ -249,6 +253,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── Liquids layer ───────────────────────────────────────────────────────────
   { id: 'water_zone', label: 'Water Zone', category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
   { id: 'lava_zone',  label: 'Lava Zone',  category: 'liquids', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLiquidZoneItem: 1 },
+  // ── TimeStop Field (experimental) ──────────────────────────────────────────
+  // Non-solid, dynamic, translucent field. Adjacent tiles merge into one
+  // connected gameplay region — see sim/timeStopField/.
+  { id: 'timestop_field', label: 'TimeStop Field', category: 'timeStop', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isTimeStopFieldItem: 1 },
   // ── Bounce pads ─────────────────────────────────────────────────────────────
   // Dim = 50 % restitution (small 2×2-pixel core)
   { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },

@@ -18,6 +18,8 @@ export const MAX_SPRINGBOARDS = 16;
 export const MAX_WATER_ZONES = 6000;
 /** Maximum number of lava zones per room (raised to 6000 to support large liquid pools). */
 export const MAX_LAVA_ZONES = 6000;
+/** Maximum number of TimeStop Field tiles per room (matches the liquid-zone scale). */
+export const MAX_TIME_STOP_FIELDS = 6000;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
 /**
@@ -246,6 +248,19 @@ export interface HazardWorldState {
   lavaZoneHWorld: Float32Array;
   /** Invulnerability cooldown ticks after lava damage. */
   lavaInvulnTicks: number;
+
+  // ── TimeStop Field tiles (authoring data only — no runtime momentum/overlap
+  //    state lives here; see world.timeStopField and sim/timeStopField/) ─────
+  /** Number of active TimeStop Field tile placements. */
+  timeStopFieldCount: number;
+  /** Left edge X of each TimeStop Field placement (world units). */
+  timeStopFieldXWorld: Float32Array;
+  /** Top edge Y of each TimeStop Field placement (world units). */
+  timeStopFieldYWorld: Float32Array;
+  /** Width of each TimeStop Field placement (world units). */
+  timeStopFieldWWorld: Float32Array;
+  /** Height of each TimeStop Field placement (world units). */
+  timeStopFieldHWorld: Float32Array;
 
   // ── Breakable blocks ───────────────────────────────────────────────────────
   /** Number of breakable blocks (active + broken). */
@@ -913,6 +928,11 @@ export function createHazardWorldState(): HazardWorldState {
     lavaZoneWWorld:                new Float32Array(MAX_LAVA_ZONES),
     lavaZoneHWorld:                new Float32Array(MAX_LAVA_ZONES),
     lavaInvulnTicks:               0,
+    timeStopFieldCount:            0,
+    timeStopFieldXWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
+    timeStopFieldYWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
+    timeStopFieldWWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
+    timeStopFieldHWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
     breakableBlockCount:           0,
     breakableBlockXWorld:          new Float32Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockYWorld:          new Float32Array(MAX_BREAKABLE_BLOCKS),

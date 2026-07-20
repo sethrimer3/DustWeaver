@@ -189,6 +189,13 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     }
   }
 
+  // Check TimeStop Field tiles
+  for (const z of (room.timeStopFields ?? [])) {
+    if (hitTestZone(z, bx, by)) {
+      return { type: 'timeStopField', uid: z.uid };
+    }
+  }
+
   // Check crumble blocks
   for (const b of (room.crumbleBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) {
@@ -549,6 +556,12 @@ export function getAllElementsInRect(
     if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
         z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
       results.push({ type: 'lavaZone', uid: z.uid });
+    }
+  }
+  for (const z of (room.timeStopFields ?? [])) {
+    if (z.xBlock + z.wBlock > minX && z.xBlock < maxX + 1 &&
+        z.yBlock + z.hBlock > minY && z.yBlock < maxY + 1) {
+      results.push({ type: 'timeStopField', uid: z.uid });
     }
   }
   for (const b of (room.crumbleBlocks ?? [])) {

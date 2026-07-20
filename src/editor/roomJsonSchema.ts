@@ -501,6 +501,7 @@ export interface RoomJsonDef {
   springboards?: RoomJsonSpringboard[];
   waterZones?: RoomJsonZone[];
   lavaZones?: RoomJsonZone[];
+  timeStopFields?: RoomJsonZone[];
   breakableBlocks?: RoomJsonBreakableBlock[];
   crumbleBlocks?: RoomJsonCrumbleBlock[];
   bouncePads?: RoomJsonBouncePad[];

@@ -159,6 +159,14 @@ export function applyPropertyToElement(
       if (prop === 'waterZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
       if (prop === 'waterZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
     }
+  } else if (el.type === 'timeStopField') {
+    const zone = (room.timeStopFields ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      if (prop === 'timeStopField.xBlock' && !isNaN(numVal)) zone.xBlock = numVal;
+      if (prop === 'timeStopField.yBlock' && !isNaN(numVal)) zone.yBlock = numVal;
+      if (prop === 'timeStopField.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
+      if (prop === 'timeStopField.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
+    }
   } else if (el.type === 'zipMoveBlock') {
     const rect = (room.zipMoveBlocks ?? []).find(candidate => candidate.uid === el.uid);
     if (rect && Number.isFinite(numVal)) {
