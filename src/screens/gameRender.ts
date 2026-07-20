@@ -103,6 +103,12 @@ import { renderBackgroundPass, type StagedRoomBgInfo } from './gameRenderBackgro
 import { renderSceneLightingPass } from './gameRenderSceneLighting';
 import { renderTeleportFlash } from '../render/lambdaAnchorRenderer';
 import { renderVoidEdge } from '../render/voidEdgeRenderer';
+import {
+  renderAdjacentRoomsPass,
+  type AdjacentRoomDrawPorts,
+  type AdjacentRoomDrawImpl,
+} from './gameRenderAdjacentRooms';
+import type { ConnectedRoomRenderState } from '../render/adjacent/adjacentRoomView';
 import { getLiquidDebugStats } from '../render/liquidBodyCache';
 import { renderRoomCollectibles } from './gameRenderCollectibles';
 import { renderDeviceOverlay } from './gameRenderDeviceOverlay';
@@ -305,6 +311,17 @@ export interface RenderFrameContext {
 
   /** Dust selection wheel controller — drives the in-canvas radial UI. */
   dustWheel: DustSelectionWheelController;
+
+  /**
+   * Render-only radius-1 connected-room view state ("Render Adjacent Rooms").
+   * Optional and empty by default; when present with views, adjacent rooms are
+   * drawn before the active room's clipped pass. All fields are omitted/empty
+   * when the effective setting is off, so the normal render path is unchanged.
+   */
+  connectedRoomState?: ConnectedRoomRenderState;
+  adjacentRoomDrawPorts?: AdjacentRoomDrawPorts;
+  adjacentRoomDrawImpl?: AdjacentRoomDrawImpl;
+  adjacentMaxChunksPerRoom?: number;
 }
 
 /**
@@ -372,6 +389,34 @@ export function renderFrame(r: RenderFrameContext): void {
     ctx.fillStyle = bgColor;
     ctx.fillRect(roomScreenXPx, roomScreenYPx, roomScreenWidthPx, roomScreenHeightPx);
   }
+
+  // ── Adjacent rooms (render-only radius-1 view, drawn into the void) ───────
+  // Drawn after the black clear and before the active room's passage gradients
+  // and clipped world pass, so neighbours fill the surrounding void while the
+  // active room and player always draw on top. No-ops cheaply (no allocation,
+  // no lookups) when the effective "Render Adjacent Rooms" setting is off.
+  if (
+    r.connectedRoomState !== undefined &&
+    r.connectedRoomState.views.length > 0 &&
+    r.adjacentRoomDrawPorts !== undefined &&
+    r.adjacentRoomDrawImpl !== undefined
+  ) {
+    renderAdjacentRoomsPass({
+      ctx,
+      state: r.connectedRoomState,
+      ox, oy, zoom,
+      vpWPx: virtualWidthPx,
+      vpHPx: virtualHeightPx,
+      maxChunksPerRoom: r.adjacentMaxChunksPerRoom ?? 6,
+      ports: r.adjacentRoomDrawPorts,
+      impl: r.adjacentRoomDrawImpl,
+    });
+  }
+
+  // ── Transition passage gradients (drawn BEFORE room clip) ────────────────
+  // Fills transition opening passages with the authored fade gradient so the
+  // black void in the passage is replaced by a proper depth-darkness effect.
+  renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
 
   // ── Clip rect: room bounds ────────────────────────────────────────────────
   // Always clip to the current room bounds (instant room transitions only).

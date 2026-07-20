@@ -339,6 +339,86 @@ export function prewarmBgChunksForRoom(
 }
 
 /**
+ * Non-destructively draws a NON-ACTIVE room's background block chunks into
+ * `ctx` at a screen offset, clipped to `clip*`. Used by the "Render Adjacent
+ * Rooms" view. Renders visible chunks from the room's own per-room prewarm
+ * `bgCache` into the real ctx without touching the active `_bgChunkCache`
+ * singleton or `_bgCacheRoomRef`.
+ */
+export function drawRoomBgChunksAt(
+  ctx: CanvasRenderingContext2D,
+  room: RoomDef,
+  zoom: number,
+  offsetXPx: number,
+  offsetYPx: number,
+  clipXPx: number,
+  clipYPx: number,
+  clipWPx: number,
+  clipHPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  maxChunks: number,
+): PrewarmChunkResult {
+  const empty: PrewarmChunkResult = { rebuilt: 0, skipped: 0, totalChunks: 0, dirtyChunks: 0 };
+  const blocks = room.backgroundBlocks;
+  if (!blocks || blocks.length === 0) return empty;
+
+  let snap = getSnapshot(room.id);
+  if (snap === undefined) {
+    const fallbackKey = computeRenderStateKey(
+      room.blockTheme ?? null,
+      room.worldNumber ?? 1,
+      'none', 'default', 'false',
+      new Set<string>(),
+      room.widthBlocks,
+      room.heightBlocks,
+      DEFAULT_DIRECTIONAL_BIAS,
+      DEFAULT_SIDE_EXPOSURE_STRENGTH,
+      DEFAULT_MINIMUM_WALL_LIGHT,
+      DEFAULT_FALLOFF_POWER,
+      DEFAULT_BACKGROUND_LIGHT_SPILL,
+      DEFAULT_SOLID_LIGHT_SOFTNESS,
+    );
+    snap = getOrCreateSnapshot(room.id, fallbackKey);
+  }
+  if (snap.bgCache === null) snap.bgCache = new _RCC(true);
+  const tempCache = snap.bgCache;
+  tempCache.activateContentOwnership(
+    createChunkCacheOwnershipKey(room.id, snap.renderStateKey, zoom),
+  );
+  tempCache.setMaxChunksPerFrame(maxChunks);
+
+  const buildFn = _makeBgBuildChunkFn(blocks, room.blockTheme ?? null, room.worldNumber ?? 0, zoom);
+
+  ctx.save();
+  try {
+    ctx.beginPath();
+    ctx.rect(clipXPx, clipYPx, clipWPx, clipHPx);
+    ctx.clip();
+    tempCache.renderVisibleChunks(
+      ctx,
+      room,
+      offsetXPx,
+      offsetYPx,
+      zoom,
+      CELL_SIZE_WORLD,
+      vpWPx,
+      vpHPx,
+      buildFn,
+    );
+  } finally {
+    ctx.restore();
+  }
+
+  return {
+    rebuilt:     tempCache.stats.rebuiltThisFrame,
+    skipped:     tempCache.stats.skippedThisFrame,
+    totalChunks: tempCache.stats.totalChunkCount,
+    dirtyChunks: tempCache.stats.dirtyChunkCount,
+  };
+}
+
+/**
  * Adopts pre-warmed background block chunks when the player enters a room.
  * Injects pre-built canvases into the active `_bgChunkCache` and sets the
  * room reference so the first `renderBackgroundBlocks` call skips the

@@ -718,6 +718,192 @@ export function prewarmWallChunksForRoom(
 }
 
 /**
+ * Non-destructively draws a NON-ACTIVE room's wall chunks into `ctx` at a given
+ * screen offset, clipped to `clip*`. Used by the render-only "Render Adjacent
+ * Rooms" view to draw radius-1 neighbours WITHOUT disturbing the active room's
+ * chunk cache or module state.
+ *
+ * Mirrors `prewarmWallChunksForRoom`'s save/restore discipline exactly, but
+ * renders visible chunks into the real `ctx` (inside a clip rect) instead of the
+ * off-screen prewarm dummy context. It reuses the SAME per-room prewarm cache
+ * keyed by room id + render-state key + scale, so warmed chunks are shared with
+ * the prewarm scheduler and never rebuilt merely to draw a neighbour. The active
+ * `_chunkCache` singleton is never touched.
+ *
+ * Callers must set up their own camera offset so all room origins derive from a
+ * single camera offset (no independent rounding → no one-pixel seams).
+ */
+export function drawRoomWallChunksAt(
+  ctx: CanvasRenderingContext2D,
+  roomId: string,
+  pctx: WallPrewarmContext,
+  offsetXPx: number,
+  offsetYPx: number,
+  clipXPx: number,
+  clipYPx: number,
+  clipWPx: number,
+  clipHPx: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+  blockSizePx: number,
+  maxChunks: number,
+): PrewarmChunkResult {
+  const renderStateKey = computeRenderStateKey(
+    pctx.blockTheme,
+    pctx.worldNumber,
+    pctx.lightingEffect,
+    pctx.ambientDirection,
+    pctx.seamBlending,
+    pctx.blockerKeys,
+    pctx.roomWidthBlocks,
+    pctx.roomHeightBlocks,
+    pctx.directionalBias,
+    pctx.sideExposureStrength,
+    pctx.minimumWallLight,
+    pctx.falloffPower,
+    pctx.backgroundLightSpill,
+    pctx.solidLightSoftness,
+  );
+
+  // Save active room state (identical set to prewarmWallChunksForRoom).
+  const savedSprites             = _sprites;
+  const savedWorldNumber         = _activeWorldNumber;
+  const savedBlockTheme          = _activeBlockTheme;
+  const savedLightingEffect      = _activeLightingEffect;
+  const savedAmbientDirection    = _activeAmbientDirection;
+  const savedRoomWidthBlocks     = _activeRoomWidthBlocks;
+  const savedRoomHeightBlocks    = _activeRoomHeightBlocks;
+  const savedAmbientBlockerKeys  = _activeAmbientBlockerKeys;
+  const savedAmbientBlockerSig   = _activeAmbientBlockerSig;
+  const savedDirectionalBias     = _activeDirectionalBias;
+  const savedSideExposureStrength = _activeSideExposureStrength;
+  const savedMinimumWallLight    = _activeMinimumWallLight;
+  const savedFalloffPower        = _activeFalloffPower;
+  const savedBackgroundLightSpill = _activeBackgroundLightSpill;
+  const savedSolidLightSoftness  = _activeSolidLightSoftness;
+  const savedSeamBlending        = _activeSeamBlending;
+  const savedSeamBlendDebug      = _seamBlendDebug;
+  const savedVpWPx               = _vpWPx;
+  const savedVpHPx               = _vpHPx;
+  const savedLayout              = getCurrentWallLayout();
+
+  ctx.save();
+  try {
+    ctx.beginPath();
+    ctx.rect(clipXPx, clipYPx, clipWPx, clipHPx);
+    ctx.clip();
+
+    if (pctx.blockTheme !== null) {
+      _activeBlockTheme  = pctx.blockTheme;
+    } else {
+      _activeWorldNumber = pctx.worldNumber;
+      _sprites           = getBlockSpriteSet(pctx.worldNumber);
+      _activeBlockTheme  = null;
+    }
+    _activeLightingEffect      = pctx.lightingEffect;
+    _activeAmbientDirection    = pctx.ambientDirection;
+    _activeRoomWidthBlocks     = pctx.roomWidthBlocks;
+    _activeRoomHeightBlocks    = pctx.roomHeightBlocks;
+    _activeAmbientBlockerKeys  = pctx.blockerKeys;
+    if (pctx.blockerKeys.size === 0) {
+      _activeAmbientBlockerSig = '';
+    } else {
+      const arr: string[] = [];
+      for (const k of pctx.blockerKeys) arr.push(k);
+      arr.sort();
+      _activeAmbientBlockerSig = arr.join(';');
+    }
+    _activeDirectionalBias      = pctx.directionalBias;
+    _activeSideExposureStrength = pctx.sideExposureStrength;
+    _activeMinimumWallLight     = pctx.minimumWallLight;
+    _activeFalloffPower         = pctx.falloffPower;
+    _activeBackgroundLightSpill = pctx.backgroundLightSpill;
+    _activeSolidLightSoftness   = pctx.solidLightSoftness;
+    _activeSeamBlending         = pctx.seamBlending;
+    _seamBlendDebug             = false;
+    _vpWPx = vpWPx;
+    _vpHPx = vpHPx;
+
+    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
+    tempCache.activateContentOwnership(
+      createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
+    );
+    tempCache.setMaxChunksPerFrame(maxChunks);
+
+    const existingLayout = getPrewarmWallLayout(roomId);
+    if (existingLayout !== undefined) {
+      setPrebuiltWallLayout(existingLayout);
+    }
+    const wallLayout = getWallLayoutCache(pctx.wallSnapshot, blockSizePx, pctx.roomWidthBlocks, pctx.roomHeightBlocks);
+    setPrewarmWallLayout(roomId, wallLayout);
+
+    _populateCoveredBy2x2Keys(wallLayout.solid2x2Map, blockSizePx, _activeBlockTheme);
+    const ambientDepths = (_activeLightingEffect !== 'DarkRoom' && _activeLightingEffect !== 'FullyLit')
+      ? _getAmbientDepths(wallLayout)
+      : null;
+
+    const walls = pctx.wallSnapshot;
+
+    // Render visible chunks into the REAL ctx at the neighbour's screen offset.
+    tempCache.renderVisibleChunks(
+      ctx,
+      wallLayout,
+      offsetXPx,
+      offsetYPx,
+      scalePx,
+      blockSizePx,
+      vpWPx,
+      vpHPx,
+      (chunkCtx, chunkOffX, chunkOffY, s, bsz, colMin, rowMin, colMax, rowMax) =>
+        _doRenderWallTilesDirect(
+          chunkCtx,
+          walls,
+          wallLayout,
+          ambientDepths,
+          chunkOffX,
+          chunkOffY,
+          s,
+          bsz,
+          colMin,
+          colMax,
+          rowMin,
+          rowMax,
+        ),
+    );
+
+    return {
+      rebuilt:     tempCache.stats.rebuiltThisFrame,
+      skipped:     tempCache.stats.skippedThisFrame,
+      totalChunks: tempCache.stats.totalChunkCount,
+      dirtyChunks: tempCache.stats.dirtyChunkCount,
+    };
+  } finally {
+    _sprites               = savedSprites;
+    _activeWorldNumber     = savedWorldNumber;
+    _activeBlockTheme      = savedBlockTheme;
+    _activeLightingEffect  = savedLightingEffect;
+    _activeAmbientDirection = savedAmbientDirection;
+    _activeRoomWidthBlocks = savedRoomWidthBlocks;
+    _activeRoomHeightBlocks = savedRoomHeightBlocks;
+    _activeAmbientBlockerKeys = savedAmbientBlockerKeys;
+    _activeAmbientBlockerSig  = savedAmbientBlockerSig;
+    _activeDirectionalBias    = savedDirectionalBias;
+    _activeSideExposureStrength = savedSideExposureStrength;
+    _activeMinimumWallLight   = savedMinimumWallLight;
+    _activeFalloffPower       = savedFalloffPower;
+    _activeBackgroundLightSpill = savedBackgroundLightSpill;
+    _activeSolidLightSoftness = savedSolidLightSoftness;
+    _activeSeamBlending       = savedSeamBlending;
+    _seamBlendDebug           = savedSeamBlendDebug;
+    _vpWPx                    = savedVpWPx;
+    _vpHPx                    = savedVpHPx;
+    if (savedLayout !== null) setPrebuiltWallLayout(savedLayout);
+    ctx.restore();
+  }
+}
+
+/**
  * Adopts pre-warmed wall chunks for a room the player is about to enter.
  *
  * Installs the pre-built `CachedWallLayout` into the module-level layout

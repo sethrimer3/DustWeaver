@@ -69,6 +69,12 @@ Important files and roles:
   - `adjacentEntityFade.ts`: gameplay-clock-timed entity crossfade controller (incoming 0→1 / outgoing ghost 1→0, player excluded, pause-safe, rapid-replacement-safe).
   - `adjacentRoomView.ts`: `AdjacentRoomView`/`ConnectedRoomRenderState` types, adjacent-room cache key, and frozen-resident `builtForRoomId` pairing check.
   - Setting: `getEffectiveRenderAdjacentRooms()` in `src/ui/renderSettings.ts` (`cameraAlwaysCentered && renderAdjacentRooms`).
+- Adjacent-room live integration:
+  - `src/screens/adjacentRoomRenderCoordinator.ts`: owns the live `ConnectedRoomRenderState` — caches the layout (rebuild only on active-room / setting / invalidate change), resolves each neighbour's terrain source (valid resident world → baked/cache template → async fallback), rejects wrong-`builtForRoomId` residents, and requests async loads. Node-tested.
+  - `src/screens/gameRenderAdjacentRooms.ts`: pure draw-pass orchestration (viewport cull, deterministic order, single-camera-offset placement). Imports only types; canvas primitives injected. Node-tested.
+  - `src/screens/gameRenderAdjacentRoomsImpl.ts`: production binding of the draw primitives (imports the renderer graph; not Node-safe).
+  - `src/render/walls/blockSpriteRenderer.ts` `drawRoomWallChunksAt` / `backgroundBlockRenderer.ts` `drawRoomBgChunksAt`: non-destructive per-room chunk draw into a real ctx at an offset (mirrors the prewarm save/restore; never touches the active singleton).
+  - Wired in `gameScreen.ts` (coordinator + draw ports constructed once; `connectedRoomState` threaded into `RenderFrameContext`) and drawn in `gameRender.ts` before the active-room clip. Entire path is gated on the effective setting → off-path unchanged.
 
 ## Room and world loading
 
