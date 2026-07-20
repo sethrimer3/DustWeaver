@@ -72,6 +72,25 @@ export const TRAIL_FADE_POWER = 1.4;
 /** Overall alpha multiplier applied to every trail. */
 export const TRAIL_ALPHA = 0.92;
 
+/** Speed needed to start a trail, in world units per second. */
+export const TRAIL_START_SPEED_WORLD = 30.0;
+
+/** Lower stop threshold keeps trail activation stable around the boundary. */
+export const TRAIL_STOP_SPEED_WORLD = 18.0;
+
+const TRAIL_START_SPEED_SQ = TRAIL_START_SPEED_WORLD * TRAIL_START_SPEED_WORLD;
+const TRAIL_STOP_SPEED_SQ = TRAIL_STOP_SPEED_WORLD * TRAIL_STOP_SPEED_WORLD;
+
+/** Pure motion gate kept exported for focused regression coverage. */
+export function isParticleTrailMotionActive(
+  wasActive: boolean,
+  velocityXWorld: number,
+  velocityYWorld: number,
+): boolean {
+  const speedSq = velocityXWorld * velocityXWorld + velocityYWorld * velocityYWorld;
+  return speedSq >= (wasActive ? TRAIL_STOP_SPEED_SQ : TRAIL_START_SPEED_SQ);
+}
+
 // ── Internal buffer sizes ─────────────────────────────────────────────────────
 
 /** Precomputed squared sample distance — avoids sqrt in the hot update loop. */
@@ -318,10 +337,16 @@ export class ParticleTrailRenderer {
    *    position; on exit the ring buffer is cleared immediately.
    */
   update(snapshot: ParticleSnapshot): void {
-    const { particleCount, isAliveFlag, behaviorMode, positionXWorld, positionYWorld } = snapshot;
+    const {
+      particleCount, isAliveFlag, behaviorMode,
+      positionXWorld, positionYWorld, velocityXWorld, velocityYWorld,
+    } = snapshot;
 
     for (let i = 0; i < particleCount; i++) {
-      const shouldHaveTrail = isAliveFlag[i] === 1 && behaviorMode[i] === 1;
+      const wasActive = this.trailActiveFlag[i] !== 0;
+      const shouldHaveTrail = isAliveFlag[i] === 1
+        && behaviorMode[i] === 1
+        && isParticleTrailMotionActive(wasActive, velocityXWorld[i], velocityYWorld[i]);
 
       if (!shouldHaveTrail) {
         // Clear trail on transition out of attack mode.

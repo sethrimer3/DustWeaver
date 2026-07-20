@@ -12,8 +12,8 @@
  * All text uses Cinzel, Regular 400.
  */
 
-import { MENU_ANIMATION_ASSETS } from './animatedAssetPaths';
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
+import { getPreloadedMenuAnimationFrames, MENU_ANIMATION_FPS } from './menuAnimationFrames';
 
 export interface DeathScreenCallbacks {
   onReturnToLastSave: () => void;
@@ -24,9 +24,11 @@ export function showDeathScreen(
   root: HTMLElement,
   callbacks: DeathScreenCallbacks,
 ): () => void {
+  const menuFrames = getPreloadedMenuAnimationFrames();
   const animatedBackground = createMenuAnimatedBackground({
-    normalUrl: MENU_ANIMATION_ASSETS.blurredUrl,
-    blurredUrl: MENU_ANIMATION_ASSETS.blurredUrl,
+    normalFrames: menuFrames.blurred,
+    blurredFrames: menuFrames.blurred,
+    fps: MENU_ANIMATION_FPS,
     opacity: 0.5,
     zIndex: 1,
   });

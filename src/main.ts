@@ -16,6 +16,10 @@ import { createExportProgressModal } from './editor/editorExportProgressModal';
 import { installSpriteAtlasDiagnostics } from './render/atlases/spriteAtlasLoader';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
 import { installSpriteAtlasDevGlobals } from './render/atlases/spriteAtlasConfig';
+import {
+  preloadMenuAnimationFrames,
+  type MenuAnimationLoadProgress,
+} from './ui/menuAnimationFrames';
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 const uiRoot = document.getElementById('ui-root') as HTMLDivElement;
@@ -27,6 +31,52 @@ if (!canvas || !uiRoot) {
 }
 
 installSpriteAtlasDevGlobals();
+
+function createStartupLoadingScreen(): {
+  update: (progress: MenuAnimationLoadProgress) => void;
+  showError: (error: unknown) => void;
+  destroy: () => void;
+} {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:10000', 'display:flex',
+    'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'gap:1rem', 'background:#050403', 'color:#d4a84b',
+    "font-family:'Cinzel',serif", 'letter-spacing:0.12em',
+  ].join(';');
+
+  const title = document.createElement('div');
+  title.textContent = 'DustWeaver';
+  title.style.cssText = 'font-size:clamp(2rem,6vw,4.5rem);text-transform:uppercase;text-shadow:0 0 40px rgba(212,168,75,.35)';
+
+  const status = document.createElement('div');
+  status.style.cssText = 'font-size:.9rem;color:rgba(212,168,75,.8);text-transform:uppercase';
+
+  const track = document.createElement('div');
+  track.style.cssText = 'width:min(560px,75vw);height:4px;background:rgba(212,168,75,.15);overflow:hidden';
+  const fill = document.createElement('div');
+  fill.style.cssText = 'height:100%;width:0;background:#d4a84b;transition:width .1s linear;box-shadow:0 0 16px rgba(212,168,75,.7)';
+  track.appendChild(fill);
+  overlay.append(title, status, track);
+  uiRoot.appendChild(overlay);
+
+  return {
+    update(progress): void {
+      const label = progress.phase === 'loading' ? 'Loading animation frames' : 'Preparing animation frames';
+      status.textContent = `${label} ${progress.completed} / ${progress.total}`;
+      fill.style.width = `${progress.total === 0 ? 0 : (progress.completed / progress.total) * 100}%`;
+    },
+    showError(error): void {
+      const message = error instanceof Error ? error.message : String(error);
+      status.textContent = `Startup failed: ${message}`;
+      status.style.color = '#ff8a73';
+      track.style.display = 'none';
+    },
+    destroy(): void {
+      overlay.remove();
+    },
+  };
+}
 
 /**
  * Initialises the official campaign room registry, then captures a snapshot
@@ -140,15 +190,28 @@ async function initAndStart(): Promise<void> {
   // Used when: not Electron, file cache unavailable, or cache init failed.
   // Also used by the editor (which calls initRoomRegistry() directly via
   // editorController and never reaches this code path).
-  initRoomRegistry().then(() => {
+  try {
+    await initRoomRegistry();
     captureMainCampaignSnapshot();
     startGame(canvas, uiRoot);
-  }).catch((err) => {
+  } catch (err) {
     console.error('Failed to initialize room registry:', err);
     captureMainCampaignSnapshot();
     // Start anyway — some rooms may have loaded
     startGame(canvas, uiRoot);
-  });
+  }
 }
 
-void initAndStart();
+async function boot(): Promise<void> {
+  const loadingScreen = createStartupLoadingScreen();
+  try {
+    await preloadMenuAnimationFrames(progress => loadingScreen.update(progress));
+    await initAndStart();
+    loadingScreen.destroy();
+  } catch (error) {
+    console.error('[main] Failed to prepare menu animation:', error);
+    loadingScreen.showError(error);
+  }
+}
+
+void boot();
