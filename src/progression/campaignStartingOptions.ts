@@ -12,11 +12,10 @@
 
 import { PlayerProgress } from './playerProgress';
 import { CampaignSpawnData } from '../levels/campaignSchema';
-import { unlockDustType, unlockActiveWeave, unlockPassiveTechnique } from './unlocks';
+import { unlockDustType, unlockActiveWeave } from './unlocks';
 import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { expandLegacyWeaveId } from './weaveMigration';
-import { PASSIVE_TECHNIQUE_DEFINITIONS, PassiveTechniqueId } from './passiveTechniques';
 import { normalizeMoteCount } from '../sim/playerMoteLife';
 import { isEquippableParticleKind } from '../sim/particles/kinds';
 import { getUnlockedDustKindsInCanonicalOrder } from '../sim/weaves/dustWheelOptions';
@@ -76,11 +75,6 @@ export function applyCampaignStartingOptions(
     }
   }
 
-  if (Array.isArray(spawn.startingPassives)) {
-    for (const passiveId of spawn.startingPassives) {
-      if (PASSIVE_TECHNIQUE_DEFINITIONS.has(passiveId as PassiveTechniqueId)) {
-        unlockPassiveTechnique(progress, passiveId as PassiveTechniqueId);
-      }
-    }
-  }
+  // `startingPassives` may still be present in older campaign files. It is
+  // intentionally ignored: Cycle was retired and replaced by Storm Weave.
 }
