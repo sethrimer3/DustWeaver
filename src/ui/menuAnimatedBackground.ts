@@ -27,7 +27,7 @@ export function createMenuAnimatedBackground(options: MenuAnimatedBackgroundOpti
   let activeFrames = options.normalFrames;
   let animationFrameId = 0;
   let destroyed = false;
-  const startedAt = performance.now();
+  let startedAt: number | null = null;
   const frameDurationMs = 1000 / (options.fps ?? 30);
 
   canvas.style.cssText = [
@@ -59,6 +59,7 @@ export function createMenuAnimatedBackground(options: MenuAnimatedBackgroundOpti
 
   function render(now: number): void {
     if (destroyed) return;
+    startedAt ??= now;
     resizeBackingStore();
     const frameIndex = Math.floor((now - startedAt) / frameDurationMs) % activeFrames.length;
     drawCover(activeFrames[frameIndex]);
