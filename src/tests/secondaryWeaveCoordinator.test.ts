@@ -520,21 +520,8 @@ test('cancellation while the button is still held mid-charge aborts the bow char
   assert.equal(world.arrowCount, 0, 'no arrow must fire purely from a cancelled charge');
 });
 
-/**
- * By-design nuance (see the coordinator's own `awaitingNeutral` doc comment):
- * once a pending Bow release has legitimately latched via a NORMAL release
- * event (button physically let go, sword still finishing its swipe), the
- * gesture settling to Idle on the next tick must NOT be treated as a cancel
- * and must NOT drop that pending release — otherwise every ordinary
- * quick-release-during-swipe interaction (already covered by the
- * "sword+bow: quick release during the swipe" test above) would silently
- * eat the player's arrow. `cancelSecondaryWeaveGesture` only sets
- * `awaitingNeutral = true` when the button is still PHYSICALLY held at
- * cancel time (see secondaryWeaveGesture.ts) — after a real release the flag
- * is false, so calling cancel again post-release is a correct no-op here,
- * not a bug. This test documents that intentional behavior explicitly.
- */
-test('a cancel call issued AFTER a normal release does not retroactively drop an already-latched pending bow release (by design)', () => {
+/** Explicit cancellation is authoritative even if a normal release already latched a deferred shot. */
+test('a modal/teardown cancellation after normal release clears an already-latched pending bow release', () => {
   const { world, player } = makeFixture(6);
   world.hasSwordWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
@@ -547,8 +534,8 @@ test('a cancel call issued AFTER a normal release does not retroactively drop an
 
   cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
   applyPlayerWeaveCombat(world);
-  assert.equal(world.newBowPendingReleaseFlag, 1, 'a cancel call after the button was already released must not retroactively cancel the legitimately-latched pending arrow');
+  assert.equal(world.newBowPendingReleaseFlag, 0, 'explicit cancellation must clear a pending arrow even after physical release');
 
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) idleTick(world);
-  assert.equal(world.arrowCount, 1, 'the legitimately-queued arrow must still fire once the sword finishes');
+  assert.equal(world.arrowCount, 0, 'a cancelled pending arrow must never fire later');
 });

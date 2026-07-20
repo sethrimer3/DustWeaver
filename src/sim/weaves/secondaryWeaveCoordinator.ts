@@ -56,6 +56,7 @@ export function resetSecondaryWeaveCoordinatorState(world: WorldState): void {
   resetNewSwordState(world);
   resetNewBowState(world);
   world.shieldWeaveIndependentActiveFlag = 0;
+  world.secondaryWeaveHandledCancellationId = world.secondaryWeaveGesture.cancellationId;
 }
 
 /**
@@ -75,15 +76,11 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
   // ── Cancellation: gesture forced back to Idle mid-hold (pause/dialogue/
   // blur/dust-wheel/death/room-transition/grapple-consume — see
   // secondaryWeaveGesture.ts) ────────────────────────────────────────────
-  // `awaitingNeutral` is the reliable signal here: it is set true ONLY by
-  // `cancelSecondaryWeaveGesture` / `markSecondaryWeaveGestureConsumedByOtherSystem`
-  // when the button was still held at the moment of cancellation, and it is
-  // explicitly false again after a NORMAL release-then-settle-to-neutral
-  // sequence (see tickSecondaryWeaveGesture's steady-neutral branch). This
-  // lets us tell a real cancel apart from the ordinary Idle a gesture
-  // reaches one tick after its own release event — which must NOT abort an
-  // in-progress Sword swipe or drop a latched pending Bow release.
-  if (gesture.phase === SecondaryWeaveGesturePhase.Idle && gesture.awaitingNeutral) {
+  // The monotonic cancellation id distinguishes an explicit cancellation
+  // from the ordinary Idle state reached after release. It also remains
+  // observable when cancellation happens after a pending Bow shot latched.
+  if (world.secondaryWeaveHandledCancellationId !== gesture.cancellationId) {
+    world.secondaryWeaveHandledCancellationId = gesture.cancellationId;
     if (world.newSwordActiveFlag === 1) resetSwordOnly(world);
     if (world.newBowChargingFlag === 1) cancelNewBowCharge(world);
     if (world.newBowPendingReleaseFlag === 1) clearPendingBowRelease(world);

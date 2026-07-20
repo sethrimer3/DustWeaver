@@ -69,7 +69,7 @@ export function sampleBowTrajectory(
 
   let x = startXWorld;
   let y = startYWorld;
-  let vx = aimDirXWorld * speed;
+  const vx = aimDirXWorld * speed;
   let vy = aimDirYWorld * speed;
 
   outXWorld[0] = x;

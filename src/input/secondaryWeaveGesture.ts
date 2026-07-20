@@ -68,6 +68,8 @@ export interface SecondaryWeaveGestureState {
    * new gesture can begin, even though it may still read as held.
    */
   awaitingNeutral: boolean;
+  /** Monotonic signal incremented by every explicit cancellation, including after release. */
+  cancellationId: number;
 
   pressAimXWorld: number;
   pressAimYWorld: number;
@@ -86,6 +88,7 @@ export function createSecondaryWeaveGestureState(): SecondaryWeaveGestureState {
     releaseEventFlag: false,
     consumedByOtherSystem: false,
     awaitingNeutral: false,
+    cancellationId: 0,
     pressAimXWorld: 0,
     pressAimYWorld: 0,
     holdAimXWorld: 0,
@@ -204,4 +207,5 @@ export function cancelSecondaryWeaveGesture(state: SecondaryWeaveGestureState): 
   state.consumedByOtherSystem = false;
   state.phase = SecondaryWeaveGesturePhase.Idle;
   state.awaitingNeutral = state.isPhysicallyHeld;
+  state.cancellationId += 1;
 }

@@ -65,6 +65,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * applyPlayerWeaveCombat(). Not yet consumed by weaveCombat.ts (stage 3).
    */
   secondaryWeaveGesture: SecondaryWeaveGestureState;
+  secondaryWeaveHandledCancellationId: number;
   /** Temporary, instance-local state for the currently loaded room's challenge elements. */
   challengeMode: ChallengeModeState;
   gates: RuntimeGate[];
@@ -670,6 +671,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     shieldWeave: createShieldWeaveState(),
     secondaryWeaveGesture: createSecondaryWeaveGestureState(),
+    secondaryWeaveHandledCancellationId: 0,
     combatMode: DEFAULT_COMBAT_MODE,
     challengeMode: createChallengeModeState(),
     gates: [],
