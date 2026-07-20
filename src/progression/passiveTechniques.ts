@@ -1,57 +1,53 @@
 /**
- * Passive Techniques — abilities that are always active once unlocked.
+ * Legacy passive-technique identifiers retained for save/campaign compatibility.
  *
- * Passive techniques are a SEPARATE category from active weaves.
- * They are NOT assigned to left-click or right-click slots.
- * They do NOT appear in the weave equip UI.
- * Once unlocked, they are always active (no toggle required).
- *
- * Example: Cycle — owned dust particles orbit and swirl around the player.
+ * Cycle was retired when its dust-attraction/orbit behavior became the Storm
+ * Weave. It must not be offered by the editor or applied to player progression.
+ * The legacy registry entry remains only so older campaign files containing
+ * `startingPassives: ['cycle']` continue to validate and load.
  */
 
-// ---- Passive Technique IDs -------------------------------------------------
+// ---- Legacy Passive Technique IDs -------------------------------------------
 
-/** Unique identifiers for each passive technique. */
+/** Legacy identifiers accepted while reading older campaign data. */
 export type PassiveTechniqueId = 'cycle';
 
-/** Registry of all passive technique IDs for iteration. */
-export const ALL_PASSIVE_TECHNIQUE_IDS: readonly PassiveTechniqueId[] = ['cycle'];
+/**
+ * Passive techniques currently available to players or campaign authors.
+ * Empty because Cycle was replaced by the Storm Weave.
+ */
+export const ALL_PASSIVE_TECHNIQUE_IDS: readonly PassiveTechniqueId[] = [];
 
-// ---- Passive Technique Definition ------------------------------------------
+// ---- Legacy Definition -------------------------------------------------------
 
 export interface PassiveTechniqueDefinition {
-  /** Unique identifier. */
+  /** Legacy identifier. */
   id: PassiveTechniqueId;
-  /** Display name for UI. */
+  /** Display name retained for diagnostics and old data inspection. */
   displayName: string;
-  /** Short description of what this technique does. */
+  /** Explanation of the retired identifier. */
   description: string;
 }
 
-/** All passive technique definitions. */
+/**
+ * Legacy definitions accepted by campaign validation only. These entries are
+ * deliberately excluded from ALL_PASSIVE_TECHNIQUE_IDS and are never granted.
+ */
 export const PASSIVE_TECHNIQUE_DEFINITIONS: ReadonlyMap<PassiveTechniqueId, PassiveTechniqueDefinition> = new Map([
   ['cycle', {
     id: 'cycle',
-    displayName: 'Cycle',
-    description: 'Owned dust particles are attracted toward you and swirl in orbit around your body.',
+    displayName: 'Cycle (Deprecated)',
+    description: 'Deprecated legacy passive. Storm Weave now provides dust attraction and orbit behavior.',
   }],
 ]);
 
-// ---- Helpers ---------------------------------------------------------------
+// ---- Helpers ----------------------------------------------------------------
 
-/** Returns the definition for a given passive technique ID. */
+/** Returns the legacy definition for a passive-technique identifier. */
 export function getPassiveTechniqueDefinition(id: PassiveTechniqueId): PassiveTechniqueDefinition {
   return PASSIVE_TECHNIQUE_DEFINITIONS.get(id) ?? {
     id,
     displayName: 'Unknown',
     description: 'Unknown passive technique.',
   };
-}
-
-/** Returns true if the given technique ID is unlocked in the provided set. */
-export function isPassiveTechniqueUnlocked(
-  unlockedTechniques: readonly PassiveTechniqueId[],
-  id: PassiveTechniqueId,
-): boolean {
-  return unlockedTechniques.indexOf(id) !== -1;
 }

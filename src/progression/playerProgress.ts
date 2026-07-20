@@ -2,7 +2,7 @@
  * Player progression state — level, dust slots, loadout, and world progress.
  *
  * Cleanly separates:
- *   - Passive techniques (e.g., Cycle) — always active once unlocked
+ *   - Legacy passive-technique flags retained only for save compatibility
  *   - Player dust types (Golden, Ice, Nature, Void, Light) — unlocked independently
  *   - Active weaves (e.g., Spire, Aegis) — bound to LMB/RMB
  *   - Dust containers — each grants 4 capacity; different dust types cost different amounts
@@ -77,7 +77,10 @@ export interface PlayerProgress {
 
   // ---- Progression system fields (added for early-game rework) ----
 
-  /** Passive techniques the player has unlocked (e.g., 'cycle'). */
+  /**
+   * Deprecated passive-technique IDs retained only so older saves can be read
+   * without a destructive migration. New progression code never grants them.
+   */
   unlockedPassiveTechniques: PassiveTechniqueId[];
   /** Active weave IDs the player has unlocked and can equip. */
   unlockedActiveWeaves: WeaveId[];
@@ -138,7 +141,7 @@ export interface PlayerProgress {
  *   - 0 dust containers (0 total capacity)
  *   - No unlocked dust types
  *   - No unlocked active weaves
- *   - No unlocked passive techniques
+ *   - No legacy passive-technique flags
  *   - No active weave assignments (LMB/RMB both empty)
  *   - No loadout choices
  *
@@ -161,7 +164,7 @@ export function createDefaultProgress(): PlayerProgress {
     unlockedDustKinds: [],
     isDevModeDustUnlocked: false,
     selectedDustKind: null,
-    // New profile starts with nothing unlocked
+    // Legacy compatibility field; new progression never adds entries.
     unlockedPassiveTechniques: [],
     unlockedActiveWeaves: [],
     dustContainerCount: 0,

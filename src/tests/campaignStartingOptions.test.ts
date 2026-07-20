@@ -185,39 +185,26 @@ describe('applyCampaignStartingOptions — weaves', () => {
   });
 });
 
-// ---- Passives ----------------------------------------------------------------
+// ---- Retired passive compatibility ------------------------------------------
 
-describe('applyCampaignStartingOptions — passives', () => {
-  it('known passive technique ID unlocks the technique', () => {
+describe('applyCampaignStartingOptions — retired passives', () => {
+  it('legacy Cycle configuration is accepted but ignored', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle'] }, 'fresh');
-    assert.ok(p.unlockedPassiveTechniques.includes('cycle'));
+    assert.deepStrictEqual(p.unlockedPassiveTechniques, []);
   });
 
-  it('unknown passive technique ID is silently ignored', () => {
+  it('unknown passive IDs are also ignored by the application layer', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['notAPassive'] }, 'fresh');
-    assert.strictEqual(p.unlockedPassiveTechniques.length, 0);
+    assert.deepStrictEqual(p.unlockedPassiveTechniques, []);
   });
 
-  it('duplicate passive IDs do not create duplicate entries', () => {
-    const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle', 'cycle'] }, 'fresh');
-    const count = p.unlockedPassiveTechniques.filter(t => t === 'cycle').length;
-    assert.strictEqual(count, 1);
-  });
-
-  it('already-unlocked passives remain after applying options', () => {
+  it('existing legacy passive flags are not modified', () => {
     const p = createDefaultProgress();
     p.unlockedPassiveTechniques.push('cycle');
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: ['cycle'] }, 'fresh');
     assert.deepStrictEqual(p.unlockedPassiveTechniques, ['cycle']);
-  });
-
-  it('absent/empty startingPassives does nothing', () => {
-    const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingPassives: [] }, 'fresh');
-    assert.strictEqual(p.unlockedPassiveTechniques.length, 0);
   });
 });
 

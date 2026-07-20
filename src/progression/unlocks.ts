@@ -3,34 +3,15 @@
  *
  * The intended early-game progression:
  *   1. New profile starts empty
- *   2. Unlock Cycle passive technique (dust orbits around the player)
- *   3. Unlock Golden Dust + 2 dust containers (auto-configured, no menu needed)
+ *   2. Unlock Golden Dust + 2 dust containers (auto-configured, no menu needed)
  *
  * After the initial auto-assignment, future customization happens at save tombs.
  */
 
 import { PlayerProgress } from './playerProgress';
-import { PassiveTechniqueId, isPassiveTechniqueUnlocked } from './passiveTechniques';
 import { ParticleKind, isEquippableParticleKind } from '../sim/particles/kinds';
 import { CAPACITY_PER_CONTAINER, getMaxParticlesForDust } from './dustCapacity';
 import { WeaveId } from '../sim/weaves/weaveDefinition';
-
-// ---- Passive technique unlocks ---------------------------------------------
-
-/**
- * Unlocks a passive technique if not already unlocked.
- * Returns true if the technique was newly unlocked.
- */
-export function unlockPassiveTechnique(
-  progress: PlayerProgress,
-  techniqueId: PassiveTechniqueId,
-): boolean {
-  if (isPassiveTechniqueUnlocked(progress.unlockedPassiveTechniques, techniqueId)) {
-    return false;
-  }
-  progress.unlockedPassiveTechniques.push(techniqueId);
-  return true;
-}
 
 // ---- Dust type unlocks -----------------------------------------------------
 
@@ -85,8 +66,10 @@ export function grantDustContainers(
  * Performs the initial early-game auto-assignment:
  *   - Grants 2 dust containers (8 total capacity)
  *   - Unlocks Golden Dust (ParticleKind.Golden)
- *   - Unlocks Cycle passive technique
  *   - Sets hasCompletedEarlyAutoAssignment = true
+ *
+ * Cycle is intentionally not granted here. Its behavior was replaced by the
+ * always-active Storm Weave.
  *
  * This should be called when the player reaches the first unlock trigger.
  * It does NOT require visiting a save tomb.
@@ -102,9 +85,6 @@ export function performEarlyAutoAssignment(progress: PlayerProgress): number {
       progress.dustContainerCount * CAPACITY_PER_CONTAINER,
     );
   }
-
-  // Unlock Cycle passive technique
-  unlockPassiveTechnique(progress, 'cycle');
 
   // Grant 2 dust containers (8 capacity)
   grantDustContainers(progress, 2);
