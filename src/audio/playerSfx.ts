@@ -4,6 +4,13 @@ const BASE = import.meta.env.BASE_URL;
 const PLAYER_SFX_BASE = `${BASE}sfx/PLAYER/`;
 const WIND_FADE_PER_SEC = 2.8;
 const WIND_MAX_VOLUME_SCALE = 0.55;
+/**
+ * Keep the loop audible only while gameplay is actively refreshing it. Web
+ * Audio runs independently of the main thread, so without this failsafe a
+ * frozen/crashed frame loop can leave the last wind gain playing forever.
+ */
+const WIND_STALL_HOLD_SEC = 0.1;
+const WIND_STALL_FADE_SEC = 0.15;
 
 export type PlayerSfxName =
   | 'grapple_impact'
@@ -225,7 +232,16 @@ export class PlayerSfxManager {
     }
 
     const finalGain = clamp01(this.windCurrentGain * getSfxVolume());
-    this.windGain.gain.value = finalGain;
+    const nowSec = this.actx.currentTime;
+    this.windGain.gain.cancelScheduledValues(nowSec);
+    this.windGain.gain.setValueAtTime(finalGain, nowSec);
+    if (finalGain > 0.001) {
+      this.windGain.gain.setValueAtTime(finalGain, nowSec + WIND_STALL_HOLD_SEC);
+      this.windGain.gain.linearRampToValueAtTime(
+        0,
+        nowSec + WIND_STALL_HOLD_SEC + WIND_STALL_FADE_SEC,
+      );
+    }
 
     if (!this.isUnlocked || this.actx.state !== 'running') return;
 
@@ -247,15 +263,22 @@ export class PlayerSfxManager {
     }
   }
 
-  /** Stop all audio and reset wind state.  Call when leaving gameplay. */
-  stop(): void {
+  /** Immediately stop and reset the looping wind effect. */
+  stopWind(): void {
+    const nowSec = this.actx.currentTime;
+    this.windGain.gain.cancelScheduledValues(nowSec);
+    this.windGain.gain.setValueAtTime(0, nowSec);
     if (this.windSource !== null) {
-      try { this.windSource.stop(); } catch { /* ignore */ }
+      try { this.windSource.stop(); } catch { /* ignore if already ended */ }
       this.windSource.disconnect();
       this.windSource = null;
     }
     this.windCurrentGain = 0;
-    this.windGain.gain.value = 0;
+  }
+
+  /** Stop all audio and reset wind state.  Call when leaving gameplay. */
+  stop(): void {
+    this.stopWind();
   }
 
   /**

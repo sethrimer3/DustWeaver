@@ -46,6 +46,17 @@ const SIZE_MAX_PX = 3;
 const MAX_FOOTPRINT_SCALE = 1.8;
 const MAX_SPEED_SCALE = 1.5;
 
+/** Landing dust begins above the ordinary landing-sound threshold. */
+const LANDING_MIN_SPEED_WORLD = 105;
+const LANDING_FULL_SPEED_WORLD = 420;
+const LANDING_BASE_COUNT_BY_QUALITY: Record<'low' | 'med' | 'high', number> = {
+  low: 3,
+  med: 6,
+  high: 10,
+};
+const LANDING_SPEED_MIN_WORLD = 22;
+const LANDING_SPEED_MAX_WORLD = 155;
+
 export class CrackedBlockShatterRenderer {
   private count = 0;
   private readonly xWorld = new Float32Array(MAX_PARTICLES);
@@ -65,6 +76,46 @@ export class CrackedBlockShatterRenderer {
   private nextRandom(): number {
     this.rngState = (this.rngState * 1664525 + 1013904223) >>> 0;
     return (this.rngState >>> 0) / 0xFFFFFFFF;
+  }
+
+  /**
+   * Spawns a short, upward-biased spray from the block beneath a hard landing.
+   * Count and launch speed both increase continuously with impact speed, while
+   * colours come from the supporting block's rendered sprite palette.
+   */
+  notifyLanding(xWorld: number, groundYWorld: number, themeIndex: number, impactSpeedWorld: number): void {
+    if (impactSpeedWorld < LANDING_MIN_SPEED_WORLD) return;
+
+    const quality = getGraphicsQuality();
+    const impactT = Math.min(1, Math.max(0,
+      (impactSpeedWorld - LANDING_MIN_SPEED_WORLD) / (LANDING_FULL_SPEED_WORLD - LANDING_MIN_SPEED_WORLD),
+    ));
+    const spawnCount = Math.max(1, Math.round(LANDING_BASE_COUNT_BY_QUALITY[quality] * (0.45 + impactT * 1.55)));
+    const launchSpeedMax = LANDING_SPEED_MIN_WORLD +
+      (LANDING_SPEED_MAX_WORLD - LANDING_SPEED_MIN_WORLD) * (0.25 + impactT * 0.75);
+    const palette = getCrackedBlockShatterPalette(indexToBlockTheme(themeIndex));
+
+    for (let s = 0; s < spawnCount; s++) {
+      const idx = this.count < MAX_PARTICLES ? this.count++ : this._recycleOldest();
+      const side = this.nextRandom() < 0.5 ? -1 : 1;
+      const horizontalSpread = 0.25 + this.nextRandom() * 0.75;
+      const speed = LANDING_SPEED_MIN_WORLD + this.nextRandom() * (launchSpeedMax - LANDING_SPEED_MIN_WORLD);
+
+      this.xWorld[idx] = xWorld + (this.nextRandom() - 0.5) * 8;
+      this.yWorld[idx] = groundYWorld - this.nextRandom() * 1.5;
+      this.vxWorld[idx] = side * speed * horizontalSpread;
+      this.vyWorld[idx] = -speed * (0.35 + this.nextRandom() * 0.65);
+      this.ageMs[idx] = 0;
+      this.lifetimeMs[idx] = 220 + this.nextRandom() * 300;
+      this.rotationRad[idx] = this.nextRandom() * Math.PI * 2;
+      this.angularVelRadPerSec[idx] = (this.nextRandom() - 0.5) * 2 * ANGULAR_VEL_MAX_RAD_PER_SEC;
+      this.sizePx[idx] = SIZE_MIN_PX + this.nextRandom() * (SIZE_MAX_PX - SIZE_MIN_PX);
+
+      const color: RgbColor = palette[(this.nextRandom() * palette.length) | 0];
+      this.colorR[idx] = color.r;
+      this.colorG[idx] = color.g;
+      this.colorB[idx] = color.b;
+    }
   }
 
   /**

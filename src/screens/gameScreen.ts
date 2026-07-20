@@ -1396,6 +1396,7 @@ export function startGameScreen(
     if (pauseController.state.isPaused
       || gameOverlayController.state.isSkillTombMenuOpen
       || gameOverlayController.state.isMapOnlyOpen) {
+      playerSfx.stopWind();
       dustWheelController.cancel(timestampMs);
       cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
@@ -1408,6 +1409,7 @@ export function startGameScreen(
 
     // While dead, still render the frozen scene but skip sim
     if (gameOverlayController.state.isPlayerDead) {
+      playerSfx.stopWind();
       dustWheelController.cancel(timestampMs);
       cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
@@ -1601,7 +1603,7 @@ export function startGameScreen(
       guideDustPathRenderer.update(FIXED_DT_MS);
       skidDebris.update(world, FIXED_DT_MS);
       weakWallJumpDebris.update(world, FIXED_DT_MS);
-      updatePlayerSfx(playerSfx, playerSfxState, world, pendingGrappleFireSfx, FIXED_DT_MS / 1000);
+      updatePlayerSfx(playerSfx, playerSfxState, world, pendingGrappleFireSfx, FIXED_DT_MS / 1000, crackedBlockShatter);
       pendingGrappleFireSfx = false;
 
       // ── Crumble block debris events & ambient lighting rebuild ────────────

@@ -8,6 +8,7 @@ import {
 import { FAST_MAX_FALL_WORLD_PER_SEC, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC } from '../sim/clusters/movementConstants';
 import { GRAPPLE_ZIP_SPEED_WORLD_PER_SEC } from '../sim/clusters/grappleZip';
 import { SWORD_STATE_GUARD_SLASHING, SWORD_STATE_SLASHING } from '../sim/weaves/swordWeave';
+import type { CrackedBlockShatterRenderer } from '../render/crackedBlockShatterRenderer';
 
 const GROUND_PROBE_WORLD = 1.25;
 const LANDING_IMPACT_MIN_SPEED_WORLD_PER_SEC = 90;
@@ -56,7 +57,13 @@ function landingNameForHardness(hardness: BlockSoundHardness): PlayerSfxName {
   }
 }
 
-function findGroundHardness(world: WorldState, player: ClusterState): BlockSoundHardness {
+interface GroundSurface {
+  hardness: BlockSoundHardness;
+  themeIndex: number;
+  topYWorld: number;
+}
+
+function findGroundSurface(world: WorldState, player: ClusterState): GroundSurface {
   const playerBottom = player.positionYWorld + player.halfHeightWorld;
   const playerLeft = player.positionXWorld - player.halfWidthWorld;
   const playerRight = player.positionXWorld + player.halfWidthWorld;
@@ -77,8 +84,12 @@ function findGroundHardness(world: WorldState, player: ClusterState): BlockSound
     }
   }
 
-  if (bestWallIndex < 0) return 'hard';
-  return blockSoundHardnessIndexToName(world.wallSoundHardnessIndex[bestWallIndex]);
+  if (bestWallIndex < 0) return { hardness: 'hard', themeIndex: 0, topYWorld: playerBottom };
+  return {
+    hardness: blockSoundHardnessIndexToName(world.wallSoundHardnessIndex[bestWallIndex]),
+    themeIndex: world.wallThemeIndex[bestWallIndex],
+    topYWorld: world.wallYWorld[bestWallIndex],
+  };
 }
 
 function impactVolume(previousVelocityYWorld: number): number {
@@ -98,6 +109,7 @@ export function updatePlayerSfx(
   world: WorldState,
   didGrappleFire: boolean,
   dtSec: number,
+  landingParticles?: CrackedBlockShatterRenderer,
 ): void {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) {
@@ -106,7 +118,8 @@ export function updatePlayerSfx(
   }
 
   const isGrounded = player.isGroundedFlag;
-  const hardness = findGroundHardness(world, player);
+  const groundSurface = findGroundSurface(world, player);
+  const hardness = groundSurface.hardness;
   if (didGrappleFire) {
     sfx.play('grapple_throw', 1);
     sfx.play('quickWhoosh', 0.7);
@@ -124,6 +137,12 @@ export function updatePlayerSfx(
   if (state.wasGroundedFlag === 0 && isGrounded === 1) {
     const volume = impactVolume(state.previousVelocityYWorld);
     if (volume > 0.45) sfx.play(landingNameForHardness(hardness), volume);
+    landingParticles?.notifyLanding(
+      player.positionXWorld,
+      groundSurface.topYWorld,
+      groundSurface.themeIndex,
+      Math.max(0, state.previousVelocityYWorld),
+    );
   }
 
   if (state.wasGroundedFlag === 1 && isGrounded === 0 && player.velocityYWorld < -100) {
