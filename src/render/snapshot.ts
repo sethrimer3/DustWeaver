@@ -153,8 +153,10 @@ interface _ReusableBacking {
   newSwordReachWorld: number;
   newSwordTicksElapsed: number;
   newSwordToShieldTransition01: number;
-  newBowChargingFlag: 0 | 1;
-  newBowTierMoteCount: number;
+  bowArrowPhase: number;
+  bowArrowCount: number;
+  bowArrowDirXWorld: number;
+  bowArrowDirYWorld: number;
   shieldWeaveIndependentActiveFlag: 0 | 1;
   moteGrappleDisplayRadiusWorld: number;
   isMoteSourceOrbitFlag: 0 | 1;
@@ -465,8 +467,10 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     newSwordReachWorld:            world.newSwordReachWorld,
     newSwordTicksElapsed:          world.newSwordTicksElapsed,
     newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
-    newBowChargingFlag:            world.newBowChargingFlag,
-    newBowTierMoteCount:           world.newBowTierMoteCount,
+    bowArrowPhase:                 world.bowArrowPhase,
+    bowArrowCount:                 world.bowArrowCount,
+    bowArrowDirXWorld:             world.bowArrowDirXWorld,
+    bowArrowDirYWorld:             world.bowArrowDirYWorld,
     shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
@@ -622,8 +626,10 @@ export function updateSnapshotInPlace(
   b.newSwordReachWorld            = world.newSwordReachWorld;
   b.newSwordTicksElapsed          = world.newSwordTicksElapsed;
   b.newSwordToShieldTransition01  = world.newSwordToShieldTransition01;
-  b.newBowChargingFlag            = world.newBowChargingFlag;
-  b.newBowTierMoteCount           = world.newBowTierMoteCount;
+  b.bowArrowPhase                 = world.bowArrowPhase;
+  b.bowArrowCount                 = world.bowArrowCount;
+  b.bowArrowDirXWorld             = world.bowArrowDirXWorld;
+  b.bowArrowDirYWorld             = world.bowArrowDirYWorld;
   b.shieldWeaveIndependentActiveFlag = world.shieldWeaveIndependentActiveFlag;
   // First available ordered-mote-queue slot's dust kind — same source used by
   // fireNewBow() to capture arrowDustKind, so sword/shield/bow-preview theming

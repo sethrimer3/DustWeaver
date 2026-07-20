@@ -400,8 +400,10 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     newSwordReachWorld:            world.newSwordReachWorld,
     newSwordTicksElapsed:          world.newSwordTicksElapsed,
     newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
-    newBowChargingFlag:            world.newBowChargingFlag,
-    newBowTierMoteCount:           world.newBowTierMoteCount,
+    bowArrowPhase:                 world.bowArrowPhase,
+    bowArrowCount:                 world.bowArrowCount,
+    bowArrowDirXWorld:             world.bowArrowDirXWorld,
+    bowArrowDirYWorld:             world.bowArrowDirYWorld,
     shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
     // Ordered Mote Queue display
     moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,

@@ -115,7 +115,7 @@ const SHIELD_DEF: WeaveDefinition = {
 const ARROW_DEF: WeaveDefinition = {
   id: WEAVE_ARROW,
   displayName: 'Bow Weave',
-  description: 'Release the secondary action to fire a charged dust arrow. More loading time = more motes, more damage, faster flight.',
+  description: 'Hold the secondary action after the shield forms to load your motes into a straight arrow (up to five), then release to fire them at a constant speed. Longer holding loads more motes, not a faster or stronger shot.',
   role: WeaveRole.SecondaryOnly,
   dustSlotCapacity: 0,
   durationTicks: 0,

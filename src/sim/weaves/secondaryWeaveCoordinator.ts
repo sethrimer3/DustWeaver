@@ -1,29 +1,29 @@
 /**
- * Secondary Weave Coordinator (Stage 3) — the per-gesture decision layer
- * that drives independently-unlockable Sword / Shield / Bow Weaves off the
- * single secondary-button gesture exposed by
- * `src/input/secondaryWeaveGesture.ts`.
+ * Secondary Weave Coordinator (Stage 3) — the per-gesture decision layer that
+ * drives the independently-unlockable Sword / Shield / Bow Weaves off the
+ * single secondary-button gesture exposed by `src/input/secondaryWeaveGesture.ts`.
  *
- * Runs once per tick in the default (non-legacy) `applyPlayerWeaveCombat`
- * path. Reads `world.secondaryWeaveGesture` (physical press/hold/release
- * shape — already ticked earlier this frame by gameCommandProcessor.ts) plus
- * `hasSwordWeaveUnlockedFlag` / `hasShieldWeaveUnlockedFlag` /
- * `hasBowWeaveUnlockedFlag` and ordered-mote availability, and decides:
+ * Runs once per tick in the default (non-legacy) `applyPlayerWeaveCombat` path.
  *
- *   - whether Sword should start this tick (press, if unlocked)
- *   - whether Shield should be forming (while held, if unlocked, and not
- *     currently suppressed by an in-progress Sword swipe)
- *   - whether Bow should be charging (from press, if unlocked, continuing
- *     through Sword + Shield)
- *   - whether Bow should fire (on release, if unlocked and tier >= 2, or via
- *     the deferred pending-release path if release happened before Sword's
- *     swipe finished)
+ * Flow within one gesture:
+ *   1. Press  → start the Sword swipe (if unlocked).
+ *   2. Hold   → once the Sword swipe is no longer blocking, the Shield crescent
+ *               forms. The tick the Shield first forms is the origin of the Bow
+ *               arrow's load schedule (0.75 / 1.25 / 1.75 s). If the Bow is
+ *               unlocked and ≥3 motes are available, the Bow reserves the
+ *               player's ACTUAL motes into a straight arrow line (center + up to
+ *               four more); reserved motes are excluded from the Shield crescent.
+ *   3. Release→ if at least the minimum three motes are loaded, fire the arrow;
+ *               otherwise cancel it gracefully (motes return to Storm, Shield
+ *               resolves normally). A partial one/two-mote arrow is never fired.
  *
- * Mote ownership arbitration priority within one gesture:
- *   Sword transition → Shield formation (while held) → Bow consumes its
- *   reserved slots only at the moment of fire. Bow charging is purely
- *   logical (tier from availability) until fire; it never removes motes from
- *   the Shield pool while charging.
+ * The outbound arrow flies independently of the gesture (it continues after
+ * release) until it bounces off a wall or reaches max distance, at which point
+ * its motes are handed back to Storm following.
+ *
+ * The old charge-strength / logical-tier / queued-mote system has been removed:
+ * there is no draw strength, no separate ammunition, and every arrow mote is an
+ * actual player mote.
  */
 
 import { WorldState } from '../world';
@@ -35,12 +35,16 @@ import {
 } from './swordWeave';
 import { applyShieldWeaveCrescent, releaseShieldWeaveParticles } from './shieldWeave';
 import {
-  startNewBowCharge,
-  updateNewBowCharge,
-  cancelNewBowCharge,
-  fireNewBow,
-  resetNewBowState,
-} from './bowWeave';
+  beginBowArrowAssembly,
+  tickBowArrowAssembly,
+  fireBowArrow,
+  cancelBowArrow,
+  tickBowArrowOutbound,
+  resetBowArrowState,
+  isBowArrowActive,
+  BOW_ARROW_PHASE_ASSEMBLING,
+  BOW_ARROW_PHASE_OUTBOUND,
+} from './bowArrow';
 
 /** Finds the live player cluster, or null. */
 function _findPlayer(world: WorldState) {
@@ -54,16 +58,15 @@ function _findPlayer(world: WorldState) {
 /** Resets ALL Stage 3 coordinator state (sword, bow, shield ownership). Safe to call idempotently. */
 export function resetSecondaryWeaveCoordinatorState(world: WorldState): void {
   resetNewSwordState(world);
-  resetNewBowState(world);
+  resetBowArrowState(world);
   world.shieldWeaveIndependentActiveFlag = 0;
   world.secondaryWeaveHandledCancellationId = world.secondaryWeaveGesture.cancellationId;
 }
 
 /**
- * Returns true when the Shield crescent should currently be suppressed
- * because a Sword swipe from this same gesture is still in progress (the
- * "sword cuts open into shield" handoff — the crescent should not appear
- * mid-swing).
+ * Returns true when the Shield crescent should currently be suppressed because
+ * a Sword swipe from this same gesture is still in progress (the "sword cuts
+ * open into shield" handoff — the crescent should not appear mid-swing).
  */
 function _isSwordBlockingShield(world: WorldState): boolean {
   return world.newSwordActiveFlag === 1;
@@ -73,46 +76,41 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
   const gesture = world.secondaryWeaveGesture;
   const player = _findPlayer(world);
 
+  // ── Outbound arrow flies independently of the gesture (continues after
+  // release) until it bounces or reaches max distance. ─────────────────────
+  if (world.bowArrowPhase === BOW_ARROW_PHASE_OUTBOUND) {
+    tickBowArrowOutbound(world);
+  }
+
   // ── Cancellation: gesture forced back to Idle mid-hold (pause/dialogue/
-  // blur/dust-wheel/death/room-transition/grapple-consume — see
-  // secondaryWeaveGesture.ts) ────────────────────────────────────────────
-  // The monotonic cancellation id distinguishes an explicit cancellation
-  // from the ordinary Idle state reached after release. It also remains
-  // observable when cancellation happens after a pending Bow shot latched.
+  // blur/dust-wheel/death/room-transition/grapple-consume). ────────────────
   if (world.secondaryWeaveHandledCancellationId !== gesture.cancellationId) {
     world.secondaryWeaveHandledCancellationId = gesture.cancellationId;
-    if (world.newSwordActiveFlag === 1) resetSwordOnly(world);
-    if (world.newBowChargingFlag === 1) cancelNewBowCharge(world);
-    if (world.newBowPendingReleaseFlag === 1) clearPendingBowRelease(world);
+    if (world.newSwordActiveFlag === 1) resetNewSwordState(world);
+    // Cancel an assembling arrow (release reserved motes to Storm). An already
+    // outbound arrow is left to complete its flight — it no longer belongs to
+    // the gesture and resolves on its own.
+    if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) cancelBowArrow(world);
     if (world.shieldWeaveIndependentActiveFlag === 1) endShieldOwnership(world);
   }
 
   if (player === null) return;
 
-  // ── Press: start Sword swipe and/or Bow charge for this fresh gesture ────
+  // ── Press: start the Sword swipe for this fresh gesture ──────────────────
   if (gesture.pressEventFlag) {
     if (world.hasSwordWeaveUnlockedFlag === 1) {
       startNewSwordSwipe(world, player, gesture.gestureId, gesture.pressAimXWorld, gesture.pressAimYWorld);
     }
-    if (world.hasBowWeaveUnlockedFlag === 1) {
-      startNewBowCharge(world, gesture.gestureId);
-    }
   }
 
-  // ── Advance in-progress Sword swipe (press tick and every hold tick) ─────
+  // ── Advance in-progress Sword swipe ──────────────────────────────────────
   if (world.newSwordActiveFlag === 1) {
     const completedThisTick = tickNewSwordSwipe(world);
-    if (completedThisTick) {
-      onSwordSwipeCompleted(world);
-    }
+    if (completedThisTick) onSwordSwipeCompleted(world);
   }
 
-  // ── Advance Bow logical charge while held (independent of Sword/Shield) ──
-  if (world.newBowChargingFlag === 1) {
-    updateNewBowCharge(world);
-  }
-
-  // ── Shield: forms while held (Holding phase) once Sword isn't blocking ──
+  // ── Shield forms while held once the Sword isn't blocking; the Bow arrow
+  // assembles alongside it from the moment the Shield first forms. ──────────
   const isHeldPhase = gesture.phase === SecondaryWeaveGesturePhase.Press
     || gesture.phase === SecondaryWeaveGesturePhase.Holding;
   const shieldShouldBeActive =
@@ -121,60 +119,51 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
     !_isSwordBlockingShield(world);
 
   if (shieldShouldBeActive) {
+    const firstShieldTick = world.shieldWeaveIndependentActiveFlag === 0;
     world.shieldWeaveIndependentActiveFlag = 1;
-    applyShieldWeaveCrescent(world, player.positionXWorld, player.positionYWorld, gesture.holdAimXWorld - player.positionXWorld, gesture.holdAimYWorld - player.positionYWorld);
+
+    const aimDirX = gesture.holdAimXWorld - player.positionXWorld;
+    const aimDirY = gesture.holdAimYWorld - player.positionYWorld;
+
+    // The tick the Shield first forms is the schedule origin for the arrow.
+    if (firstShieldTick && world.hasBowWeaveUnlockedFlag === 1) {
+      beginBowArrowAssembly(world, world.tick, gesture.gestureId);
+    }
+    // Reserve/advance the arrow BEFORE the crescent so reserved motes (marked
+    // BEHAVIOR_MODE_BOW_ARROW) are excluded from ordinary shield-slot placement.
+    if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
+      tickBowArrowAssembly(world, aimDirX, aimDirY);
+    }
+    applyShieldWeaveCrescent(world, player.positionXWorld, player.positionYWorld, aimDirX, aimDirY);
   } else if (world.shieldWeaveIndependentActiveFlag === 1) {
     endShieldOwnership(world);
   }
 
-  // ── Release: fire Bow now, or latch a pending release if Sword still mid-swipe ──
+  // ── Release: fire the assembled arrow, or cancel it gracefully ───────────
   if (gesture.releaseEventFlag) {
-    if (world.hasBowWeaveUnlockedFlag === 1 && world.newBowChargingFlag === 1) {
-      if (world.newSwordActiveFlag === 1) {
-        // Sword hasn't finished yet — latch exactly one pending release.
-        latchPendingBowRelease(world, gesture.releaseAimXWorld, gesture.releaseAimYWorld, world.newBowTierMoteCount);
-        world.newBowChargingFlag = 0;
-      } else {
-        fireBowNow(world, player, gesture.releaseAimXWorld, gesture.releaseAimYWorld, world.newBowTierMoteCount);
+    if (world.hasBowWeaveUnlockedFlag === 1 && world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
+      const aimDirX = gesture.releaseAimXWorld - player.positionXWorld;
+      const aimDirY = gesture.releaseAimYWorld - player.positionYWorld;
+      // fireBowArrow only fires when ≥3 motes are loaded; otherwise cancel so a
+      // partial one/two-mote arrow is never launched and no motes are stranded.
+      if (!fireBowArrow(world, aimDirX, aimDirY)) {
+        cancelBowArrow(world);
       }
-    } else if (world.newBowChargingFlag === 1) {
-      cancelNewBowCharge(world);
     }
-    // Shield ownership always ends first on release (priority order).
     if (world.shieldWeaveIndependentActiveFlag === 1) {
       endShieldOwnership(world);
     }
-  }
-
-  // ── Deferred pending-arrow fire: as soon as Sword is no longer active ────
-  if (world.newBowPendingReleaseFlag === 1 && world.newSwordActiveFlag === 0) {
-    fireBowNow(
-      world,
-      player,
-      world.newBowPendingReleaseAimXWorld,
-      world.newBowPendingReleaseAimYWorld,
-      world.newBowPendingReleaseMoteCount,
-    );
-    clearPendingBowRelease(world);
   }
 }
 
 /**
  * Called the tick the Sword swipe's animation finishes. Marks the
- * sword→shield transition as complete for Stage 5 rendering. No mote
- * bookkeeping is needed here: the swipe itself never claimed ordered-mote
- * slots into block mode, so if Shield is unlocked and the button is still
- * held, `applyShieldWeaveCrescent` picking up next tick IS the handoff (same
- * underlying particles, retargeted in place — no duplicate-motes frame, no
- * destroy/recreate). If Sword-only (no Shield unlocked) or the button was
- * already released, there is nothing to release since nothing was claimed.
+ * sword→shield transition as complete for rendering. If Shield is unlocked and
+ * the button is still held, `applyShieldWeaveCrescent` picking up next tick IS
+ * the handoff (same underlying particles, retargeted in place).
  */
 function onSwordSwipeCompleted(world: WorldState): void {
   world.newSwordToShieldTransition01 = 1;
-}
-
-function resetSwordOnly(world: WorldState): void {
-  resetNewSwordState(world);
 }
 
 function endShieldOwnership(world: WorldState): void {
@@ -192,33 +181,5 @@ function _findPlayerEntityId(world: WorldState): number {
   return -1;
 }
 
-function latchPendingBowRelease(world: WorldState, aimXWorld: number, aimYWorld: number, moteCount: number): void {
-  world.newBowPendingReleaseFlag      = 1;
-  world.newBowPendingReleaseAimXWorld = aimXWorld;
-  world.newBowPendingReleaseAimYWorld = aimYWorld;
-  world.newBowPendingReleaseMoteCount = moteCount;
-}
-
-function clearPendingBowRelease(world: WorldState): void {
-  world.newBowPendingReleaseFlag      = 0;
-  world.newBowPendingReleaseAimXWorld = 0;
-  world.newBowPendingReleaseAimYWorld = 0;
-  world.newBowPendingReleaseMoteCount = 0;
-}
-
-function fireBowNow(
-  world: WorldState,
-  player: NonNullable<ReturnType<typeof _findPlayer>>,
-  aimXWorld: number,
-  aimYWorld: number,
-  moteCount: number,
-): void {
-  world.newBowChargingFlag = 0;
-  if (moteCount < 2) return;
-  const dx = aimXWorld - player.positionXWorld;
-  const dy = aimYWorld - player.positionYWorld;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-  const aimDirX = dist > 1e-6 ? dx / dist : 1;
-  const aimDirY = dist > 1e-6 ? dy / dist : 0;
-  fireNewBow(world, player.positionXWorld, player.positionYWorld, aimDirX, aimDirY, moteCount);
-}
+// Re-export for callers/tests that want to query arrow activity.
+export { isBowArrowActive };
