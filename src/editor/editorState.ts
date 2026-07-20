@@ -329,6 +329,7 @@ export interface EditorUICallbacks {
   onVoidEdgeStyleChange: (style: VoidEdgeStyle) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
+  onSave: () => void;
   onConfirm: () => void;
   onCancel: () => void;
   onExportAllChanges: () => void;

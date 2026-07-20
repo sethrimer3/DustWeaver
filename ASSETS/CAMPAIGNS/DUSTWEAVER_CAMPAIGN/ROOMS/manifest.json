@@ -1,17 +1,17 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "19039129868cf374",
-  "campaignVersion": 6,
+  "campaignHash": "f71b98525f3643e5",
+  "campaignVersion": 7,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-19T07:18:03.884Z",
+  "exportedAt": "2026-07-20T01:45:50.426Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
       "file": "lobby_room.json",
       "hash": "1a06c418a65e160a",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
+      "updatedAt": "2026-07-20T01:45:05.802Z"
     },
     "w1_room1": {
       "roomId": "w1_room1",
@@ -43,10 +43,40 @@
       "hash": "2ac820feeb66afe2",
       "updatedAt": "2026-07-19T07:18:03.884Z"
     },
+    "long_hall": {
+      "roomId": "long_hall",
+      "file": "long_hall_room.json",
+      "hash": "946f4909eb732f09",
+      "updatedAt": "2026-07-19T07:18:03.884Z"
+    },
+    "tall_shaft": {
+      "roomId": "tall_shaft",
+      "file": "tall_shaft_room.json",
+      "hash": "bf4be0817d1d8b29",
+      "updatedAt": "2026-07-19T07:18:03.884Z"
+    },
+    "Cozy_Chamber": {
+      "roomId": "Cozy_Chamber",
+      "file": "Cozy_Chamber_room.json",
+      "hash": "bb6e4b399c25d96e",
+      "updatedAt": "2026-07-19T07:18:03.884Z"
+    },
+    "the_fall": {
+      "roomId": "the_fall",
+      "file": "the_fall_room.json",
+      "hash": "8db07d798ae095bf",
+      "updatedAt": "2026-07-19T07:18:03.884Z"
+    },
     "overgrown_chasm": {
       "roomId": "overgrown_chasm",
       "file": "overgrown_chasm_room.json",
       "hash": "14ee02d55474431b",
+      "updatedAt": "2026-07-19T07:18:03.884Z"
+    },
+    "magma_corridor": {
+      "roomId": "magma_corridor",
+      "file": "magma_corridor_room.json",
+      "hash": "a84c0ec72b6cde5b",
       "updatedAt": "2026-07-19T07:18:03.884Z"
     },
     "interesting_room": {
@@ -61,46 +91,16 @@
       "hash": "30e8ff17488352b1",
       "updatedAt": "2026-07-19T07:18:03.884Z"
     },
-    "long_hall": {
-      "roomId": "long_hall",
-      "file": "long_hall_room.json",
-      "hash": "946f4909eb732f09",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
-    },
-    "Cozy_Chamber": {
-      "roomId": "Cozy_Chamber",
-      "file": "Cozy_Chamber_room.json",
-      "hash": "bb6e4b399c25d96e",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
-    },
     "bend": {
       "roomId": "bend",
       "file": "bend_room.json",
       "hash": "67b1df09da250b64",
       "updatedAt": "2026-07-19T07:18:03.884Z"
     },
-    "the_fall": {
-      "roomId": "the_fall",
-      "file": "the_fall_room.json",
-      "hash": "8db07d798ae095bf",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
-    },
-    "tall_shaft": {
-      "roomId": "tall_shaft",
-      "file": "tall_shaft_room.json",
-      "hash": "bf4be0817d1d8b29",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
-    },
     "chasm": {
       "roomId": "chasm",
       "file": "chasm_room.json",
       "hash": "31e75eec1c094526",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
-    },
-    "magma_corridor": {
-      "roomId": "magma_corridor",
-      "file": "magma_corridor_room.json",
-      "hash": "a84c0ec72b6cde5b",
       "updatedAt": "2026-07-19T07:18:03.884Z"
     },
     "a_big_ask": {
@@ -173,10 +173,47 @@
         "Cozy_Chamber"
       ]
     },
+    "long_hall": {
+      "roomId": "long_hall",
+      "targets": [
+        "the_fall",
+        "seal_chamber"
+      ]
+    },
+    "tall_shaft": {
+      "roomId": "tall_shaft",
+      "targets": [
+        "seal_chamber",
+        "overgrown_chasm",
+        "magma_corridor"
+      ]
+    },
+    "Cozy_Chamber": {
+      "roomId": "Cozy_Chamber",
+      "targets": [
+        "seal_chamber"
+      ]
+    },
+    "the_fall": {
+      "roomId": "the_fall",
+      "targets": [
+        "long_hall",
+        "interesting_room",
+        "dark_tunnel"
+      ]
+    },
     "overgrown_chasm": {
       "roomId": "overgrown_chasm",
       "targets": [
         "tall_shaft"
+      ]
+    },
+    "magma_corridor": {
+      "roomId": "magma_corridor",
+      "targets": [
+        "tall_shaft",
+        "a_big_ask",
+        "lava_tube"
       ]
     },
     "interesting_room": {
@@ -192,39 +229,10 @@
         "chasm"
       ]
     },
-    "long_hall": {
-      "roomId": "long_hall",
-      "targets": [
-        "the_fall",
-        "seal_chamber"
-      ]
-    },
-    "Cozy_Chamber": {
-      "roomId": "Cozy_Chamber",
-      "targets": [
-        "seal_chamber"
-      ]
-    },
     "bend": {
       "roomId": "bend",
       "targets": [
         "chasm"
-      ]
-    },
-    "the_fall": {
-      "roomId": "the_fall",
-      "targets": [
-        "long_hall",
-        "interesting_room",
-        "dark_tunnel"
-      ]
-    },
-    "tall_shaft": {
-      "roomId": "tall_shaft",
-      "targets": [
-        "seal_chamber",
-        "overgrown_chasm",
-        "magma_corridor"
       ]
     },
     "chasm": {
@@ -232,14 +240,6 @@
       "targets": [
         "dark_tunnel",
         "bend"
-      ]
-    },
-    "magma_corridor": {
-      "roomId": "magma_corridor",
-      "targets": [
-        "tall_shaft",
-        "a_big_ask",
-        "lava_tube"
       ]
     },
     "a_big_ask": {

@@ -638,6 +638,7 @@ export function createEditorController(
           if (state.roomData) state.roomData.songId = songId;
           applyEdits('metadata');
         },
+        onSave: () => saveEdits(),
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
         onExportAllChanges: () => {
@@ -866,13 +867,21 @@ export function createEditorController(
     onEditorClose?.();
   }
 
+  function saveEdits(): RoomDef | null {
+    if (!state.roomData) return null;
+    const newRoomDef = editorRoomDataToRoomDef(state.roomData);
+    registerRoom(newRoomDef);
+    commitActiveRoomToCampaign('manual-save');
+    invalidateRoomContour(newRoomDef.id);
+    originalRoomDef = newRoomDef;
+    return newRoomDef;
+  }
+
   function confirmEdits(): void {
     const confirmStartMs = import.meta.env.DEV ? performance.now() : 0;
     if (state.roomData) {
-      const newRoomDef = editorRoomDataToRoomDef(state.roomData);
-      registerRoom(newRoomDef);
-      commitActiveRoomToCampaign('playtest');
-      invalidateRoomContour(newRoomDef.id);
+      const newRoomDef = saveEdits();
+      if (newRoomDef === null) return;
       const sx = state.roomData.playerSpawnBlock[0];
       const sy = state.roomData.playerSpawnBlock[1];
       closeEditor();
@@ -886,29 +895,10 @@ export function createEditorController(
   }
 
   function cancelEdits(): void {
-    // If the current room has unsaved changes, ask whether to save them first.
-    if (isCurrentRoomDirty && state.roomData) {
-      showSaveChangesDialog(uiRoot, () => {
-        // YES — save to pending, then exit
-        if (state.roomData) {
-          commitActiveRoomToCampaign('manual-save');
-        }
-        const saved = originalRoomDef;
-        closeEditor();
-        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
-      }, () => {
-        // NO — exit without saving
-        discardCurrentRoomSessionChanges(state.roomData);
-        const saved = originalRoomDef;
-        closeEditor();
-        if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
-      });
-    } else {
-      // No unsaved changes — exit immediately
-      const saved = originalRoomDef;
-      closeEditor();
-      if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
-    }
+    if (isCurrentRoomDirty && state.roomData) discardCurrentRoomSessionChanges(state.roomData);
+    const saved = originalRoomDef;
+    closeEditor();
+    if (saved) onLoadRoom(saved, saved.playerSpawnBlock[0], saved.playerSpawnBlock[1]);
   }
 
   /**

@@ -82,25 +82,45 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const confirmCancelBar = document.createElement('div');
   confirmCancelBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
 
-  const confirmBtn = makeBtn('✔ Confirm', () => callbacks?.onConfirm());
+  const confirmBtn = makeBtn('▶ Save & Test', () => callbacks?.onConfirm());
   confirmBtn.style.cssText += `
-    flex: 1; padding: 8px; font-size: 12px;
+    flex: 1.35; padding: 8px 4px; font-size: 11px;
     background: rgba(0,100,50,0.4); border-color: ${GREEN}; color: ${GREEN};
   `;
   confirmCancelBar.appendChild(confirmBtn);
 
-  const cancelBtn = makeBtn('✕ Cancel', () => callbacks?.onCancel());
+  let isCancelConfirmationPending = false;
+  let cancelBtn: HTMLButtonElement;
+  const saveBtn = makeBtn('✔ Save', () => {
+    isCancelConfirmationPending = false;
+    cancelBtn.textContent = '✕ Cancel';
+    callbacks?.onSave();
+  });
+  saveBtn.style.cssText += `
+    flex: 0.85; padding: 8px 4px; font-size: 11px;
+    background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
+  `;
+  confirmCancelBar.appendChild(saveBtn);
+
+  cancelBtn = makeBtn('✕ Cancel', () => {
+    if (!isCancelConfirmationPending) {
+      isCancelConfirmationPending = true;
+      cancelBtn.textContent = 'Confirm?';
+      return;
+    }
+    callbacks?.onCancel();
+  });
   cancelBtn.style.cssText += `
-    flex: 1; padding: 8px; font-size: 12px;
+    flex: 0.85; padding: 8px 4px; font-size: 11px;
     background: rgba(100,30,20,0.4); border-color: #ff6644; color: #ff6644;
   `;
   confirmCancelBar.appendChild(cancelBtn);
   container.appendChild(confirmCancelBar);
 
-  // ── Export Campaign button ───────────────────────────────────────────────
-  // Always shows "Export Campaign" regardless of whether this is a custom
+  // ── Save and Export Campaign button ──────────────────────────────────────
+  // Always shows "Save and Export Campaign" regardless of whether this is a custom
   // campaign session or the main DustWeaver campaign.
-  const exportAllBtn = makeBtn('📦 Export Campaign', () => callbacks?.onExportCampaignJson?.());
+  const exportAllBtn = makeBtn('📦 Save and Export Campaign', () => callbacks?.onExportCampaignJson?.());
   exportAllBtn.style.cssText += `
     width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
     background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;

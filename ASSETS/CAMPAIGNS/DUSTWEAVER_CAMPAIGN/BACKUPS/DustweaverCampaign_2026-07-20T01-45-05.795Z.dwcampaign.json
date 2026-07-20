@@ -3,7 +3,7 @@
   "kind": "DustWeaverCampaign",
   "metadata": {
     "version": 7,
-    "lastEditedAt": "2026-07-20T01:45:50.399Z"
+    "lastEditedAt": "2026-07-20T01:44:08.975Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -16,7 +16,6 @@
       "roomId": "lobby",
       "xBlock": 9,
       "yBlock": 13,
-      "startingHealth": 4,
       "startingDustTypes": [
         "Golden",
         "Light",
@@ -200,8 +199,8 @@
         58
       ],
       "spawn": [
-        10,
-        38
+        51,
+        33
       ],
       "solids": {
         "byTheme": {},
@@ -840,6 +839,19 @@
       "bg": "crystallineCracks",
       "light": "DEFAULT",
       "song": "thoughtfulLevel",
+      "enemies": [
+        {
+          "type": "basic",
+          "pos": [
+            42,
+            43
+          ],
+          "kinds": [
+            "Nature"
+          ],
+          "particleCount": 2
+        }
+      ],
       "transitions": [
         {
           "dir": "right",
@@ -43736,6 +43748,6 @@
   ],
   "editor": {
     "createdWithBuild": "487",
-    "lastEditedIso": "2026-07-20T01:45:50.399Z"
+    "lastEditedIso": "2026-07-20T01:44:08.975Z"
   }
 }
