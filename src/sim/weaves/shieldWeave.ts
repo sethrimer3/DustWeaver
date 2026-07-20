@@ -28,8 +28,23 @@ const SHIELD_CRESCENT_RADIUS_WORLD = 12.0;
 const SHIELD_MIN_HALF_ARC_RAD = 0.15;
 /** Maximum half-arc angle (radians) for maximum particles. */
 const SHIELD_MAX_HALF_ARC_RAD = Math.PI * 0.5;
-/** Spring force strength pulling particles toward their crescent position. */
-const SHIELD_SPRING_STRENGTH = 600.0;
+/**
+ * Spring force strength pulling particles toward their crescent position.
+ *
+ * Task section 4 — faster Shield formation. Raised from the previous 600 so the
+ * crescent forms almost immediately (defensive, responsive feel) rather than
+ * easing in. Paired with the critical-damping term below so the stiffer spring
+ * snaps into place without oscillating or overshooting the shield slots.
+ */
+const SHIELD_SPRING_STRENGTH = 1400.0;
+/**
+ * Critical-damping factor for the shield spring. The per-particle damping force
+ * is `2 * sqrt(SHIELD_SPRING_STRENGTH * mass) * SHIELD_SPRING_DAMPING_RATIO`
+ * applied against the mote's velocity, giving a fast, slightly-underdamped
+ * settle: motes sweep in quickly but still show a small amount of animated
+ * movement as they seat, instead of a rigid teleport.
+ */
+const SHIELD_SPRING_DAMPING_RATIO = 0.9;
 /**
  * Number of particles at which the crescent reaches maximum arc.
  * Beyond this, particles pack more densely rather than widening further.
@@ -96,6 +111,12 @@ export function applyShieldWeaveCrescent(
     const dy = targetY - world.positionYWorld[pidx];
     world.forceX[pidx] += dx * SHIELD_SPRING_STRENGTH;
     world.forceY[pidx] += dy * SHIELD_SPRING_STRENGTH;
+
+    // Critical damping so the stiffer spring snaps in fast without oscillating.
+    const mass = world.massKg[pidx] > 0 ? world.massKg[pidx] : 1.0;
+    const dampCoeff = 2.0 * Math.sqrt(SHIELD_SPRING_STRENGTH * mass) * SHIELD_SPRING_DAMPING_RATIO;
+    world.forceX[pidx] -= world.velocityXWorld[pidx] * dampCoeff;
+    world.forceY[pidx] -= world.velocityYWorld[pidx] * dampCoeff;
 
     world.behaviorMode[pidx] = 2;
   }
