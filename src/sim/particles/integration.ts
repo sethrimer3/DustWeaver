@@ -14,6 +14,7 @@ import { WorldState } from '../world';
 import { getElementProfile } from './elementProfiles';
 import { BEHAVIOR_MODE_DUST_SWITCH_RECALL } from './dustSwitchBehaviorMode';
 import { BEHAVIOR_MODE_BOW_ARROW } from './bowArrowBehaviorMode';
+import { BEHAVIOR_MODE_SWORD_SLASH } from './swordSlashBehaviorMode';
 
 export function integrateParticles(world: WorldState): void {
   const {
@@ -37,6 +38,8 @@ export function integrateParticles(world: WorldState): void {
     // Bow arrow motes are fully position/velocity-managed by bowArrow.ts
     // (assembly line + outbound flight) — skip normal integration.
     if (behaviorMode[i] === BEHAVIOR_MODE_BOW_ARROW) continue;
+    // Sword crescent motes are fully position-managed by swordWeave.ts.
+    if (behaviorMode[i] === BEHAVIOR_MODE_SWORD_SLASH) continue;
 
     const profile = getElementProfile(kindBuffer[i]);
 

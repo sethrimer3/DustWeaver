@@ -29,12 +29,14 @@
  *   • No per-tick allocations.
  */
 
-import { WorldState } from '../world';
+import { WorldState, MAX_SWORD_SLASH_MOTES } from '../world';
 import { ClusterState } from '../clusters/state';
 import {
   getCircleOfInfluenceRadiusWorld,
   getAvailableMoteSlotCount,
+  getAvailableOrderedMoteSlots,
 } from '../motes/orderedMoteQueue';
+import { BEHAVIOR_MODE_SWORD_SLASH } from '../particles/swordSlashBehaviorMode';
 import { applyODCHit } from '../clusters/orbitalDustCoreAi';
 import {
   ODC_SMALL_RING_RADII,
@@ -517,11 +519,31 @@ function _resolveLiveTarget(world: WorldState): ClusterState | null {
 
 /** Ticks the new sword swipe takes to complete (press → recovery-free end). */
 export const NEW_SWORD_SLASH_TICKS = 10;
-/** Total angular sweep of the new sword's swipe (radians). */
-const NEW_SWORD_SLASH_ARC_RAD = Math.PI * 0.75;
-const NEW_SWORD_SLASH_HALF_ARC_RAD = NEW_SWORD_SLASH_ARC_RAD * 0.5;
+/**
+ * Crescent geometry (task section 3). The blade STAGES behind the aim, then
+ * sweeps forward around the player to terminate in front of the aim:
+ *   startAngle = aim + STAGE_BACK * swing   (rear staging)
+ *   endAngle   = aim − FRONT_LEAD  * swing   (front of aim)
+ * so the total sweep is ≈ π (a strong crescent that passes through the aim
+ * direction near the end).
+ */
+const NEW_SWORD_STAGE_BACK_RAD = Math.PI * 0.85;
+const NEW_SWORD_FRONT_LEAD_RAD = Math.PI * 0.15;
 /** Whole-number damage applied to each enemy hit once per swipe. */
 const NEW_SWORD_DAMAGE = 2;
+
+/**
+ * Fraction of the swipe the motes spend "shooting" from orbit into the rear
+ * staging arc before the forward sweep begins. Small, so the staging feels
+ * like an explosive wind-up, not a slow drift.
+ */
+const NEW_SWORD_STAGE_FRACTION = 0.18;
+/** Base crescent radius (world units) at which the leading mote sweeps. */
+const NEW_SWORD_CRESCENT_RADIUS_WORLD = 9.0;
+/** Extra radius (world units) per rank — each mote sits farther out than the preceding. */
+const NEW_SWORD_RANK_RADIAL_STEP_WORLD = 1.4;
+/** Angular lag (radians) per rank — each mote trails slightly behind the preceding. */
+const NEW_SWORD_RANK_ANGLE_LAG_RAD = 0.14;
 
 /** Per-gesture hit registry for the new sword swipe — reset at swipe start. */
 const _newSwordHitFlags = new Uint8Array(MAX_HIT_REGISTRY_SLOTS);
@@ -562,16 +584,109 @@ export function startNewSwordSwipe(
   const dy = pressAimYWorld - anchorY;
   const aimAngleRad = (dx * dx + dy * dy) > 1e-9 ? Math.atan2(dy, dx) : 0;
 
+  // Swing counter-clockwise for a right-facing player, mirrored when facing
+  // left, so the crescent always winds up behind the player and cuts forward.
+  const swingSign = player.isFacingLeftFlag === 1 ? -1.0 : 1.0;
+  const startAngleRad = aimAngleRad + NEW_SWORD_STAGE_BACK_RAD * swingSign;
+  const endAngleRad   = aimAngleRad - NEW_SWORD_FRONT_LEAD_RAD * swingSign;
+
   world.newSwordActiveFlag       = 1;
   world.newSwordGestureId        = gestureId;
   world.newSwordTicksElapsed     = 0;
   world.newSwordAimAngleRad      = aimAngleRad;
-  world.newSwordCurrentAngleRad  = aimAngleRad - NEW_SWORD_SLASH_HALF_ARC_RAD;
+  world.newSwordStartAngleRad    = startAngleRad;
+  world.newSwordEndAngleRad      = endAngleRad;
+  world.newSwordCurrentAngleRad  = startAngleRad;
   world.newSwordHandAnchorXWorld = anchorX;
   world.newSwordHandAnchorYWorld = anchorY;
   world.newSwordReachWorld       = SWORD_REACH_WORLD * Math.max(lengthRatio, 0.0);
   world.newSwordToShieldTransition01 = 0;
   _newSwordHitFlags.fill(0);
+
+  // Reserve the player's available motes as the actual blade. Each participating
+  // mote records its pre-swipe position so it can "shoot" from orbit into the
+  // rear staging arc, and is marked BEHAVIOR_MODE_SWORD_SLASH so integration,
+  // binding and the Shield crescent leave it fully under sword control.
+  world.newSwordMoteParticleIndex.fill(-1);
+  world.newSwordMoteCount = 0;
+  const available = getAvailableOrderedMoteSlots(world);
+  const bladeCount = Math.min(MAX_SWORD_SLASH_MOTES, available.count);
+  for (let rank = 0; rank < bladeCount; rank++) {
+    const pidx = world.moteSlotParticleIndex[available.indices[rank]];
+    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    const r = world.newSwordMoteCount;
+    world.newSwordMoteParticleIndex[r] = pidx;
+    world.newSwordMoteFromXWorld[r]    = world.positionXWorld[pidx];
+    world.newSwordMoteFromYWorld[r]    = world.positionYWorld[pidx];
+    world.behaviorMode[pidx]           = BEHAVIOR_MODE_SWORD_SLASH;
+    world.newSwordMoteCount++;
+  }
+}
+
+/** Eases 0..1 with a fast, decisive ease-out (for the explosive staging shot). */
+function _easeOutQuad(t: number): number {
+  return 1 - (1 - t) * (1 - t);
+}
+
+/** Smoothstep 0..1 for the forward crescent sweep. */
+function _smoothstep(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * Drives every reserved sword mote to its crescent position for progress
+ * `t01` (0..1 across the whole swipe). Motes shoot from their pre-swipe
+ * position into the rear staging arc during the first NEW_SWORD_STAGE_FRACTION,
+ * then sweep forward; each successive mote trails slightly behind and sits
+ * slightly farther out, forming a layered claw-like crescent.
+ */
+function _driveSwordMotes(world: WorldState, t01: number): void {
+  const startRad = world.newSwordStartAngleRad;
+  const endRad   = world.newSwordEndAngleRad;
+  const sweepDelta = endRad - startRad;
+  const cx = world.newSwordHandAnchorXWorld;
+  const cy = world.newSwordHandAnchorYWorld;
+  const swingSign = sweepDelta >= 0 ? 1 : -1;
+
+  const inStaging = t01 < NEW_SWORD_STAGE_FRACTION;
+  const sweepT = inStaging ? 0 : _smoothstep((t01 - NEW_SWORD_STAGE_FRACTION) / (1 - NEW_SWORD_STAGE_FRACTION));
+  const baseAngle = startRad + sweepDelta * sweepT;
+
+  for (let r = 0; r < world.newSwordMoteCount; r++) {
+    const pidx = world.newSwordMoteParticleIndex[r];
+    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+
+    const angle = baseAngle - NEW_SWORD_RANK_ANGLE_LAG_RAD * r * swingSign;
+    const radius = NEW_SWORD_CRESCENT_RADIUS_WORLD + NEW_SWORD_RANK_RADIAL_STEP_WORLD * r;
+    const targetX = cx + Math.cos(angle) * radius;
+    const targetY = cy + Math.sin(angle) * radius;
+
+    if (inStaging) {
+      // Shoot from the pre-swipe orbit position into the rear staging point.
+      const s = _easeOutQuad(t01 / NEW_SWORD_STAGE_FRACTION);
+      world.positionXWorld[pidx] = world.newSwordMoteFromXWorld[r] + (targetX - world.newSwordMoteFromXWorld[r]) * s;
+      world.positionYWorld[pidx] = world.newSwordMoteFromYWorld[r] + (targetY - world.newSwordMoteFromYWorld[r]) * s;
+    } else {
+      world.positionXWorld[pidx] = targetX;
+      world.positionYWorld[pidx] = targetY;
+    }
+    world.velocityXWorld[pidx] = 0;
+    world.velocityYWorld[pidx] = 0;
+    world.behaviorMode[pidx] = BEHAVIOR_MODE_SWORD_SLASH;
+  }
+}
+
+/** Releases every reserved sword mote back to Storm following (behaviorMode 0). */
+function _releaseSwordMotes(world: WorldState): void {
+  for (let r = 0; r < world.newSwordMoteCount; r++) {
+    const pidx = world.newSwordMoteParticleIndex[r];
+    if (pidx < 0 || pidx >= world.particleCount) continue;
+    if (world.behaviorMode[pidx] === BEHAVIOR_MODE_SWORD_SLASH) {
+      world.behaviorMode[pidx] = 0;
+    }
+  }
+  world.newSwordMoteCount = 0;
+  world.newSwordMoteParticleIndex.fill(-1);
 }
 
 /**
@@ -585,16 +700,23 @@ export function tickNewSwordSwipe(world: WorldState): boolean {
 
   world.newSwordTicksElapsed++;
   const t = Math.min(1.0, world.newSwordTicksElapsed / NEW_SWORD_SLASH_TICKS);
-  const eased = t * t * (3.0 - 2.0 * t);
-  const startAngleRad = world.newSwordAimAngleRad - NEW_SWORD_SLASH_HALF_ARC_RAD;
-  const endAngleRad   = world.newSwordAimAngleRad + NEW_SWORD_SLASH_HALF_ARC_RAD;
+
+  // Sweep angle follows the staged crescent (rear staging during the first
+  // NEW_SWORD_STAGE_FRACTION, then a smooth forward sweep to the front).
+  const startAngleRad = world.newSwordStartAngleRad;
+  const endAngleRad   = world.newSwordEndAngleRad;
+  const inStaging = t < NEW_SWORD_STAGE_FRACTION;
+  const sweepT = inStaging ? 0 : _smoothstep((t - NEW_SWORD_STAGE_FRACTION) / (1 - NEW_SWORD_STAGE_FRACTION));
 
   // Swept angular-interval collision: test every enemy against the arc swept
   // THIS tick (previous angle → current angle), not just the current sample,
   // so a fast swipe cannot skip past an enemy between ticks.
   const prevAngleRad = world.newSwordCurrentAngleRad;
-  const currentAngleRad = startAngleRad + (endAngleRad - startAngleRad) * eased;
+  const currentAngleRad = startAngleRad + (endAngleRad - startAngleRad) * sweepT;
   world.newSwordCurrentAngleRad = currentAngleRad;
+
+  // Drive the actual motes along the crescent (identities preserved).
+  _driveSwordMotes(world, t);
 
   if (world.newSwordReachWorld > 0) {
     _applySweptSlashHits(
@@ -609,6 +731,9 @@ export function tickNewSwordSwipe(world: WorldState): boolean {
 
   if (world.newSwordTicksElapsed >= NEW_SWORD_SLASH_TICKS) {
     world.newSwordActiveFlag = 0;
+    // Release the blade motes so the sword→shield handoff (or Storm) can claim
+    // them in place next tick — no stale sword control persists.
+    _releaseSwordMotes(world);
     return true;
   }
   return false;
@@ -673,17 +798,27 @@ function _applySweptSlashHits(
   }
 }
 
-/** Resets all new-sword transient state (cancel / room teardown). */
+/**
+ * Resets all new-sword transient state (cancel / room teardown). Releases any
+ * reserved blade motes back to Storm following first (guarded by particleCount,
+ * so it is safe even after the particle buffer has been rebuilt — stale indices
+ * simply won't be in BEHAVIOR_MODE_SWORD_SLASH and are skipped).
+ */
 export function resetNewSwordState(world: WorldState): void {
+  _releaseSwordMotes(world);
   world.newSwordActiveFlag           = 0;
   world.newSwordGestureId            = -1;
   world.newSwordTicksElapsed         = 0;
   world.newSwordAimAngleRad          = 0;
+  world.newSwordStartAngleRad        = 0;
+  world.newSwordEndAngleRad          = 0;
   world.newSwordCurrentAngleRad      = 0;
   world.newSwordHandAnchorXWorld     = 0;
   world.newSwordHandAnchorYWorld     = 0;
   world.newSwordReachWorld           = 0;
   world.newSwordToShieldTransition01 = 0;
+  world.newSwordMoteCount            = 0;
+  world.newSwordMoteParticleIndex.fill(-1);
   _newSwordHitFlags.fill(0);
 }
 

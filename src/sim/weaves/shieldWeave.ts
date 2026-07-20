@@ -22,6 +22,7 @@ import { WorldState } from '../world';
 import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
 import { isDustSwitchBehaviorMode } from '../particles/dustSwitchBehaviorMode';
 import { isBowArrowBehaviorMode } from '../particles/bowArrowBehaviorMode';
+import { isSwordSlashBehaviorMode } from '../particles/swordSlashBehaviorMode';
 
 /** Distance (world units) from player center at which the crescent forms. */
 const SHIELD_CRESCENT_RADIUS_WORLD = 12.0;
@@ -105,6 +106,8 @@ export function applyShieldWeaveCrescent(
     // excluded from ordinary shield-slot placement, keeping the central arrow
     // corridor clear and ensuring a mote is never both a shield and arrow mote.
     if (isBowArrowBehaviorMode(world.behaviorMode[pidx])) continue;
+    // Motes mid sword-crescent are owned by the Sword Weave, not the shield.
+    if (isSwordSlashBehaviorMode(world.behaviorMode[pidx])) continue;
 
     const arcPosition = _centerOutArcT(rank, total);
     const angle = centerAngle - halfArcRad + arcPosition * 2.0 * halfArcRad;

@@ -51,6 +51,9 @@ export const DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT = 6;
 /** Maximum simultaneous arrows in flight or stuck (legacy WEAVE_ARROW path). */
 export const MAX_ARROWS = 8;
 
+/** Maximum real motes that sweep the Sword Weave crescent slash. */
+export const MAX_SWORD_SLASH_MOTES = 8;
+
 /** Maximum real motes assembled into a single Bow Weave arrow (center + 4). */
 export const MAX_BOW_ARROW_MOTES = 5;
 /** Minimum real motes for a valid Bow Weave arrow (center + 2). */
@@ -488,6 +491,17 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * smooth interpolation itself belongs to the renderer).
    */
   newSwordToShieldTransition01: number;
+  /** Rear staging angle (radians) the crescent sweep starts behind the aim. */
+  newSwordStartAngleRad: number;
+  /** Front terminating angle (radians) the crescent sweep ends in front of the aim. */
+  newSwordEndAngleRad: number;
+  /** Number of actual motes participating in the crescent slash (0..MAX_SWORD_SLASH_MOTES). */
+  newSwordMoteCount: number;
+  /** Participating particle indices, ordered leading→trailing along the blade. */
+  newSwordMoteParticleIndex: Int32Array;
+  /** Per-mote pre-swipe position, so the mote can "shoot" from orbit into rear staging. */
+  newSwordMoteFromXWorld: Float32Array;
+  newSwordMoteFromYWorld: Float32Array;
 
   // ── Independent Bow Weave (Stage 3) — actual-mote arrow assembly ───────────
   //
@@ -839,6 +853,12 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     newSwordHandAnchorYWorld:      0,
     newSwordReachWorld:            0,
     newSwordToShieldTransition01:  0,
+    newSwordStartAngleRad:         0,
+    newSwordEndAngleRad:           0,
+    newSwordMoteCount:             0,
+    newSwordMoteParticleIndex:     new Int32Array(MAX_SWORD_SLASH_MOTES).fill(-1),
+    newSwordMoteFromXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMoteFromYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
     // ── Independent Bow Weave — actual-mote arrow ───────────────────────
     bowArrowPhase:                 0,
     bowArrowGestureId:             -1,
