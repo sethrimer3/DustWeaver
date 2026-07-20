@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceSwordShieldTransitionSmoothing } from '../render/effects/newSwordWeaveRenderer';
+import {
+  advanceSwordShieldTransitionSmoothing,
+  NewSwordWeaveRenderer,
+} from '../render/effects/newSwordWeaveRenderer';
 
 test('sword-to-shield transition smoothing is monotonic toward an increasing target', () => {
   let v = 0;
@@ -34,4 +37,19 @@ test('sword-to-shield transition smoothing clamps to [0, 1] even for out-of-rang
 test('sword-to-shield transition smoothing reaches target exactly with rate = 1', () => {
   assert.equal(advanceSwordShieldTransitionSmoothing(0, 1, 1), 1);
   assert.equal(advanceSwordShieldTransitionSmoothing(1, 0, 1), 0);
+});
+
+test('renderer reset() clears stale smoothed transition/interpolation state back to fresh-load defaults', () => {
+  const renderer = new NewSwordWeaveRenderer();
+  // Drive the private smoothing state far from its default via the public
+  // advance function used internally, then poke it in through the same
+  // shape render() would leave it in after a near-complete transition.
+  const rendererAny = renderer as unknown as { _smoothedTransition01: number; _prevActiveFlag: 0 | 1 };
+  rendererAny._smoothedTransition01 = 0.97;
+  rendererAny._prevActiveFlag = 1;
+
+  renderer.reset();
+
+  assert.equal(rendererAny._smoothedTransition01, 0, 'smoothed transition must reset to 0, not carry stale progress into a fresh room');
+  assert.equal(rendererAny._prevActiveFlag, 0, 'prev-active-flag baseline must reset so the next swipe starts a clean transition');
 });

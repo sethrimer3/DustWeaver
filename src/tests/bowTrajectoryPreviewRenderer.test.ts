@@ -4,6 +4,7 @@ import {
   sampleBowTrajectory,
   computeBowPreviewShouldBeVisible,
   MAX_BOW_PREVIEW_SAMPLES,
+  BowTrajectoryPreviewRenderer,
 } from '../render/effects/bowTrajectoryPreviewRenderer';
 import {
   getBowSpeedForMoteCount,
@@ -94,4 +95,14 @@ test('bow preview visibility requires unlock + held gesture + charging', () => {
   assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Idle, 1, 3), false);
   assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, 0, 3), false);
   assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Press, 1, 3), true);
+});
+
+test('renderer reset() clears stale fade-alpha interpolation state back to fresh-load default', () => {
+  const renderer = new BowTrajectoryPreviewRenderer();
+  const rendererAny = renderer as unknown as { _visibleAlpha: number };
+  rendererAny._visibleAlpha = 0.85;
+
+  renderer.reset();
+
+  assert.equal(rendererAny._visibleAlpha, 0, 'visible alpha must reset to 0 so a fully-faded-in preview from the previous room cannot flash for a frame in the new one');
 });

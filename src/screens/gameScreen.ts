@@ -350,6 +350,10 @@ export function startGameScreen(
     // Run all phases synchronously (for initial load / save-load paths).
     let result = gen.next();
     while (!result.done) result = gen.next();
+    // Reset render-local Sword/Bow smoothing state so a stale interpolation
+    // value from the previous room can never bleed a frame into this one.
+    newSwordWeaveRenderer.reset();
+    bowTrajectoryPreviewRenderer.reset();
   }
 
   /**

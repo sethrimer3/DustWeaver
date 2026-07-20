@@ -61,6 +61,17 @@ export class NewSwordWeaveRenderer {
   private _smoothedTransition01 = 0;
   private _prevActiveFlag: 0 | 1 = 0;
 
+  /**
+   * Resets render-local smoothing/interpolation state to its fresh-load
+   * default. Intended to be called on room/world load so a stale
+   * near-complete sword→shield transition from the previous room can never
+   * bleed a single frame into the new one. No sim state is touched.
+   */
+  reset(): void {
+    this._smoothedTransition01 = 0;
+    this._prevActiveFlag = 0;
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     snapshot: WorldSnapshot,

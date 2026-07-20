@@ -144,6 +144,16 @@ export class BowTrajectoryPreviewRenderer {
   /** Render-local smoothed visibility alpha (never written to WorldState). */
   private _visibleAlpha = 0;
 
+  /**
+   * Resets render-local smoothing state to its fresh-load default. Intended
+   * to be called on room/world load so a stale visibility fade from the
+   * previous room never bleeds a frame into the new one. No sim state is
+   * touched.
+   */
+  reset(): void {
+    this._visibleAlpha = 0;
+  }
+
   render(
     ctx: CanvasRenderingContext2D,
     snapshot: WorldSnapshot,

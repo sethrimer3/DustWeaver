@@ -11,6 +11,7 @@ import {
   markSecondaryWeaveGestureConsumedByOtherSystem,
 } from '../input/secondaryWeaveGesture';
 import { applyPlayerWeaveCombat } from '../sim/weaves/weaveCombat';
+import { releaseShieldWeaveParticles } from '../sim/weaves/shieldWeave';
 import { NEW_SWORD_SLASH_TICKS } from '../sim/weaves/swordWeave';
 import { MOTE_4_LOAD_TICKS } from '../sim/weaves/arrowWeave';
 
@@ -350,3 +351,166 @@ function countAvailableMotes(world: ReturnType<typeof createWorldState>): number
   }
   return n;
 }
+
+// ---- Item 1: sword->shield handoff mote-identity continuity ----------------
+
+test('sword-to-shield handoff: the exact motes that formed the swipe are the exact motes that form the shield, no gap and no double-render frame', () => {
+  const { world, player } = makeFixture(6);
+  world.hasSwordWeaveUnlockedFlag = 1;
+  world.hasShieldWeaveUnlockedFlag = 1;
+
+  // Snapshot the ordered mote-queue particle identities BEFORE the gesture —
+  // the swipe itself never depletes/reassigns queue slots (see
+  // secondaryWeaveCoordinator.ts's onSwordSwipeCompleted comment), so these
+  // are the exact same particle indices Shield must pick up.
+  const particleIdentitiesBefore: number[] = [];
+  for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesBefore.push(world.moteSlotParticleIndex[i]);
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.newSwordActiveFlag, 1);
+
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS - 1; i++) {
+    hold(world, player.positionXWorld + 20, player.positionYWorld);
+    // No frame during the swipe may show a formed shield crescent at the
+    // same time as an active sword swipe.
+    const shieldFormedThisFrame = world.shieldWeaveIndependentActiveFlag === 1;
+    assert.ok(!(world.newSwordActiveFlag === 1 && shieldFormedThisFrame), 'sword and shield must never both be fully active the same frame');
+  }
+
+  // Final hold tick: swipe completes and shield takes over the SAME tick.
+  hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.newSwordActiveFlag, 0, 'sword swipe finished');
+  assert.equal(world.shieldWeaveIndependentActiveFlag, 1, 'shield active same tick as handoff — no gap frame');
+
+  // No frame assigned zero motes during the handoff: the shield crescent
+  // must have picked up a nonzero mote count immediately.
+  let assignedToShieldCount = 0;
+  for (let i = 0; i < world.moteSlotCount; i++) {
+    if (world.behaviorMode[world.moteSlotParticleIndex[i]] === 2) assignedToShieldCount++;
+  }
+  assert.ok(assignedToShieldCount > 0, 'shield must not form with zero assigned motes during handoff');
+
+  // Identity check: the particle indices behind the shield crescent are
+  // exactly the same particle indices that existed before the gesture
+  // (the underlying particles were never destroyed/recreated, only
+  // retargeted in place).
+  const particleIdentitiesAfter: number[] = [];
+  for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesAfter.push(world.moteSlotParticleIndex[i]);
+  assert.deepEqual(particleIdentitiesAfter, particleIdentitiesBefore, 'the same underlying particles must carry through the sword->shield handoff, not a different set');
+});
+
+// ---- Item 5: arrow-slot reuse must not leak stale dust kind -----------------
+
+test('bow: reused arrow slot overwrites dust kind (no stale-kind leakage) and other fields', () => {
+  const { world, player } = makeFixture(8);
+  world.hasBowWeaveUnlockedFlag = 1;
+
+  // First arrow: dust kind A (Golden).
+  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  release(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.arrowCount, 1);
+  const slot = 0;
+  assert.equal(world.arrowDustKind[slot], ParticleKind.Golden);
+
+  // Expire the slot so it returns to the pool for reuse.
+  world.arrowLifetimeTicksLeft[slot] = 0;
+
+  // Second arrow: dust kind B (Ice) — fired into the same reused slot.
+  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Ice;
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  release(world, player.positionXWorld + 20, player.positionYWorld);
+
+  assert.equal(world.arrowDustKind[slot], ParticleKind.Ice, 'reused slot must carry the NEW dust kind, not the stale one from the previous occupant');
+  assert.equal(world.isArrowStuckFlag[slot], 0, 'reused slot must not carry stale stuck flag');
+  assert.equal(world.isArrowHitEnemyFlag[slot], 0, 'reused slot must not carry stale hit-enemy flag');
+  assert.equal(world.arrowHitTargetClusterIndex[slot], -1, 'reused slot must not carry a stale hit-target cluster index');
+});
+
+// ---- Item 7: shield cleanup preserves particles owned by other modes -------
+
+test('releaseShieldWeaveParticles only resets shield-owned (behaviorMode 2, this player) particles, leaving other-mode and other-owner particles untouched', () => {
+  const { world, player } = makeFixture(6);
+  const otherOwnerEntityId = player.entityId + 1000;
+  const OTHER_BEHAVIOR_MODE = 3; // e.g. Stormweave orbit / grapple-carried mote — anything != 2 (block/shield).
+
+  // A subset of this player's motes are in shield mode (2).
+  const shieldOwnedIndices = [world.moteSlotParticleIndex[0], world.moteSlotParticleIndex[1]];
+  for (const pidx of shieldOwnedIndices) world.behaviorMode[pidx] = 2;
+
+  // A particle owned by this player but in a DIFFERENT mode (not shield-owned).
+  const otherModeSamePlayerIdx = world.moteSlotParticleIndex[2];
+  world.behaviorMode[otherModeSamePlayerIdx] = OTHER_BEHAVIOR_MODE;
+
+  // A particle in behaviorMode 2 but owned by someone else entirely — must
+  // never be touched by this player's shield cleanup.
+  const shieldModeOtherOwnerIdx = world.moteSlotParticleIndex[3];
+  world.ownerEntityId[shieldModeOtherOwnerIdx] = otherOwnerEntityId;
+  world.behaviorMode[shieldModeOtherOwnerIdx] = 2;
+
+  releaseShieldWeaveParticles(world, player.entityId);
+
+  for (const pidx of shieldOwnedIndices) {
+    assert.equal(world.behaviorMode[pidx], 0, 'this player\'s shield-owned particles must be released to orbit (mode 0)');
+  }
+  assert.equal(world.behaviorMode[otherModeSamePlayerIdx], OTHER_BEHAVIOR_MODE, 'a same-player particle in a different mode (e.g. Stormweave orbit/grapple) must be left completely untouched');
+  assert.equal(world.behaviorMode[shieldModeOtherOwnerIdx], 2, 'a different owner\'s shield-mode particle must be left completely untouched');
+});
+
+// ---- Item 6: default combat mode executes exactly one ability path ---------
+
+test('default combat mode applies sword damage exactly once per hit, and the legacy path never fires', () => {
+  const { world, player } = makeFixture();
+  assert.notEqual(world.combatMode, 'legacy');
+  world.hasSwordWeaveUnlockedFlag = 1;
+  const enemy = addEnemy(world, player.positionXWorld + 10, player.positionYWorld, 20);
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  const hpTrace: number[] = [enemy.healthPoints];
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) {
+    hold(world, player.positionXWorld + 20, player.positionYWorld);
+    hpTrace.push(enemy.healthPoints);
+  }
+
+  // Damage must drop exactly once across the whole swipe (a single hit
+  // event), not be applied on multiple ticks (which would indicate the
+  // legacy path also ran and double-applied damage).
+  let dropCount = 0;
+  for (let i = 1; i < hpTrace.length; i++) {
+    if (hpTrace[i] < hpTrace[i - 1]) dropCount++;
+  }
+  assert.equal(dropCount, 1, 'damage must be applied exactly once for this single swipe, not duplicated by a legacy path also running');
+
+  // Legacy-only fields must remain fully untouched in default mode — if the
+  // legacy branch had run it would have flipped isPlayerSecondaryWeaveActiveFlag.
+  assert.equal(world.isPlayerSecondaryWeaveActiveFlag, 0, 'legacy secondary-weave-active flag must never be touched by the default-mode coordinator path');
+});
+
+// ---- Item 12: cancellation clears a LATCHED PENDING bow release too --------
+
+test('cancellation while a pending bow release is latched (mid-swipe) clears it without firing', () => {
+  const { world, player } = makeFixture(6);
+  world.hasSwordWeaveUnlockedFlag = 1;
+  world.hasBowWeaveUnlockedFlag = 1;
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.newSwordActiveFlag, 1, 'sword still swinging');
+
+  release(world, player.positionXWorld + 5, player.positionYWorld + 30);
+  assert.equal(world.newBowPendingReleaseFlag, 1, 'pending release latched before sword finished');
+
+  // Simulate a modal/teardown/death/room-transition cancellation while the
+  // pending release is still latched and the sword hasn't finished.
+  cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
+  applyPlayerWeaveCombat(world);
+
+  assert.equal(world.newBowPendingReleaseFlag, 0, 'latched pending release must be cleared by cancellation');
+  assert.equal(world.newSwordActiveFlag, 0, 'sword swipe must also be aborted by cancellation');
+
+  // Let additional ticks pass — no deferred fire must ever occur.
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 5; i++) idleTick(world);
+  assert.equal(world.arrowCount, 0, 'no arrow must fire from a cancelled pending release');
+});
