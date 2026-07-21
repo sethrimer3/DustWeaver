@@ -21,6 +21,9 @@ import { placeAtCursor } from '../editor/editorPlaceTool';
 import { deleteAtCursor } from '../editor/editorDeleteTool';
 import { PALETTE_ITEMS } from '../editor/editorPaletteItems';
 import { isCellCoveredByTimeStopField } from '../editor/editorHitTest';
+import { dehydrateRoom } from '../levels/roomSchemaV2';
+import { hydrateV2Room } from '../levels/roomSchemaHydrator';
+import { validateRoundTrip } from '../levels/roomRoundTripValidator';
 
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
   return {
@@ -165,6 +168,67 @@ test('a room with no TimeStop Field tiles omits the key from JSON (old-room comp
   const room = makeRoom({ timeStopFields: [] });
   const json = editorRoomDataToJson(room);
   assert.equal((json as { timeStopFields?: unknown }).timeStopFields, undefined);
+});
+
+// ── Compact v3 on-disk round trip (dehydrateRoom / hydrateV2Room) ───────────
+//
+// This is the ACTUAL save-file format (roomSchemaV2.ts docblock: "dehydrate
+// → SavedRoomV2 (file on disk)") used by exportCampaignJson/exportMainCampaignJson
+// — distinct from the "verbose" editorRoomDataToJson format tested above.
+// A field present only in the verbose path but not wired into
+// dehydrateRoom/hydrateV2Room is silently DROPPED on every real save/reload.
+
+test('TimeStop Field tiles survive the compact v3 dehydrate -> hydrate round trip (the actual on-disk save format)', () => {
+  const room = makeRoom({
+    timeStopFields: [
+      { uid: 1, xBlock: 3, yBlock: 4, wBlock: 2, hBlock: 1 },
+      { uid: 2, xBlock: 15, yBlock: 15, wBlock: 1, hBlock: 1 },
+    ],
+  });
+  const verboseJson = editorRoomDataToJson(room);
+  const saved = dehydrateRoom(verboseJson);
+  const rehydrated = hydrateV2Room(saved);
+
+  assert.ok(rehydrated.timeStopFields && rehydrated.timeStopFields.length > 0,
+    'timeStopFields must not be silently dropped by the compact save-file round trip');
+
+  // Compare cell coverage (compact encoding may re-tile into different
+  // rects/runs — e.g. a 2x1 could re-emerge as two 1x1s — so compare the set
+  // of covered cells, not the exact rect list, matching the game's own
+  // roundtrip-validator convention for water/lava zones.
+  const cellsOf = (zones: readonly { xBlock: number; yBlock: number; wBlock: number; hBlock: number }[]) => {
+    const set = new Set<string>();
+    for (const z of zones) {
+      for (let dy = 0; dy < z.hBlock; dy++) {
+        for (let dx = 0; dx < z.wBlock; dx++) set.add(`${z.xBlock + dx},${z.yBlock + dy}`);
+      }
+    }
+    return set;
+  };
+  const before = cellsOf(room.timeStopFields!);
+  const after = cellsOf(rehydrated.timeStopFields!);
+  assert.deepEqual([...after].sort(), [...before].sort());
+});
+
+test('a room with no TimeStop Field tiles round-trips cleanly through the compact v3 format (no key, no crash)', () => {
+  const room = makeRoom({ timeStopFields: [] });
+  const verboseJson = editorRoomDataToJson(room);
+  const saved = dehydrateRoom(verboseJson);
+  assert.equal((saved as { timeStopFieldLayer?: unknown }).timeStopFieldLayer, undefined);
+  const rehydrated = hydrateV2Room(saved);
+  assert.equal(rehydrated.timeStopFields, undefined);
+});
+
+test('validateRoundTrip (the project\'s own dev round-trip checker) reports no dropped/added TimeStop Field cells', () => {
+  const room = makeRoom({
+    timeStopFields: [
+      { uid: 1, xBlock: 6, yBlock: 6, wBlock: 3, hBlock: 3 },
+    ],
+  });
+  const verboseJson = editorRoomDataToJson(room);
+  const result = validateRoundTrip(verboseJson);
+  const timeStopErrors = result.errors.filter(e => e.includes('TimeStop Field cell'));
+  assert.deepEqual(timeStopErrors, []);
 });
 
 // ── RoomDef <-> EditorRoomData (gameplay export / import direction) ─────────

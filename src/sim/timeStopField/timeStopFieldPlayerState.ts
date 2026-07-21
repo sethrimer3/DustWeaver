@@ -45,16 +45,26 @@
  *
  * Room-transition policy: because a TimeStop Field region cannot span two
  * separate rooms' WorldState, `releaseTimeStopFieldMomentumIfActive` is
- * called once at the exact point the transition system captures the
- * player's carried-over velocity (gameScreen.ts) — treating a transition as
- * an implicit field exit, so momentum the player already earned is added
- * back rather than silently discarded. `resetTimeStopFieldPlayerState` then
- * clears the (already-released) state when the destination room activates.
+ * called once inside the transition-fire callback in
+ * gameRoomTransitionOrchestrator.ts — i.e. only at the exact moment a
+ * transition is CONFIRMED to fire, not every frame — treating a transition
+ * as an implicit field exit, so momentum the player already earned is added
+ * back (and carried into the new room's velocity) rather than silently
+ * discarded. `resetTimeStopFieldPlayerState` then clears the (already-
+ * released) state when the destination room activates.
+ *
+ * Region-identity policy across cache rebuilds: `activeRegionId` is a plain
+ * array index that is only meaningful within the `TimeStopFieldRegionSet`
+ * generation it was computed against. If the cache rebuilds while the
+ * player is standing in a field, `updateTimeStopFieldPlayerState` rebinds
+ * `activeRegionId` to the new generation's id for the SAME physical tile
+ * instead of comparing indices across generations — see the inline comment
+ * in that function.
  */
 
 import type { WorldState } from '../world';
 import { getTimeStopFieldRegions } from './timeStopFieldCache';
-import { encodeTimeStopTileKey, worldToTimeStopGrid } from './timeStopFieldBuilder';
+import { encodeTimeStopTileKey, worldToTimeStopGrid, type TimeStopFieldRegionSet } from './timeStopFieldBuilder';
 import {
   TIME_STOP_ENTRY_TRANSITION_TICKS,
   TIME_STOP_EXIT_TRANSITION_TICKS,
@@ -80,6 +90,20 @@ export interface TimeStopFieldPlayerState {
   entrySequence: number;
   /** Debug/testing aid: incremented exactly once per release. */
   exitSequence: number;
+  /**
+   * Internal bookkeeping only — never read by gameplay or rendering code
+   * outside this module, never serialized. Reference to the
+   * `TimeStopFieldRegionSet` that `activeRegionId` was last computed
+   * against. `activeRegionId` is a plain array index into
+   * `TimeStopFieldRegionSet.regions`, which is ONLY meaningful within the
+   * generation it came from — BFS region numbering can (and does) reshuffle
+   * across a cache rebuild even when the underlying tile geometry the
+   * player is standing on hasn't actually changed (Set iteration order
+   * depends on insertion order, which can differ between rebuilds). See the
+   * rebind check inside `updateTimeStopFieldPlayerState` for how this is
+   * used to avoid treating a mere renumbering as a false exit+entry event.
+   */
+  _lastRegionSet: TimeStopFieldRegionSet | null;
 }
 
 export function createTimeStopFieldPlayerState(): TimeStopFieldPlayerState {
@@ -92,6 +116,7 @@ export function createTimeStopFieldPlayerState(): TimeStopFieldPlayerState {
     visualIntensity: 0,
     entrySequence: 0,
     exitSequence: 0,
+    _lastRegionSet: null,
   };
 }
 
@@ -107,6 +132,7 @@ export function resetTimeStopFieldPlayerState(state: TimeStopFieldPlayerState): 
   state.storedMomentumXWorld = 0;
   state.storedMomentumYWorld = 0;
   state.visualIntensity = 0;
+  state._lastRegionSet = null;
 }
 
 function finiteOrZero(v: number): number {
@@ -153,6 +179,7 @@ export function releaseTimeStopFieldMomentumIfActive(
   else { state.hasStoredMomentumFlag = 0; state.storedMomentumXWorld = 0; state.storedMomentumYWorld = 0; }
   state.activeRegionId = -1;
   state.isInsideFieldFlag = 0;
+  state._lastRegionSet = null;
 }
 
 /**
@@ -188,6 +215,26 @@ export function updateTimeStopFieldPlayerState(world: WorldState): void {
     ? -1
     : (regionSet.tileToRegion.get(encodeTimeStopTileKey(gx, gy)) ?? -1);
 
+  // The region cache was rebuilt since we last evaluated (room-scoped reset
+  // normally guarantees this can't coincide with an active region today —
+  // see the module docblock — but this guard makes the logic correct even
+  // if a future caller marks the cache dirty during live occupancy, e.g. a
+  // runtime field edit or region merge/split while the player stands on it).
+  // `activeRegionId` is a bare array index into the OLD regions array and is
+  // therefore meaningless when compared against ids from a NEW regionSet —
+  // BFS numbering can reshuffle across a rebuild even when the tile the
+  // player is standing on didn't actually change. Rebind instead of
+  // comparing indices across generations, so an incidental rebuild (or a
+  // region merge that swallows the player's region into a bigger one) never
+  // produces a false exit+entry event.
+  const regionSetChanged = regionSet !== state._lastRegionSet;
+  if (regionSetChanged && state.activeRegionId !== -1 && newRegionId !== -1) {
+    state.activeRegionId = newRegionId;
+    state._lastRegionSet = regionSet;
+    stepVisualIntensity(state, true);
+    return;
+  }
+
   if (newRegionId !== state.activeRegionId) {
     // Deterministic ordering: release the old region's momentum BEFORE
     // capturing the new region's entry velocity, so a same-tick crossing
@@ -198,6 +245,7 @@ export function updateTimeStopFieldPlayerState(world: WorldState): void {
     state.activeRegionId = newRegionId;
     state.isInsideFieldFlag = newRegionId !== -1 ? 1 : 0;
   }
+  state._lastRegionSet = regionSet;
 
   stepVisualIntensity(state, state.isInsideFieldFlag === 1);
 }

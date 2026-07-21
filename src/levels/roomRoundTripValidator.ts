@@ -8,6 +8,7 @@
  *   • Same special wall count and properties
  *   • Same water zone cell coverage
  *   • Same lava zone cell coverage
+ *   • Same TimeStop Field cell coverage
  *   • Same ambient blocker cells (clear and dark separately)
  *   • Same background block cells, theme, and light-blocking identity
  *
@@ -211,6 +212,12 @@ export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult 
   const lavaAfter  = buildZoneCoverage(roundTripped.lavaZones);
   for (const k of lavaBefore) if (!lavaAfter.has(k))  errors.push(`Lava cell ${k} DROPPED`);
   for (const k of lavaAfter)  if (!lavaBefore.has(k)) errors.push(`Lava cell ${k} ADDED`);
+
+  // ── 6b. TimeStop Field coverage ───────────────────────────────────────────
+  const timeStopBefore = buildZoneCoverage(json.timeStopFields);
+  const timeStopAfter  = buildZoneCoverage(roundTripped.timeStopFields);
+  for (const k of timeStopBefore) if (!timeStopAfter.has(k))  errors.push(`TimeStop Field cell ${k} DROPPED`);
+  for (const k of timeStopAfter)  if (!timeStopBefore.has(k)) errors.push(`TimeStop Field cell ${k} ADDED`);
 
   // ── 7. Ambient blockers (clear and dark identity) ─────────────────────────
   const blkBefore = buildBlockerMap(json.ambientLightBlockers);

@@ -470,6 +470,12 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     const layer = dehydrateZoneLayer(json.lavaZones, json.widthBlocks, json.heightBlocks);
     if (layer) out.lavaLayer = layer;
   }
+  if (json.timeStopFields && json.timeStopFields.length > 0) {
+    // Same compression, independent layer — TimeStop Field tiles are not a
+    // liquid and never interact with water/lava coverage.
+    const layer = dehydrateZoneLayer(json.timeStopFields, json.widthBlocks, json.heightBlocks);
+    if (layer) out.timeStopFieldLayer = layer;
+  }
   if (json.breakableBlocks && json.breakableBlocks.length > 0) {
     out.breakableBlocks = json.breakableBlocks.map(b => [b.xBlock, b.yBlock] as SavedPoint);
   }

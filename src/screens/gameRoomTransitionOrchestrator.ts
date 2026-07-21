@@ -4,6 +4,7 @@ import type { RoomDef } from '../levels/roomDef';
 import type { WorldState } from '../sim/world';
 import { checkRoomTransitions, type TransitionDirection } from './gameTransitions';
 import { TRANSITION_COOLDOWN_MS, type GameCameraState } from './gameCameraState';
+import { releaseTimeStopFieldMomentumIfActive } from '../sim/timeStopField/timeStopFieldPlayerState';
 
 export interface TransitionDebugState {
   lastTransitionPlayerSpeedWorld: number;
@@ -46,14 +47,27 @@ export function orchestrateRoomTransitions(
     roomWidthWorld,
     roomHeightWorld,
     (room, spawnX, spawnY, dir) => {
-      debugState.lastTransitionPlayerSpeedWorld = Math.sqrt(preTransVX * preTransVX + preTransVY * preTransVY) * 60;
+      // A TimeStop Field region cannot span two rooms, so a transition is
+      // treated as an implicit field exit — release any stored momentum into
+      // velocity right here, at the moment a transition is CONFIRMED to
+      // fire (not every frame — this callback only runs when the player has
+      // actually crossed a transition trigger), so player-earned momentum is
+      // carried into the new room instead of silently discarded. Re-read
+      // velocity after releasing rather than using the closure-captured
+      // preTransVX/preTransVY, which were sampled before this release.
+      releaseTimeStopFieldMomentumIfActive(world);
+      const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
+      const vx = player?.velocityXWorld ?? preTransVX;
+      const vy = player?.velocityYWorld ?? preTransVY;
+
+      debugState.lastTransitionPlayerSpeedWorld = Math.sqrt(vx * vx + vy * vy) * 60;
       const [validSpawnX, validSpawnY] = resolveSpawnBlock(room, spawnX, spawnY);
 
       // Instant room transition — the only supported mode.
       // Velocity application is delegated to the loadRoom callback so that
       // async loads can defer it until the generator completes.
       if (ENABLE_SIMPLE_ROOM_TRANSITIONS) {
-        loadRoom(room, validSpawnX, validSpawnY, preTransVX, preTransVY, dir);
+        loadRoom(room, validSpawnX, validSpawnY, vx, vy, dir);
       }
 
       debugState.lastTransitionDestRoomId = room.id;

@@ -18,6 +18,7 @@ import { getMaterialFootprintSize, MATERIAL_VISUALS } from '../sim/pixelMaterial
 import { isFolderBasedTheme, getTheme1x1SpriteDarkened } from '../render/walls/folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from '../render/walls/blockEdgeShading';
 import { buildRoundedRegionPath, occupiedQueryFromCellList } from '../render/timeStopFieldGeometry';
+import { TIME_STOP_FIELD_CORNER_RADIUS_FRACTION } from '../sim/timeStopField/timeStopFieldConfig';
 import {
   ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
@@ -131,7 +132,12 @@ export function drawEditorTimeStopFields(
   }
   const isOccupied = occupiedQueryFromCellList(cells);
   const cellSizePx = BLOCK_SIZE_SMALL * zoom;
-  const path = buildRoundedRegionPath(cells, isOccupied, offsetXPx, offsetYPx, cellSizePx, cellSizePx * 0.45);
+  // Corner radius fraction is shared with the gameplay renderer
+  // (timeStopFieldRenderer.ts) so the editor preview never silently drifts
+  // out of sync with the actual in-game field geometry.
+  const path = buildRoundedRegionPath(
+    cells, isOccupied, offsetXPx, offsetYPx, cellSizePx, cellSizePx * TIME_STOP_FIELD_CORNER_RADIUS_FRACTION,
+  );
 
   ctx.save();
   ctx.fillStyle = 'rgba(150,110,255,0.28)';

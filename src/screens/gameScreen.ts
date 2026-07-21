@@ -158,7 +158,6 @@ import {
   type RoomPreloadAnticipationPorts,
 } from './roomPreloadAnticipationPolicy';
 import { createGameRunTimer } from './gameRunTimer';
-import { releaseTimeStopFieldMomentumIfActive } from '../sim/timeStopField/timeStopFieldPlayerState';
 
 const FIXED_DT_MS = 16.666;
 
@@ -1442,11 +1441,13 @@ export function startGameScreen(
     );
 
     // ── Room transition check ──────────────────────────────────────────────
-    // A TimeStop Field region cannot span two rooms, so a room transition is
-    // treated as an implicit field exit: release any stored momentum into
-    // velocity BEFORE it is captured below as the carried-over transition
-    // velocity, so player-earned momentum is never silently discarded.
-    releaseTimeStopFieldMomentumIfActive(world);
+    // NOTE: the TimeStop Field release-on-transition hook does NOT live here.
+    // This block runs every frame regardless of whether a transition is about
+    // to fire, so releasing here would release stored momentum continuously
+    // (within one frame of capture) instead of only at an actual transition.
+    // The release is performed inside orchestrateRoomTransitions' fire
+    // callback (gameRoomTransitionOrchestrator.ts), which only runs at the
+    // moment a transition is confirmed — see that file for the hook.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
 

@@ -8,8 +8,25 @@
  * arrow. Fully independent from the player's active-velocity speedometer /
  * debug displays (see ui/playerSpeedometerOverlayRenderer.ts) — this reads
  * only the suspended vector, never `player.velocityXWorld/YWorld`.
+ *
+ * Positioned at the player's INTERPOLATED render position
+ * (`ClusterSnapshot.renderPositionXWorld/YWorld`, blended between the
+ * previous and current simulation tick by `renderAlpha` — see snapshot.ts),
+ * the same position the player sprite itself is drawn at
+ * (render/clusters/renderer.ts). Using the raw un-interpolated simulation
+ * position here instead would visibly detach the arrow's origin from the
+ * player sprite by up to one tick's movement on any frame rendered between
+ * two simulation ticks.
+ *
+ * Rendered outside-the-field-mask, this arrow is ordinary world-space scene
+ * content: if it's captured by the inversion compositor's before-and-after
+ * scene copy (which runs after all world content is drawn) and its tip
+ * extends past the active field's boundary, that portion inverts along with
+ * everything else outside the mask — a deliberate, consistent choice (no
+ * special-casing) rather than an accidental side effect.
  */
 
+import type { ClusterSnapshot } from '../clusterSnapshotTypes';
 import type { WorldState } from '../../sim/world';
 import {
   TIME_STOP_ARROW_LENGTH_PER_SPEED,
@@ -23,19 +40,23 @@ import {
 /**
  * Draws the stored-momentum arrow for the player cluster, if any is stored
  * and the field visual has faded in enough to be visible. No-op otherwise.
+ *
+ * @param player  The player's render snapshot (for interpolated position),
+ *                e.g. the same `ClusterSnapshot` gameRender.ts already
+ *                derives for sunray-dust/rocket-particle rendering. Pass
+ *                `null` when no live player cluster exists this frame.
  */
 export function renderTimeStopMomentumArrow(
   ctx: CanvasRenderingContext2D,
   world: WorldState,
+  player: ClusterSnapshot | null,
   ox: number,
   oy: number,
   zoom: number,
 ): void {
   const state = world.timeStopField;
   if (state.hasStoredMomentumFlag === 0 || state.visualIntensity <= 0) return;
-
-  const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
-  if (player === undefined || player.isAliveFlag === 0) return;
+  if (player === null || player.isAliveFlag === 0) return;
 
   const vx = state.storedMomentumXWorld;
   const vy = state.storedMomentumYWorld;
@@ -50,8 +71,8 @@ export function renderTimeStopMomentumArrow(
   const dirX = vx / speed;
   const dirY = vy / speed;
 
-  const originXWorld = player.positionXWorld;
-  const originYWorld = player.positionYWorld;
+  const originXWorld = player.renderPositionXWorld;
+  const originYWorld = player.renderPositionYWorld;
   const tipXWorld = originXWorld + dirX * length;
   const tipYWorld = originYWorld + dirY * length;
 

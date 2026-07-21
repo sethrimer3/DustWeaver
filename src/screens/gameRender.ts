@@ -563,7 +563,7 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // TimeStop Field stored-momentum arrow — behind the player sprite, kept
   // independent from the active-velocity speedometer/debug overlays.
-  renderTimeStopMomentumArrow(ctx, world, ox, oy, zoom);
+  renderTimeStopMomentumArrow(ctx, world, playerForSunrayDust, ox, oy, zoom);
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
   if (playerForSunrayDust !== null) {
