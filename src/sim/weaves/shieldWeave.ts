@@ -23,9 +23,11 @@ import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
 import { isDustSwitchBehaviorMode } from '../particles/dustSwitchBehaviorMode';
 import { isBowArrowBehaviorMode } from '../particles/bowArrowBehaviorMode';
 import { isSwordSlashBehaviorMode } from '../particles/swordSlashBehaviorMode';
+import { SHIELD_CRESCENT_RADIUS_WORLD, centerOutArcT } from './shieldGeometry';
 
-/** Distance (world units) from player center at which the crescent forms. */
-const SHIELD_CRESCENT_RADIUS_WORLD = 12.0;
+// Re-exported for backward compatibility with existing importers.
+export { SHIELD_CRESCENT_RADIUS_WORLD };
+
 /** Minimum half-arc angle (radians) for 1 particle. */
 const SHIELD_MIN_HALF_ARC_RAD = 0.15;
 /** Maximum half-arc angle (radians) for maximum particles. */
@@ -52,27 +54,6 @@ const SHIELD_SPRING_DAMPING_RATIO = 0.9;
  * Beyond this, particles pack more densely rather than widening further.
  */
 const SHIELD_MAX_ARC_PARTICLE_COUNT = 30;
-
-/**
- * Computes the arc-t position (0..1 along the crescent) for a mote at `rank`
- * in the center-out ordering. Rank 0 gets the center, rank 1 just above,
- * rank 2 just below, rank 3 further above, etc. — earliest-queue motes
- * occupy the strongest defensive (center) positions.
- */
-function _centerOutArcT(rank: number, n: number): number {
-  if (n <= 1) return 0.5;
-  const center = Math.floor((n - 1) / 2);
-  let posIdx: number;
-  if (rank === 0) {
-    posIdx = center;
-  } else if (rank % 2 === 1) {
-    posIdx = center + Math.ceil(rank / 2);
-  } else {
-    posIdx = center - (rank / 2);
-  }
-  posIdx = Math.max(0, Math.min(n - 1, posIdx));
-  return posIdx / (n - 1);
-}
 
 /**
  * Applies spring forces that hold the player's available mote particles in a
@@ -109,7 +90,7 @@ export function applyShieldWeaveCrescent(
     // Motes mid sword-crescent are owned by the Sword Weave, not the shield.
     if (isSwordSlashBehaviorMode(world.behaviorMode[pidx])) continue;
 
-    const arcPosition = _centerOutArcT(rank, total);
+    const arcPosition = centerOutArcT(rank, total);
     const angle = centerAngle - halfArcRad + arcPosition * 2.0 * halfArcRad;
 
     const targetX = playerXWorld + Math.cos(angle) * SHIELD_CRESCENT_RADIUS_WORLD;

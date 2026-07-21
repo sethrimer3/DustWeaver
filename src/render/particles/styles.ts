@@ -1,15 +1,32 @@
 /**
- * Per-element visual style for the Canvas 2D fallback renderer.
- * The WebGL renderer picks colours directly in the vertex packing step
- * (see webglRenderer.ts + shaders.ts → kindColor()).
+ * Per-element visual style. `STYLES`/`getParticleStyle()` here are used only
+ * for the Fluid background particle (see renderer.ts) — ordinary gameplay
+ * motes are NOT drawn from this table; they go through
+ * `pixelLockedDustRenderer.ts` (Canvas fallback) or the WebGL shader
+ * (`shaders.ts` → `kindColor()`).
  *
- * For the *equippable player mote* kinds, the per-channel RGB values below are
- * synchronized with the centralized mote-type configuration
- * (`sim/motes/moteTypeConfig.ts`), which is the authoritative source for a
- * mote type's body / glow / trail / particle colour. The accompanying
- * regression test asserts the two never drift apart, so changing a player mote
- * type's colour in one place is enough. Internal / environmental kinds keep
- * their bespoke values here.
+ * `KIND_COLOR_R/G/B` below feed the trail renderers (`trailRenderer.ts`,
+ * `dustSwitchTrailRenderer.ts`).
+ *
+ * Where the centralized mote-type config (task section 7) actually lands, per
+ * render path — all generated FROM `sim/motes/moteTypeConfig.ts` at module
+ * load for the *equippable player mote* kinds (Golden, Ice, Nature, Void,
+ * Light); internal/environmental kinds keep their bespoke hand-tuned values
+ * everywhere:
+ *   • trail   → `visual.trail`, synced into `KIND_COLOR_R/G/B` below.
+ *   • body    → `visual.body`, synced into `pixelLockedDustRenderer.ts`'s
+ *               Canvas tone ramp (darker tones) AND `shaders.ts`'s WebGL
+ *               `kindColor()` literal — both renderers' actual body colour.
+ *   • glow    → `visual.glow`, synced into `pixelLockedDustRenderer.ts`'s
+ *               ramp as the glint/brightest accent tone. WebGL has no
+ *               separate glow-colour slot; its "glow" is the additive-blend
+ *               appearance of the body colour itself (see shaders.ts).
+ *   • particle→ intentionally aliases `visual.body` for now: motes ARE the
+ *               particles in this renderer architecture, so there is no
+ *               independent spawned-effect-particle colour to wire yet. Kept
+ *               as a distinct config field for a future dedicated FX spawner.
+ * A regression test asserts each of these stays in sync (or, for `particle`,
+ * intentionally equal to `body`) so this comment cannot silently go stale.
  */
 
 import { ParticleKind } from '../../sim/particles/kinds';

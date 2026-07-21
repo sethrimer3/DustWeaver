@@ -37,6 +37,8 @@ import {
   getAvailableOrderedMoteSlots,
 } from '../motes/orderedMoteQueue';
 import { BEHAVIOR_MODE_SWORD_SLASH } from '../particles/swordSlashBehaviorMode';
+import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
+import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
 import { applyODCHit } from '../clusters/orbitalDustCoreAi';
 import {
   ODC_SMALL_RING_RADII,
@@ -101,9 +103,6 @@ const READY_ANGLE_LEFT_RAD  = Math.PI - READY_ANGLE_RIGHT_RAD; // mirror
 
 /** Pull-back amount during windup (radians). */
 const WINDUP_PULL_BACK_RAD = Math.PI * 0.45;
-
-/** Maximum number of cluster hit-registry slots — must cover all enemies in a room. */
-const MAX_HIT_REGISTRY_SLOTS = 64;
 
 /** Hand anchor offsets relative to player center (world units). */
 const HAND_ANCHOR_X_OFFSET_WORLD = 3.0;
@@ -618,6 +617,11 @@ export function startNewSwordSwipe(
     world.newSwordMoteParticleIndex[r] = pidx;
     world.newSwordMoteFromXWorld[r]    = world.positionXWorld[pidx];
     world.newSwordMoteFromYWorld[r]    = world.positionYWorld[pidx];
+    // Seed the swept-collision "previous position" with the mote's pre-swipe
+    // position so the very first tick's swept test covers the initial shot
+    // into rear staging too (not just the forward sweep).
+    world.newSwordMotePrevXWorld[r]    = world.positionXWorld[pidx];
+    world.newSwordMotePrevYWorld[r]    = world.positionYWorld[pidx];
     world.behaviorMode[pidx]           = BEHAVIOR_MODE_SWORD_SLASH;
     world.newSwordMoteCount++;
   }
@@ -703,30 +707,29 @@ export function tickNewSwordSwipe(world: WorldState): boolean {
 
   // Sweep angle follows the staged crescent (rear staging during the first
   // NEW_SWORD_STAGE_FRACTION, then a smooth forward sweep to the front).
+  // This angle bookkeeping is retained purely for the renderer's trail
+  // visualization (newSwordWeaveRenderer.ts) — hit detection below is driven
+  // entirely by the actual mote positions, not this angle.
   const startAngleRad = world.newSwordStartAngleRad;
   const endAngleRad   = world.newSwordEndAngleRad;
   const inStaging = t < NEW_SWORD_STAGE_FRACTION;
   const sweepT = inStaging ? 0 : _smoothstep((t - NEW_SWORD_STAGE_FRACTION) / (1 - NEW_SWORD_STAGE_FRACTION));
+  world.newSwordCurrentAngleRad = startAngleRad + (endAngleRad - startAngleRad) * sweepT;
 
-  // Swept angular-interval collision: test every enemy against the arc swept
-  // THIS tick (previous angle → current angle), not just the current sample,
-  // so a fast swipe cannot skip past an enemy between ticks.
-  const prevAngleRad = world.newSwordCurrentAngleRad;
-  const currentAngleRad = startAngleRad + (endAngleRad - startAngleRad) * sweepT;
-  world.newSwordCurrentAngleRad = currentAngleRad;
-
-  // Drive the actual motes along the crescent (identities preserved).
+  // Capture each reserved mote's pre-update position, then drive them to
+  // their new crescent position — the swept test below covers exactly the
+  // path each individual mote traveled this tick (task section 5): visual
+  // motes and damage geometry are now the same geometry, at every mote count.
+  for (let r = 0; r < world.newSwordMoteCount; r++) {
+    const pidx = world.newSwordMoteParticleIndex[r];
+    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    world.newSwordMotePrevXWorld[r] = world.positionXWorld[pidx];
+    world.newSwordMotePrevYWorld[r] = world.positionYWorld[pidx];
+  }
   _driveSwordMotes(world, t);
 
   if (world.newSwordReachWorld > 0) {
-    _applySweptSlashHits(
-      world,
-      world.newSwordHandAnchorXWorld,
-      world.newSwordHandAnchorYWorld,
-      prevAngleRad,
-      currentAngleRad,
-      world.newSwordReachWorld,
-    );
+    _applySweptMoteHits(world);
   }
 
   if (world.newSwordTicksElapsed >= NEW_SWORD_SLASH_TICKS) {
@@ -740,22 +743,24 @@ export function tickNewSwordSwipe(world: WorldState): boolean {
 }
 
 /**
- * Applies NEW_SWORD_DAMAGE to enemies whose bearing falls within the swept
- * angular interval [min(prev,current), max(prev,current)] (clamped to the
- * swipe's total arc), each enemy hit at most once per swipe via the
- * per-gesture hit registry.
+ * Small per-mote hit radius (world units) for sword swept-capsule collision,
+ * approximating a blade mote's rendered body + glow footprint. Combined with
+ * each enemy's own half-size so larger enemies are correspondingly easier to
+ * clip (task section 5 — "give each mote a small canonical hit radius based
+ * on its rendered body/glow").
  */
-function _applySweptSlashHits(
-  world: WorldState,
-  anchorXWorld: number,
-  anchorYWorld: number,
-  prevAngleRad: number,
-  currentAngleRad: number,
-  reachWorld: number,
-): void {
-  const reachSq = reachWorld * reachWorld;
-  const loAngle = Math.min(prevAngleRad, currentAngleRad);
-  const hiAngle = Math.max(prevAngleRad, currentAngleRad);
+const NEW_SWORD_MOTE_HIT_RADIUS_WORLD = 2.0;
+
+/**
+ * Applies NEW_SWORD_DAMAGE to enemies swept by any reserved blade mote's
+ * actual previous→current position this tick (a small capsule around each
+ * mote's real swept path, not an abstract angular hitbox) — the visual blade
+ * and the damage geometry are the same geometry at every mote count and every
+ * rank. Each enemy is damaged at most once per swipe via the per-gesture hit
+ * registry, checked/set per enemy (not per mote), so multiple motes crossing
+ * the same enemy in the same tick still only apply damage once.
+ */
+function _applySweptMoteHits(world: WorldState): void {
   const limit = Math.min(world.clusters.length, MAX_HIT_REGISTRY_SLOTS);
 
   for (let ci = 0; ci < limit; ci++) {
@@ -764,37 +769,27 @@ function _applySweptSlashHits(
     if (c.isAliveFlag === 0) continue;
     if (c.isPlayerFlag === 1) continue;
 
-    const dx = c.positionXWorld - anchorXWorld;
-    const dy = c.positionYWorld - anchorYWorld;
-    const distSq = dx * dx + dy * dy;
-    if (distSq > reachSq) continue;
+    const enemyRadius = Math.min(c.halfWidthWorld, c.halfHeightWorld);
+    const hitRadius = NEW_SWORD_MOTE_HIT_RADIUS_WORLD + enemyRadius;
+    const hitRadiusSq = hitRadius * hitRadius;
 
-    const bearingRad = Math.atan2(dy, dx);
-    // Normalize bearing into the same winding as [loAngle, hiAngle] by
-    // shifting by full turns until it falls within [loAngle - 2π, hiAngle + 2π].
-    let normalizedBearing = bearingRad;
-    while (normalizedBearing < loAngle - Math.PI) normalizedBearing += 2.0 * Math.PI;
-    while (normalizedBearing > hiAngle + Math.PI) normalizedBearing -= 2.0 * Math.PI;
-    if (normalizedBearing < loAngle || normalizedBearing > hiAngle) continue;
+    let hitByRank = -1;
+    for (let r = 0; r < world.newSwordMoteCount; r++) {
+      const pidx = world.newSwordMoteParticleIndex[r];
+      if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+
+      const distSq = segmentPointDistanceSq(
+        world.newSwordMotePrevXWorld[r], world.newSwordMotePrevYWorld[r],
+        world.positionXWorld[pidx], world.positionYWorld[pidx],
+        c.positionXWorld, c.positionYWorld,
+      );
+      if (distSq <= hitRadiusSq) { hitByRank = r; break; }
+    }
+    if (hitByRank === -1) continue;
 
     _newSwordHitFlags[ci] = 1;
-    if (c.isOrbitalDustCoreFlag === 1) {
-      const dist = Math.sqrt(distSq) || 1;
-      const nx = -dx / dist;
-      const ny = -dy / dist;
-      const exposedRing = c.orbitalDustCoreExposedRing;
-      const isLarge = c.isOrbitalDustCoreLargeFlag;
-      const radii = isLarge === 1 ? ODC_LARGE_RING_RADII : ODC_SMALL_RING_RADII;
-      const ringCount = isLarge === 1 ? ODC_LARGE_RING_COUNT : ODC_SMALL_RING_COUNT;
-      const hitR = exposedRing >= ringCount ? 0 : radii[exposedRing];
-      applyODCHit(world, ci, c.positionXWorld + nx * hitR, c.positionYWorld + ny * hitR, NEW_SWORD_DAMAGE);
-      continue;
-    }
-    c.healthPoints -= NEW_SWORD_DAMAGE;
-    if (c.healthPoints <= 0) {
-      c.healthPoints = 0;
-      c.isAliveFlag = 0;
-    }
+    const hitPidx = world.newSwordMoteParticleIndex[hitByRank];
+    applyRoutedWeaveDamage(world, ci, NEW_SWORD_DAMAGE, world.positionXWorld[hitPidx], world.positionYWorld[hitPidx]);
   }
 }
 

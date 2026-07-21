@@ -8,26 +8,45 @@
  * ammunition queue — every arrow mote is an actual player mote temporarily in a
  * projectile state, and it is never permanently removed from the inventory.
  *
+ * Assembly seats and launches from the shield's canonical center (see
+ * `shieldGeometry.ts`), not the player's body — the arrow visually extends
+ * from where the shield already sits in front of the player.
+ *
  * Timing (measured from when the Shield Weave began, NOT from the input press):
  *   • t=0.00 s — one center mote occupies the arrow center; the straight
  *     trajectory line extends outward along the aim.
- *   • t=0.75 s — the two shield motes farthest from center arc into the arrow,
- *     forming a straight 3-mote line (behind · center · front).
- *   • t=1.25 s — a fourth mote (if available) arcs in → 4-mote arrow.
- *   • t=1.75 s — a fifth mote (if available) arcs in → 5-mote arrow (max).
- *   Minimum valid arrow = 3 motes; below 3 total motes the bow does not
- *   assemble and the Shield Weave behaves normally.
+ *   • t=0.75 s — the two outermost shield-arc motes (selected deterministically
+ *     by center-out queue rank, not physics distance — see
+ *     `_pickEdgeAvailableMote`) begin arcing in, forming a 3-mote line once
+ *     seated (behind · center · front).
+ *   • t=1.25 s — a fourth mote (if available) begins arcing in → 4-mote arrow
+ *     once seated.
+ *   • t=1.75 s — a fifth mote (if available) begins arcing in → 5-mote arrow
+ *     (max) once seated.
+ *   Minimum valid arrow = 3 SEATED motes; below 3 total motes available the
+ *   bow does not assemble and the Shield Weave behaves normally.
+ *
+ * Loading vs. seated (task section 6): a mote that has just started its
+ * 12-tick arc-in animation is LOADING, not SEATED. Only seated motes count
+ * toward the fireable minimum, so releasing the instant the 0.75 s threshold
+ * is crossed cannot snap two still-mid-air motes directly into a fired arrow.
+ * If release happens before enough motes are even reserved to ever reach the
+ * minimum, the arrow cancels immediately; otherwise the release latches and
+ * fires automatically the moment enough motes finish seating (see
+ * `fireBowArrow` / the coordinator's latch handling).
  *
  * State ownership: an arrow mote is marked BEHAVIOR_MODE_BOW_ARROW, so normal
  * integration + binding skip it and the Shield crescent excludes it (a mote is
  * never simultaneously a shield-slot mote and an arrow mote). On launch
- * resolution (wall bounce or max-distance curve-home) each mote is handed back
- * to behaviorMode 0 with an initial velocity, so the standard Storm pursuit
- * gradually reclaims it — there is no separate owned "returning" phase.
+ * resolution (wall bounce, enemy hit, or max-distance curve-home) each mote is
+ * handed back to behaviorMode 0 with an initial velocity, so the standard
+ * Storm pursuit gradually reclaims it — there is no separate owned "returning"
+ * phase.
  *
  * Gold Dust (the default) supplies the projectile baseline via
  * `moteTypeConfig.ts`: 250 px/s outbound speed (constant, independent of load
- * duration) and 250 px maximum outbound travel.
+ * duration), 250 px maximum outbound travel, and non-piercing (each shot
+ * resolves on its first enemy hit).
  */
 
 import { WorldState, MAX_BOW_ARROW_MOTES, MIN_BOW_ARROW_MOTES } from '../world';
@@ -37,16 +56,24 @@ import { getMoteTypeProjectile } from '../motes/moteTypeConfig';
 import { BEHAVIOR_MODE_BOW_ARROW } from '../particles/bowArrowBehaviorMode';
 import { raycastWalls } from '../clusters/grappleShared';
 import { nextFloatRange } from '../rng';
+import { computeShieldCenterWorld, WorldPoint } from './shieldGeometry';
+import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
+import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
 
 // ── Phases ───────────────────────────────────────────────────────────────────
 export const BOW_ARROW_PHASE_NONE       = 0;
 export const BOW_ARROW_PHASE_ASSEMBLING = 1;
 export const BOW_ARROW_PHASE_OUTBOUND   = 2;
 
+// ── Per-rank assembly state ─────────────────────────────────────────────────
+export const BOW_ARROW_RANK_UNUSED  = 0;
+export const BOW_ARROW_RANK_LOADING = 1;
+export const BOW_ARROW_RANK_SEATED  = 2;
+
 // ── Timing (ticks at 60 fps, measured from Shield Weave start) ────────────────
-export const BOW_ARROW_LOAD_3_TICKS = 45;  // 0.75 s → 3 motes
-export const BOW_ARROW_LOAD_4_TICKS = 75;  // 1.25 s → 4 motes
-export const BOW_ARROW_LOAD_5_TICKS = 105; // 1.75 s → 5 motes
+export const BOW_ARROW_LOAD_3_TICKS = 45;  // 0.75 s → 3 motes begin loading
+export const BOW_ARROW_LOAD_4_TICKS = 75;  // 1.25 s → 4th mote begins loading
+export const BOW_ARROW_LOAD_5_TICKS = 105; // 1.75 s → 5th mote begins loading
 
 /** Ticks each pulled mote spends arcing from its shield slot into the line. */
 const BOW_ARROW_ARC_TICKS = 12;
@@ -64,6 +91,27 @@ const BOW_ARROW_CURVE_HOME_BASE_RAD = 0.6;
 const BOW_ARROW_CURVE_HOME_JITTER_RAD = 0.35;
 /** Small backoff (world units) from a wall hit point so motes never embed in terrain. */
 const BOW_ARROW_WALL_BACKOFF_WORLD = 0.75;
+
+/**
+ * Small per-mote hit radius (world units) for the arrow's swept enemy
+ * collision, approximating a mote's rendered body + glow footprint. Combined
+ * with each enemy's own half-size, matching the Sword Weave's equivalent
+ * constant in spirit (see `NEW_SWORD_MOTE_HIT_RADIUS_WORLD` in swordWeave.ts).
+ */
+const BOW_ARROW_MOTE_HIT_RADIUS_WORLD = 2.0;
+
+/**
+ * Whole-number Bow Weave damage policy by fired arrow mote count (task
+ * section 1). A single authoritative pure function — no scattered literals.
+ */
+export function getBowArrowDamage(moteCount: number): number {
+  if (moteCount >= 5) return 4;
+  if (moteCount === 4) return 3;
+  return 2; // minimum 3-mote arrow
+}
+
+/** Per-shot enemy hit registry (module-level scratch — reset on every fire). */
+const _bowArrowHitFlags = new Uint8Array(MAX_HIT_REGISTRY_SLOTS);
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 
@@ -91,6 +139,38 @@ function _isReserved(world: WorldState, pidx: number): boolean {
     if (world.bowArrowParticleIndex[r] === pidx) return true;
   }
   return false;
+}
+
+/** Number of currently-reserved ranks whose assembly state is SEATED. */
+export function countSeatedBowArrowMotes(world: WorldState): number {
+  let n = 0;
+  for (let r = 0; r < world.bowArrowCount; r++) {
+    if (world.bowArrowRankState[r] === BOW_ARROW_RANK_SEATED) n++;
+  }
+  return n;
+}
+
+const _shieldCenterScratch: WorldPoint = { x: 0, y: 0 };
+
+/**
+ * Resolves the current shield-center seating/launch origin for `player`,
+ * given an aim delta (need not be normalized) and a fallback direction (used
+ * when the aim delta is ~zero — see `shieldGeometry.computeShieldCenterWorld`).
+ * Writes into the shared scratch point and returns it (allocation-free).
+ */
+function _resolveShieldCenter(
+  player: ClusterState,
+  aimDirXWorld: number,
+  aimDirYWorld: number,
+  fallbackDirXWorld: number,
+  fallbackDirYWorld: number,
+): WorldPoint {
+  return computeShieldCenterWorld(
+    _shieldCenterScratch,
+    player.positionXWorld, player.positionYWorld,
+    aimDirXWorld, aimDirYWorld,
+    fallbackDirXWorld, fallbackDirYWorld,
+  );
 }
 
 // ── Assembly lifecycle ───────────────────────────────────────────────────────
@@ -123,47 +203,54 @@ export function beginBowArrowAssembly(
   world.bowArrowCount           = 1;
   world.bowArrowParticleIndex.fill(-1);
   world.bowArrowSlotStartTick.fill(-1);
+  world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
   world.bowArrowParticleIndex[0] = centerPidx;
   world.bowArrowSlotStartTick[0] = world.tick;
+  world.bowArrowRankState[0]     = BOW_ARROW_RANK_LOADING;
   world.bowArrowArcFromXWorld[0] = world.positionXWorld[centerPidx];
   world.bowArrowArcFromYWorld[0] = world.positionYWorld[centerPidx];
   world.bowArrowArcCtrlXWorld[0] = world.positionXWorld[centerPidx];
   world.bowArrowArcCtrlYWorld[0] = world.positionYWorld[centerPidx];
   world.behaviorMode[centerPidx] = BEHAVIOR_MODE_BOW_ARROW;
   world.bowArrowTravelPx = 0;
+  world.bowArrowReleaseLatchedFlag = 0;
   return true;
 }
 
 /**
- * Picks the available (non-reserved, alive) player mote particle whose current
- * position is farthest from `cx,cy`. Returns the particle index or −1.
+ * Selects the next available player mote for the Bow arrow using the SAME
+ * center-out queue ordering the Shield crescent uses to place its slots (see
+ * `shieldGeometry.centerOutArcT`): for any available-motes count, the LAST
+ * entries of the ordered available-motes list are always the two outermost
+ * shield-arc positions (arc-t 0 and 1), and scanning further inward from
+ * there visits the next-outermost slots in order. Scanning the available list
+ * from its end, skipping already-reserved motes, therefore deterministically
+ * picks the outermost unreserved shield-arc mote first, then the
+ * next-outermost, purely from queue order — never from transient physics
+ * position or floating-point distance.
  */
-function _pickFarthestAvailableMote(world: WorldState, cx: number, cy: number): number {
+function _pickEdgeAvailableMote(world: WorldState): number {
   const available = getAvailableOrderedMoteSlots(world);
-  let bestPidx = -1;
-  let bestDistSq = -1;
-  for (let k = 0; k < available.count; k++) {
-    const pidx = world.moteSlotParticleIndex[available.indices[k]];
+  for (let rank = available.count - 1; rank >= 0; rank--) {
+    const pidx = world.moteSlotParticleIndex[available.indices[rank]];
     if (pidx < 0 || pidx >= world.particleCount) continue;
     if (world.isAliveFlag[pidx] === 0) continue;
     if (_isReserved(world, pidx)) continue;
-    const dx = world.positionXWorld[pidx] - cx;
-    const dy = world.positionYWorld[pidx] - cy;
-    const d2 = dx * dx + dy * dy;
-    if (d2 > bestDistSq) { bestDistSq = d2; bestPidx = pidx; }
+    return pidx;
   }
-  return bestPidx;
+  return -1;
 }
 
-/** Reserves one additional mote into the arrow at the next center-out rank. */
-function _reserveNextMote(world: WorldState, centerX: number, centerY: number, playerX: number, playerY: number): void {
+/** Reserves one additional mote into the arrow at the next center-out rank (state: LOADING). */
+function _reserveNextMote(world: WorldState, playerX: number, playerY: number): void {
   const rank = world.bowArrowCount;
   if (rank >= MAX_BOW_ARROW_MOTES) return;
-  const pidx = _pickFarthestAvailableMote(world, centerX, centerY);
+  const pidx = _pickEdgeAvailableMote(world);
   if (pidx === -1) return;
 
   world.bowArrowParticleIndex[rank] = pidx;
   world.bowArrowSlotStartTick[rank] = world.tick;
+  world.bowArrowRankState[rank]     = BOW_ARROW_RANK_LOADING;
   world.bowArrowArcFromXWorld[rank] = world.positionXWorld[pidx];
   world.bowArrowArcFromYWorld[rank] = world.positionYWorld[pidx];
   // Control point bulges away from the player so the mote arcs out then curves back.
@@ -177,43 +264,57 @@ function _reserveNextMote(world: WorldState, centerX: number, centerY: number, p
 }
 
 /**
- * Advances arrow assembly one tick while the bow is held. Updates the firing
- * direction from the current aim (so the arrow rotates smoothly with the aim
- * line without re-running the load timers), loads motes as schedule thresholds
- * are crossed, and drives each mote toward its seated line position (arcing in
- * for freshly-pulled motes). Safe to call every held tick.
+ * Advances arrow assembly one tick. When `isHeld` is true (the secondary
+ * gesture is actively held), updates the firing direction from the current
+ * aim (so the arrow rotates smoothly with the aim line without re-running the
+ * load timers) and loads new motes as schedule thresholds are crossed. Every
+ * call — held or not — drives each already-reserved mote toward its seated
+ * line position (arcing in for still-loading motes, transitioning to SEATED
+ * once the arc completes), so a release-latched arrow keeps assembling with
+ * its already-loading motes even after the gesture ends (task section 6).
+ * Safe to call every tick while `bowArrowPhase === ASSEMBLING`.
  */
 export function tickBowArrowAssembly(
   world: WorldState,
   aimDirXWorld: number,
   aimDirYWorld: number,
+  isHeld: boolean,
 ): void {
   if (world.bowArrowPhase !== BOW_ARROW_PHASE_ASSEMBLING) return;
   const player = _findPlayer(world);
   if (player === null) return;
 
-  const aimLen = Math.hypot(aimDirXWorld, aimDirYWorld);
-  const dirX = aimLen > 1e-6 ? aimDirXWorld / aimLen : world.bowArrowDirXWorld;
-  const dirY = aimLen > 1e-6 ? aimDirYWorld / aimLen : world.bowArrowDirYWorld;
-  world.bowArrowDirXWorld = dirX;
-  world.bowArrowDirYWorld = dirY;
+  let dirX = world.bowArrowDirXWorld;
+  let dirY = world.bowArrowDirYWorld;
+  if (isHeld) {
+    const aimLen = Math.hypot(aimDirXWorld, aimDirYWorld);
+    dirX = aimLen > 1e-6 ? aimDirXWorld / aimLen : world.bowArrowDirXWorld;
+    dirY = aimLen > 1e-6 ? aimDirYWorld / aimLen : world.bowArrowDirYWorld;
+    world.bowArrowDirXWorld = dirX;
+    world.bowArrowDirYWorld = dirY;
+  }
 
-  const centerX = player.positionXWorld;
-  const centerY = player.positionYWorld;
+  const center = _resolveShieldCenter(player, dirX, dirY, dirX, dirY);
+  const centerX = center.x;
+  const centerY = center.y;
 
-  // ── Load schedule (thresholds measured from Shield start) ─────────────────
-  const elapsed = world.tick - world.bowArrowShieldStartTick;
-  let targetCount = 1;
-  if (elapsed >= BOW_ARROW_LOAD_5_TICKS) targetCount = 5;
-  else if (elapsed >= BOW_ARROW_LOAD_4_TICKS) targetCount = 4;
-  else if (elapsed >= BOW_ARROW_LOAD_3_TICKS) targetCount = 3;
-  targetCount = Math.min(targetCount, MAX_BOW_ARROW_MOTES);
+  // ── Load schedule (thresholds measured from Shield start) — only while
+  // actively held, so a released gesture never pulls NEW motes; already-
+  // reserved motes still finish seating below regardless of `isHeld`. ───────
+  if (isHeld) {
+    const elapsed = world.tick - world.bowArrowShieldStartTick;
+    let targetCount = 1;
+    if (elapsed >= BOW_ARROW_LOAD_5_TICKS) targetCount = 5;
+    else if (elapsed >= BOW_ARROW_LOAD_4_TICKS) targetCount = 4;
+    else if (elapsed >= BOW_ARROW_LOAD_3_TICKS) targetCount = 3;
+    targetCount = Math.min(targetCount, MAX_BOW_ARROW_MOTES);
 
-  // At the 0.75 s threshold two motes appear together (→ 3); afterwards one at a time.
-  while (world.bowArrowCount < targetCount) {
-    const before = world.bowArrowCount;
-    _reserveNextMote(world, centerX, centerY, centerX, centerY);
-    if (world.bowArrowCount === before) break; // no more available motes to pull
+    // At the 0.75 s threshold two motes appear together (→ 3); afterwards one at a time.
+    while (world.bowArrowCount < targetCount) {
+      const before = world.bowArrowCount;
+      _reserveNextMote(world, player.positionXWorld, player.positionYWorld);
+      if (world.bowArrowCount === before) break; // no more available motes to pull
+    }
   }
 
   // ── Drive each reserved mote toward its seated line position ──────────────
@@ -227,14 +328,16 @@ export function tickBowArrowAssembly(
 
     const arcElapsed = world.tick - world.bowArrowSlotStartTick[r];
     if (arcElapsed >= BOW_ARROW_ARC_TICKS) {
-      // Seated: track the line exactly (rotates with aim, follows the player).
+      // Seated: track the line exactly (rotates with aim, follows the shield center).
       world.positionXWorld[pidx] = seatX;
       world.positionYWorld[pidx] = seatY;
       world.velocityXWorld[pidx] = 0;
       world.velocityYWorld[pidx] = 0;
+      world.bowArrowRankState[r] = BOW_ARROW_RANK_SEATED;
     } else {
       // Arc in: quadratic bezier from the mote's shield slot, bulging outward,
-      // to its seated line position.
+      // to its seated line position. Still LOADING — does not count toward
+      // the fireable minimum yet.
       const t = Math.max(0, arcElapsed) / BOW_ARROW_ARC_TICKS;
       const mt = 1 - t;
       const p0x = world.bowArrowArcFromXWorld[r];
@@ -243,42 +346,83 @@ export function tickBowArrowAssembly(
       const p1y = world.bowArrowArcCtrlYWorld[r];
       world.positionXWorld[pidx] = mt * mt * p0x + 2 * mt * t * p1x + t * t * seatX;
       world.positionYWorld[pidx] = mt * mt * p0y + 2 * mt * t * p1y + t * t * seatY;
+      world.bowArrowRankState[r] = BOW_ARROW_RANK_LOADING;
     }
     world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
   }
 }
 
 /**
- * Fires the assembled arrow along `aimDir` when at least the minimum three
- * motes are loaded. Snaps all motes exactly onto the straight line at the
- * player center so they launch as a coherent group, captures the projectile
- * dust kind, and transitions to the outbound phase. Returns false (and leaves
- * the arrow assembling) when fewer than three motes are loaded.
+ * Fires the arrow along `aimDir` when at least the minimum three motes are
+ * currently SEATED (task section 6 — a still-loading mote is never snapped
+ * into the fired line). Any reserved-but-still-loading mote at fire time is
+ * released back to Storm following in place (no teleport) rather than being
+ * dragged into the shot; only seated motes are compacted onto the fired line.
+ * Snaps the fired motes exactly onto the straight line at the shield center so
+ * they launch as a coherent group, captures the projectile dust kind, and
+ * transitions to the outbound phase. Returns false (leaving the arrow
+ * assembling, and any release latch still pending) when fewer than three
+ * motes are seated.
  */
 export function fireBowArrow(world: WorldState, aimDirXWorld: number, aimDirYWorld: number): boolean {
   if (world.bowArrowPhase !== BOW_ARROW_PHASE_ASSEMBLING) return false;
-  if (world.bowArrowCount < MIN_BOW_ARROW_MOTES) return false;
+  // Readiness check first, with NO allocation and NO side effects — this is
+  // the path taken every tick while a release latch waits for seating to
+  // finish (task section 6), so it must stay allocation-free and must never
+  // disturb still-loading motes when we are not actually about to fire.
+  if (countSeatedBowArrowMotes(world) < MIN_BOW_ARROW_MOTES) return false;
   const player = _findPlayer(world);
   if (player === null) return false;
+
+  // We ARE firing: compact the SEATED ranks down to a contiguous 0..k-1 list;
+  // anything still LOADING is released back to Storm in place, not fired —
+  // never snapped into the shot (task section 6).
+  const seatedPidx: number[] = [];
+  for (let r = 0; r < world.bowArrowCount; r++) {
+    const pidx = world.bowArrowParticleIndex[r];
+    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    if (world.bowArrowRankState[r] === BOW_ARROW_RANK_SEATED) {
+      seatedPidx.push(pidx);
+    } else if (world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW) {
+      // Still mid-arc: hand back to Storm exactly where it is — no snap.
+      world.behaviorMode[pidx] = 0;
+      world.velocityXWorld[pidx] = 0;
+      world.velocityYWorld[pidx] = 0;
+    }
+  }
+  // seatedPidx.length is guaranteed >= MIN_BOW_ARROW_MOTES here (confirmed by
+  // countSeatedBowArrowMotes above; nothing mutates rank state between).
 
   const aimLen = Math.hypot(aimDirXWorld, aimDirYWorld);
   const dirX = aimLen > 1e-6 ? aimDirXWorld / aimLen : world.bowArrowDirXWorld;
   const dirY = aimLen > 1e-6 ? aimDirYWorld / aimLen : world.bowArrowDirYWorld;
 
-  world.bowArrowDirXWorld  = dirX;
-  world.bowArrowDirYWorld  = dirY;
-  world.bowArrowOriginXWorld = player.positionXWorld;
-  world.bowArrowOriginYWorld = player.positionYWorld;
-  world.bowArrowTravelPx   = 0;
+  const center = _resolveShieldCenter(player, dirX, dirY, dirX, dirY);
 
-  // Capture dust kind from the center mote's slot (first available at fire time).
-  const centerPidx = world.bowArrowParticleIndex[0];
-  world.bowArrowDustKind = centerPidx >= 0 ? world.kindBuffer[centerPidx] : 0;
+  world.bowArrowDirXWorld    = dirX;
+  world.bowArrowDirYWorld    = dirY;
+  world.bowArrowOriginXWorld = center.x;
+  world.bowArrowOriginYWorld = center.y;
+  world.bowArrowTravelPx     = 0;
 
-  // Snap the whole line onto the straight firing vector at the origin.
+  // Capture dust kind from the (always-seated) center mote.
+  world.bowArrowDustKind = world.kindBuffer[seatedPidx[0]];
+
+  // Re-pack the reserved arrays down to just the fired (seated) set.
+  world.bowArrowCount = seatedPidx.length;
+  world.bowArrowParticleIndex.fill(-1);
+  world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
+  for (let r = 0; r < seatedPidx.length; r++) {
+    world.bowArrowParticleIndex[r] = seatedPidx[r];
+    world.bowArrowRankState[r]     = BOW_ARROW_RANK_SEATED;
+  }
+
+  // Snap the whole fired line onto the straight firing vector at the shield center.
   _placeArrowLine(world, world.bowArrowOriginXWorld, world.bowArrowOriginYWorld, dirX, dirY);
 
   world.bowArrowPhase = BOW_ARROW_PHASE_OUTBOUND;
+  world.bowArrowReleaseLatchedFlag = 0;
+  _bowArrowHitFlags.fill(0);
   return true;
 }
 
@@ -296,6 +440,41 @@ function _placeArrowLine(world: WorldState, cx: number, cy: number, dirX: number
   }
 }
 
+// ── Release latch (task section 6) ──────────────────────────────────────────
+
+/**
+ * Called on gesture release when `fireBowArrow` couldn't yet fire. Latches an
+ * automatic fire for the moment enough motes finish seating, UNLESS fewer
+ * than the minimum motes are even reserved (bowArrowCount < MIN) — in that
+ * case seating could never reach the minimum (no more motes will ever be
+ * pulled once the gesture is released), so the caller must cancel instead.
+ * Returns true if the latch was armed, false if the caller should cancel.
+ */
+export function latchBowArrowRelease(world: WorldState, aimDirXWorld: number, aimDirYWorld: number): boolean {
+  if (world.bowArrowPhase !== BOW_ARROW_PHASE_ASSEMBLING) return false;
+  if (world.bowArrowCount < MIN_BOW_ARROW_MOTES) return false;
+  world.bowArrowReleaseLatchedFlag = 1;
+  world.bowArrowLatchedAimXWorld   = aimDirXWorld;
+  world.bowArrowLatchedAimYWorld   = aimDirYWorld;
+  return true;
+}
+
+/**
+ * Attempts to resolve a pending release latch: if enough motes have now
+ * finished seating, fires using the aim captured at release time and clears
+ * the latch. No-op (returns false) if not yet ready or no latch is pending.
+ */
+export function tryResolveLatchedBowArrowRelease(world: WorldState): boolean {
+  if (world.bowArrowReleaseLatchedFlag === 0) return false;
+  if (world.bowArrowPhase !== BOW_ARROW_PHASE_ASSEMBLING) {
+    world.bowArrowReleaseLatchedFlag = 0;
+    return false;
+  }
+  const fired = fireBowArrow(world, world.bowArrowLatchedAimXWorld, world.bowArrowLatchedAimYWorld);
+  if (fired) world.bowArrowReleaseLatchedFlag = 0;
+  return fired;
+}
+
 // ── Outbound flight ──────────────────────────────────────────────────────────
 
 /** Largest positive line offset (front mote), in world units, for collision leading edge. */
@@ -309,12 +488,58 @@ function _frontOffsetWorld(world: WorldState): number {
 }
 
 /**
+ * Swept per-mote enemy collision test over this tick's proposed step: for
+ * every not-yet-hit enemy, tests every arrow mote's actual previous→next
+ * segment (not just the center point) against the enemy's hit circle,
+ * preventing both point-sampling tunneling and "only the center mote counts"
+ * blind spots (task section 1). Returns the hit cluster index, or −1.
+ */
+function _sweptArrowEnemyHit(world: WorldState, stepDist: number): number {
+  if (world.bowArrowCount === 0) return -1;
+  const dirX = world.bowArrowDirXWorld;
+  const dirY = world.bowArrowDirYWorld;
+  const baseX = world.bowArrowOriginXWorld + dirX * world.bowArrowTravelPx;
+  const baseY = world.bowArrowOriginYWorld + dirY * world.bowArrowTravelPx;
+  const newBaseX = baseX + dirX * stepDist;
+  const newBaseY = baseY + dirY * stepDist;
+
+  const limit = Math.min(world.clusters.length, MAX_HIT_REGISTRY_SLOTS);
+  for (let ci = 0; ci < limit; ci++) {
+    if (_bowArrowHitFlags[ci] === 1) continue;
+    const c = world.clusters[ci];
+    if (c.isAliveFlag === 0 || c.isPlayerFlag === 1) continue;
+
+    const enemyRadius = Math.min(c.halfWidthWorld, c.halfHeightWorld);
+    const hitRadius = BOW_ARROW_MOTE_HIT_RADIUS_WORLD + enemyRadius;
+    const hitRadiusSq = hitRadius * hitRadius;
+
+    for (let r = 0; r < world.bowArrowCount; r++) {
+      const pidx = world.bowArrowParticleIndex[r];
+      if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+      const offset = bowArrowRankLineOffset(r) * BOW_ARROW_MOTE_SPACING_WORLD;
+      const prevX = baseX + dirX * offset;
+      const prevY = baseY + dirY * offset;
+      const nextX = newBaseX + dirX * offset;
+      const nextY = newBaseY + dirY * offset;
+
+      const distSq = segmentPointDistanceSq(prevX, prevY, nextX, nextY, c.positionXWorld, c.positionYWorld);
+      if (distSq <= hitRadiusSq) return ci;
+    }
+  }
+  return -1;
+}
+
+/**
  * Advances the outbound arrow one tick. The whole arrow is treated as one
  * coherent group: only the LEADING mote's swept segment is tested against
  * terrain, so the group bounces/returns exactly once per collision rather than
- * each mote detecting the same wall on successive frames. Travel distance is
- * accumulated from displacement (robust to pauses / variable steps). Returns
- * true when the arrow has resolved this tick (bounced or curved home).
+ * each mote detecting the same wall on successive frames. Enemy collision is
+ * swept per-mote (see `_sweptArrowEnemyHit`) and takes priority within a tick
+ * over a wall the arrow would also reach, so an enemy standing in front of a
+ * wall is hit rather than the arrow visually clipping through it to bounce.
+ * Travel distance is accumulated from displacement (robust to pauses /
+ * variable steps). Returns true when the arrow has resolved this tick
+ * (bounced, hit an enemy, or curved home).
  */
 export function tickBowArrowOutbound(world: WorldState): boolean {
   if (world.bowArrowPhase !== BOW_ARROW_PHASE_OUTBOUND) return false;
@@ -329,6 +554,21 @@ export function tickBowArrowOutbound(world: WorldState): boolean {
   const remaining = proj.maxTravelPx - world.bowArrowTravelPx;
   const reachedMax = stepDist >= remaining;
   if (reachedMax) stepDist = Math.max(0, remaining);
+
+  // ── Enemy collision (swept, per-mote) — takes priority this tick. ────────
+  if (stepDist > 1e-6 && !proj.piercing) {
+    const hitCi = _sweptArrowEnemyHit(world, stepDist);
+    if (hitCi !== -1) {
+      _resolveEnemyHit(world, hitCi);
+      return true;
+    }
+  } else if (stepDist > 1e-6 && proj.piercing) {
+    // Piercing: apply damage to every not-yet-hit enemy swept this tick, but
+    // do not resolve/release the arrow — it keeps flying. (No configured mote
+    // type currently sets piercing: true; this is forward-compatible plumbing
+    // for task section 1's "unless an explicit piercing behavior permits it".)
+    _applyPiercingArrowHits(world, stepDist);
+  }
 
   // Leading-mote swept collision against terrain over this tick's step.
   const frontOff = _frontOffsetWorld(world);
@@ -353,6 +593,70 @@ export function tickBowArrowOutbound(world: WorldState): boolean {
     return true;
   }
   return false;
+}
+
+/** Applies damage to every enemy swept this tick by a piercing arrow, without resolving flight. */
+function _applyPiercingArrowHits(world: WorldState, stepDist: number): void {
+  const dirX = world.bowArrowDirXWorld;
+  const dirY = world.bowArrowDirYWorld;
+  const baseX = world.bowArrowOriginXWorld + dirX * world.bowArrowTravelPx;
+  const baseY = world.bowArrowOriginYWorld + dirY * world.bowArrowTravelPx;
+  const newBaseX = baseX + dirX * stepDist;
+  const newBaseY = baseY + dirY * stepDist;
+  const damage = getBowArrowDamage(world.bowArrowCount);
+
+  const limit = Math.min(world.clusters.length, MAX_HIT_REGISTRY_SLOTS);
+  for (let ci = 0; ci < limit; ci++) {
+    if (_bowArrowHitFlags[ci] === 1) continue;
+    const c = world.clusters[ci];
+    if (c.isAliveFlag === 0 || c.isPlayerFlag === 1) continue;
+
+    const enemyRadius = Math.min(c.halfWidthWorld, c.halfHeightWorld);
+    const hitRadiusSq = (BOW_ARROW_MOTE_HIT_RADIUS_WORLD + enemyRadius) * (BOW_ARROW_MOTE_HIT_RADIUS_WORLD + enemyRadius);
+
+    let hit = false;
+    for (let r = 0; r < world.bowArrowCount && !hit; r++) {
+      const offset = bowArrowRankLineOffset(r) * BOW_ARROW_MOTE_SPACING_WORLD;
+      const distSq = segmentPointDistanceSq(
+        baseX + dirX * offset, baseY + dirY * offset,
+        newBaseX + dirX * offset, newBaseY + dirY * offset,
+        c.positionXWorld, c.positionYWorld,
+      );
+      if (distSq <= hitRadiusSq) hit = true;
+    }
+    if (!hit) continue;
+
+    _bowArrowHitFlags[ci] = 1;
+    applyRoutedWeaveDamage(world, ci, damage, c.positionXWorld, c.positionYWorld);
+  }
+}
+
+/**
+ * Resolves a non-piercing arrow's first enemy hit: applies whole-number
+ * damage (routed through the Orbital Dust Core's specialized hit function
+ * when applicable), then releases the arrow back to Storm with a gentle
+ * curved peel-off — the same clean "resolve and hand back to Storm" shape as
+ * a wall bounce or max-distance curve-home, so exactly one resolution path
+ * exists for ending outbound flight.
+ */
+function _resolveEnemyHit(world: WorldState, clusterIndex: number): void {
+  const c = world.clusters[clusterIndex];
+  const damage = getBowArrowDamage(world.bowArrowCount);
+  applyRoutedWeaveDamage(world, clusterIndex, damage, c.positionXWorld, c.positionYWorld);
+  _bowArrowHitFlags[clusterIndex] = 1;
+
+  // Re-place the line at its current (pre-step) position — the arrow does not
+  // advance further into the enemy this tick, so it never visually embeds.
+  const dirX = world.bowArrowDirXWorld;
+  const dirY = world.bowArrowDirYWorld;
+  _placeArrowLine(
+    world,
+    world.bowArrowOriginXWorld + dirX * world.bowArrowTravelPx,
+    world.bowArrowOriginYWorld + dirY * world.bowArrowTravelPx,
+    dirX, dirY,
+  );
+
+  _releaseWithCurvedPeel(world, dirX, dirY);
 }
 
 /** Reflects the group off a wall (biased-random) and releases motes to Storm. */
@@ -390,9 +694,17 @@ function _resolveBounce(world: WorldState, normalX: number, normalY: number, hit
 function _resolveCurveHome(world: WorldState): void {
   const dirX = world.bowArrowDirXWorld;
   const dirY = world.bowArrowDirYWorld;
-  // Rotate the outbound direction away by a randomized angle so the motes peel
-  // off smoothly (no instant reversal, no sharp corner) — the Storm pursuit
-  // then arcs them home from this initial curved velocity.
+  _releaseWithCurvedPeel(world, dirX, dirY);
+}
+
+/**
+ * Shared "peel off and hand back to Storm" release used by both the
+ * max-distance curve-home and the enemy-hit resolution: rotates the outbound
+ * direction away by a randomized angle so the motes peel off smoothly (no
+ * instant reversal, no sharp corner) — the Storm pursuit then arcs them home
+ * from this initial curved velocity.
+ */
+function _releaseWithCurvedPeel(world: WorldState, dirX: number, dirY: number): void {
   const side = nextFloatRange(world.rng, -1, 1) >= 0 ? 1 : -1;
   const jitter = nextFloatRange(world.rng, 0, BOW_ARROW_CURVE_HOME_JITTER_RAD);
   const angle = side * (BOW_ARROW_CURVE_HOME_BASE_RAD + jitter);
@@ -426,19 +738,22 @@ function _releaseArrowToStorm(world: WorldState, velX: number, velY: number): vo
 
 /** Clears the arrow instance bookkeeping (does not touch particle modes). */
 function _clearArrowInstance(world: WorldState): void {
-  world.bowArrowPhase     = BOW_ARROW_PHASE_NONE;
-  world.bowArrowGestureId = -1;
-  world.bowArrowCount     = 0;
-  world.bowArrowTravelPx  = 0;
+  world.bowArrowPhase           = BOW_ARROW_PHASE_NONE;
+  world.bowArrowGestureId       = -1;
+  world.bowArrowCount           = 0;
+  world.bowArrowTravelPx        = 0;
+  world.bowArrowReleaseLatchedFlag = 0;
   world.bowArrowParticleIndex.fill(-1);
   world.bowArrowSlotStartTick.fill(-1);
+  world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
 }
 
 /**
  * Cancels an in-progress arrow (assembling or outbound), releasing every
  * reserved mote back to Storm following in place (zero initial velocity).
- * Used when the player releases before the minimum three-mote arrow forms, on
- * damage cancellation, dust-wheel/pause/dialogue cancellation, etc.
+ * Used when the player releases before the minimum three-mote arrow can ever
+ * seat (fewer than MIN_BOW_ARROW_MOTES reserved), on damage cancellation,
+ * dust-wheel/pause/dialogue cancellation, etc.
  */
 export function cancelBowArrow(world: WorldState): void {
   if (world.bowArrowPhase === BOW_ARROW_PHASE_NONE && world.bowArrowCount === 0) return;
@@ -468,8 +783,13 @@ export function resetBowArrowState(world: WorldState): void {
   world.bowArrowOriginYWorld    = 0;
   world.bowArrowTravelPx        = 0;
   world.bowArrowDustKind        = 0;
+  world.bowArrowReleaseLatchedFlag = 0;
+  world.bowArrowLatchedAimXWorld   = 0;
+  world.bowArrowLatchedAimYWorld   = 0;
   world.bowArrowParticleIndex.fill(-1);
   world.bowArrowSlotStartTick.fill(-1);
+  world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
+  _bowArrowHitFlags.fill(0);
 }
 
 /** True while any bow arrow is assembling or in flight. */

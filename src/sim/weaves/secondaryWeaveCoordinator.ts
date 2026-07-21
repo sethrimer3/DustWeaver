@@ -38,6 +38,8 @@ import {
   beginBowArrowAssembly,
   tickBowArrowAssembly,
   fireBowArrow,
+  latchBowArrowRelease,
+  tryResolveLatchedBowArrowRelease,
   cancelBowArrow,
   tickBowArrowOutbound,
   resetBowArrowState,
@@ -98,6 +100,14 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
 
   // ── Press: start the Sword swipe for this fresh gesture ──────────────────
   if (gesture.pressEventFlag) {
+    // A release latch (task section 6) can leave a PREVIOUS gesture's arrow
+    // still ASSEMBLING (motes reserved, in BEHAVIOR_MODE_BOW_ARROW) after that
+    // gesture has otherwise gone idle, since seating can take a few more
+    // ticks to finish. A brand-new press always supersedes it — cancel it
+    // here (releasing its motes back to Storm) BEFORE the new gesture's Sword
+    // swipe reserves motes, so the same particle can never be claimed by both
+    // an old latched Bow arrow and a new Sword swipe at once.
+    if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) cancelBowArrow(world);
     if (world.hasSwordWeaveUnlockedFlag === 1) {
       startNewSwordSwipe(world, player, gesture.gestureId, gesture.pressAimXWorld, gesture.pressAimYWorld);
     }
@@ -132,22 +142,40 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
     // Reserve/advance the arrow BEFORE the crescent so reserved motes (marked
     // BEHAVIOR_MODE_BOW_ARROW) are excluded from ordinary shield-slot placement.
     if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
-      tickBowArrowAssembly(world, aimDirX, aimDirY);
+      tickBowArrowAssembly(world, aimDirX, aimDirY, /* isHeld */ true);
     }
     applyShieldWeaveCrescent(world, player.positionXWorld, player.positionYWorld, aimDirX, aimDirY);
-  } else if (world.shieldWeaveIndependentActiveFlag === 1) {
-    endShieldOwnership(world);
+  } else {
+    if (world.shieldWeaveIndependentActiveFlag === 1) {
+      endShieldOwnership(world);
+    }
+    // The gesture is no longer actively held (idle, or mid-sword-swipe
+    // suppression), but an arrow may still have motes mid-arc from before
+    // release, or be waiting on a release latch — keep seating them (no new
+    // motes are pulled while not held; see tickBowArrowAssembly's `isHeld`
+    // gate) so a latched release can resolve and a plain cancel never leaves
+    // a mote frozen mid-animation.
+    if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
+      tickBowArrowAssembly(world, world.bowArrowDirXWorld, world.bowArrowDirYWorld, /* isHeld */ false);
+    }
   }
 
-  // ── Release: fire the assembled arrow, or cancel it gracefully ───────────
+  // ── Resolve a pending release latch as soon as enough motes finish seating. ─
+  if (world.bowArrowReleaseLatchedFlag === 1) {
+    tryResolveLatchedBowArrowRelease(world);
+  }
+
+  // ── Release: fire the assembled arrow if enough motes are seated, latch a
+  // pending fire if enough are reserved but still seating, or cancel outright
+  // if fewer than the minimum are even reserved (task section 6). ──────────
   if (gesture.releaseEventFlag) {
     if (world.hasBowWeaveUnlockedFlag === 1 && world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
       const aimDirX = gesture.releaseAimXWorld - player.positionXWorld;
       const aimDirY = gesture.releaseAimYWorld - player.positionYWorld;
-      // fireBowArrow only fires when ≥3 motes are loaded; otherwise cancel so a
-      // partial one/two-mote arrow is never launched and no motes are stranded.
       if (!fireBowArrow(world, aimDirX, aimDirY)) {
-        cancelBowArrow(world);
+        if (!latchBowArrowRelease(world, aimDirX, aimDirY)) {
+          cancelBowArrow(world);
+        }
       }
     }
     if (world.shieldWeaveIndependentActiveFlag === 1) {

@@ -11,13 +11,45 @@
  *  - Point size shrinks slightly with age (visual decay cue).
  *  - Shape clipping via gl_PointCoord — non-Golden kinds render as polygons.
  *  - Radial glow falloff for circle kinds; edge highlight for polygon kinds.
- *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom.
+ *  - Additive blending (SRC_ALPHA, ONE) produces natural bloom — this additive
+ *    mode applied to the body colour below IS the "glow" for ordinary WebGL
+ *    motes (there is no separate glow-colour uniform in this shader).
  *  - Fluid particles (kind 14) are normally transparent; disturbanceFactor
  *    drives their alpha so they appear only when disturbed by nearby movement.
  *  - isSpent (a_isSpent == 1.0): particle's mote slot is currently depleted;
  *    alpha reduced to 25% as a "spent" visual cue.
  *  - GLSL ES 1.00 for maximum device compatibility.
+ *
+ * Equippable-kind body colour (task section 7): the `kindColor()` literals for
+ * the player-equippable kinds (Golden, Ice, Nature, Void, Light) are NOT
+ * hand-typed below — they are generated at module load from the centralized
+ * `sim/motes/moteTypeConfig.ts` (`_glslKindColorLiteral()`), so this static
+ * GLSL source string is itself a lookup table produced FROM that config. This
+ * keeps the shader fully static (no runtime uniform plumbing / WebGL API
+ * risk) while guaranteeing the compiled colour can never silently drift from
+ * the authoritative config. Internal/environmental kinds keep their
+ * hand-tuned literals.
  */
+
+import { ParticleKind } from '../../sim/particles/kinds';
+import { getMoteTypeVisual, hasMoteTypeConfig } from '../../sim/motes/moteTypeConfig';
+
+/** Formats a 0..1 channel as a 2-decimal GLSL float literal, e.g. 0.53 → "0.53". */
+function _glslChannel(v: number): string {
+  return Math.max(0, Math.min(1, v)).toFixed(2);
+}
+
+/** Formats a mote-type body colour as a GLSL `vec3(r, g, b)` literal. */
+function _glslKindColorLiteral(kind: ParticleKind): string {
+  const body = getMoteTypeVisual(kind).body;
+  return `vec3(${_glslChannel(body.r)}, ${_glslChannel(body.g)}, ${_glslChannel(body.b)})`;
+}
+
+const _goldenColorLiteral = hasMoteTypeConfig(ParticleKind.Golden) ? _glslKindColorLiteral(ParticleKind.Golden) : 'vec3(1.00, 0.84, 0.00)';
+const _iceColorLiteral    = hasMoteTypeConfig(ParticleKind.Ice)    ? _glslKindColorLiteral(ParticleKind.Ice)    : 'vec3(0.53, 0.87, 1.00)';
+const _natureColorLiteral = hasMoteTypeConfig(ParticleKind.Nature) ? _glslKindColorLiteral(ParticleKind.Nature) : 'vec3(0.27, 0.80, 0.27)';
+const _voidColorLiteral   = hasMoteTypeConfig(ParticleKind.Void)   ? _glslKindColorLiteral(ParticleKind.Void)   : 'vec3(0.13, 0.00, 0.20)';
+const _lightColorLiteral  = hasMoteTypeConfig(ParticleKind.Light)  ? _glslKindColorLiteral(ParticleKind.Light)  : 'vec3(1.00, 0.99, 0.88)';
 
 /** Vertex shader: clip-space transform + per-element point-size modulation. */
 export const PARTICLE_VERTEX_SHADER_SRC = `
@@ -94,7 +126,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
   vec3 kindColor(float k) {
     int ki = int(k + 0.5);
     if (ki == 1)  return vec3(1.00, 0.33, 0.00);  // Fire      — hot orange
-    if (ki == 2)  return vec3(0.53, 0.87, 1.00);  // Ice       — cool blue
+    if (ki == 2)  return ${_iceColorLiteral};  // Ice       — cool blue
     if (ki == 3)  return vec3(1.00, 1.00, 0.27);  // Lightning — electric yellow
     if (ki == 4)  return vec3(0.27, 1.00, 0.27);  // Poison    — acid green
     if (ki == 5)  return vec3(0.80, 0.27, 1.00);  // Arcane    — violet
@@ -103,16 +135,16 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 8)  return vec3(0.40, 0.20, 0.80);  // Shadow    — deep purple
     if (ki == 9)  return vec3(0.67, 0.73, 0.80);  // Metal     — silver
     if (ki == 10) return vec3(0.53, 0.40, 0.16);  // Earth     — warm brown
-    if (ki == 11) return vec3(0.27, 0.80, 0.27);  // Nature    — vivid green
+    if (ki == 11) return ${_natureColorLiteral};  // Nature    — vivid green
     if (ki == 12) return vec3(0.67, 0.93, 1.00);  // Crystal   — icy bright blue
-    if (ki == 13) return vec3(0.13, 0.00, 0.20);  // Void      — near-black purple
+    if (ki == 13) return ${_voidColorLiteral};  // Void      — near-black purple
     if (ki == 14) return vec3(0.55, 0.80, 1.00);  // Fluid     — pale aqua-blue
     if (ki == 15) return vec3(0.13, 0.60, 0.93);  // Water     — deep flowing blue
     if (ki == 16) return vec3(1.00, 0.13, 0.00);  // Lava      — deep molten red-orange
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
     if (ki == 18) return vec3(1.00, 0.84, 0.00);  // Gold      — bright golden yellow
-    if (ki == 19) return vec3(1.00, 0.99, 0.88);  // Light     — radiant white-gold
-    return vec3(1.00, 0.84, 0.00);                // Golden  — bright golden yellow
+    if (ki == 19) return ${_lightColorLiteral};  // Light     — radiant white-gold
+    return ${_goldenColorLiteral};                // Golden  — bright golden yellow
   }
 
   // Maps a ParticleKind to a shape index (0–7).

@@ -186,8 +186,9 @@ test('bow requires shield: with shield+bow unlocked, the arrow assembles from ac
   assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_ASSEMBLING, 'arrow assembles from shield start');
   assert.equal(world.bowArrowCount, 1, 'only the center mote initially');
 
-  // Advance past the 0.75s load threshold → 3 motes.
-  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 2; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  // Advance past the 0.75s load threshold plus the seating arc so the 3
+  // motes are fully SEATED (not merely reserved/mid-arc) before release.
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 13; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   assert.ok(world.bowArrowCount >= 3, 'at least three motes loaded after 0.75s');
   assert.ok(countArrowMotes(world) >= 3, 'reserved motes are actual particles in BOW_ARROW mode');
 
@@ -234,7 +235,9 @@ test('bow: fired arrow dust kind is captured at fire time and unaffected by a la
   for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 2; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  // Hold past the 0.75s threshold plus the seating arc so the 3 motes are
+  // fully SEATED (fires synchronously on release, not merely latched).
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 13; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   release(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.bowArrowDustKind, ParticleKind.Golden);
 

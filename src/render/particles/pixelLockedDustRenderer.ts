@@ -25,6 +25,7 @@ import type { WorldSnapshot } from '../snapshot';
 import { ParticleKind } from '../../sim/particles/kinds';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 import { isDustSwitchBehaviorMode } from '../../sim/particles/dustSwitchBehaviorMode';
+import { getMoteTypeVisual, hasMoteTypeConfig, shadeRgb, rgbToHex } from '../../sim/motes/moteTypeConfig';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,7 +90,12 @@ const SEED_NORMALISE = 65536.0;
 // Per-kind palette ramps  (indexed by ParticleKind ordinal)
 // ---------------------------------------------------------------------------
 
-const KIND_PALETTE_RAMPS: readonly (readonly string[])[] = [
+// Not `readonly` at the type level: the equippable-kind entries are
+// overwritten below at module load, generated from the centralized mote-type
+// config (task section 7), so this table's body colour genuinely follows
+// `moteTypeConfig.ts` rather than drifting from a separately hand-authored
+// palette. Internal/environmental kinds keep their bespoke hand-tuned ramps.
+const KIND_PALETTE_RAMPS: string[][] = [
   // Golden (0) — dense gold motes
   ['#7a5000', '#c48c00', '#ffd700', '#fff5cc'],
   // Fire (1) — scorching embers
@@ -132,9 +138,44 @@ const KIND_PALETTE_RAMPS: readonly (readonly string[])[] = [
   ['#887755', '#ccbb99', '#fffaee', '#ffffff'],
 ];
 
+// ── Sync equippable player-mote body/glint tones from the centralized config ─
+//
+// For each equippable player mote type, the ramp's darker tones (indices 0-2,
+// darkest→base) are generated from `visual.body`, and the glint/brightest
+// tone (index 3 — already the "glint" accent drawn by the shimmer/attack-mode
+// paths below) is generated from `visual.glow`. This makes "body" and "glow"
+// both genuinely centralized instead of only the trail colour, while keeping
+// the existing 4-tone dithering-ramp visual structure. Internal/environmental
+// kinds are left on their hand-tuned ramps.
+for (const kind of [
+  ParticleKind.Golden,
+  ParticleKind.Ice,
+  ParticleKind.Nature,
+  ParticleKind.Void,
+  ParticleKind.Light,
+]) {
+  if (!hasMoteTypeConfig(kind)) continue;
+  const visual = getMoteTypeVisual(kind);
+  KIND_PALETTE_RAMPS[kind] = [
+    rgbToHex(shadeRgb(visual.body, 0.42)),
+    rgbToHex(shadeRgb(visual.body, 0.72)),
+    rgbToHex(visual.body),
+    rgbToHex(visual.glow),
+  ];
+}
+
 /** Safe palette lookup — returns the Golden ramp if kind is out of range. */
 function getPalette(kind: number): readonly string[] {
   return KIND_PALETTE_RAMPS[kind] ?? KIND_PALETTE_RAMPS[0];
+}
+
+/**
+ * Exposed read-only accessor for the per-kind tone ramp, primarily so tests
+ * can verify the equippable-kind entries are genuinely generated from
+ * `moteTypeConfig.ts` (task section 7) without needing a canvas.
+ */
+export function getMotePaletteRampForTesting(kind: number): readonly string[] {
+  return getPalette(kind);
 }
 
 // ---------------------------------------------------------------------------

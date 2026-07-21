@@ -502,15 +502,25 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   /** Per-mote pre-swipe position, so the mote can "shoot" from orbit into rear staging. */
   newSwordMoteFromXWorld: Float32Array;
   newSwordMoteFromYWorld: Float32Array;
+  /**
+   * Per-mote position at the START of the current tick (before this tick's
+   * `_driveSwordMotes` update), captured so swept-segment collision can test
+   * the actual path each mote traveled this tick rather than an abstract
+   * angular hitbox. Updated every tick the swipe is active.
+   */
+  newSwordMotePrevXWorld: Float32Array;
+  newSwordMotePrevYWorld: Float32Array;
 
   // ── Independent Bow Weave (Stage 3) — actual-mote arrow assembly ───────────
   //
   // The bow no longer has a "draw strength" / charge tier or a separate queue
   // of phantom motes. Instead it loads the player's ACTUAL mote particles into
-  // a straight arrow line (a center mote plus up to four additional real motes)
-  // on a fixed schedule measured from when the Shield Weave began, then fires
-  // them together as a constant-speed straight projectile that reflects off
-  // walls or curves home at max distance before the Storm reclaims them.
+  // a straight arrow line (a center mote plus up to four additional real motes,
+  // seated at the shield's canonical center — see shieldGeometry.ts) on a
+  // fixed schedule measured from when the Shield Weave began, then fires them
+  // together as a constant-speed straight projectile that damages the first
+  // enemy it sweeps through, reflects off walls, or curves home at max
+  // distance — all three resolutions hand the motes back to Storm.
   //
   // Phase: 0 = none, 1 = assembling (held), 2 = outbound (fired).
   bowArrowPhase: number;
@@ -528,6 +538,24 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   bowArrowParticleIndex: Int32Array;
   /** Per-rank tick at which that mote began arcing into the line (−1 = unused). */
   bowArrowSlotStartTick: Int32Array;
+  /**
+   * Per-rank assembly state: 0 = unused, 1 = loading (still arcing in),
+   * 2 = seated (tracking the line exactly, ready to fire). Only SEATED ranks
+   * count toward the minimum fireable three-mote arrow — a mote is never
+   * snapped straight into a fired arrow mid-arc (task section 6).
+   */
+  bowArrowRankState: Uint8Array;
+  /**
+   * 1 when the player released while fewer than the minimum three motes were
+   * SEATED but enough are reserved (bowArrowCount >= MIN_BOW_ARROW_MOTES) that
+   * seating will eventually finish — the arrow fires automatically, using the
+   * aim captured at release time, the first tick enough motes finish seating.
+   * Never set when bowArrowCount < MIN_BOW_ARROW_MOTES (that case cancels
+   * immediately instead, since seating could never reach the minimum).
+   */
+  bowArrowReleaseLatchedFlag: 0 | 1;
+  bowArrowLatchedAimXWorld: number;
+  bowArrowLatchedAimYWorld: number;
   /** Per-rank arc-in start position (where the mote left its shield slot). */
   bowArrowArcFromXWorld: Float32Array;
   bowArrowArcFromYWorld: Float32Array;
@@ -859,6 +887,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     newSwordMoteParticleIndex:     new Int32Array(MAX_SWORD_SLASH_MOTES).fill(-1),
     newSwordMoteFromXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
     newSwordMoteFromYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
     // ── Independent Bow Weave — actual-mote arrow ───────────────────────
     bowArrowPhase:                 0,
     bowArrowGestureId:             -1,
@@ -866,6 +896,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     bowArrowCount:                 0,
     bowArrowParticleIndex:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
     bowArrowSlotStartTick:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
+    bowArrowRankState:             new Uint8Array(MAX_BOW_ARROW_MOTES),
     bowArrowArcFromXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
     bowArrowArcFromYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
     bowArrowArcCtrlXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
@@ -876,6 +907,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     bowArrowOriginYWorld:          0,
     bowArrowTravelPx:              0,
     bowArrowDustKind:              0,
+    bowArrowReleaseLatchedFlag:    0,
+    bowArrowLatchedAimXWorld:      0,
+    bowArrowLatchedAimYWorld:      0,
     // ── Ordered Mote Queue ────────────────────────────────────────────
     moteSlotCount:              0,
     moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),

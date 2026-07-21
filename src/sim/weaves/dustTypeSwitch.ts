@@ -34,6 +34,8 @@ import {
   BEHAVIOR_MODE_DUST_SWITCH_RETURN,
   isDustSwitchBehaviorMode,
 } from '../particles/dustSwitchBehaviorMode';
+import { isBowArrowBehaviorMode } from '../particles/bowArrowBehaviorMode';
+import { isSwordSlashBehaviorMode } from '../particles/swordSlashBehaviorMode';
 
 // ── Per-slot phase values ───────────────────────────────────────────────────
 
@@ -97,8 +99,20 @@ export function beginDustTypeSwitch(world: WorldState, targetKind: ParticleKind)
     if (currentKind === targetKind) continue;
 
     const pidx = world.moteSlotParticleIndex[slot];
+    // A mote currently owned by the Bow arrow (in flight or mid-assembly) or
+    // the Sword crescent must NOT be hijacked into the dust-switch recall
+    // animation — that would silently overwrite its behaviorMode out from
+    // under the owning weave (which still believes it owns the particle),
+    // violating the "one authoritative behaviorMode owner per mote" invariant.
+    // Treat it the same as "not currently available for animation": retarget
+    // its logical/physical kind immediately (no recall animation) so it comes
+    // out the other side of its current weave already showing the new type,
+    // then resumes normal dust-switch-free behavior when that weave releases it.
+    const isOwnedByAnotherWeave = pidx >= 0 && pidx < world.particleCount
+      && (isBowArrowBehaviorMode(world.behaviorMode[pidx]) || isSwordSlashBehaviorMode(world.behaviorMode[pidx]));
     const isLiveAndAvailable = world.moteSlotState[slot] === MOTE_STATE_AVAILABLE
-      && pidx >= 0 && pidx < world.particleCount && world.isAliveFlag[pidx] === 1;
+      && pidx >= 0 && pidx < world.particleCount && world.isAliveFlag[pidx] === 1
+      && !isOwnedByAnotherWeave;
 
     if (isLiveAndAvailable) {
       world.dustSwitchSourceKind[slot] = currentKind;
@@ -110,9 +124,11 @@ export function beginDustTypeSwitch(world: WorldState, targetKind: ParticleKind)
       world.behaviorMode[pidx] = BEHAVIOR_MODE_DUST_SWITCH_RECALL;
       world.dustSwitchActiveSlotCount++;
     } else {
-      // Depleted, regenerating, or unlinked — retarget the slot (and its
-      // linked particle's stored kind, if any) so it respawns as the newly
-      // selected type later, preserving its depletion/regen timer untouched.
+      // Depleted, regenerating, unlinked, or currently owned by the Bow/Sword
+      // Weave — retarget the slot (and its linked particle's stored kind, if
+      // any) so it shows the newly selected type immediately without an
+      // animation, preserving its depletion/regen timer and current weave
+      // ownership untouched.
       world.moteSlotKind[slot] = targetKind;
       if (pidx >= 0 && pidx < world.particleCount) {
         world.kindBuffer[pidx] = targetKind;

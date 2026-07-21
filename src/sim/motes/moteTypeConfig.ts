@@ -36,7 +36,15 @@ export interface MoteRgb {
   b: number;
 }
 
-/** Visual identity for one mote type. Body / glow / trail / particle share the hue. */
+/**
+ * Visual identity for one mote type. Body / glow / trail / particle share the
+ * hue. Each channel's actual render-path wiring (task section 7) is
+ * documented in `render/particles/styles.ts`'s module docblock: `body` drives
+ * both the Canvas and WebGL renderers' actual mote colour, `glow` drives the
+ * Canvas glint/brightest accent tone, `trail` drives the trail renderers, and
+ * `particle` intentionally aliases `body` for now (motes ARE the particles in
+ * this architecture; kept distinct for a future dedicated FX spawner).
+ */
 export interface MoteTypeVisual {
   /** Core body fill colour. */
   body: MoteRgb;
@@ -44,7 +52,7 @@ export interface MoteTypeVisual {
   glow: MoteRgb;
   /** Motion-trail colour. Kept equal to the body hue so trails follow the type. */
   trail: MoteRgb;
-  /** Type-specific effect-particle colour (sparks/embers spawned by the mote). */
+  /** Type-specific effect-particle colour (sparks/embers spawned by the mote). Currently aliases `body`. */
   particle: MoteRgb;
 }
 
@@ -177,4 +185,24 @@ export function getMoteTypeProjectile(kind: ParticleKind | number): MoteTypeProj
 /** True when an explicit (non-fallback) config exists for this kind. */
 export function hasMoteTypeConfig(kind: ParticleKind | number): boolean {
   return MOTE_TYPE_CONFIGS[kind as ParticleKind] !== undefined;
+}
+
+// ── Shared pure colour helpers (task section 7) ───────────────────────────────
+//
+// Pure number/string formatting only — no DOM/browser APIs — so these remain
+// safe to import from both the simulation and any renderer. Renderers use
+// these to derive their own per-kind colour tables (Canvas tone ramps, GLSL
+// shader literals) FROM this config at module load, instead of maintaining
+// independent hardcoded palettes that can silently drift from it.
+
+/** Multiplies each channel of `rgb` by `factor`, clamped to [0, 1]. */
+export function shadeRgb(rgb: MoteRgb, factor: number): MoteRgb {
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  return { r: clamp(rgb.r * factor), g: clamp(rgb.g * factor), b: clamp(rgb.b * factor) };
+}
+
+/** Formats an RGB triple (0..1 channels) as a `#rrggbb` hex string. */
+export function rgbToHex(rgb: MoteRgb): string {
+  const toByte = (v: number) => Math.max(0, Math.min(255, Math.round(v * 255))).toString(16).padStart(2, '0');
+  return `#${toByte(rgb.r)}${toByte(rgb.g)}${toByte(rgb.b)}`;
 }

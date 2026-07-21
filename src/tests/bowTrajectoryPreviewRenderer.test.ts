@@ -35,6 +35,42 @@ test('bow aim preview clips at a terrain raycast hit', () => {
   assert.equal(out.y, 0);
 });
 
+// ── Task section 8: zero-length aim uses the simulation's own fallback ──────
+
+test('zero-length aim delta falls back to the caller-supplied (simulation-owned) direction, not a hardcoded default', () => {
+  const out = { x: 0, y: 0 };
+  // Simulation is holding a previously-resolved "aimed up" direction.
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null, 0, -1);
+  assert.ok(Math.abs(out.x - 0) < 1e-6, 'must stay pointed up (x=0), not snap to the hardcoded (1,0) default');
+  assert.ok(Math.abs(out.y - -100) < 1e-6, 'must extend upward using the supplied fallback');
+});
+
+test('regression: aim upward, then move the cursor exactly onto the player — preview stays aimed upward', () => {
+  const out = { x: 0, y: 0 };
+  // Step 1: player aims upward — simulation resolves and stores dir=(0,-1)
+  // (this mirrors what tickBowArrowAssembly does internally).
+  const aimLen1 = Math.hypot(0, -40);
+  const simulatedDirX = 0 / aimLen1;
+  const simulatedDirY = -40 / aimLen1;
+  assert.ok(Math.abs(simulatedDirX - 0) < 1e-9 && Math.abs(simulatedDirY - -1) < 1e-9);
+
+  // Step 2: cursor moves exactly onto the player (zero-length aim delta this
+  // frame). The preview must use the simulation's last-resolved direction
+  // (captured above) as its fallback — exactly what the render() call site
+  // now passes via snapshot.bowArrowDirXWorld/YWorld.
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null, simulatedDirX, simulatedDirY);
+  assert.ok(Math.abs(out.x - 0) < 1e-6, 'preview remains aimed upward (x=0)');
+  assert.ok(out.y < 0, 'preview remains aimed upward (negative y = up)');
+  assert.ok(Math.abs(out.y - -100) < 1e-6, 'extends the full range in the up direction, not the hardcoded rightward default');
+});
+
+test('default fallback (no explicit args) matches the prior always-rightward behavior for callers that pass none', () => {
+  const out = { x: 0, y: 0 };
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null);
+  assert.equal(out.x, 100);
+  assert.equal(out.y, 0);
+});
+
 test('bow preview visibility requires unlock + held gesture + assembling arrow', () => {
   assert.equal(computeBowPreviewShouldBeVisible(0, SecondaryWeaveGesturePhase.Holding, BOW_ARROW_PHASE_ASSEMBLING), false);
   assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Idle, BOW_ARROW_PHASE_ASSEMBLING), false);
