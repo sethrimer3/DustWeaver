@@ -35,6 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
+import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -444,11 +445,12 @@ export function createEditorController(
       const campaignTitle = activeCampaignSession.campaign.campaign.title;
       ui = createEditorUI(uiRoot, campaignTitle);
       ui.setCallbacks({
-        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
-        onCategoryChange: (cat) => { state.activeCategory = cat; },
+        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; ensureActiveLayerVisible(state); },
+        onCategoryChange: (cat) => { state.activeCategory = cat; ensureActiveLayerVisible(state); },
         onPaletteItemSelect: (item) => {
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
+          ensureActiveLayerVisible(state);
         },
         onExport: () => {
           if (state.roomData) exportRoomAsJson(state.roomData);
@@ -817,6 +819,7 @@ export function createEditorController(
           };
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
+          ensureActiveLayerVisible(state);
           ui?.update(state);
         },
       });
@@ -1381,6 +1384,8 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
           }
+        } else if (state.activeTool === EditorTool.Place && isActiveLayerLocked(state)) {
+          showEditorToast(uiRoot, `"${LAYER_LABELS[getActiveLayerId(state)]}" layer is locked — unlock it to place here.`);
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           pushSnapshot(history, state.roomData);
           const px = pixelFromCursor(state);
@@ -1650,6 +1655,7 @@ export function createEditorController(
         state.isSelectionBoxActive = false;
         if (state.roomData) {
           const boxElements = getAllElementsInRect(
+            state,
             state.roomData,
             Math.min(state.selectionBoxStartBlockX, state.cursorBlockX),
             Math.min(state.selectionBoxStartBlockY, state.cursorBlockY),

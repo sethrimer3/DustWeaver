@@ -18,15 +18,19 @@ import {
   hitTestTransition,
   hitTestTransitionRect,
 } from './editorHitTest';
+import { canSelectElementType } from './editorLayers';
 export { deleteAtCursor, deleteAtCursorBrushed } from './editorDeleteTool';
 
 // ── Select tool ──────────────────────────────────────────────────────────────
 
 /**
- * Attempts to select an element at the given block coordinates.
- * Returns the selected element or null.
+ * Attempts to select an element at the given block coordinates, ignoring
+ * layer visibility/lock/select-only state. Used internally by
+ * `selectAtCursor` and by the delete tool (which needs to know what *would*
+ * be hit, including on non-editable layers, in order to distinguish "nothing
+ * here" from "something here but it's locked/hidden").
  */
-export function selectAtCursor(state: EditorState): SelectedElement | null {
+export function selectAtCursorAnyLayer(state: EditorState): SelectedElement | null {
   const room = state.roomData;
   if (room === null) return null;
 
@@ -310,6 +314,17 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
   return null;
 }
 
+/**
+ * Attempts to select an element at the cursor's block coordinates, respecting
+ * layer visibility/lock/select-only state — the version used by the Select
+ * tool's click handling and hover preview.
+ */
+export function selectAtCursor(state: EditorState): SelectedElement | null {
+  const hit = selectAtCursorAnyLayer(state);
+  if (hit === null) return null;
+  return canSelectElementType(state, hit.type) ? hit : null;
+}
+
 // ── Rotate selected element ──────────────────────────────────────────────────
 
 /**
@@ -438,6 +453,7 @@ function _repositionTransitionForNewDirection(
  * Returns all elements whose block-space bounding box overlaps the given rect.
  */
 export function getAllElementsInRect(
+  state: EditorState,
   room: EditorRoomData,
   x1: number, y1: number,
   x2: number, y2: number,
@@ -612,7 +628,7 @@ export function getAllElementsInRect(
       results.push({ type: 'transition', uid: t.uid });
     }
   }
-  return results;
+  return results.filter(el => canSelectElementType(state, el.type));
 }
 
 /**

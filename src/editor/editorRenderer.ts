@@ -43,6 +43,8 @@ import {
 } from './editorPlacementPreviewDrawer';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { isLayerVisible, getLayerForElementType } from './editorLayers';
+import type { SelectedElementType } from './editorElementTypes';
 
 /**
  * Renders all editor overlays on the 2D canvas.
@@ -87,35 +89,43 @@ export function renderEditorOverlays(
   const isElementSelected = (type: string, uid: number): boolean =>
     state.selectedElements.some(e => e.type === type && e.uid === uid);
 
+  // Per-element-type visibility gate driven by the editor layer panel. Most
+  // drawEditor* functions below cover a single layer's worth of content and
+  // are gated with a single `layerOn(...)` check; a few (spawn/tombs,
+  // collectibles, critter areas) mix several layers and are always called,
+  // filtering per-item internally via `isTypeVisible`.
+  const layerOn = (type: SelectedElementType): boolean => isLayerVisible(state, getLayerForElementType(type));
+  const isTypeVisible = (type: SelectedElementType): boolean => layerOn(type);
+
   // ── Grid ─────────────────────────────────────────────────────────────────
   drawGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
-  drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorSpawnAndTombs(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorCollectibles(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorCritterAreas(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorZipMoveBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('backgroundBlock')) drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('wall')) drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('enemy')) drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('transition')) drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorSpawnAndTombs(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
+  drawEditorCollectibles(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
+  drawEditorCritterAreas(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
+  if (layerOn('lightSource')) drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('waterZone')) drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('bouncePad')) drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('kineticBlock')) drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('phantasmalTile')) drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('grappleCarryBlock')) drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('zipMoveBlock')) drawEditorZipMoveBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('pixelMaterial')) drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
     drawPixelGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
   }
-  drawEditorEnvironmentItems(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorGuideDustPaths(ctx, room, state, offsetXPx, offsetYPx, zoom);
-  drawEditorCustomBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorEnvironmentItems(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
+  if (layerOn('rope')) drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('dialogueTrigger')) drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('guideDustPath')) drawEditorGuideDustPaths(ctx, room, state, offsetXPx, offsetYPx, zoom);
+  if (layerOn('customBlock')) drawEditorCustomBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawPlacementPreview(ctx, room, state, offsetXPx, offsetYPx, zoom);
   drawEditorUIOverlays(ctx, room, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 

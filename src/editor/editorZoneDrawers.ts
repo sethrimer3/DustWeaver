@@ -466,19 +466,21 @@ export function drawEditorEnvironmentItems(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,
   isSelected: IsElementSelected,
+  isTypeVisible: (type: 'decoration' | 'fallingBlock') => boolean,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
 ): void {
-  // Decorations (mushroom, glowGrass, vine)
-  for (const d of (room.decorations ?? [])) {
+  // Decorations (mushroom, glowGrass, vine) — Foreground layer
+  if (isTypeVisible('decoration')) for (const d of (room.decorations ?? [])) {
     const sel = isSelected('decoration', d.uid);
     const emoji = d.kind === 'mushroom' ? '🍄' : d.kind === 'glowGrass' ? '🌿' : '🌱';
     const color = sel ? 'rgba(80,220,130,0.9)' : 'rgba(60,170,90,0.55)';
     drawMarker(ctx, d.xBlock, d.yBlock, offsetXPx, offsetYPx, zoom, color, emoji);
   }
 
-  // Falling block tiles (standard, tough, sensitive)
+  // Falling block tiles (standard, tough, sensitive) — Dynamic Geometry layer
+  if (!isTypeVisible('fallingBlock')) return;
   for (const fb of (room.fallingBlocks ?? [])) {
     const sel = isSelected('fallingBlock', fb.uid);
     const xPx = fb.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;

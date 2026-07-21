@@ -17,6 +17,9 @@ import type { RoomSongId } from '../audio/musicManager';
 import type { BrushMode, PaletteCategory, PaletteItem } from './editorDropdownData';
 import type { SelectedElement, EditorRoomData } from './editorElementTypes';
 import type { RoomComplexitySeverity } from '../levels/roomComplexity';
+import { createDefaultEditorLayers, type EditorLayersState } from './editorLayers';
+
+export type { LayerId, EditorLayerState, EditorLayersState } from './editorLayers';
 
 // Re-export element types so existing consumers need not change their imports.
 export type {
@@ -222,6 +225,12 @@ export interface EditorState {
    * blocks are created, deleted, or rooms are modified.
    */
   customBlockUsage: Map<string, number>;
+  /**
+   * Editor-only layer visibility/lock/solo/select-only state, keyed by
+   * LayerId (see editorLayers.ts). Not part of room JSON — a per-session
+   * editing convenience, like blockThemeSlots.
+   */
+  layers: EditorLayersState;
 }
 
 export function createEditorState(): EditorState {
@@ -280,6 +289,7 @@ export function createEditorState(): EditorState {
     lastWarnedComplexitySeverity: 'normal',
     customBlockRegistry: new Map(),
     customBlockUsage: new Map(),
+    layers: createDefaultEditorLayers(),
   };
 }
 

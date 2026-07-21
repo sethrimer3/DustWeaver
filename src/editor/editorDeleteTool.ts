@@ -15,6 +15,8 @@ import {
 } from './editorHitTest';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
+import { selectAtCursorAnyLayer } from './editorTools';
+import { canSelectElementType } from './editorLayers';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
 
@@ -93,6 +95,20 @@ export function deleteAtCursorBrushed(state: EditorState): void {
 function deleteAt(state: EditorState, bx: number, by: number): void {
   const room = state.roomData;
   if (room === null) return;
+
+  // Layer gate: figure out what (if anything) sits at this cell regardless of
+  // layer state, then bail without mutating if that element's layer is
+  // hidden, locked, or excluded by an active select-only layer. Mirrors the
+  // same top-hit priority order the Select tool uses (selectAtCursorAnyLayer),
+  // so "what would be selected" and "what would be deleted" stay consistent.
+  const savedCursorX = state.cursorBlockX;
+  const savedCursorY = state.cursorBlockY;
+  state.cursorBlockX = bx;
+  state.cursorBlockY = by;
+  const hit = selectAtCursorAnyLayer(state);
+  state.cursorBlockX = savedCursorX;
+  state.cursorBlockY = savedCursorY;
+  if (hit !== null && !canSelectElementType(state, hit.type)) return;
 
   // Check campaign spawn first (campaign-level singleton marker)
   if (state.campaignSpawnBlock !== null &&

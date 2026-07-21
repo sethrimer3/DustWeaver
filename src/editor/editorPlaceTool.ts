@@ -37,6 +37,7 @@ import {
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+import { isActiveLayerLocked } from './editorLayers';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export function placeAtCursor(state: EditorState): void {
   const room = state.roomData;
   const item = state.selectedPaletteItem;
   if (room === null || item === null) return;
+  if (isActiveLayerLocked(state)) return;
 
   // Brush painting: tile-like items support multi-cell brushes.
   const isBrushable =

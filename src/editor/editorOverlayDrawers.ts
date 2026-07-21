@@ -189,17 +189,22 @@ export function drawEditorTransitions(
 // Player spawn, save tombs, and skill tombs
 // ============================================================================
 
+type SpawnAndTombsElementType =
+  'campaignSpawn' | 'playerSpawn' | 'saveTomb' | 'skillTomb' |
+  'challengeField' | 'challengeGate' | 'challengeTotem' | 'gate';
+
 export function drawEditorSpawnAndTombs(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,
   state: EditorState,
   isSelected: IsElementSelected,
+  isTypeVisible: (type: SpawnAndTombsElementType) => boolean,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
 ): void {
   // Campaign spawn marker — drawn first so room spawn overlaps it slightly (clear priority)
-  if (state.campaignSpawnBlock !== null) {
+  if (isTypeVisible('campaignSpawn') && state.campaignSpawnBlock !== null) {
     const [csx, csy] = state.campaignSpawnBlock;
     const sel = isSelected('campaignSpawn', 0);
     const color = sel ? CAMPAIGN_SPAWN_SELECTED : CAMPAIGN_SPAWN_COLOR;
@@ -223,14 +228,14 @@ export function drawEditorSpawnAndTombs(
   }
 
   // Player spawn marker (room-local fallback)
-  {
+  if (isTypeVisible('playerSpawn')) {
     const sel = isSelected('playerSpawn', 0);
     drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,
       sel ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
   }
 
   // Save tombs
-  for (const s of room.saveTombs) {
+  if (isTypeVisible('saveTomb')) for (const s of room.saveTombs) {
     const sel = isSelected('saveTomb', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'saveTomb' && state.hoverElement.uid === s.uid;
@@ -242,7 +247,7 @@ export function drawEditorSpawnAndTombs(
   }
 
   // Skill tombs (dust skill unlocks)
-  for (const s of room.skillTombs) {
+  if (isTypeVisible('skillTomb')) for (const s of room.skillTombs) {
     const sel = isSelected('skillTomb', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'skillTomb' && state.hoverElement.uid === s.uid;
@@ -256,6 +261,7 @@ export function drawEditorSpawnAndTombs(
     ['challengeField', room.challengeFields ?? [], 'rgba(155,70,255,0.34)', 'C'],
     ['challengeGate', room.challengeGates ?? [], 'rgba(120,70,180,0.58)', 'S'],
   ] as const) {
+    if (!isTypeVisible(kind)) continue;
     for (const element of elements) {
       const selected = isSelected(kind, element.uid);
       const x = element.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
@@ -273,7 +279,7 @@ export function drawEditorSpawnAndTombs(
       ctx.fillText(label, x + w * 0.5, y + h * 0.5 + 3 * zoom);
     }
   }
-  for (const totem of room.challengeTotems ?? []) {
+  if (isTypeVisible('challengeTotem')) for (const totem of room.challengeTotems ?? []) {
     const selected = isSelected('challengeTotem', totem.uid);
     drawMarker(ctx, totem.xBlock, totem.yBlock, offsetXPx, offsetYPx, zoom, selected ? '#ffd85a' : '#b85cff', 'C');
   }
@@ -281,7 +287,7 @@ export function drawEditorSpawnAndTombs(
     enemy: ['rgba(194,145,151,0.78)', 'X'], challenge: ['rgba(220,196,125,0.78)', 'S'],
     heart: ['rgba(227,174,186,0.78)', 'H'], speed: ['rgba(151,207,220,0.78)', '>'],
   } as const;
-  for (const gate of room.gates ?? []) {
+  if (isTypeVisible('gate')) for (const gate of room.gates ?? []) {
     const selected = isSelected('gate', gate.uid);
     const [fill, label] = gatePreview[gate.kind];
     const x = gate.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
@@ -311,17 +317,22 @@ export function drawEditorSpawnAndTombs(
 // Collectibles: dust containers, container pieces, boost jars, dust piles
 // ============================================================================
 
+type CollectibleElementType =
+  'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' |
+  'lambdaAnchor' | 'fireflyJar' | 'springboard' | 'breakableBlock' | 'dustPile';
+
 export function drawEditorCollectibles(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,
   state: EditorState,
   isSelected: IsElementSelected,
+  isTypeVisible: (type: CollectibleElementType) => boolean,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
 ): void {
   // Dust containers (+4 capacity each)
-  for (const c of (room.dustContainers ?? [])) {
+  if (isTypeVisible('dustContainer')) for (const c of (room.dustContainers ?? [])) {
     const sel = isSelected('dustContainer', c.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainer' && state.hoverElement.uid === c.uid;
@@ -333,7 +344,7 @@ export function drawEditorCollectibles(
   }
 
   // Dust container pieces (accumulate toward a full container)
-  for (const c of (room.dustContainerPieces ?? [])) {
+  if (isTypeVisible('dustContainerPiece')) for (const c of (room.dustContainerPieces ?? [])) {
     const sel = isSelected('dustContainerPiece', c.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainerPiece' && state.hoverElement.uid === c.uid;
@@ -345,7 +356,7 @@ export function drawEditorCollectibles(
   }
 
   // Dust boost jars (grant temporary dust of specific kind)
-  for (const j of (room.dustBoostJars ?? [])) {
+  if (isTypeVisible('dustBoostJar')) for (const j of (room.dustBoostJars ?? [])) {
     const sel = isSelected('dustBoostJar', j.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustBoostJar' && state.hoverElement.uid === j.uid;
@@ -356,7 +367,7 @@ export function drawEditorCollectibles(
   }
 
   // Dust swarms (collectible sandstorms — press F to collect)
-  for (const s of (room.dustSwarms ?? [])) {
+  if (isTypeVisible('dustSwarm')) for (const s of (room.dustSwarms ?? [])) {
     const sel = isSelected('dustSwarm', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustSwarm' && state.hoverElement.uid === s.uid;
@@ -369,7 +380,7 @@ export function drawEditorCollectibles(
   // Lambda Anchors (temporary recall points — press F to link/teleport)
   const LAMBDA_ANCHOR_COLOR    = 'rgba(255, 215, 0, 0.55)';
   const LAMBDA_ANCHOR_SELECTED = 'rgba(255, 235, 80, 0.95)';
-  for (const a of (room.lambdaAnchors ?? [])) {
+  if (isTypeVisible('lambdaAnchor')) for (const a of (room.lambdaAnchors ?? [])) {
     const sel = isSelected('lambdaAnchor', a.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'lambdaAnchor' && state.hoverElement.uid === a.uid;
@@ -382,7 +393,7 @@ export function drawEditorCollectibles(
   // Firefly Jars (decorative jar emitting fireflies)
   const FIREFLY_JAR_COLOR    = 'rgba(255, 200, 60, 0.55)';
   const FIREFLY_JAR_SELECTED = 'rgba(255, 225, 120, 0.95)';
-  for (const j of (room.fireflyJars ?? [])) {
+  if (isTypeVisible('fireflyJar')) for (const j of (room.fireflyJars ?? [])) {
     const sel = isSelected('fireflyJar', j.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'fireflyJar' && state.hoverElement.uid === j.uid;
@@ -395,7 +406,7 @@ export function drawEditorCollectibles(
   // Springboards (directional launch pad, distinct from bounce pads)
   const SPRINGBOARD_COLOR    = 'rgba(90, 220, 140, 0.55)';
   const SPRINGBOARD_SELECTED = 'rgba(130, 255, 180, 0.95)';
-  for (const s of (room.springboards ?? [])) {
+  if (isTypeVisible('springboard')) for (const s of (room.springboards ?? [])) {
     const sel = isSelected('springboard', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'springboard' && state.hoverElement.uid === s.uid;
@@ -408,7 +419,7 @@ export function drawEditorCollectibles(
   // Breakable blocks (generic fracture-on-impact block)
   const BREAKABLE_COLOR    = 'rgba(210, 150, 90, 0.55)';
   const BREAKABLE_SELECTED = 'rgba(240, 190, 130, 0.95)';
-  for (const b of (room.breakableBlocks ?? [])) {
+  if (isTypeVisible('breakableBlock')) for (const b of (room.breakableBlocks ?? [])) {
     const sel = isSelected('breakableBlock', b.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'breakableBlock' && state.hoverElement.uid === b.uid;
