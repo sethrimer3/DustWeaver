@@ -83,11 +83,96 @@ const TRAIL_OFFSET_MAX_WORLD = 23.0;
 /** Fraction of normal orbitalStrength applied while an attack is in flight. */
 const ATTACK_ORBITAL_SCALE = 2.5;
 
+/**
+ * Velocity-matching gain (1/s) for player orbit motes (task section 2 — faster
+ * Storm follow).
+ *
+ * A pure position spring tracking a moving anchor lags by a steady-state offset
+ * proportional to player speed (offset ≈ v·drag·mass / attractionStrength). For
+ * Gold Dust's heavy/weak profile that offset exceeds the influence radius at
+ * grapple/zip/launch speeds, so motes detach and are left far behind.
+ *
+ * This feed-forward drives each mote's *velocity* toward the player's velocity.
+ * The applied force is scaled by the mote's mass so the resulting acceleration
+ * — (playerVel − moteVel)·gain — is mass-independent, giving every mote type the
+ * same small, bounded velocity deficit (≈ drag/gain of player speed) instead of
+ * a large positional lag. At steady state the term vanishes, so it adds no
+ * offset and does not fight the orbital swirl; it only removes systematic lag.
+ *
+ * Explicit-Euler stability: gain·dtSec = 40/60 ≈ 0.67 ≪ 2, so it is
+ * well-damped and cannot oscillate/overshoot at the fixed 60 Hz step.
+ *
+ * Gated to when the player is actually moving (speed above the standing-still
+ * threshold), so the idle hovering halo is byte-for-byte unchanged.
+ */
+const PLAYER_FOLLOW_VELOCITY_MATCH_GAIN = 40.0;
+
+/**
+ * Far-recovery policy for player-owned motes beyond `INFLUENCE_RADIUS_WORLD`
+ * (task section 4). Without this, a mote knocked or left far outside the
+ * influence ring is skipped by binding entirely and can drift indefinitely —
+ * nothing ever pulls it back. This applies ONLY to player-owned orbit/return
+ * motes (never non-player particles, which keep their prior free-drift
+ * behavior), and only outside the ordinary influence radius, so it can never
+ * affect the calm idle halo or normal in-range orbiting.
+ *
+ * Below `FAR_RECOVERY_HARD_SNAP_DISTANCE_WORLD`: a stable, distance-scaled
+ * pursuit force (proportional to how far beyond the influence radius the mote
+ * has drifted, capped at `FAR_RECOVERY_MAX_PURSUIT_ACCEL_WORLD` so it can
+ * never be explosive) steers it back toward the owner. Combined with the
+ * element's normal drag during integration this converges to a bounded
+ * steady-state speed — no oscillation, no runaway.
+ *
+ * At or beyond `FAR_RECOVERY_HARD_SNAP_DISTANCE_WORLD` (an extreme distance
+ * that should only occur after a discontinuity such as the owner teleporting
+ * to a different room while the mote was mid-flight elsewhere): a one-time
+ * hard relocation places the mote just inside the influence ring with zero
+ * velocity, so ordinary binding resumes cleanly next tick instead of asking
+ * the pursuit force to close an unbounded gap.
+ */
+const FAR_RECOVERY_MAX_PURSUIT_ACCEL_WORLD = 900.0;
+/** Proportional gain (1/s²) on how far beyond the influence radius the mote has drifted. */
+const FAR_RECOVERY_GAIN = 6.0;
+/** Extreme-distance safety-relocation threshold (world units) — see doc above. */
+const FAR_RECOVERY_HARD_SNAP_DISTANCE_WORLD = 480.0;
+
+function _applyFarRecoveryForce(
+  world: WorldState,
+  particleIndex: number,
+  ownerX: number,
+  ownerY: number,
+  distToOwnerSq: number,
+): void {
+  const dist = Math.sqrt(distToOwnerSq);
+
+  if (dist >= FAR_RECOVERY_HARD_SNAP_DISTANCE_WORLD) {
+    const px = world.positionXWorld[particleIndex];
+    const py = world.positionYWorld[particleIndex];
+    const angle = (dist > 1e-6) ? Math.atan2(py - ownerY, px - ownerX) : 0;
+    world.positionXWorld[particleIndex] = ownerX + Math.cos(angle) * INFLUENCE_RADIUS_WORLD * 0.9;
+    world.positionYWorld[particleIndex] = ownerY + Math.sin(angle) * INFLUENCE_RADIUS_WORLD * 0.9;
+    world.velocityXWorld[particleIndex] = 0;
+    world.velocityYWorld[particleIndex] = 0;
+    return;
+  }
+
+  const excess = dist - INFLUENCE_RADIUS_WORLD; // > 0 here
+  const invDist = dist > 1e-6 ? 1.0 / dist : 0;
+  const dx = (ownerX - world.positionXWorld[particleIndex]) * invDist;
+  const dy = (ownerY - world.positionYWorld[particleIndex]) * invDist;
+  const accel = Math.min(FAR_RECOVERY_MAX_PURSUIT_ACCEL_WORLD, FAR_RECOVERY_GAIN * excess);
+  const mass = world.massKg[particleIndex] > 0 ? world.massKg[particleIndex] : 1.0;
+  world.forceX[particleIndex] += dx * accel * mass;
+  world.forceY[particleIndex] += dy * accel * mass;
+}
+
 export function applyBindingForces(world: WorldState): void {
   const {
     clusters,
     positionXWorld, positionYWorld,
+    velocityXWorld, velocityYWorld,
     forceX, forceY,
+    massKg,
     ownerEntityId, isAliveFlag,
     kindBuffer,
     anchorAngleRad, anchorRadiusWorld,
@@ -181,17 +266,26 @@ export function applyBindingForces(world: WorldState): void {
     }
     if (!found) continue;
 
+    const isPlayerParticle = (ownerId === playerEntityId);
+
     // ── Influence radius check ─────────────────────────────────────────────
-    // Skip binding for particles outside the owner's influence ring so they
-    // drift freely and only orbit when within range.
+    // Skip ordinary binding for particles outside the owner's influence ring
+    // so they drift freely and only orbit when within range. Non-player
+    // particles keep exactly this prior behavior (skip entirely, drift
+    // freely) — the far-recovery policy below applies ONLY to player-owned
+    // motes (task section 4), since only the player's own inventory motes
+    // must be guaranteed to eventually return.
     const dxToOwner = positionXWorld[particleIndex] - ownerX;
     const dyToOwner = positionYWorld[particleIndex] - ownerY;
     const distToOwnerSq = dxToOwner * dxToOwner + dyToOwner * dyToOwner;
-    if (distToOwnerSq > INFLUENCE_RADIUS_WORLD * INFLUENCE_RADIUS_WORLD) continue;
+    if (distToOwnerSq > INFLUENCE_RADIUS_WORLD * INFLUENCE_RADIUS_WORLD) {
+      if (isPlayerParticle) {
+        _applyFarRecoveryForce(world, particleIndex, ownerX, ownerY, distToOwnerSq);
+      }
+      continue;
+    }
 
     const profile = getElementProfile(kindBuffer[particleIndex]);
-
-    const isPlayerParticle = (ownerId === playerEntityId);
 
     // ── Compute anchor target (may be modified by player state below) ──────
     const aAngle  = anchorAngleRad[particleIndex];
@@ -246,6 +340,20 @@ export function applyBindingForces(world: WorldState): void {
       const tangentY =  toOwnerX * invDist;
       forceX[particleIndex] += tangentX * profile.orbitalStrength * orbitalScale;
       forceY[particleIndex] += tangentY * profile.orbitalStrength * orbitalScale;
+    }
+
+    // ---- 3. Player-follow velocity matching (task section 2) -------------
+    // Drive the mote's velocity toward the player's so it keeps pace during
+    // fast movement (grapple, zip, fall, launch, invulnerability dash) instead
+    // of lagging behind by the position spring's large steady-state offset.
+    // Mass-scaled so the acceleration is mass-independent; gated to a moving
+    // player so the idle halo is unchanged.
+    if (isPlayerParticle && playerSpeedWorld >= STANDING_STILL_SPEED_WORLD) {
+      const massScale = massKg[particleIndex] > 0 ? massKg[particleIndex] : 1.0;
+      forceX[particleIndex] +=
+        (playerVelXWorld - velocityXWorld[particleIndex]) * PLAYER_FOLLOW_VELOCITY_MATCH_GAIN * massScale;
+      forceY[particleIndex] +=
+        (playerVelYWorld - velocityYWorld[particleIndex]) * PLAYER_FOLLOW_VELOCITY_MATCH_GAIN * massScale;
     }
   }
 }

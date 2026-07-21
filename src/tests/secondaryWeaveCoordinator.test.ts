@@ -13,7 +13,13 @@ import {
 import { applyPlayerWeaveCombat } from '../sim/weaves/weaveCombat';
 import { releaseShieldWeaveParticles } from '../sim/weaves/shieldWeave';
 import { NEW_SWORD_SLASH_TICKS } from '../sim/weaves/swordWeave';
-import { MOTE_4_LOAD_TICKS } from '../sim/weaves/arrowWeave';
+import {
+  BOW_ARROW_PHASE_NONE,
+  BOW_ARROW_PHASE_ASSEMBLING,
+  BOW_ARROW_PHASE_OUTBOUND,
+  BOW_ARROW_LOAD_3_TICKS,
+} from '../sim/weaves/bowArrow';
+import { BEHAVIOR_MODE_BOW_ARROW } from '../sim/particles/bowArrowBehaviorMode';
 
 function makeFixture(moteCount = 8) {
   const world = createWorldState(1000 / 60, 7);
@@ -30,7 +36,6 @@ function addEnemy(world: ReturnType<typeof createWorldState>, x: number, y: numb
   return enemy;
 }
 
-/** Presses, ticks the gesture + coordinator once. Advances world.tick like the real fixed-step loop. */
 function press(world: ReturnType<typeof createWorldState>, aimX: number, aimY: number) {
   world.tick++;
   tickSecondaryWeaveGesture(world.secondaryWeaveGesture, true, aimX, aimY);
@@ -52,13 +57,31 @@ function idleTick(world: ReturnType<typeof createWorldState>) {
   applyPlayerWeaveCombat(world);
 }
 
+function countArrowMotes(world: ReturnType<typeof createWorldState>): number {
+  let n = 0;
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.behaviorMode[i] === BEHAVIOR_MODE_BOW_ARROW) n++;
+  }
+  return n;
+}
+
+function countAvailableMotes(world: ReturnType<typeof createWorldState>): number {
+  let n = 0;
+  for (let i = 0; i < world.moteSlotCount; i++) {
+    if (world.moteSlotState[i] === 0) n++;
+  }
+  return n;
+}
+
+// ── Sword / shield (unchanged behavior) ──────────────────────────────────────
+
 test('none unlocked: press/hold/release is a total no-op', () => {
   const { world } = makeFixture();
   press(world, 110, 100);
   for (let i = 0; i < 5; i++) hold(world, 110, 100);
   release(world, 110, 100);
   assert.equal(world.newSwordActiveFlag, 0);
-  assert.equal(world.newBowChargingFlag, 0);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
 });
 
@@ -67,7 +90,7 @@ test('sword-only: press triggers a swipe, damages an in-arc enemy once, and clea
   world.hasSwordWeaveUnlockedFlag = 1;
   const enemy = addEnemy(world, player.positionXWorld + 10, player.positionYWorld, 10);
 
-  press(world, player.positionXWorld + 20, player.positionYWorld); // aim straight at enemy
+  press(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.newSwordActiveFlag, 1);
 
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
@@ -76,7 +99,6 @@ test('sword-only: press triggers a swipe, damages an in-arc enemy once, and clea
   assert.ok(enemy.healthPoints < 10, 'enemy should have taken damage');
   const hpAfterFirstSwipe = enemy.healthPoints;
 
-  // Holding further must not re-trigger damage (no auto-swing while idle).
   for (let i = 0; i < 20; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(enemy.healthPoints, hpAfterFirstSwipe, 'no idle auto-swing/auto-target');
 
@@ -102,7 +124,7 @@ test('sword: press-time aim only — retargeting the mouse mid-swing does not re
   world.hasSwordWeaveUnlockedFlag = 1;
   press(world, player.positionXWorld + 20, player.positionYWorld);
   const aimAtPress = world.newSwordAimAngleRad;
-  hold(world, player.positionXWorld, player.positionYWorld - 50); // different aim while swinging
+  hold(world, player.positionXWorld, player.positionYWorld - 50);
   assert.equal(world.newSwordAimAngleRad, aimAtPress, 'aim angle must stay fixed at press-time value');
 });
 
@@ -123,33 +145,6 @@ test('shield-only: forms while held, releases motes on end, no crescent while no
     const pidx = world.moteSlotParticleIndex[i];
     assert.equal(world.behaviorMode[pidx], 0, 'motes should return to orbit after release');
   }
-});
-
-test('bow-only: charges on press, tier increases over time, fires on release consuming motes', () => {
-  const { world, player } = makeFixture(6);
-  world.hasBowWeaveUnlockedFlag = 1;
-
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newBowChargingFlag, 1);
-  assert.equal(world.newBowTierMoteCount, 2);
-
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newBowTierMoteCount, 4);
-
-  const availableBefore = countAvailableMotes(world);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newBowChargingFlag, 0);
-  const availableAfter = countAvailableMotes(world);
-  assert.equal(availableBefore - availableAfter, 4, 'exactly the fired arrow tier worth of motes should deplete');
-  assert.equal(world.arrowCount >= 1, true);
-});
-
-test('bow: tier is capped by available motes, and mid-charge depletion clamps live', () => {
-  const { world, player } = makeFixture(2);
-  world.hasBowWeaveUnlockedFlag = 1;
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newBowTierMoteCount, 2, 'tier capped by only 2 available motes');
 });
 
 test('sword+shield: swipe completes then the SAME motes hand off to the shield crescent (no gap, no duplication)', () => {
@@ -179,82 +174,75 @@ test('sword unlocked, shield NOT unlocked: after swipe completes, no phantom shi
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
 });
 
-test('sword+bow: quick release during the swipe queues exactly one pending arrow and fires it after sword completes with the captured release aim', () => {
-  const { world, player } = makeFixture(6);
-  world.hasSwordWeaveUnlockedFlag = 1;
-  world.hasBowWeaveUnlockedFlag = 1;
+// ── Bow — actual-mote arrow ──────────────────────────────────────────────────
 
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  // Charge a couple of ticks then release mid-swing (before NEW_SWORD_SLASH_TICKS).
-  for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newSwordActiveFlag, 1, 'sword still swinging');
-
-  const releaseAimX = player.positionXWorld + 5;
-  const releaseAimY = player.positionYWorld + 30;
-  release(world, releaseAimX, releaseAimY);
-  assert.equal(world.newBowPendingReleaseFlag, 1, 'a pending release must be latched');
-  assert.equal(world.arrowCount, 0, 'no arrow must fire before the sword finishes');
-
-  // Let the sword finish.
-  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) idleTick(world);
-
-  assert.equal(world.newSwordActiveFlag, 0);
-  assert.equal(world.newBowPendingReleaseFlag, 0, 'pending release consumed');
-  assert.equal(world.arrowCount, 1, 'exactly one arrow fired');
-  const dx = world.arrowDirXWorld[0];
-  const dy = world.arrowDirYWorld[0];
-  const expectedDx = releaseAimX - player.positionXWorld;
-  const expectedDy = releaseAimY - player.positionYWorld;
-  const expectedLen = Math.hypot(expectedDx, expectedDy);
-  assert.ok(Math.abs(dx - expectedDx / expectedLen) < 1e-3);
-  assert.ok(Math.abs(dy - expectedDy / expectedLen) < 1e-3);
-});
-
-test('sword not unlocked, bow unlocked: release fires immediately (no delay)', () => {
-  const { world, player } = makeFixture(6);
-  world.hasBowWeaveUnlockedFlag = 1;
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < 5; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.arrowCount, 1);
-  assert.equal(world.newBowPendingReleaseFlag, 0);
-});
-
-test('shield+bow: shield forms while bow charges concurrently; releasing ends shield before/at fire', () => {
+test('bow requires shield: with shield+bow unlocked, the arrow assembles from actual motes and fires ≥3 on release', () => {
   const { world, player } = makeFixture(6);
   world.hasShieldWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 1);
-  assert.equal(world.newBowChargingFlag, 1);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_ASSEMBLING, 'arrow assembles from shield start');
+  assert.equal(world.bowArrowCount, 1, 'only the center mote initially');
 
-  for (let i = 0; i < 10; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  // Advance past the 0.75s load threshold plus the seating arc so the 3
+  // motes are fully SEATED (not merely reserved/mid-arc) before release.
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 13; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.ok(world.bowArrowCount >= 3, 'at least three motes loaded after 0.75s');
+  assert.ok(countArrowMotes(world) >= 3, 'reserved motes are actual particles in BOW_ARROW mode');
+
+  const availableBefore = countAvailableMotes(world);
   release(world, player.positionXWorld + 20, player.positionYWorld);
-
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_OUTBOUND, 'arrow fires outbound on release');
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
-  assert.equal(world.arrowCount, 1);
+  // Motes are conserved — firing does not deplete inventory slots.
+  assert.equal(countAvailableMotes(world), availableBefore, 'firing does not permanently remove motes');
 });
 
-test('sword+shield+bow: full matrix — swipe, handoff to shield while bow keeps charging, quick release mid-swipe on a fresh gesture defers the arrow', () => {
-  const { world, player } = makeFixture(8);
-  world.hasSwordWeaveUnlockedFlag = 1;
+test('bow: fewer than three total motes never assembles an arrow, and the shield stays valid', () => {
+  const { world, player } = makeFixture(2);
   world.hasShieldWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newSwordActiveFlag, 1);
-  assert.equal(world.newBowChargingFlag, 1);
-  assert.equal(world.shieldWeaveIndependentActiveFlag, 0, 'shield suppressed during swipe');
-
-  for (let i = 0; i < NEW_SWORD_SLASH_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newSwordActiveFlag, 0);
-  assert.equal(world.shieldWeaveIndependentActiveFlag, 1, 'shield now active');
-  assert.equal(world.newBowChargingFlag, 1, 'bow kept charging through sword+shield');
-
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 5; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no arrow assembles below three motes');
+  assert.equal(world.shieldWeaveIndependentActiveFlag, 1, 'shield still forms normally');
   release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
-  assert.equal(world.arrowCount, 1);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'nothing fires');
+});
+
+test('bow: releasing before the minimum three-mote arrow forms fires nothing and returns motes to orbit', () => {
+  const { world, player } = makeFixture(6);
+  world.hasShieldWeaveUnlockedFlag = 1;
+  world.hasBowWeaveUnlockedFlag = 1;
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  // Release well before the 0.75s threshold: only the center mote exists.
+  for (let i = 0; i < 5; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.bowArrowCount, 1);
+  release(world, player.positionXWorld + 20, player.positionYWorld);
+
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no partial arrow fired');
+  assert.equal(countArrowMotes(world), 0, 'reserved center mote returned to orbit, none stranded');
+});
+
+test('bow: fired arrow dust kind is captured at fire time and unaffected by a later dust-type switch', () => {
+  const { world, player } = makeFixture(6);
+  world.hasShieldWeaveUnlockedFlag = 1;
+  world.hasBowWeaveUnlockedFlag = 1;
+  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
+
+  press(world, player.positionXWorld + 20, player.positionYWorld);
+  // Hold past the 0.75s threshold plus the seating arc so the 3 motes are
+  // fully SEATED (fires synchronously on release, not merely latched).
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 13; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  release(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.bowArrowDustKind, ParticleKind.Golden);
+
+  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Ice;
+  assert.equal(world.bowArrowDustKind, ParticleKind.Golden, 'fired arrow dust kind must be frozen at fire time');
 });
 
 test('grapple-consumed press never triggers sword/shield/bow and produces no stale arrow on release', () => {
@@ -264,17 +252,16 @@ test('grapple-consumed press never triggers sword/shield/bow and produces no sta
   world.hasBowWeaveUnlockedFlag = 1;
 
   tickSecondaryWeaveGesture(world.secondaryWeaveGesture, true, player.positionXWorld + 20, player.positionYWorld);
-  // Grapple claims this press immediately (simulating arbitration).
   markSecondaryWeaveGestureConsumedByOtherSystem(world.secondaryWeaveGesture);
   applyPlayerWeaveCombat(world);
 
   assert.equal(world.newSwordActiveFlag, 0);
-  assert.equal(world.newBowChargingFlag, 0);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
 
   for (let i = 0; i < 5; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.arrowCount, 0, 'no stale arrow from a consumed press');
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no stale arrow from a consumed press');
 });
 
 test('cancellation mid-gesture (window blur / pause) leaves no stuck shield and no phantom arrow', () => {
@@ -283,17 +270,16 @@ test('cancellation mid-gesture (window blur / pause) leaves no stuck shield and 
   world.hasBowWeaveUnlockedFlag = 1;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < 5; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 2; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 1);
-  assert.equal(world.newBowChargingFlag, 1);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_ASSEMBLING);
 
-  // Simulate pause: cancel every frame while button remains physically held.
   cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
   applyPlayerWeaveCombat(world);
 
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0, 'shield must not stay stuck');
-  assert.equal(world.newBowChargingFlag, 0, 'bow charge must be cancelled, not fired');
-  assert.equal(world.arrowCount, 0, 'no phantom arrow generated purely from a cancel');
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'assembling arrow must be cancelled, not fired');
+  assert.equal(countArrowMotes(world), 0, 'no motes stranded in arrow mode');
   for (let i = 0; i < world.moteSlotCount; i++) {
     const pidx = world.moteSlotParticleIndex[i];
     assert.equal(world.behaviorMode[pidx], 0, 'motes returned to normal orbit');
@@ -310,59 +296,13 @@ test('default (non-legacy) combat mode: weave combat now functions (was previous
   assert.ok(enemy.healthPoints < 10, 'default combat mode must allow weave damage now');
 });
 
-test('bow: fired arrow dust kind is captured at fire time and unaffected by a later dust-type switch', () => {
-  const { world, player } = makeFixture(6);
-  world.hasBowWeaveUnlockedFlag = 1;
-  // Give all motes a known kind.
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
-
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.arrowCount, 1);
-  assert.equal(world.arrowDustKind[0], ParticleKind.Golden);
-
-  // Simulate a later dust-type switch changing the remaining motes' kind —
-  // the already-fired arrow's stored kind must not change.
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Ice;
-  assert.equal(world.arrowDustKind[0], ParticleKind.Golden, 'fired arrow dust kind must be frozen at fire time');
-});
-
-test('bow: failed arrow-slot reservation consumes no motes', () => {
-  const { world, player } = makeFixture(6);
-  world.hasBowWeaveUnlockedFlag = 1;
-  // Fill every arrow flight slot with a still-alive arrow so reservation fails.
-  const MAX_ARROWS = world.arrowLifetimeTicksLeft.length;
-  world.arrowCount = MAX_ARROWS;
-  for (let i = 0; i < MAX_ARROWS; i++) world.arrowLifetimeTicksLeft[i] = 999;
-
-  const availableBefore = countAvailableMotes(world);
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-
-  assert.equal(countAvailableMotes(world), availableBefore, 'no motes consumed when the arrow slot reservation fails');
-});
-
-function countAvailableMotes(world: ReturnType<typeof createWorldState>): number {
-  let n = 0;
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    if (world.moteSlotState[i] === 0) n++;
-  }
-  return n;
-}
-
-// ---- Item 1: sword->shield handoff mote-identity continuity ----------------
+// ── Sword→shield handoff mote-identity continuity (unchanged) ────────────────
 
 test('sword-to-shield handoff: the exact motes that formed the swipe are the exact motes that form the shield, no gap and no double-render frame', () => {
   const { world, player } = makeFixture(6);
   world.hasSwordWeaveUnlockedFlag = 1;
   world.hasShieldWeaveUnlockedFlag = 1;
 
-  // Snapshot the ordered mote-queue particle identities BEFORE the gesture —
-  // the swipe itself never depletes/reassigns queue slots (see
-  // secondaryWeaveCoordinator.ts's onSwordSwipeCompleted comment), so these
-  // are the exact same particle indices Shield must pick up.
   const particleIdentitiesBefore: number[] = [];
   for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesBefore.push(world.moteSlotParticleIndex[i]);
 
@@ -371,81 +311,38 @@ test('sword-to-shield handoff: the exact motes that formed the swipe are the exa
 
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS - 1; i++) {
     hold(world, player.positionXWorld + 20, player.positionYWorld);
-    // No frame during the swipe may show a formed shield crescent at the
-    // same time as an active sword swipe.
     const shieldFormedThisFrame = world.shieldWeaveIndependentActiveFlag === 1;
     assert.ok(!(world.newSwordActiveFlag === 1 && shieldFormedThisFrame), 'sword and shield must never both be fully active the same frame');
   }
 
-  // Final hold tick: swipe completes and shield takes over the SAME tick.
   hold(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.newSwordActiveFlag, 0, 'sword swipe finished');
   assert.equal(world.shieldWeaveIndependentActiveFlag, 1, 'shield active same tick as handoff — no gap frame');
 
-  // No frame assigned zero motes during the handoff: the shield crescent
-  // must have picked up a nonzero mote count immediately.
   let assignedToShieldCount = 0;
   for (let i = 0; i < world.moteSlotCount; i++) {
     if (world.behaviorMode[world.moteSlotParticleIndex[i]] === 2) assignedToShieldCount++;
   }
   assert.ok(assignedToShieldCount > 0, 'shield must not form with zero assigned motes during handoff');
 
-  // Identity check: the particle indices behind the shield crescent are
-  // exactly the same particle indices that existed before the gesture
-  // (the underlying particles were never destroyed/recreated, only
-  // retargeted in place).
   const particleIdentitiesAfter: number[] = [];
   for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesAfter.push(world.moteSlotParticleIndex[i]);
   assert.deepEqual(particleIdentitiesAfter, particleIdentitiesBefore, 'the same underlying particles must carry through the sword->shield handoff, not a different set');
 });
 
-// ---- Item 5: arrow-slot reuse must not leak stale dust kind -----------------
-
-test('bow: reused arrow slot overwrites dust kind (no stale-kind leakage) and other fields', () => {
-  const { world, player } = makeFixture(8);
-  world.hasBowWeaveUnlockedFlag = 1;
-
-  // First arrow: dust kind A (Golden).
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.arrowCount, 1);
-  const slot = 0;
-  assert.equal(world.arrowDustKind[slot], ParticleKind.Golden);
-
-  // Expire the slot so it returns to the pool for reuse.
-  world.arrowLifetimeTicksLeft[slot] = 0;
-
-  // Second arrow: dust kind B (Ice) — fired into the same reused slot.
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Ice;
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < MOTE_4_LOAD_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 20, player.positionYWorld);
-
-  assert.equal(world.arrowDustKind[slot], ParticleKind.Ice, 'reused slot must carry the NEW dust kind, not the stale one from the previous occupant');
-  assert.equal(world.isArrowStuckFlag[slot], 0, 'reused slot must not carry stale stuck flag');
-  assert.equal(world.isArrowHitEnemyFlag[slot], 0, 'reused slot must not carry stale hit-enemy flag');
-  assert.equal(world.arrowHitTargetClusterIndex[slot], -1, 'reused slot must not carry a stale hit-target cluster index');
-});
-
-// ---- Item 7: shield cleanup preserves particles owned by other modes -------
+// ── Shield cleanup preserves particles owned by other modes (unchanged) ──────
 
 test('releaseShieldWeaveParticles only resets shield-owned (behaviorMode 2, this player) particles, leaving other-mode and other-owner particles untouched', () => {
   const { world, player } = makeFixture(6);
   const otherOwnerEntityId = player.entityId + 1000;
-  const OTHER_BEHAVIOR_MODE = 3; // e.g. Stormweave orbit / grapple-carried mote — anything != 2 (block/shield).
+  const OTHER_BEHAVIOR_MODE = 3;
 
-  // A subset of this player's motes are in shield mode (2).
   const shieldOwnedIndices = [world.moteSlotParticleIndex[0], world.moteSlotParticleIndex[1]];
   for (const pidx of shieldOwnedIndices) world.behaviorMode[pidx] = 2;
 
-  // A particle owned by this player but in a DIFFERENT mode (not shield-owned).
   const otherModeSamePlayerIdx = world.moteSlotParticleIndex[2];
   world.behaviorMode[otherModeSamePlayerIdx] = OTHER_BEHAVIOR_MODE;
 
-  // A particle in behaviorMode 2 but owned by someone else entirely — must
-  // never be touched by this player's shield cleanup.
   const shieldModeOtherOwnerIdx = world.moteSlotParticleIndex[3];
   world.ownerEntityId[shieldModeOtherOwnerIdx] = otherOwnerEntityId;
   world.behaviorMode[shieldModeOtherOwnerIdx] = 2;
@@ -455,11 +352,11 @@ test('releaseShieldWeaveParticles only resets shield-owned (behaviorMode 2, this
   for (const pidx of shieldOwnedIndices) {
     assert.equal(world.behaviorMode[pidx], 0, 'this player\'s shield-owned particles must be released to orbit (mode 0)');
   }
-  assert.equal(world.behaviorMode[otherModeSamePlayerIdx], OTHER_BEHAVIOR_MODE, 'a same-player particle in a different mode (e.g. Stormweave orbit/grapple) must be left completely untouched');
-  assert.equal(world.behaviorMode[shieldModeOtherOwnerIdx], 2, 'a different owner\'s shield-mode particle must be left completely untouched');
+  assert.equal(world.behaviorMode[otherModeSamePlayerIdx], OTHER_BEHAVIOR_MODE, 'a same-player particle in a different mode must be left untouched');
+  assert.equal(world.behaviorMode[shieldModeOtherOwnerIdx], 2, 'a different owner\'s shield-mode particle must be left untouched');
 });
 
-// ---- Item 6: default combat mode executes exactly one ability path ---------
+// ── Default combat mode executes exactly one ability path (unchanged) ────────
 
 test('default combat mode applies sword damage exactly once per hit, and the legacy path never fires', () => {
   const { world, player } = makeFixture();
@@ -474,68 +371,35 @@ test('default combat mode applies sword damage exactly once per hit, and the leg
     hpTrace.push(enemy.healthPoints);
   }
 
-  // Damage must drop exactly once across the whole swipe (a single hit
-  // event), not be applied on multiple ticks (which would indicate the
-  // legacy path also ran and double-applied damage).
   let dropCount = 0;
   for (let i = 1; i < hpTrace.length; i++) {
     if (hpTrace[i] < hpTrace[i - 1]) dropCount++;
   }
-  assert.equal(dropCount, 1, 'damage must be applied exactly once for this single swipe, not duplicated by a legacy path also running');
+  assert.equal(dropCount, 1, 'damage must be applied exactly once for this single swipe');
 
-  // Legacy-only fields must remain fully untouched in default mode — if the
-  // legacy branch had run it would have flipped isPlayerSecondaryWeaveActiveFlag.
   assert.equal(world.isPlayerSecondaryWeaveActiveFlag, 0, 'legacy secondary-weave-active flag must never be touched by the default-mode coordinator path');
 });
 
-// ---- Item 12: cancellation of pending Bow fire on every modal/teardown path -
+// ── Cancellation aborts an assembling arrow before it can fire ───────────────
 
-test('cancellation while the button is still held mid-charge aborts the bow charge before any release/pending-release can latch', () => {
+test('cancellation while the button is still held mid-assembly aborts the arrow before any fire', () => {
   const { world, player } = makeFixture(6);
   world.hasSwordWeaveUnlockedFlag = 1;
+  world.hasShieldWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  assert.equal(world.newSwordActiveFlag, 1, 'sword still swinging');
-  assert.equal(world.newBowChargingFlag, 1, 'bow still charging');
+  // Let the sword finish and the shield/arrow start assembling.
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + BOW_ARROW_LOAD_3_TICKS; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_ASSEMBLING, 'arrow assembling');
 
-  // Simulate a modal/teardown/death/room-transition cancellation while the
-  // button is still physically held (this is the real shape every call site
-  // in gameScreen.ts / gameCommandProcessor.ts uses — see cancelSecondaryWeaveGesture
-  // call sites for death, room transition, modal open, and window blur).
   cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
   applyPlayerWeaveCombat(world);
 
-  assert.equal(world.newSwordActiveFlag, 0, 'sword swipe must be aborted by cancellation');
-  assert.equal(world.newBowChargingFlag, 0, 'bow charge must be cancelled, not left charging');
-  assert.equal(world.newBowPendingReleaseFlag, 0, 'no pending release can have latched — cancellation happened before any release event');
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'arrow assembly must be cancelled, not left assembling');
+  assert.equal(countArrowMotes(world), 0, 'no motes stranded in arrow mode');
 
-  // Physically releasing the button after the cancellation (as a real
-  // window-blur / pause teardown would eventually see) must not resurrect a
-  // charge or fire an arrow — full physical release + a fresh press is
-  // required for any new gesture to begin.
   release(world, player.positionXWorld + 20, player.positionYWorld);
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 5; i++) idleTick(world);
-  assert.equal(world.arrowCount, 0, 'no arrow must fire purely from a cancelled charge');
-});
-
-/** Explicit cancellation is authoritative even if a normal release already latched a deferred shot. */
-test('a modal/teardown cancellation after normal release clears an already-latched pending bow release', () => {
-  const { world, player } = makeFixture(6);
-  world.hasSwordWeaveUnlockedFlag = 1;
-  world.hasBowWeaveUnlockedFlag = 1;
-
-  press(world, player.positionXWorld + 20, player.positionYWorld);
-  for (let i = 0; i < 3; i++) hold(world, player.positionXWorld + 20, player.positionYWorld);
-  release(world, player.positionXWorld + 5, player.positionYWorld + 30);
-  assert.equal(world.newBowPendingReleaseFlag, 1, 'pending release latched before sword finished');
-  assert.equal(world.secondaryWeaveGesture.awaitingNeutral, false, 'awaitingNeutral is false after a normal physical release');
-
-  cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
-  applyPlayerWeaveCombat(world);
-  assert.equal(world.newBowPendingReleaseFlag, 0, 'explicit cancellation must clear a pending arrow even after physical release');
-
-  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 2; i++) idleTick(world);
-  assert.equal(world.arrowCount, 0, 'a cancelled pending arrow must never fire later');
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no arrow must fire purely from a cancelled assembly');
 });

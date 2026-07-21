@@ -1,41 +1,39 @@
 /**
- * Bow Trajectory Preview Renderer (Stage 5).
+ * Bow Aim-Line Preview Renderer.
  *
- * Draws a thin, fading preview line showing where the currently-charging
- * Bow Weave arrow will fly, for the CURRENT tier (2/3/4 motes). Visible for
- * the whole held gesture (Press/Holding), independent of whether Sword or
- * Shield are also active this tick, per the Stage 5 spec.
+ * Draws a thin, fading STRAIGHT preview line from the shield center along the
+ * current aim direction while the Bow arrow is assembling (Press/Holding).
+ * The Bow Weave no longer has a draw-strength / ballistic arc, so the preview
+ * is always a straight ray — there is no parabola, no gravity, and no
+ * per-tier curve. The line is clipped at the first wall along the aim (using
+ * the same `raycastWalls()` helper the real arrow uses) or at the Gold Dust
+ * maximum outbound travel distance, whichever is closer.
  *
- * Physics parity: `sampleBowTrajectory()` below calls the exact same
- * `getBowSpeedForMoteCount` / `getBowGravityForMoteCount` functions from
- * `sim/weaves/bowProjectilePhysics.ts` that the real fired arrow uses
- * (`sim/weaves/arrowWeave.ts` `_updateArrowFlight` / `sim/weaves/bowWeave.ts`
- * `fireNewBow`), and integrates with the identical fixed-step convention:
- * gravity added to vertical velocity first, then position advanced by
- * velocity * dt, with a wall raycast each step using the same
- * `raycastWalls()` helper the real arrow uses for terrain sticking.
+ * Origin and fallback direction (task section 2 / 8): the preview starts from
+ * the SAME shield-center point (`shieldGeometry.computeShieldCenterWorld`)
+ * the simulation seats and launches the arrow from — never the player's raw
+ * body position — and when the aim point sits exactly on the player (a
+ * zero-length aim delta), it falls back to `snapshot.bowArrowDirXWorld/YWorld`
+ * — the simulation's own authoritative last-resolved direction — rather than
+ * inventing an independent default. This guarantees the preview and the
+ * simulated arrow always agree, including at the degenerate zero-length case.
  *
- * No sim state is mutated. All render-local smoothing state (fade in/out)
- * lives in this class, never written back to WorldState.
+ * No sim state is mutated. All render-local smoothing state (fade in/out) lives
+ * in this class, never written back to WorldState.
  */
 
 import { WorldSnapshot } from '../snapshot';
 import { WorldState } from '../../sim/world';
 import { raycastWalls } from '../../sim/clusters/grappleShared';
-import {
-  getBowSpeedForMoteCount,
-  getBowGravityForMoteCount,
-} from '../../sim/weaves/bowProjectilePhysics';
 import { getDustDefinition } from '../../sim/weaves/dustDefinition';
 import { ParticleKind } from '../../sim/particles/kinds';
 import { SecondaryWeaveGesturePhase } from '../../input/secondaryWeaveGesture';
+import { GOLD_DUST_MAX_TRAVEL_PX } from '../../sim/motes/moteTypeConfig';
+import { BOW_ARROW_PHASE_ASSEMBLING } from '../../sim/weaves/bowArrow';
+import { computeShieldCenterWorld } from '../../sim/weaves/shieldGeometry';
 
-/** Fixed-length reusable sample buffer size — no per-frame allocation. */
-export const MAX_BOW_PREVIEW_SAMPLES = 24;
-/** Time step (seconds) per preview sample — coarser than the 60 fps sim tick for a cheap preview. */
-export const BOW_PREVIEW_STEP_SEC = 1.0 / 30.0;
-/** Hard cap on preview travel distance (world units) when no terrain is hit. */
-export const BOW_PREVIEW_MAX_RANGE_WORLD = 220.0;
+/** Default preview length (world units) when no terrain is hit — the Gold Dust max travel. */
+export const BOW_PREVIEW_MAX_RANGE_WORLD = GOLD_DUST_MAX_TRAVEL_PX;
 /** Per-frame smoothing rate for the fade in/out alpha (higher = snappier). */
 const FADE_SMOOTHING_RATE = 0.22;
 
@@ -45,110 +43,74 @@ export type BowPreviewRaycastFn = (
 ) => { x: number; y: number } | null;
 
 /**
- * Samples the predicted arrow trajectory into the caller-provided fixed
- * buffers (no allocation). Returns the number of valid samples written
- * (always >= 1: index 0 is always the start point).
- *
- * Uses the SAME `getBowSpeedForMoteCount` / `getBowGravityForMoteCount`
- * functions as the real projectile — this is what proves no physics drift
- * between the preview and the fired arrow (see bowTrajectoryPreviewRenderer.test.ts).
+ * Computes the straight aim-line end point: `startXWorld/YWorld` extended
+ * along the unit aim direction by `maxRangeWorld`, clipped to the first wall
+ * hit if any. When `aimDirXWorld/YWorld` has ~zero length (the aim point sits
+ * exactly on the start point), falls back to `fallbackDirXWorld/YWorld`
+ * instead of inventing an independent default — callers should pass the
+ * simulation's own last-resolved direction (e.g. `snapshot.bowArrowDirXWorld/
+ * YWorld`) so the preview can never disagree with the simulated arrow at this
+ * degenerate case (task section 8). Writes the end point into `out` and
+ * returns it. Pure and allocation-free (writes into the caller-provided
+ * object).
  */
-export function sampleBowTrajectory(
-  outXWorld: Float32Array,
-  outYWorld: Float32Array,
+export function computeStraightBowAimEnd(
+  out: { x: number; y: number },
   startXWorld: number,
   startYWorld: number,
   aimDirXWorld: number,
   aimDirYWorld: number,
-  moteCount: number,
+  maxRangeWorld: number,
   raycast: BowPreviewRaycastFn | null,
-  maxSamples: number = MAX_BOW_PREVIEW_SAMPLES,
-): number {
-  const speed = getBowSpeedForMoteCount(moteCount);
-  const gravity = getBowGravityForMoteCount(moteCount);
+  fallbackDirXWorld = 1,
+  fallbackDirYWorld = 0,
+): { x: number; y: number } {
+  const len = Math.hypot(aimDirXWorld, aimDirYWorld);
+  const dirX = len > 1e-6 ? aimDirXWorld / len : fallbackDirXWorld;
+  const dirY = len > 1e-6 ? aimDirYWorld / len : fallbackDirYWorld;
 
-  let x = startXWorld;
-  let y = startYWorld;
-  const vx = aimDirXWorld * speed;
-  let vy = aimDirYWorld * speed;
-
-  outXWorld[0] = x;
-  outYWorld[0] = y;
-  let count = 1;
-  let traveledWorld = 0;
-
-  const cap = Math.min(maxSamples, outXWorld.length, outYWorld.length);
-
-  for (let i = 1; i < cap; i++) {
-    // Same integration order as arrowWeave.ts's _updateArrowFlight: gravity
-    // applied to vertical velocity first, then position advanced by vel*dt.
-    vy += gravity * BOW_PREVIEW_STEP_SEC;
-
-    const dx = vx * BOW_PREVIEW_STEP_SEC;
-    const dy = vy * BOW_PREVIEW_STEP_SEC;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist > 0.001 && raycast !== null) {
-      const ndx = dx / dist;
-      const ndy = dy / dist;
-      const hit = raycast(x, y, ndx, ndy, dist);
-      if (hit !== null) {
-        outXWorld[count] = hit.x;
-        outYWorld[count] = hit.y;
-        count++;
-        break;
-      }
+  if (raycast !== null) {
+    const hit = raycast(startXWorld, startYWorld, dirX, dirY, maxRangeWorld);
+    if (hit !== null) {
+      out.x = hit.x;
+      out.y = hit.y;
+      return out;
     }
-
-    x += dx;
-    y += dy;
-    traveledWorld += dist;
-    outXWorld[count] = x;
-    outYWorld[count] = y;
-    count++;
-
-    if (traveledWorld >= BOW_PREVIEW_MAX_RANGE_WORLD) break;
   }
-
-  return count;
+  out.x = startXWorld + dirX * maxRangeWorld;
+  out.y = startYWorld + dirY * maxRangeWorld;
+  return out;
 }
 
 /**
- * Pure visibility predicate — extracted so the "hide below 2 motes" /
- * "only during held gesture" rules are unit-testable without a canvas.
- * The renderer chose to fully HIDE the preview when fewer than 2 motes are
- * available (rather than drawing a faint invalid-state line).
+ * Pure visibility predicate — the straight aim line is shown only while the Bow
+ * is unlocked, the gesture is held, and the arrow is assembling.
  */
 export function computeBowPreviewShouldBeVisible(
   hasBowWeaveUnlockedFlag: 0 | 1,
   gesturePhase: SecondaryWeaveGesturePhase,
-  newBowChargingFlag: 0 | 1,
-  newBowTierMoteCount: number,
+  bowArrowPhase: number,
 ): boolean {
   const isHeldPhase =
     gesturePhase === SecondaryWeaveGesturePhase.Press || gesturePhase === SecondaryWeaveGesturePhase.Holding;
   return (
     hasBowWeaveUnlockedFlag === 1 &&
     isHeldPhase &&
-    newBowChargingFlag === 1 &&
-    newBowTierMoteCount >= 2
+    bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING
   );
 }
 
 // ── Renderer ─────────────────────────────────────────────────────────────────
 
 export class BowTrajectoryPreviewRenderer {
-  /** Preallocated sample buffers reused every frame — no per-frame allocation. */
-  private readonly _xs = new Float32Array(MAX_BOW_PREVIEW_SAMPLES);
-  private readonly _ys = new Float32Array(MAX_BOW_PREVIEW_SAMPLES);
   /** Render-local smoothed visibility alpha (never written to WorldState). */
   private _visibleAlpha = 0;
+  private readonly _end = { x: 0, y: 0 };
+  private readonly _origin = { x: 0, y: 0 };
 
   /**
-   * Resets render-local smoothing state to its fresh-load default. Intended
-   * to be called on room/world load so a stale visibility fade from the
-   * previous room never bleeds a frame into the new one. No sim state is
-   * touched.
+   * Resets render-local smoothing state to its fresh-load default so a stale
+   * visibility fade from the previous room never bleeds into the new one.
    */
   reset(): void {
     this._visibleAlpha = 0;
@@ -165,8 +127,7 @@ export class BowTrajectoryPreviewRenderer {
     const shouldBeVisible = computeBowPreviewShouldBeVisible(
       snapshot.hasBowWeaveUnlockedFlag,
       snapshot.secondaryWeaveGesturePhase,
-      snapshot.newBowChargingFlag,
-      snapshot.newBowTierMoteCount,
+      snapshot.bowArrowPhase,
     );
 
     const targetAlpha = shouldBeVisible ? 1.0 : 0.0;
@@ -194,43 +155,39 @@ export class BowTrajectoryPreviewRenderer {
     const aimYWorld = snapshot.secondaryWeaveGestureHoldAimYWorld;
     const dx = aimXWorld - playerXWorld;
     const dy = aimYWorld - playerYWorld;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const aimDirX = dist > 1e-6 ? dx / dist : 1;
-    const aimDirY = dist > 1e-6 ? dy / dist : 0;
 
-    const moteCount = snapshot.newBowTierMoteCount;
+    // Simulation-owned fallback direction — see computeStraightBowAimEnd's
+    // doc comment. Also used to resolve the shield-center origin so the
+    // origin point itself agrees with the simulation at the zero-length case.
+    const fallbackDirX = snapshot.bowArrowDirXWorld;
+    const fallbackDirY = snapshot.bowArrowDirYWorld;
+
+    const origin = computeShieldCenterWorld(
+      this._origin, playerXWorld, playerYWorld, dx, dy, fallbackDirX, fallbackDirY,
+    );
+
     const raycast: BowPreviewRaycastFn = (x, y, ndx, ndy, maxDist) => raycastWalls(world, x, y, ndx, ndy, maxDist);
-    const count = sampleBowTrajectory(
-      this._xs, this._ys,
-      playerXWorld, playerYWorld,
-      aimDirX, aimDirY,
-      moteCount,
-      raycast,
+    const end = computeStraightBowAimEnd(
+      this._end, origin.x, origin.y, dx, dy, BOW_PREVIEW_MAX_RANGE_WORLD, raycast, fallbackDirX, fallbackDirY,
     );
 
     const dustKind: ParticleKind = snapshot.currentWeaveDustKind;
     const colorHex = getDustDefinition(dustKind).colorHex;
 
+    const x0 = origin.x * zoom + ox;
+    const y0 = origin.y * zoom + oy;
+    const x1 = end.x * zoom + ox;
+    const y1 = end.y * zoom + oy;
+
     ctx.save();
     ctx.lineCap = 'round';
-    for (let i = 0; i < count - 1; i++) {
-      const t0 = i / Math.max(1, count - 1);
-      const t1 = (i + 1) / Math.max(1, count - 1);
-      // Brighter near the player, fully transparent at the far end.
-      const segAlpha = this._visibleAlpha * (1.0 - t0) * 0.55;
-      if (segAlpha <= 0.01) continue;
-      const x0 = this._xs[i] * zoom + ox;
-      const y0 = this._ys[i] * zoom + oy;
-      const x1 = this._xs[i + 1] * zoom + ox;
-      const y1 = this._ys[i + 1] * zoom + oy;
-      ctx.globalAlpha = segAlpha;
-      ctx.strokeStyle = colorHex;
-      ctx.lineWidth = Math.max(1, 1.4 * zoom * (1.0 - t1 * 0.4));
-      ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
-      ctx.stroke();
-    }
+    ctx.globalAlpha = this._visibleAlpha * 0.5;
+    ctx.strokeStyle = colorHex;
+    ctx.lineWidth = Math.max(1, 1.2 * zoom);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
     ctx.globalAlpha = 1.0;
     ctx.restore();
   }

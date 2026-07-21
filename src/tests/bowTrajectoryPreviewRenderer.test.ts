@@ -1,108 +1,89 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  sampleBowTrajectory,
+  computeStraightBowAimEnd,
   computeBowPreviewShouldBeVisible,
-  MAX_BOW_PREVIEW_SAMPLES,
   BowTrajectoryPreviewRenderer,
+  BOW_PREVIEW_MAX_RANGE_WORLD,
 } from '../render/effects/bowTrajectoryPreviewRenderer';
-import {
-  getBowSpeedForMoteCount,
-  getBowGravityForMoteCount,
-} from '../sim/weaves/bowProjectilePhysics';
 import { SecondaryWeaveGesturePhase } from '../input/secondaryWeaveGesture';
+import { BOW_ARROW_PHASE_ASSEMBLING, BOW_ARROW_PHASE_NONE, BOW_ARROW_PHASE_OUTBOUND } from '../sim/weaves/bowArrow';
+import { GOLD_DUST_MAX_TRAVEL_PX } from '../sim/motes/moteTypeConfig';
 
-function makeBuffers() {
-  return {
-    xs: new Float32Array(MAX_BOW_PREVIEW_SAMPLES),
-    ys: new Float32Array(MAX_BOW_PREVIEW_SAMPLES),
-  };
-}
-
-test('bow trajectory: 2-mote and 3-mote tiers curve downward (nonzero gravity)', () => {
-  for (const moteCount of [2, 3]) {
-    const { xs, ys } = makeBuffers();
-    const count = sampleBowTrajectory(xs, ys, 0, 0, 1, 0, moteCount, null);
-    assert.ok(count > 3, `expected several samples for tier ${moteCount}`);
-    // Straight-line (no-gravity) Y would stay at 0. With gravity the Y at the
-    // last sample must have dropped (aim is purely horizontal, so a
-    // curving projectile falls below the start line).
-    assert.ok(ys[count - 1] > 0, `tier ${moteCount} should curve downward, got y=${ys[count - 1]}`);
-  }
+test('bow aim preview is a straight line of the Gold Dust max travel length', () => {
+  assert.equal(BOW_PREVIEW_MAX_RANGE_WORLD, GOLD_DUST_MAX_TRAVEL_PX);
+  const out = { x: 0, y: 0 };
+  computeStraightBowAimEnd(out, 0, 0, 1, 0, BOW_PREVIEW_MAX_RANGE_WORLD, null);
+  assert.equal(out.x, GOLD_DUST_MAX_TRAVEL_PX, 'straight along +x');
+  assert.equal(out.y, 0, 'no vertical drop — the aim line is always straight');
 });
 
-test('bow trajectory: 4-mote tier is straight (zero gravity per getBowGravityForMoteCount)', () => {
-  assert.equal(getBowGravityForMoteCount(4), 0, 'precondition: 4-mote tier must have zero gravity');
-  const { xs, ys } = makeBuffers();
-  const count = sampleBowTrajectory(xs, ys, 0, 0, 1, 0, 4, null);
-  assert.ok(count > 3);
-  for (let i = 0; i < count; i++) {
-    assert.equal(ys[i], 0, `4-mote trajectory must stay perfectly level, sample ${i} had y=${ys[i]}`);
-  }
+test('bow aim preview stays straight for a diagonal aim (no ballistic curve)', () => {
+  const out = { x: 0, y: 0 };
+  const inv = 1 / Math.SQRT2;
+  computeStraightBowAimEnd(out, 10, 10, 1, 1, 100, null);
+  // End lies exactly on the ray from the start along the normalized aim.
+  assert.ok(Math.abs(out.x - (10 + inv * 100)) < 1e-4);
+  assert.ok(Math.abs(out.y - (10 + inv * 100)) < 1e-4);
 });
 
-test('bow trajectory preview shares physics functions with the real fired arrow', () => {
-  // Directly asserts the preview's speed/gravity inputs are the literal
-  // return values of the same shared functions arrowWeave.ts/bowWeave.ts use
-  // — proves no hand-copied constants/drift.
-  for (const moteCount of [2, 3, 4]) {
-    const speed = getBowSpeedForMoteCount(moteCount);
-    const gravity = getBowGravityForMoteCount(moteCount);
-    const { xs, ys } = makeBuffers();
-    sampleBowTrajectory(xs, ys, 0, 0, 1, 0, moteCount, null, 2);
-    // First step displacement should match one integration step at `speed`
-    // horizontally and derived from `gravity` vertically (dt = 1/30 s).
-    const dtSec = 1 / 30;
-    const expectedX = speed * dtSec;
-    const expectedY = gravity * dtSec * dtSec; // vy after one gravity application * dt
-    assert.ok(Math.abs(xs[1] - expectedX) < 1e-4, `x mismatch for tier ${moteCount}`);
-    assert.ok(Math.abs(ys[1] - expectedY) < 1e-4, `y mismatch for tier ${moteCount}`);
-  }
-});
-
-test('bow trajectory preview reflects live tier changes', () => {
-  const bufA = makeBuffers();
-  const bufB = makeBuffers();
-  const countA = sampleBowTrajectory(bufA.xs, bufA.ys, 0, 0, 1, 0, 2, null);
-  const countB = sampleBowTrajectory(bufB.xs, bufB.ys, 0, 0, 1, 0, 4, null);
-  // Different tiers must not produce identical trajectories (different
-  // speed/gravity), proving the preview is live-reactive to tier changes.
-  assert.notEqual(bufA.ys[Math.min(countA, countB) - 1], bufB.ys[Math.min(countA, countB) - 1]);
-});
-
-test('bow trajectory preview stops at a terrain raycast hit', () => {
-  const { xs, ys } = makeBuffers();
+test('bow aim preview clips at a terrain raycast hit', () => {
+  const out = { x: 0, y: 0 };
   const raycast = () => ({ x: 5, y: 0 });
-  const count = sampleBowTrajectory(xs, ys, 0, 0, 1, 0, 4, raycast);
-  assert.equal(count, 2, 'should stop immediately after the first hit');
-  assert.equal(xs[1], 5);
-  assert.equal(ys[1], 0);
+  computeStraightBowAimEnd(out, 0, 0, 1, 0, BOW_PREVIEW_MAX_RANGE_WORLD, raycast);
+  assert.equal(out.x, 5);
+  assert.equal(out.y, 0);
 });
 
-test('bow preview visibility hides below 2 available motes', () => {
-  assert.equal(
-    computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, 1, 1),
-    false,
-  );
-  assert.equal(
-    computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, 1, 2),
-    true,
-  );
+// ── Task section 8: zero-length aim uses the simulation's own fallback ──────
+
+test('zero-length aim delta falls back to the caller-supplied (simulation-owned) direction, not a hardcoded default', () => {
+  const out = { x: 0, y: 0 };
+  // Simulation is holding a previously-resolved "aimed up" direction.
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null, 0, -1);
+  assert.ok(Math.abs(out.x - 0) < 1e-6, 'must stay pointed up (x=0), not snap to the hardcoded (1,0) default');
+  assert.ok(Math.abs(out.y - -100) < 1e-6, 'must extend upward using the supplied fallback');
 });
 
-test('bow preview visibility requires unlock + held gesture + charging', () => {
-  assert.equal(computeBowPreviewShouldBeVisible(0, SecondaryWeaveGesturePhase.Holding, 1, 3), false);
-  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Idle, 1, 3), false);
-  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, 0, 3), false);
-  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Press, 1, 3), true);
+test('regression: aim upward, then move the cursor exactly onto the player — preview stays aimed upward', () => {
+  const out = { x: 0, y: 0 };
+  // Step 1: player aims upward — simulation resolves and stores dir=(0,-1)
+  // (this mirrors what tickBowArrowAssembly does internally).
+  const aimLen1 = Math.hypot(0, -40);
+  const simulatedDirX = 0 / aimLen1;
+  const simulatedDirY = -40 / aimLen1;
+  assert.ok(Math.abs(simulatedDirX - 0) < 1e-9 && Math.abs(simulatedDirY - -1) < 1e-9);
+
+  // Step 2: cursor moves exactly onto the player (zero-length aim delta this
+  // frame). The preview must use the simulation's last-resolved direction
+  // (captured above) as its fallback — exactly what the render() call site
+  // now passes via snapshot.bowArrowDirXWorld/YWorld.
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null, simulatedDirX, simulatedDirY);
+  assert.ok(Math.abs(out.x - 0) < 1e-6, 'preview remains aimed upward (x=0)');
+  assert.ok(out.y < 0, 'preview remains aimed upward (negative y = up)');
+  assert.ok(Math.abs(out.y - -100) < 1e-6, 'extends the full range in the up direction, not the hardcoded rightward default');
+});
+
+test('default fallback (no explicit args) matches the prior always-rightward behavior for callers that pass none', () => {
+  const out = { x: 0, y: 0 };
+  computeStraightBowAimEnd(out, 0, 0, 0, 0, 100, null);
+  assert.equal(out.x, 100);
+  assert.equal(out.y, 0);
+});
+
+test('bow preview visibility requires unlock + held gesture + assembling arrow', () => {
+  assert.equal(computeBowPreviewShouldBeVisible(0, SecondaryWeaveGesturePhase.Holding, BOW_ARROW_PHASE_ASSEMBLING), false);
+  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Idle, BOW_ARROW_PHASE_ASSEMBLING), false);
+  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, BOW_ARROW_PHASE_NONE), false);
+  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, BOW_ARROW_PHASE_OUTBOUND), false);
+  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Holding, BOW_ARROW_PHASE_ASSEMBLING), true);
+  assert.equal(computeBowPreviewShouldBeVisible(1, SecondaryWeaveGesturePhase.Press, BOW_ARROW_PHASE_ASSEMBLING), true);
 });
 
 test('renderer reset() clears stale fade-alpha interpolation state back to fresh-load default', () => {
   const renderer = new BowTrajectoryPreviewRenderer();
   const rendererAny = renderer as unknown as { _visibleAlpha: number };
   rendererAny._visibleAlpha = 0.85;
-
   renderer.reset();
-
-  assert.equal(rendererAny._visibleAlpha, 0, 'visible alpha must reset to 0 so a fully-faded-in preview from the previous room cannot flash for a frame in the new one');
+  assert.equal(rendererAny._visibleAlpha, 0, 'visible alpha must reset to 0');
 });

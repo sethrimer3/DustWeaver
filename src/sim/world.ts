@@ -48,8 +48,16 @@ export const MAX_ROPE_SEGMENTS = 32;
 export const MAX_MOTE_SLOTS = 20;
 /** Fixed trail-sample history capacity per mote slot for the dust-switch trail effect. */
 export const DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT = 6;
-/** Maximum simultaneous arrows in flight or stuck. */
+/** Maximum simultaneous arrows in flight or stuck (legacy WEAVE_ARROW path). */
 export const MAX_ARROWS = 8;
+
+/** Maximum real motes that sweep the Sword Weave crescent slash. */
+export const MAX_SWORD_SLASH_MOTES = 8;
+
+/** Maximum real motes assembled into a single Bow Weave arrow (center + 4). */
+export const MAX_BOW_ARROW_MOTES = 5;
+/** Minimum real motes for a valid Bow Weave arrow (center + 2). */
+export const MIN_BOW_ARROW_MOTES = 3;
 
 /** Number of positions stored in the momentum trail circular buffer. */
 export const MOMENTUM_TRAIL_MAX_POINTS = 8;
@@ -483,27 +491,88 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * smooth interpolation itself belongs to the renderer).
    */
   newSwordToShieldTransition01: number;
-
-  // ── Independent Bow Weave (Stage 3) — press/hold charge, release fire ──────
-  /** 1 while the bow is logically charging (tier tracked but motes not spent). */
-  newBowChargingFlag: 0 | 1;
-  /** Gesture id this charge belongs to. */
-  newBowGestureId: number;
-  /** World tick charging began. */
-  newBowChargeStartTick: number;
-  /** Current logical tier (2/3/4), live-clamped by available motes. */
-  newBowTierMoteCount: number;
+  /** Rear staging angle (radians) the crescent sweep starts behind the aim. */
+  newSwordStartAngleRad: number;
+  /** Front terminating angle (radians) the crescent sweep ends in front of the aim. */
+  newSwordEndAngleRad: number;
+  /** Number of actual motes participating in the crescent slash (0..MAX_SWORD_SLASH_MOTES). */
+  newSwordMoteCount: number;
+  /** Participating particle indices, ordered leading→trailing along the blade. */
+  newSwordMoteParticleIndex: Int32Array;
+  /** Per-mote pre-swipe position, so the mote can "shoot" from orbit into rear staging. */
+  newSwordMoteFromXWorld: Float32Array;
+  newSwordMoteFromYWorld: Float32Array;
   /**
-   * Quick-release-during-sword latch: true when the player released while
-   * the sword swipe (that started in or before this gesture) had not yet
-   * finished. Captures the release aim + tier so the bow can fire at the
-   * first safe tick after the sword completes.
+   * Per-mote position at the START of the current tick (before this tick's
+   * `_driveSwordMotes` update), captured so swept-segment collision can test
+   * the actual path each mote traveled this tick rather than an abstract
+   * angular hitbox. Updated every tick the swipe is active.
    */
-  newBowPendingReleaseFlag: 0 | 1;
-  newBowPendingReleaseAimXWorld: number;
-  newBowPendingReleaseAimYWorld: number;
-  newBowPendingReleaseMoteCount: number;
-  /** Dust kind (ParticleKind) captured per fired arrow, MAX_ARROWS entries. */
+  newSwordMotePrevXWorld: Float32Array;
+  newSwordMotePrevYWorld: Float32Array;
+
+  // ── Independent Bow Weave (Stage 3) — actual-mote arrow assembly ───────────
+  //
+  // The bow no longer has a "draw strength" / charge tier or a separate queue
+  // of phantom motes. Instead it loads the player's ACTUAL mote particles into
+  // a straight arrow line (a center mote plus up to four additional real motes,
+  // seated at the shield's canonical center — see shieldGeometry.ts) on a
+  // fixed schedule measured from when the Shield Weave began, then fires them
+  // together as a constant-speed straight projectile that damages the first
+  // enemy it sweeps through, reflects off walls, or curves home at max
+  // distance — all three resolutions hand the motes back to Storm.
+  //
+  // Phase: 0 = none, 1 = assembling (held), 2 = outbound (fired).
+  bowArrowPhase: number;
+  /** Gesture id this arrow belongs to. */
+  bowArrowGestureId: number;
+  /** World tick the Shield Weave began — origin of the 0.75/1.25/1.75 s schedule. */
+  bowArrowShieldStartTick: number;
+  /** Number of real motes currently in the arrow (includes the center mote), 0..MAX_BOW_ARROW_MOTES. */
+  bowArrowCount: number;
+  /**
+   * Participating particle indices in center-out insertion order:
+   * [0]=center, [1]=behind, [2]=front, [3]=further behind, [4]=further front.
+   * The signed line offset for rank r is derived from this ordering.
+   */
+  bowArrowParticleIndex: Int32Array;
+  /** Per-rank tick at which that mote began arcing into the line (−1 = unused). */
+  bowArrowSlotStartTick: Int32Array;
+  /**
+   * Per-rank assembly state: 0 = unused, 1 = loading (still arcing in),
+   * 2 = seated (tracking the line exactly, ready to fire). Only SEATED ranks
+   * count toward the minimum fireable three-mote arrow — a mote is never
+   * snapped straight into a fired arrow mid-arc (task section 6).
+   */
+  bowArrowRankState: Uint8Array;
+  /**
+   * 1 when the player released while fewer than the minimum three motes were
+   * SEATED but enough are reserved (bowArrowCount >= MIN_BOW_ARROW_MOTES) that
+   * seating will eventually finish — the arrow fires automatically, using the
+   * aim captured at release time, the first tick enough motes finish seating.
+   * Never set when bowArrowCount < MIN_BOW_ARROW_MOTES (that case cancels
+   * immediately instead, since seating could never reach the minimum).
+   */
+  bowArrowReleaseLatchedFlag: 0 | 1;
+  bowArrowLatchedAimXWorld: number;
+  bowArrowLatchedAimYWorld: number;
+  /** Per-rank arc-in start position (where the mote left its shield slot). */
+  bowArrowArcFromXWorld: Float32Array;
+  bowArrowArcFromYWorld: Float32Array;
+  /** Per-rank quadratic-bezier control point (bulges away from the player, then curves back). */
+  bowArrowArcCtrlXWorld: Float32Array;
+  bowArrowArcCtrlYWorld: Float32Array;
+  /** Current straight firing direction (unit). Updated with aim while assembling. */
+  bowArrowDirXWorld: number;
+  bowArrowDirYWorld: number;
+  /** Outbound launch origin (arrow line center at fire time). */
+  bowArrowOriginXWorld: number;
+  bowArrowOriginYWorld: number;
+  /** Accumulated outbound travel distance (pixels) — tracked by displacement, not time. */
+  bowArrowTravelPx: number;
+  /** Dust kind (ParticleKind) captured at fire time so a later switch cannot retag it. */
+  bowArrowDustKind: number;
+  /** Dust kind (ParticleKind) captured per legacy fired arrow, MAX_ARROWS entries. */
   arrowDustKind: Uint8Array;
   /** 1 while the independent (Stage 3) Shield Weave crescent currently owns the player's motes. */
   shieldWeaveIndependentActiveFlag: 0 | 1;
@@ -812,15 +881,35 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     newSwordHandAnchorYWorld:      0,
     newSwordReachWorld:            0,
     newSwordToShieldTransition01:  0,
-    // ── Independent Bow Weave ───────────────────────────────────────────
-    newBowChargingFlag:            0,
-    newBowGestureId:               -1,
-    newBowChargeStartTick:         -1,
-    newBowTierMoteCount:           0,
-    newBowPendingReleaseFlag:      0,
-    newBowPendingReleaseAimXWorld: 0,
-    newBowPendingReleaseAimYWorld: 0,
-    newBowPendingReleaseMoteCount: 0,
+    newSwordStartAngleRad:         0,
+    newSwordEndAngleRad:           0,
+    newSwordMoteCount:             0,
+    newSwordMoteParticleIndex:     new Int32Array(MAX_SWORD_SLASH_MOTES).fill(-1),
+    newSwordMoteFromXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMoteFromYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    // ── Independent Bow Weave — actual-mote arrow ───────────────────────
+    bowArrowPhase:                 0,
+    bowArrowGestureId:             -1,
+    bowArrowShieldStartTick:       -1,
+    bowArrowCount:                 0,
+    bowArrowParticleIndex:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
+    bowArrowSlotStartTick:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
+    bowArrowRankState:             new Uint8Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcFromXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcFromYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcCtrlXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcCtrlYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowDirXWorld:             1,
+    bowArrowDirYWorld:             0,
+    bowArrowOriginXWorld:          0,
+    bowArrowOriginYWorld:          0,
+    bowArrowTravelPx:              0,
+    bowArrowDustKind:              0,
+    bowArrowReleaseLatchedFlag:    0,
+    bowArrowLatchedAimXWorld:      0,
+    bowArrowLatchedAimYWorld:      0,
     // ── Ordered Mote Queue ────────────────────────────────────────────
     moteSlotCount:              0,
     moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),

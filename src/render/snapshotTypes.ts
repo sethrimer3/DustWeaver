@@ -452,8 +452,10 @@ export interface WorldSnapshot {
   readonly newSwordReachWorld: number;
   readonly newSwordTicksElapsed: number;
   readonly newSwordToShieldTransition01: number;
-  readonly newBowChargingFlag: 0 | 1;
-  readonly newBowTierMoteCount: number;
+  readonly bowArrowPhase: number;
+  readonly bowArrowCount: number;
+  readonly bowArrowDirXWorld: number;
+  readonly bowArrowDirYWorld: number;
   readonly shieldWeaveIndependentActiveFlag: 0 | 1;
 
   // ── Ordered Mote Queue display ────────────────────────────────────────────
