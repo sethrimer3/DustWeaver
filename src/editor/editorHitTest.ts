@@ -417,6 +417,13 @@ export function isCellCoveredByLavaZone(room: EditorRoomData, xBlock: number, yB
   return (room.lavaZones ?? []).some(z => hitTestZone(z, xBlock, yBlock));
 }
 
+/**
+ * Same as `isCellCoveredByWaterZone` but for TimeStop Field tiles.
+ */
+export function isCellCoveredByTimeStopField(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return (room.timeStopFields ?? []).some(z => hitTestZone(z, xBlock, yBlock));
+}
+
 // ── Bounds helpers ───────────────────────────────────────────────────────────
 
 export function isInsideRoom(room: EditorRoomData, xBlock: number, yBlock: number): boolean {

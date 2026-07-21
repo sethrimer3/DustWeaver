@@ -61,6 +61,14 @@ export interface RenderQualityConfig {
    * less blur (cheaper offscreen work) instead of being fully disabled.
    */
   isSunraysReducedQuality: boolean;
+
+  // ── TimeStop Field ──────────────────────────────────────────────────────────
+  /** Whether the field visual draws internal shimmer/ripple distortion (vs. a flat fill). */
+  isTimeStopShimmerEnabled: boolean;
+  /** Whether the field's boundary glow (shadowBlur) is drawn. */
+  isTimeStopEdgeGlowEnabled: boolean;
+  /** Whether the outside-field screen inversion compositor runs at all. */
+  isTimeStopInversionEnabled: boolean;
 }
 
 // ── Tier constants ───────────────────────────────────────────────────────────
@@ -77,6 +85,9 @@ const CONFIG_LOW: RenderQualityConfig = {
   isSunbeamEnabled:         false,
   isSunraysEnabled:         false,
   isSunraysReducedQuality:  true,
+  isTimeStopShimmerEnabled: false,
+  isTimeStopEdgeGlowEnabled:false,
+  isTimeStopInversionEnabled: true,
 };
 
 /** MED: balanced default.  Cheaper bloom, moderate dust density. */
@@ -91,6 +102,9 @@ const CONFIG_MED: RenderQualityConfig = {
   isSunbeamEnabled:         true,
   isSunraysEnabled:         true,
   isSunraysReducedQuality:  true,
+  isTimeStopShimmerEnabled: true,
+  isTimeStopEdgeGlowEnabled:true,
+  isTimeStopInversionEnabled: true,
 };
 
 /** HIGH: visual fidelity mode.  Full bloom, full dust, no caps. */
@@ -105,6 +119,9 @@ const CONFIG_HIGH: RenderQualityConfig = {
   isSunbeamEnabled:         true,
   isSunraysEnabled:         true,
   isSunraysReducedQuality:  false,
+  isTimeStopShimmerEnabled: true,
+  isTimeStopEdgeGlowEnabled:true,
+  isTimeStopInversionEnabled: true,
 };
 
 // ── Public accessor ──────────────────────────────────────────────────────────

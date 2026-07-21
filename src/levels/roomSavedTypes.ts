@@ -309,6 +309,13 @@ export interface SavedRoomV2 {
    * New exports write `lavaLayer` instead.  Still read for backward compatibility.
    */
   lavaZones?: SavedRect[];
+  /**
+   * Compact TimeStop Field tile coverage layer, same encoding as
+   * waterLayer/lavaLayer. Absent (undefined) on rooms with no TimeStop
+   * Field tiles or saved before this field existed — always defaults safely
+   * to an empty list on hydrate, so old rooms keep loading unaffected.
+   */
+  timeStopFieldLayer?: SavedSolidLayer;
   breakableBlocks?: SavedPoint[];
   dustBoostJars?: [number, number, string, number][];
   /** [x, y, kind, count] */

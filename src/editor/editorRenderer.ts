@@ -21,6 +21,7 @@ import {
   drawEditorCritterAreas,
   drawEditorLightingOverlays,
   drawEditorLiquidZones,
+  drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
   drawEditorBouncePads,
@@ -98,6 +99,7 @@ export function renderEditorOverlays(
   drawEditorCritterAreas(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);

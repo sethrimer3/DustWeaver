@@ -49,6 +49,7 @@ import type { IsElementSelected } from './editorZoneDrawers';
 export type { IsElementSelected } from './editorZoneDrawers';
 export {
   drawEditorLiquidZones,
+  drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
   drawEditorBouncePads,

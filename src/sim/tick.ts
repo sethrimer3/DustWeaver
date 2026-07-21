@@ -46,6 +46,7 @@ import { tickArrows } from './weaves/arrowWeave';
 import { updateMomentumCombatState, applyMomentumCombatCollisionDamage } from './momentumCombat';
 import { getCombatMode } from './combatMode';
 import { applyHazards, computePlayerWaterState } from './hazards';
+import { updateTimeStopFieldPlayerState } from './timeStopField/timeStopFieldPlayerState';
 import { tickGrasshoppers } from './critters/grasshopper';
 import { applySlimeAI, applyLargeSlimeAI } from './clusters/slimeAi';
 import { applyWheelEnemyAI } from './clusters/wheelEnemyAi';
@@ -154,6 +155,12 @@ export function tick(world: WorldState): void {
 
   // 0.07. Pixel-material simulation (falling sand) — fixed-step, deterministic.
   tickPixelMaterials(world);
+
+  // 0.09. TimeStop Field — connected-region membership + suspended-momentum
+  //        capture/release. Runs after this tick's movement/collision has
+  //        finalised position and velocity, and before hazards/grapple can
+  //        further modify velocity.
+  updateTimeStopFieldPlayerState(world);
 
   // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
   applyHazards(world);

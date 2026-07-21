@@ -26,6 +26,10 @@ import { renderDustLeeches } from '../render/clusters/dustLeechRenderer';
 import { collectVoidSphereScreenCircles, renderVoidSpheres } from '../render/clusters/heraldRenderer';
 import { applyVoidLensDistortion } from '../render/effects/voidLensDistortion';
 import { renderHazards } from '../render/hazards';
+import { renderTimeStopField } from '../render/timeStopFieldRenderer';
+import { renderTimeStopMomentumArrow } from '../render/effects/timeStopMomentumArrowRenderer';
+import { applyTimeStopInversionCompositor } from '../render/effects/timeStopInversionCompositor';
+import { renderTimeStopFieldDebug } from '../render/effects/timeStopFieldDebugRenderer';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
 import { renderDustSwitchTrails } from '../render/effects/dustSwitchTrailRenderer';
@@ -549,8 +553,17 @@ export function renderFrame(r: RenderFrameContext): void {
     renderProfiler.updateLiquidStats(getLiquidDebugStats());
   }
 
+  // TimeStop Field — translucent connected-region volumes (experimental).
+  if (world.timeStopFieldCount > 0) {
+    renderTimeStopField(ctx, world, ox, oy, zoom, qc);
+  }
+
   // Dust-switch trail + participating motes — drawn behind the player sprite.
   renderDustSwitchTrails(ctx, world, ox, oy, zoom, graphicsQuality);
+
+  // TimeStop Field stored-momentum arrow — behind the player sprite, kept
+  // independent from the active-velocity speedometer/debug overlays.
+  renderTimeStopMomentumArrow(ctx, world, playerForSunrayDust, ox, oy, zoom);
 
   renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
   if (playerForSunrayDust !== null) {
@@ -633,6 +646,9 @@ export function renderFrame(r: RenderFrameContext): void {
   if (isDebugMode && getAirCurrentsDebugEnabled()) {
     renderAirCurrentsDebug(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   }
+  if (isDebugMode && world.timeStopFieldCount > 0) {
+    renderTimeStopFieldDebug(ctx, world, ox, oy, zoom);
+  }
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_DUST);
 
   // Save tombs (sprite + swirling/falling dust particles)
@@ -685,6 +701,14 @@ export function renderFrame(r: RenderFrameContext): void {
   if (voidSphereCircles.length > 0) {
     applyVoidLensDistortion(ctx, voidSphereCircles, virtualWidthPx, virtualHeightPx);
     renderVoidSpheres(ctx, snapshot, ox, oy, zoom);
+  }
+
+  // ── TimeStop Field inversion compositor (experimental) ───────────────────
+  // Applied last, after everything else in the room — inverts the rendered
+  // scene outside the player's active connected field. Never touches HUD/UI
+  // (drawn after ctx.restore() below, outside the room clip).
+  if (world.timeStopField.visualIntensity > 0) {
+    applyTimeStopInversionCompositor(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx, qc);
   }
   } finally {
     // End room clip before any HUD/screen-space overlays are drawn. Runs

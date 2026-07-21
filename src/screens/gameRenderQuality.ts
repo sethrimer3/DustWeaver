@@ -25,6 +25,9 @@ const _adaptiveQcScratch: RenderQualityConfig = {
   isSunbeamEnabled: false,
   isSunraysEnabled: false,
   isSunraysReducedQuality: true,
+  isTimeStopShimmerEnabled: false,
+  isTimeStopEdgeGlowEnabled: false,
+  isTimeStopInversionEnabled: true,
 };
 
 export interface ApplyRenderQualitySettingsContext {

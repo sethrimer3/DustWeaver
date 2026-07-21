@@ -452,6 +452,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       wBlock: z.wBlock,
       hBlock: z.hBlock,
     })),
+    timeStopFields: (data.timeStopFields ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    })),
     crumbleBlocks: (data.crumbleBlocks ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,

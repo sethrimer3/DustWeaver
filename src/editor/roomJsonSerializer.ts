@@ -323,6 +323,14 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       hBlock: z.hBlock,
     }));
   }
+  if ((data.timeStopFields ?? []).length > 0) {
+    json.timeStopFields = (data.timeStopFields ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    }));
+  }
   if ((data.crumbleBlocks ?? []).length > 0) {
     json.crumbleBlocks = (data.crumbleBlocks ?? []).map(b => {
       const entry: RoomJsonCrumbleBlock = {

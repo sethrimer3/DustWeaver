@@ -177,6 +177,7 @@ export function drawPlacementPreview(
       item.category === 'blocks' ||
       item.category === 'specialBlocks' ||
       item.category === 'liquids' ||
+      item.category === 'timeStop' ||
       (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1)
     );
     const itemPreview = getPlacementPreview(state);

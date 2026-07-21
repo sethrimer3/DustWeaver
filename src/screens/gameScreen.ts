@@ -1441,6 +1441,13 @@ export function startGameScreen(
     );
 
     // ── Room transition check ──────────────────────────────────────────────
+    // NOTE: the TimeStop Field release-on-transition hook does NOT live here.
+    // This block runs every frame regardless of whether a transition is about
+    // to fire, so releasing here would release stored momentum continuously
+    // (within one frame of capture) instead of only at an actual transition.
+    // The release is performed inside orchestrateRoomTransitions' fire
+    // callback (gameRoomTransitionOrchestrator.ts), which only runs at the
+    // moment a transition is confirmed — see that file for the hook.
     const preTransVX = world.clusters[0]?.velocityXWorld ?? 0;
     const preTransVY = world.clusters[0]?.velocityYWorld ?? 0;
 

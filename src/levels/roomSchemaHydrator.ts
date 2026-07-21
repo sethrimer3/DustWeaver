@@ -314,6 +314,13 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
   } else if (saved.lavaZones) {
     json.lavaZones = saved.lavaZones.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }) as RoomJsonZone);
   }
+
+  // TimeStop Field tiles: compact `timeStopFieldLayer` only (no legacy
+  // fallback needed — this field never existed before the compact format).
+  if (saved.timeStopFieldLayer) {
+    const rects = expandLayerToRects(saved.timeStopFieldLayer);
+    if (rects.length > 0) json.timeStopFields = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
+  }
   if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonBreakableBlock);
   if (saved.dustBoostJars)  json.dustBoostJars   = saved.dustBoostJars.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustBoostJar);
   if (saved.dustSwarms)     json.dustSwarms      = saved.dustSwarms.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustSwarm);

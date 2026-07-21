@@ -17,6 +17,8 @@ import { ropeLineCrossesWall } from './editorHitTest';
 import { getMaterialFootprintSize, MATERIAL_VISUALS } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { isFolderBasedTheme, getTheme1x1SpriteDarkened } from '../render/walls/folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from '../render/walls/blockEdgeShading';
+import { buildRoundedRegionPath, occupiedQueryFromCellList } from '../render/timeStopFieldGeometry';
+import { TIME_STOP_FIELD_CORNER_RADIUS_FRACTION } from '../sim/timeStopField/timeStopFieldConfig';
 import {
   ROPE_COLOR, ROPE_SELECTED, ROPE_PREVIEW_COLOR, ROPE_ANCHOR_COLOR, ROPE_INVALID_COLOR,
   CRUMBLE_VARIANT_CRACK_COLOR,
@@ -95,6 +97,72 @@ export function drawEditorLiquidZones(
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('🔥', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+}
+
+// ============================================================================
+// TimeStop Field (experimental)
+// ============================================================================
+
+/**
+ * Draws all TimeStop Field tiles as one seamlessly-merged, rounded,
+ * translucent region per connected group. Rebuilt fresh every call — editor
+ * rooms are small enough (tens to low hundreds of tiles) that this is cheap,
+ * so no caching is needed here (unlike the runtime renderer, which caches
+ * per room-load/edit via `sim/timeStopField/timeStopFieldCache.ts`).
+ */
+export function drawEditorTimeStopFields(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+): void {
+  const zones = room.timeStopFields ?? [];
+  if (zones.length === 0) return;
+
+  const cells: { gx: number; gy: number }[] = [];
+  for (const z of zones) {
+    for (let dy = 0; dy < z.hBlock; dy++) {
+      for (let dx = 0; dx < z.wBlock; dx++) {
+        cells.push({ gx: z.xBlock + dx, gy: z.yBlock + dy });
+      }
+    }
+  }
+  const isOccupied = occupiedQueryFromCellList(cells);
+  const cellSizePx = BLOCK_SIZE_SMALL * zoom;
+  // Corner radius fraction is shared with the gameplay renderer
+  // (timeStopFieldRenderer.ts) so the editor preview never silently drifts
+  // out of sync with the actual in-game field geometry.
+  const path = buildRoundedRegionPath(
+    cells, isOccupied, offsetXPx, offsetYPx, cellSizePx, cellSizePx * TIME_STOP_FIELD_CORNER_RADIUS_FRACTION,
+  );
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(150,110,255,0.28)';
+  ctx.fill(path);
+  ctx.strokeStyle = 'rgba(200,170,255,0.75)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = 'rgba(180,140,255,0.9)';
+  ctx.shadowBlur = Math.max(2, 3 * zoom);
+  ctx.stroke(path);
+  ctx.restore();
+
+  // Selection outlines drawn per authored rect (not merged) so the exact
+  // selected placement stays legible even inside a larger merged region.
+  for (const z of zones) {
+    if (!isSelected('timeStopField', z.uid)) continue;
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.save();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.restore();
   }
 }
 

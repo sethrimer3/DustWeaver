@@ -33,6 +33,7 @@ import type {
   EditorSunbeam,
   EditorWaterZone,
   EditorLavaZone,
+  EditorTimeStopField,
   EditorCrumbleBlock,
   EditorRope,
   EditorFallingBlock,
@@ -363,6 +364,14 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     hBlock: z.hBlock,
   }));
 
+  const timeStopFields: EditorTimeStopField[] = (room.timeStopFields ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
   const crumbleBlocks: EditorCrumbleBlock[] = (room.crumbleBlocks ?? []).map(b => ({
     uid: uid++,
     xBlock: b.xBlock,
@@ -482,6 +491,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       lightSources,
       waterZones,
       lavaZones,
+      timeStopFields,
       crumbleBlocks,
       ropes,
       sunbeams,
