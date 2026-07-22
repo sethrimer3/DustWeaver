@@ -21,6 +21,7 @@ import { placeAtCursor } from '../editor/editorPlaceTool';
 import { placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from '../editor/editorPixelMaterialTool';
 import { handlePropertyChange } from '../editor/editorPropertyChange';
 import { createEditorHistory, undo, redo, pushSnapshot, runLazyMutation } from '../editor/editorHistory';
+import { beginGesture, finishGesture, rollbackGesture } from '../editor/editorGesture';
 
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
   return {
@@ -800,4 +801,333 @@ test('deleteAtCursorBrushed on a fully-locked cell is a no-op and preserves redo
   const deleted = deleteAtCursorBrushed(state);
   assert.equal(deleted, false, 'a visible locked top candidate blocks deletion entirely');
   assert.equal(history.redoStack.length, 1);
+});
+
+// ── Phase 1.7: gesture-transaction model for drag/resize ──────────────────
+
+test('gesture: zero-delta drag (click release without movement) reports unchanged and preserves redo', () => {
+  const room = makeStackedRoom();
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'enemy', uid: 1 }];
+  const positions = new Map<number | string, { xBlock: number; yBlock: number }>();
+  storeDragStartPositions(state, positions);
+  const gesture = beginGesture(
+    room,
+    () => {
+      const current = new Map<number | string, { xBlock: number; yBlock: number }>();
+      storeDragStartPositions(state, current);
+      for (const [key, val] of current) {
+        const orig = positions.get(key);
+        if (!orig || orig.xBlock !== val.xBlock || orig.yBlock !== val.yBlock) return true;
+      }
+      return false;
+    },
+    () => moveSelectedElements(state, positions, 0, 0),
+  );
+  // No movement applied at all — release immediately.
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, false, 'a zero-delta drag must not commit a snapshot');
+  assert.equal(history.redoStack.length, 1, 'redo must be preserved by an unchanged gesture');
+});
+
+test('gesture: moving away and returning to the origin before release reports unchanged and preserves redo', () => {
+  const room = makeStackedRoom();
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'enemy', uid: 1 }];
+  const positions = new Map<number | string, { xBlock: number; yBlock: number }>();
+  storeDragStartPositions(state, positions);
+  const hasChanged = () => {
+    const current = new Map<number | string, { xBlock: number; yBlock: number }>();
+    storeDragStartPositions(state, current);
+    for (const [key, val] of current) {
+      const orig = positions.get(key);
+      if (!orig || orig.xBlock !== val.xBlock || orig.yBlock !== val.yBlock) return true;
+    }
+    return false;
+  };
+  const gesture = beginGesture(room, hasChanged, () => moveSelectedElements(state, positions, 0, 0));
+  moveSelectedElements(state, positions, 3, 3); // move away
+  moveSelectedElements(state, positions, 0, 0); // return to origin
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, false, 'returning to the exact origin must not commit a snapshot');
+  assert.equal(history.redoStack.length, 1, 'redo must be preserved');
+});
+
+test('gesture: a genuine drag commits exactly one undo entry and clears redo', () => {
+  const room = makeStackedRoom();
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'enemy', uid: 1 }];
+  const positions = new Map<number | string, { xBlock: number; yBlock: number }>();
+  storeDragStartPositions(state, positions);
+  const undoDepthBefore = history.undoStack.length;
+  const hasChanged = () => {
+    const current = new Map<number | string, { xBlock: number; yBlock: number }>();
+    storeDragStartPositions(state, current);
+    for (const [key, val] of current) {
+      const orig = positions.get(key);
+      if (!orig || orig.xBlock !== val.xBlock || orig.yBlock !== val.yBlock) return true;
+    }
+    return false;
+  };
+  const gesture = beginGesture(room, hasChanged, () => moveSelectedElements(state, positions, 0, 0));
+  moveSelectedElements(state, positions, 2, 2);
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, true, 'an actual move must commit');
+  assert.equal(history.undoStack.length, undoDepthBefore + 1, 'exactly one undo entry must be added');
+  assert.equal(history.redoStack.length, 0, 'redo must be cleared exactly once by the successful drag');
+});
+
+test('gesture: rollbackGesture restores every dragged element to its original position (mixed-layer all-or-nothing)', () => {
+  const room = makeRoom({
+    enemies: [{ uid: 1, xBlock: 5, yBlock: 5, type: 'basic' } as never],
+    interiorWalls: [{ uid: 2, xBlock: 8, yBlock: 8, wBlock: 1, hBlock: 1 } as never],
+  });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'enemy', uid: 1 }, { type: 'wall', uid: 2 }];
+  const positions = new Map<number | string, { xBlock: number; yBlock: number }>();
+  storeDragStartPositions(state, positions);
+  const gesture = beginGesture(room, () => true, () => moveSelectedElements(state, positions, 0, 0));
+  moveSelectedElements(state, positions, 4, 4);
+  const enemy = room.enemies.find(e => e.uid === 1)!;
+  const wall = room.interiorWalls.find(w => w.uid === 2)!;
+  assert.deepEqual([enemy.xBlock, enemy.yBlock], [9, 9], 'sanity: enemy moved during the gesture');
+  assert.deepEqual([wall.xBlock, wall.yBlock], [12, 12], 'sanity: wall moved during the gesture');
+  rollbackGesture(gesture);
+  assert.deepEqual([enemy.xBlock, enemy.yBlock], [5, 5], 'rollback must restore the enemy to its original position');
+  assert.deepEqual([wall.xBlock, wall.yBlock], [8, 8], 'rollback must restore the wall to its original position');
+});
+
+test('gesture: rect-resize return-to-original-dimensions reports unchanged and preserves redo', () => {
+  const room = makeRoom({ challengeFields: [{ uid: 3, xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 }] } as never);
+  const { history } = primeRedoStack(room);
+  const original = { xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 };
+  const getRect = () => room.challengeFields!.find(r => r.uid === 3)!;
+  const gesture = beginGesture(
+    room,
+    () => {
+      const r = getRect();
+      return r.xBlock !== original.xBlock || r.yBlock !== original.yBlock || r.wBlock !== original.wBlock || r.hBlock !== original.hBlock;
+    },
+    () => Object.assign(getRect(), original),
+  );
+  const rect = getRect();
+  rect.wBlock = 6; // resize out
+  rect.wBlock = 3; // resize back to original
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, false, 'returning to original dimensions must not commit');
+  assert.equal(history.redoStack.length, 1, 'redo must be preserved');
+});
+
+test('gesture: a genuine rect-resize commits exactly one undo entry', () => {
+  const room = makeRoom({ challengeFields: [{ uid: 3, xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 }] } as never);
+  const history = createEditorHistory();
+  const original = { xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 };
+  const getRect = () => room.challengeFields!.find(r => r.uid === 3)!;
+  const gesture = beginGesture(
+    room,
+    () => {
+      const r = getRect();
+      return r.wBlock !== original.wBlock;
+    },
+    () => Object.assign(getRect(), original),
+  );
+  getRect().wBlock = 6;
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, true);
+  assert.equal(history.undoStack.length, 1, 'exactly one undo entry must be recorded');
+});
+
+test('gesture: rect-resize rollback restores exact original geometry (e.g. layer locked mid-resize)', () => {
+  const room = makeRoom({ challengeFields: [{ uid: 3, xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 }] } as never);
+  const original = { xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 3 };
+  const getRect = () => room.challengeFields!.find(r => r.uid === 3)!;
+  const gesture = beginGesture(room, () => true, () => Object.assign(getRect(), original));
+  getRect().wBlock = 9;
+  getRect().hBlock = 1;
+  rollbackGesture(gesture);
+  const restoredRect = getRect();
+  assert.deepEqual(
+    { xBlock: restoredRect.xBlock, yBlock: restoredRect.yBlock, wBlock: restoredRect.wBlock, hBlock: restoredRect.hBlock },
+    original,
+    'rollback must restore the exact pre-resize rectangle',
+  );
+});
+
+test('gesture: transition-resize zero-change preserves redo, successful resize commits one entry with synced positionBlock', () => {
+  const room = makeRoom({
+    transitions: [{
+      uid: 9, direction: 'left', xBlock: 0, yBlock: 5, openingSizeBlocks: 4,
+      gradientWidthBlocks: 3, positionBlock: 5,
+    } as never],
+  });
+  const { history } = primeRedoStack(room);
+  const getTrans = () => room.transitions.find(t => t.uid === 9)!;
+  const original = { xBlock: 0, yBlock: 5, gradientWidthBlocks: 3, openingSizeBlocks: 4, positionBlock: 5 };
+  const hasChanged = () => {
+    const t = getTrans();
+    return t.xBlock !== original.xBlock || t.yBlock !== original.yBlock ||
+      (t.gradientWidthBlocks ?? 3) !== original.gradientWidthBlocks || t.openingSizeBlocks !== original.openingSizeBlocks;
+  };
+  const restore = () => {
+    const t = getTrans();
+    t.xBlock = original.xBlock;
+    t.yBlock = original.yBlock;
+    t.gradientWidthBlocks = original.gradientWidthBlocks;
+    t.openingSizeBlocks = original.openingSizeBlocks;
+    t.positionBlock = original.positionBlock;
+  };
+
+  // Zero-change: grab the handle, release without moving it.
+  const noopGesture = beginGesture(room, hasChanged, restore);
+  const noopCommitted = finishGesture(history, noopGesture);
+  assert.equal(noopCommitted, false, 'a zero-change transition resize must not commit');
+  assert.equal(history.redoStack.length, 1, 'redo must be preserved by a zero-change resize');
+
+  // Successful resize: openingSizeBlocks grows, yBlock/positionBlock stay synced.
+  const gesture = beginGesture(room, hasChanged, restore);
+  const t = getTrans();
+  t.openingSizeBlocks = 6;
+  t.yBlock = 3;
+  t.positionBlock = 3;
+  const committed = finishGesture(history, gesture);
+  assert.equal(committed, true, 'a real resize must commit');
+  assert.equal(history.undoStack.length, 1, 'exactly one undo entry must be recorded for the successful resize');
+  const restored = undo(history, room);
+  assert.ok(restored, 'undo must succeed after the committed resize');
+  assert.equal(restored!.roomData.transitions[0].yBlock, original.yBlock, 'undo must restore the pre-resize yBlock');
+  assert.equal(restored!.roomData.transitions[0].positionBlock, original.positionBlock, 'undo must restore the synced positionBlock');
+});
+
+test('gesture: Room Structure lock mid-transition-resize rolls back to the exact original geometry', () => {
+  const room = makeRoom({
+    transitions: [{
+      uid: 9, direction: 'up', xBlock: 4, yBlock: 0, openingSizeBlocks: 5,
+      gradientWidthBlocks: 2, positionBlock: 4,
+    } as never],
+  });
+  const getTrans = () => room.transitions.find(t => t.uid === 9)!;
+  const original = { xBlock: 4, yBlock: 0, gradientWidthBlocks: 2, openingSizeBlocks: 5, positionBlock: 4 };
+  const restore = () => Object.assign(getTrans(), original);
+  const gesture = beginGesture(room, () => true, restore);
+  const t = getTrans();
+  t.openingSizeBlocks = 9;
+  t.xBlock = 1;
+  t.positionBlock = 1;
+  rollbackGesture(gesture);
+  assert.deepEqual(
+    { xBlock: getTrans().xBlock, yBlock: getTrans().yBlock, gradientWidthBlocks: getTrans().gradientWidthBlocks, openingSizeBlocks: getTrans().openingSizeBlocks, positionBlock: getTrans().positionBlock },
+    original,
+    'rollback must restore every synchronized transition field exactly',
+  );
+});
+
+// ── Phase 1.7: rotate/flip real mutation-result contracts ─────────────────
+
+test('rotateSelectedElement returns false and preserves redo for an unsupported element type', () => {
+  const room = makeRoom({ dustPiles: [{ uid: 4, xBlock: 3, yBlock: 3 } as never] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'dustPile', uid: 4 }];
+  const pending = { before: JSON.stringify(room) };
+  const changed = rotateSelectedElement(state);
+  assert.equal(changed, false, 'dust piles have no rotation concept — must report no change');
+  assert.equal(JSON.stringify(room), pending.before, 'room data must be untouched');
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('rotateSelectedElement returns false and preserves redo when the target element no longer exists', () => {
+  const room = makeRoom({ interiorWalls: [] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 999 }];
+  const changed = rotateSelectedElement(state);
+  assert.equal(changed, false, 'a missing target must report no change');
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('rotateSelectedElement returns false and preserves redo on a restricted (locked) layer', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 2, hBlock: 1 } as never] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  state.layers.terrain.locked = true;
+  const changed = rotateSelectedElement(state);
+  assert.equal(changed, false);
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('rotateSelectedElement returns false for a square wall (rotation normalizes to the same state)', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 2, hBlock: 2 } as never] });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  const changed = rotateSelectedElement(state);
+  assert.equal(changed, false, 'swapping equal width/height is a genuine no-op');
+});
+
+test('rotateSelectedElement returns true for a real rotation, and undo restores the exact original dimensions', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 2, hBlock: 1 } as never] });
+  const history = createEditorHistory();
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  const pending = { snapshot: JSON.parse(JSON.stringify(room)) };
+  const changed = rotateSelectedElement(state);
+  assert.equal(changed, true);
+  history.undoStack.push({ roomData: pending.snapshot });
+  const restored = undo(history, room);
+  assert.equal(restored!.roomData.interiorWalls[0].wBlock, 2);
+  assert.equal(restored!.roomData.interiorWalls[0].hBlock, 1);
+});
+
+test('flipSelectedTransition returns false and preserves redo for an unsupported element type', () => {
+  const room = makeRoom({ enemies: [{ uid: 1, xBlock: 5, yBlock: 5, type: 'basic' } as never] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'enemy', uid: 1 }];
+  const changed = flipSelectedTransition(state);
+  assert.equal(changed, false, 'flip only supports transitions');
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('flipSelectedTransition returns false and preserves redo when the transition no longer exists', () => {
+  const room = makeRoom({ transitions: [] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'transition', uid: 42 }];
+  const changed = flipSelectedTransition(state);
+  assert.equal(changed, false);
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('flipSelectedTransition returns true for a real flip, and undo restores the exact original direction', () => {
+  const room = makeRoom({
+    transitions: [{
+      uid: 9, direction: 'left', xBlock: 0, yBlock: 5, openingSizeBlocks: 4,
+      gradientWidthBlocks: 3, positionBlock: 5,
+    } as never],
+  });
+  const history = createEditorHistory();
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'transition', uid: 9 }];
+  const snapshot = JSON.parse(JSON.stringify(room));
+  const changed = flipSelectedTransition(state);
+  assert.equal(changed, true);
+  assert.equal(room.transitions[0].direction, 'right', 'flipping left must produce right');
+  history.undoStack.push({ roomData: snapshot });
+  const restored = undo(history, room);
+  assert.equal(restored!.roomData.transitions[0].direction, 'left', 'undo must restore the exact original direction');
 });

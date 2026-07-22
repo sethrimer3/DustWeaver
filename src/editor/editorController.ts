@@ -35,7 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
-import { ensureActiveLayerVisible, LAYER_LABELS, getActiveLayerId, canMutateElement, canPlaceOnLayer } from './editorLayers';
+import { ensureActiveLayerVisible, LAYER_LABELS, getActiveLayerId, canMutateElement, canMutateSelection, canPlaceOnLayer } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -46,11 +46,39 @@ import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
 import { loadRoomForGameplayAsync } from '../levels/roomFileLoader';
-import { createEditorHistory, pushSnapshot, clearHistory, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
+import { createEditorHistory, clearHistory, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
+import { beginGesture, finishGesture, rollbackGesture, type EditorGestureTransaction } from './editorGesture';
 import {
   storeDragStartPositions, moveSelectedElements,
 } from './editorDragCopyPaste';
+/** Snapshots the CURRENT block positions of the selected elements (reusing
+ *  `storeDragStartPositions`'s live-lookup logic) so an in-progress drag's
+ *  `hasChanged` check can compare "now" against the captured pre-drag
+ *  originals without duplicating the per-type lookup switch. */
+function currentSelectedElementPositions(
+  s: EditorState,
+): Map<number | string, { xBlock: number; yBlock: number }> {
+  const positions = new Map<number | string, { xBlock: number; yBlock: number }>();
+  storeDragStartPositions(s, positions);
+  return positions;
+}
+
+/** Compares two drag-position maps for exact equality (same keys, same
+ *  xBlock/yBlock values) — used to detect a zero-delta drag (including one
+ *  that moved away and returned to its origin) so it can be discarded
+ *  without committing a no-op undo entry. */
+function arePositionMapsEqual(
+  a: Map<number | string, { xBlock: number; yBlock: number }>,
+  b: Map<number | string, { xBlock: number; yBlock: number }>,
+): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, val] of a) {
+    const other = b.get(key);
+    if (other === undefined || other.xBlock !== val.xBlock || other.yBlock !== val.yBlock) return false;
+  }
+  return true;
+}
 import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
 import { handlePropertyChange } from './editorPropertyChange';
@@ -187,8 +215,47 @@ export function createEditorController(
   const dragOriginalPositions: Map<number | string, { xBlock: number; yBlock: number }> = new Map();
 
   // Edge-resize: original zone geometry of the transition being resized, captured at drag start.
-  let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number } | null = null;
+  let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number; positionBlock: number } | null = null;
   let challengeResize: { type: 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock'; uid: number; edge: RectResizeEdge; original: { xBlock: number; yBlock: number; wBlock: number; hBlock: number } } | null = null;
+
+  // ── Gesture transaction (drag-move / rect-resize / transition-resize) ───
+  //
+  // At most one of these three continuous gestures can be active at a time
+  // (mutual exclusion is enforced at each gesture's start site below). This
+  // single slot backs all three so cancellation/commit logic doesn't need to
+  // be duplicated per gesture kind — see editorGesture.ts.
+  let activeGesture: EditorGestureTransaction | null = null;
+
+  /**
+   * Cancels whatever continuous gesture (drag / rect-resize / transition-
+   * resize) is currently active: restores the live room data it touched back
+   * to its pre-gesture geometry, discards the pending snapshot, and clears
+   * every piece of gesture-tracking state. Never touches history/dirty state
+   * — the room is back to exactly what it was before the gesture began, so
+   * there is nothing new to persist. Safe to call when no gesture is active
+   * (no-op). Centralised here so every cancellation trigger (layer
+   * hidden/locked/solo-excluded, tool/room change, editor close, Escape)
+   * shares one rollback path instead of duplicating it.
+   */
+  function cancelActiveGesture(): void {
+    if (activeGesture) {
+      rollbackGesture(activeGesture);
+      activeGesture = null;
+    }
+    if (state.isDragging) {
+      state.isDragging = false;
+      dragOriginalPositions.clear();
+    }
+    if (challengeResize) {
+      challengeResize = null;
+    }
+    if (state.isResizingTransition) {
+      state.isResizingTransition = false;
+      state.resizeTransitionUid = -1;
+      state.resizeEdge = null;
+      resizeOriginalGeometry = null;
+    }
+  }
 
   // ── Pending-edits persistence for multi-room editing ────────────────────
   // Stores EditorRoomData snapshots saved by the user as they navigate rooms.
@@ -842,8 +909,7 @@ export function createEditorController(
           // to keep just the eligible subset.
           const dragSelectionBecameInvalid = state.selectedElements.some(el => !canMutateElement(state, el));
           if (state.isDragging && dragSelectionBecameInvalid) {
-            state.isDragging = false;
-            dragOriginalPositions.clear();
+            cancelActiveGesture();
           }
           // Selection-list pruning for post-drag/idle state: drop elements
           // that are no longer eligible so future operations don't act on
@@ -851,11 +917,10 @@ export function createEditorController(
           // decision above, which used the pre-prune selection.
           state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
           if (challengeResize !== null && !canMutateElement(state, { type: challengeResize.type })) {
-            challengeResize = null;
+            cancelActiveGesture();
           }
           if (state.isResizingTransition && !canMutateElement(state, { type: 'transition' })) {
-            state.isResizingTransition = false;
-            resizeOriginalGeometry = null;
+            cancelActiveGesture();
           }
           ui?.update(state);
         },
@@ -866,6 +931,10 @@ export function createEditorController(
   }
 
   function closeEditor(): void {
+    // Cancel any in-progress drag/resize gesture BEFORE tearing down state —
+    // an uncommitted live mutation must never survive editor close without
+    // going through the normal commit/rollback flow.
+    cancelActiveGesture();
     // Reset the shared camera's zoom so editor zoom never leaks into
     // gameplay rendering after the editor closes.
     if (activeCameraRef) { activeCameraRef.zoom = CAMERA_DEFAULT_ZOOM; activeCameraRef = null; }
@@ -988,6 +1057,10 @@ export function createEditorController(
   // showCampaignSpawnReplaceModal) have been extracted to editorCampaignSpawn.ts.
 
   function loadRoomForEditing(room: RoomDef): void {
+    // Cancel any in-progress gesture from the room being left — its captured
+    // originals/pending snapshot referred to the outgoing room's data and
+    // must not be carried over or left dangling against the new room.
+    cancelActiveGesture();
     // Reset complexity-warning state for the newly-loaded room so a density
     // warning already shown for a previous room doesn't suppress a fresh
     // warning here, and so this room doesn't inherit a stale check flag.
@@ -1328,7 +1401,7 @@ export function createEditorController(
     state.cursorBlockY = Math.floor(worldY / BS);
 
     // Keyboard shortcuts (tool keys, rotation/flip, map toggles, ESC, undo/redo, copy/paste)
-    handleEditorKeyboardShortcuts(state, inputState, history, openWorldMap, openVisualMap, applyEdits, campaignSpawnCtx);
+    handleEditorKeyboardShortcuts(state, inputState, history, openWorldMap, openVisualMap, applyEdits, campaignSpawnCtx, cancelActiveGesture);
 
     // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
@@ -1365,9 +1438,33 @@ export function createEditorController(
           const challengeRect = soleChallenge ? (challengeElements ?? []).find(element => element.uid === soleChallenge.uid) : undefined;
           const challengeEdge = challengeRect
             ? hitTestRectResizeEdge(challengeRect, state.cursorWorldX, state.cursorWorldY) : null;
-          if (challengeRect && soleChallenge && challengeEdge) {
-            challengeResize = { type: soleChallenge.type as 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock', uid: soleChallenge.uid, edge: challengeEdge, original: { ...challengeRect } };
-            pushSnapshot(history, state.roomData);
+          if (challengeRect && soleChallenge && challengeEdge && activeGesture === null &&
+              canMutateElement(state, { type: soleChallenge.type })) {
+            const resizeType = soleChallenge.type as 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock';
+            const resizeUid = soleChallenge.uid;
+            const original = { ...challengeRect };
+            challengeResize = { type: resizeType, uid: resizeUid, edge: challengeEdge, original };
+            const getRect = () => {
+              const elements = resizeType === 'challengeField' ? state.roomData!.challengeFields
+                : resizeType === 'gate' ? state.roomData!.gates
+                : resizeType === 'zipMoveBlock' ? state.roomData!.zipMoveBlocks
+                : state.roomData!.challengeGates;
+              return (elements ?? []).find(element => element.uid === resizeUid);
+            };
+            activeGesture = beginGesture(
+              state.roomData,
+              () => {
+                const rect = getRect();
+                return rect !== undefined && (
+                  rect.xBlock !== original.xBlock || rect.yBlock !== original.yBlock ||
+                  rect.wBlock !== original.wBlock || rect.hBlock !== original.hBlock
+                );
+              },
+              () => {
+                const rect = getRect();
+                if (rect) Object.assign(rect, original);
+              },
+            );
           }
           // If exactly one transition is already selected, check whether the
           // click landed on one of its (non-trigger) zone edges — if so,
@@ -1380,17 +1477,42 @@ export function createEditorController(
             : null;
           if (challengeResize !== null) {
             // Generic rectangle resize owns this drag.
-          } else if (soleSelectedTrans !== null && grabbedEdge !== null) {
+          } else if (soleSelectedTrans !== null && grabbedEdge !== null && activeGesture === null &&
+                     canMutateElement(state, { type: 'transition' })) {
             state.isResizingTransition = true;
             state.resizeTransitionUid = soleSelectedTrans.uid;
             state.resizeEdge = grabbedEdge;
-            resizeOriginalGeometry = {
+            const transUid = soleSelectedTrans.uid;
+            const original = {
               xBlock: soleSelectedTrans.xBlock,
               yBlock: soleSelectedTrans.yBlock,
               gradientWidthBlocks: soleSelectedTrans.gradientWidthBlocks ?? 3,
               openingSizeBlocks: soleSelectedTrans.openingSizeBlocks,
+              positionBlock: soleSelectedTrans.positionBlock,
             };
-            pushSnapshot(history, state.roomData);
+            resizeOriginalGeometry = original;
+            const getTrans = () => state.roomData!.transitions.find((t: EditorTransition) => t.uid === transUid);
+            activeGesture = beginGesture(
+              state.roomData,
+              () => {
+                const trans = getTrans();
+                return trans !== undefined && (
+                  trans.xBlock !== original.xBlock || trans.yBlock !== original.yBlock ||
+                  (trans.gradientWidthBlocks ?? 3) !== original.gradientWidthBlocks ||
+                  trans.openingSizeBlocks !== original.openingSizeBlocks
+                );
+              },
+              () => {
+                const trans = getTrans();
+                if (trans) {
+                  trans.xBlock = original.xBlock;
+                  trans.yBlock = original.yBlock;
+                  trans.gradientWidthBlocks = original.gradientWidthBlocks;
+                  trans.openingSizeBlocks = original.openingSizeBlocks;
+                  trans.positionBlock = original.positionBlock;
+                }
+              },
+            );
           } else {
           const clicked = selectAtCursor(state);
           if (clicked) {
@@ -1677,12 +1799,16 @@ export function createEditorController(
       if (!state.isDragging) {
         const dxPx = inputState.mouseScreenXPx - inputState.clickScreenXPx;
         const dyPx = inputState.mouseScreenYPx - inputState.clickScreenYPx;
-        if (Math.abs(dxPx) > 2 || Math.abs(dyPx) > 2) {
+        if ((Math.abs(dxPx) > 2 || Math.abs(dyPx) > 2) && activeGesture === null && canMutateSelection(state)) {
           state.isDragging = true;
           state.dragStartBlockX = state.cursorBlockX;
           state.dragStartBlockY = state.cursorBlockY;
-          pushSnapshot(history, state.roomData!);
           storeDragStartPositions(state, dragOriginalPositions);
+          activeGesture = beginGesture(
+            state.roomData!,
+            () => !arePositionMapsEqual(currentSelectedElementPositions(state), dragOriginalPositions),
+            () => { moveSelectedElements(state, dragOriginalPositions, 0, 0); },
+          );
         }
       }
       if (state.isDragging && state.roomData) {
@@ -1702,18 +1828,27 @@ export function createEditorController(
       if (state.isDragging) {
         state.isDragging = false;
         dragOriginalPositions.clear();
-        applyEdits('metadata');
+        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        activeGesture = null;
+        // Only rebuild/dirty the room when the drag actually moved something —
+        // a click-release with no movement (or a drag that returned to its
+        // origin) leaves undo/redo and dirty state completely untouched.
+        if (committed) applyEdits('metadata');
       }
       if (state.isResizingTransition) {
         state.isResizingTransition = false;
         state.resizeTransitionUid = -1;
         state.resizeEdge = null;
         resizeOriginalGeometry = null;
-        applyEdits('metadata');
+        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        activeGesture = null;
+        if (committed) applyEdits('metadata');
       }
       if (challengeResize) {
         challengeResize = null;
-        applyEdits('metadata');
+        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        activeGesture = null;
+        if (committed) applyEdits('metadata');
       }
       if (state.isSelectionBoxActive) {
         state.isSelectionBoxActive = false;

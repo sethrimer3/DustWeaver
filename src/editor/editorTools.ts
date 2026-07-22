@@ -422,35 +422,43 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
  * - Transitions: cycle direction right → down → left → up → right and
  *   reposition to the nearest matching room edge.
  */
-export function rotateSelectedElement(state: EditorState): void {
+export function rotateSelectedElement(state: EditorState): boolean {
   const sel = state.selectedElements[0] ?? null;
-  if (sel === null || state.roomData === null) return;
+  if (sel === null || state.roomData === null) return false;
   // Defend this mutation directly — don't rely solely on the layer-toggle
   // callback having cancelled/pruned the selection after the fact.
-  if (!canMutateElement(state, sel)) return;
+  if (!canMutateElement(state, sel)) return false;
   if (sel.type === 'wall') {
     const wall = state.roomData.interiorWalls.find(w => w.uid === sel.uid);
-    if (wall) {
-      const tmp = wall.wBlock;
-      wall.wBlock = wall.hBlock;
-      wall.hBlock = tmp;
-    }
+    if (!wall) return false;
+    // A square wall's dimensions are unchanged by a width/height swap — this
+    // is a genuine no-op, not just "rotation isn't visually distinguishable".
+    if (wall.wBlock === wall.hBlock) return false;
+    const tmp = wall.wBlock;
+    wall.wBlock = wall.hBlock;
+    wall.hBlock = tmp;
+    return true;
   } else if (sel.type === 'transition') {
     const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
-    if (t) {
-      const DIRS: TransitionDirection[] = ['right', 'down', 'left', 'up'];
-      const idx = DIRS.indexOf(t.direction);
-      const newDir = DIRS[(idx + 1) % 4];
-      _repositionTransitionForNewDirection(t, newDir, state.roomData);
-    }
+    if (!t) return false;
+    const DIRS: TransitionDirection[] = ['right', 'down', 'left', 'up'];
+    const idx = DIRS.indexOf(t.direction);
+    const newDir = DIRS[(idx + 1) % 4];
+    _repositionTransitionForNewDirection(t, newDir, state.roomData);
+    return true;
   } else if (sel.type === 'enemy') {
     const enemy = state.roomData.enemies.find(e => e.uid === sel.uid);
     if (enemy?.isMomentumTurretFlag === 1) {
       enemy.momentumTurretFacingIndex = (((enemy.momentumTurretFacingIndex ?? 0) + 1) % 4) as 0 | 1 | 2 | 3;
+      return true;
     } else if (enemy?.isSlimeSnailFlag === 1) {
       enemy.slimeSnailSurfaceSideIndex = (((enemy.slimeSnailSurfaceSideIndex ?? 0) + 1) % 4) as 0 | 1 | 2 | 3;
+      return true;
     }
+    return false;
   }
+  // Unsupported element type: no-op.
+  return false;
 }
 
 /**
@@ -465,14 +473,14 @@ export function rotateSelectedElement(state: EditorState): void {
  *
  * No-op for walls and other element types.
  */
-export function flipSelectedTransition(state: EditorState): void {
+export function flipSelectedTransition(state: EditorState): boolean {
   const sel = state.selectedElements[0] ?? null;
-  if (sel === null || sel.type !== 'transition' || state.roomData === null) return;
+  if (sel === null || sel.type !== 'transition' || state.roomData === null) return false;
   // Defend this mutation directly — don't rely solely on the layer-toggle
   // callback having cancelled/pruned the selection after the fact.
-  if (!canMutateElement(state, sel)) return;
+  if (!canMutateElement(state, sel)) return false;
   const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
-  if (!t) return;
+  if (!t) return false;
   let newDir: TransitionDirection;
   switch (t.direction) {
     case 'left':  newDir = 'right'; break;
@@ -481,6 +489,7 @@ export function flipSelectedTransition(state: EditorState): void {
     case 'down':  newDir = 'up';    break;
   }
   _repositionTransitionForNewDirection(t, newDir, state.roomData);
+  return true;
 }
 
 // ── Transition direction helpers ─────────────────────────────────────────────

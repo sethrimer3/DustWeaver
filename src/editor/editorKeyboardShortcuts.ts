@@ -13,7 +13,7 @@
 
 import { EditorState, EditorTool } from './editorState';
 import type { EditorInputState } from './editorInput';
-import { EditorHistory, undo, redo, pushSnapshot, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
+import { EditorHistory, undo, redo, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import { cancelTransitionLink } from './transitionLinker';
 import { rotateSelectedElement, flipSelectedTransition } from './editorTools';
 import { serializeSelectedElements, pasteFromClipboard } from './editorDragCopyPaste';
@@ -42,6 +42,7 @@ export function handleEditorKeyboardShortcuts(
   openVisualMap: () => void | Promise<void>,
   applyEdits: () => void,
   campaignSpawnCtx?: CampaignSpawnContext,
+  cancelActiveGesture?: () => void,
 ): void {
   // Tool key shortcuts (1 = Select, 2 = Place, 3 = Delete)
   if (inputState.toolKeyPressed === 1) state.activeTool = EditorTool.Select;
@@ -67,9 +68,16 @@ export function handleEditorKeyboardShortcuts(
     const selType = state.selectedElements[0]?.type;
     if (selType === 'transition') {
       if (inputState.isRotateRightPressed || inputState.isRotateLeftPressed) {
-        pushSnapshot(history, state.roomData);
-        rotateSelectedElement(state);
-        applyEdits();
+        // Lazy snapshot: rotate can be a no-op (e.g. unsupported element,
+        // restricted layer, already-square wall) — only commit history and
+        // rebuild when rotateSelectedElement reports a real change, so a
+        // blocked/no-op rotate leaves undo/redo completely untouched.
+        const pending = capturePendingSnapshot(state.roomData);
+        const changed = rotateSelectedElement(state);
+        if (changed) {
+          commitPendingSnapshot(history, pending);
+          applyEdits();
+        }
       }
     }
   }
@@ -80,9 +88,12 @@ export function handleEditorKeyboardShortcuts(
       state.placementFlipH = !state.placementFlipH;
     } else if (state.activeTool === EditorTool.Select && state.roomData &&
                state.selectedElements.length > 0 && state.selectedElements[0]?.type === 'transition') {
-      pushSnapshot(history, state.roomData);
-      flipSelectedTransition(state);
-      applyEdits();
+      const pending = capturePendingSnapshot(state.roomData);
+      const changed = flipSelectedTransition(state);
+      if (changed) {
+        commitPendingSnapshot(history, pending);
+        applyEdits();
+      }
     }
   }
 
@@ -96,8 +107,10 @@ export function handleEditorKeyboardShortcuts(
     openVisualMap();
   }
 
-  // ESC → cancel transition linking or clear selection / rect brush
+  // ESC → cancel an in-progress drag/resize gesture (restoring its original
+  // geometry), or cancel transition linking, or clear selection / rect brush.
   if (inputState.isEscapePressed) {
+    cancelActiveGesture?.();
     if (state.isLinkingTransition) {
       cancelTransitionLink(state);
     } else {
