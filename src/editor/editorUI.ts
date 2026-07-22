@@ -25,6 +25,7 @@ import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePre
 import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
 import { createEditorLightingPanel } from './editorUILightingPanel';
+import { createEditorLayersPanel } from './editorUILayersPanel';
 import type { TheroBackgroundEffect } from '../render/effects/theroBackgroundEffect';
 import { createPrologueShapeEffect } from '../render/effects/prologueShapeEffect';
 import { createVermiculateEffect } from '../render/effects/vermiculateEffect';
@@ -449,6 +450,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   songDiv.appendChild(songSelect);
   container.appendChild(songDiv);
 
+  // ── Layers panel (always visible — editor-only visibility/lock/solo/target) ──
+  const layersPanel = createEditorLayersPanel(() => callbacks);
+  container.appendChild(layersPanel.div);
+
   // ── Category tabs ────────────────────────────────────────────────────────
   let lastRenderedRoomId = '';
   let lastRenderedWidthBlocks = -1;
@@ -643,6 +648,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   root.appendChild(topRightBar);
 
   function update(state: EditorState): void {
+    layersPanel.sync(state);
+
     // Update room density indicator
     if (state.roomData) {
       const report = analyzeEditorRoomComplexity(state.roomData);

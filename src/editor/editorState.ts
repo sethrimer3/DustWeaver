@@ -377,6 +377,8 @@ export interface EditorUICallbacks {
   onDeleteCustomBlock?: (blockId: string) => void;
   /** Called when user selects a custom block in the palette to place it. */
   onSelectCustomBlockForPlacement?: (blockId: string) => void;
+  /** Called when the user toggles a layer's visible/locked/solo/selectOnly state in the Layers panel. */
+  onLayerStateChange: (id: import('./editorLayers').LayerId, patch: Partial<import('./editorLayers').EditorLayerState>) => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

@@ -822,6 +822,10 @@ export function createEditorController(
           ensureActiveLayerVisible(state);
           ui?.update(state);
         },
+        onLayerStateChange: (id, patch) => {
+          Object.assign(state.layers[id], patch);
+          ui?.update(state);
+        },
       });
     } else {
       closeEditor();

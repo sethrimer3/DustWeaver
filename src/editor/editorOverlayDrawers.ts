@@ -430,7 +430,7 @@ export function drawEditorCollectibles(
   }
 
   // Dust piles (unowned Gold Dust for Storm Weave attraction)
-  for (const p of room.dustPiles) {
+  if (isTypeVisible('dustPile')) for (const p of room.dustPiles) {
     const sel = isSelected('dustPile', p.uid);
     drawMarker(ctx, p.xBlock, p.yBlock, offsetXPx, offsetYPx, zoom,
       sel ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
@@ -445,12 +445,13 @@ export function drawEditorCritterAreas(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,
   isSelected: IsElementSelected,
+  isTypeVisible: (type: 'grasshopperArea' | 'fireflyArea') => boolean,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
 ): void {
-  // Grasshopper areas
-  for (const a of room.grasshopperAreas) {
+  // Grasshopper areas (Enemies layer — critter spawners)
+  if (isTypeVisible('grasshopperArea')) for (const a of room.grasshopperAreas) {
     const sel = isSelected('grasshopperArea', a.uid);
     const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -468,8 +469,8 @@ export function drawEditorCritterAreas(
     ctx.fillText('🦗', xPx + wPx * 0.5, yPx + hPx * 0.5);
   }
 
-  // Firefly areas
-  for (const a of (room.fireflyAreas ?? [])) {
+  // Firefly areas (Lighting/VFX layer — decorative, not enemy spawners)
+  if (isTypeVisible('fireflyArea')) for (const a of (room.fireflyAreas ?? [])) {
     const sel = isSelected('fireflyArea', a.uid);
     const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
