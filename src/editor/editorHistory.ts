@@ -33,13 +33,26 @@ export function createEditorHistory(): EditorHistory {
   return { undoStack: [], redoStack: [] };
 }
 
-export function pushSnapshot(
-  history: EditorHistory,
+/**
+ * A snapshot that has been captured (cloned from current room data) but not
+ * yet committed to the undo stack. Capturing is side-effect-free — it does
+ * NOT touch undoStack/redoStack — so a caller that ends up discovering its
+ * operation was a no-op can simply drop the `PendingSnapshot` on the floor
+ * without any history/redo state ever having been disturbed. This replaces
+ * the old "push then pop if no-op" pattern, which cleared the redo stack as
+ * a side effect of pushSnapshot() and could NOT be undone by popping the
+ * undo entry back off afterward.
+ */
+export interface PendingSnapshot {
+  snapshot: HistorySnapshot;
+}
+
+function cloneSnapshot(
   data: EditorRoomData,
   campaignSpawn?: CampaignSpawnData,
   initialRoomId?: string,
   campaignSpawnTracked?: boolean,
-): void {
+): HistorySnapshot {
   const t0 = import.meta.env?.DEV ? performance.now() : 0;
   const snapshot: HistorySnapshot = {
     roomData: structuredClone(data) as EditorRoomData,
@@ -51,7 +64,6 @@ export function pushSnapshot(
       : undefined;
     snapshot.initialRoomId = initialRoomId;
   }
-  history.undoStack.push(snapshot);
   if (import.meta.env?.DEV) {
     const elapsedMs = performance.now() - t0;
     const wallCount = data.interiorWalls.length;
@@ -63,11 +75,78 @@ export function pushSnapshot(
       console.log(`[editor-perf] pushSnapshot: ${elapsedMs.toFixed(2)}ms walls=${wallCount} strategy=structuredClone`);
     }
   }
+  return snapshot;
+}
+
+/**
+ * Captures a snapshot of the current room (and, when tracked, campaign
+ * spawn) state WITHOUT touching undoStack/redoStack. Call this immediately
+ * before performing a mutation whose success is not yet known; if the
+ * mutation turns out to be a no-op, simply discard the returned
+ * PendingSnapshot — history is left completely untouched. If the mutation
+ * did change something, pass it to `commitPendingSnapshot`.
+ */
+export function capturePendingSnapshot(
+  data: EditorRoomData,
+  campaignSpawn?: CampaignSpawnData,
+  initialRoomId?: string,
+  campaignSpawnTracked?: boolean,
+): PendingSnapshot {
+  return { snapshot: cloneSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked) };
+}
+
+/**
+ * Commits a previously-captured PendingSnapshot: pushes it onto the undo
+ * stack, trims to MAX_HISTORY_SIZE, and clears the redo stack. Only call
+ * this once a mutation is known to have actually changed something.
+ */
+export function commitPendingSnapshot(history: EditorHistory, pending: PendingSnapshot): void {
+  history.undoStack.push(pending.snapshot);
   if (history.undoStack.length > MAX_HISTORY_SIZE) {
     history.undoStack.shift();
   }
   // Any new action clears redo stack
   history.redoStack.length = 0;
+}
+
+export function pushSnapshot(
+  history: EditorHistory,
+  data: EditorRoomData,
+  campaignSpawn?: CampaignSpawnData,
+  initialRoomId?: string,
+  campaignSpawnTracked?: boolean,
+): void {
+  commitPendingSnapshot(history, capturePendingSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked));
+}
+
+/**
+ * Runs a mutation that may or may not actually change anything, capturing
+ * history lazily: the pre-mutation snapshot is captured up front (it has to
+ * be, since `mutate` may mutate `data` in place), but it is only committed
+ * to the undo stack (and the redo stack only cleared) if `mutate` reports a
+ * real change. A no-op `mutate` — including one that throws — leaves
+ * undoStack/redoStack completely unchanged; the try/finally ensures a
+ * thrown exception can never leave history half-updated (e.g. redo cleared
+ * but no undo entry recorded, or vice versa).
+ */
+export function runLazyMutation(
+  history: EditorHistory,
+  data: EditorRoomData,
+  mutate: () => boolean,
+  campaignSpawn?: CampaignSpawnData,
+  initialRoomId?: string,
+  campaignSpawnTracked?: boolean,
+): boolean {
+  const pending = capturePendingSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked);
+  let changed = false;
+  try {
+    changed = mutate();
+    return changed;
+  } finally {
+    if (changed) {
+      commitPendingSnapshot(history, pending);
+    }
+  }
 }
 
 function cloneCurrent(

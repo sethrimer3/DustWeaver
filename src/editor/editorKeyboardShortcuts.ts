@@ -13,7 +13,7 @@
 
 import { EditorState, EditorTool } from './editorState';
 import type { EditorInputState } from './editorInput';
-import { EditorHistory, undo, redo, pushSnapshot } from './editorHistory';
+import { EditorHistory, undo, redo, pushSnapshot, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import { cancelTransitionLink } from './transitionLinker';
 import { rotateSelectedElement, flipSelectedTransition } from './editorTools';
 import { serializeSelectedElements, pasteFromClipboard } from './editorDragCopyPaste';
@@ -161,16 +161,16 @@ export function handleEditorKeyboardShortcuts(
   }
 
   // Paste (Ctrl+V) — all-or-nothing: pasteFromClipboard() itself refuses to
-  // mutate anything if any represented layer is currently ineligible, so the
-  // speculative snapshot pushed here is simply dropped again on a blocked/
-  // empty paste rather than left as a no-op undo entry.
+  // mutate anything if any represented layer is currently ineligible. The
+  // snapshot is only captured (not committed) up front, so a blocked/empty
+  // paste leaves undo/redo completely untouched rather than briefly clearing
+  // redo and then trying to undo that via a pop.
   if (inputState.isPastePressed && state.roomData && state.clipboard) {
-    pushSnapshot(history, state.roomData);
+    const pending = capturePendingSnapshot(state.roomData);
     const pasted = pasteFromClipboard(state);
     if (pasted) {
+      commitPendingSnapshot(history, pending);
       applyEdits();
-    } else {
-      history.undoStack.pop();
     }
   }
 }

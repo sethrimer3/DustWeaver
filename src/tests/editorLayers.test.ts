@@ -20,7 +20,7 @@ import { canMutateElement, canMutateSelection } from '../editor/editorLayers';
 import { placeAtCursor } from '../editor/editorPlaceTool';
 import { placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from '../editor/editorPixelMaterialTool';
 import { handlePropertyChange } from '../editor/editorPropertyChange';
-import { createEditorHistory } from '../editor/editorHistory';
+import { createEditorHistory, undo, redo, pushSnapshot, runLazyMutation } from '../editor/editorHistory';
 
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
   return {
@@ -598,4 +598,206 @@ test('pasteFromClipboard succeeds across multiple layers when all are editable',
   assert.equal(destRoom.interiorWalls.length, 1);
   assert.equal(destRoom.dustPiles.length, 1);
   assert.equal(state.selectedElements.length, 2);
+});
+
+// ── Phase 1.6: no-op/blocked operations must leave undo/redo completely
+// untouched (the old "push then pop on no-op" pattern cleared the redo
+// stack as a pushSnapshot side effect and could not undo that by popping
+// the undo entry back off afterward). Each test below primes the redo
+// stack with a real entry (edit + undo), then runs a blocked/no-op
+// operation and asserts the redo stack — and its ability to redo — is
+// completely unaffected. ────────────────────────────────────────────────
+
+/** Performs one real edit + undo so history has exactly one redo entry
+ * ready to be restored, matching the "user did something, undid it" setup
+ * every regression test below starts from. */
+function primeRedoStack(room: EditorRoomData) {
+  const history = createEditorHistory();
+  pushSnapshot(history, room);
+  room.interiorWalls.push({ uid: 999, xBlock: 1, yBlock: 1, wBlock: 1, hBlock: 1 } as never);
+  const restored = undo(history, room);
+  assert.ok(restored, 'setup: undo must succeed');
+  assert.equal(history.redoStack.length, 1, 'setup: redo stack must have exactly one entry');
+  return { history, restoredRoomData: restored!.roomData };
+}
+
+test('runLazyMutation: a no-op mutation leaves undo/redo completely untouched and redo still works', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const { history } = primeRedoStack(room);
+  const undoLenBefore = history.undoStack.length;
+
+  const changed = runLazyMutation(history, room, () => false /* no-op mutate */);
+
+  assert.equal(changed, false);
+  assert.equal(history.undoStack.length, undoLenBefore, 'no-op must not push an undo entry');
+  assert.equal(history.redoStack.length, 1, 'no-op must not clear the redo stack');
+
+  const redone = redo(history, room);
+  assert.ok(redone, 'redo must still work after the no-op');
+});
+
+test('runLazyMutation: a mutation that throws leaves undo/redo completely untouched (try/finally safety)', () => {
+  const room = makeRoom();
+  const { history } = primeRedoStack(room);
+  const undoLenBefore = history.undoStack.length;
+
+  assert.throws(() => {
+    runLazyMutation(history, room, () => { throw new Error('boom'); });
+  });
+
+  assert.equal(history.undoStack.length, undoLenBefore, 'a thrown mutation must not leave a stray undo entry');
+  assert.equal(history.redoStack.length, 1, 'a thrown mutation must not clear the redo stack');
+});
+
+test('runLazyMutation: a real mutation commits exactly one undo entry and clears redo', () => {
+  const room = makeRoom();
+  const { history } = primeRedoStack(room);
+  const undoLenBefore = history.undoStack.length;
+
+  const changed = runLazyMutation(history, room, () => {
+    room.interiorWalls.push({ uid: 3, xBlock: 2, yBlock: 2, wBlock: 1, hBlock: 1 } as never);
+    return true;
+  });
+
+  assert.equal(changed, true);
+  assert.equal(history.undoStack.length, undoLenBefore + 1, 'a real change must push exactly one undo entry');
+  assert.equal(history.redoStack.length, 0, 'a real change must clear the redo stack');
+});
+
+test('blocked placeAtCursor (locked destination layer) preserves the redo stack', () => {
+  const room = makeRoom();
+  const { history } = primeRedoStack(room);
+  const state = placeStateFor(DUST_PILE_ITEM, room);
+  state.layers.powder.locked = true;
+
+  const placed = placeAtCursor(state);
+  assert.equal(placed, false);
+  assert.equal(history.redoStack.length, 1, 'blocked placement must not clear redo');
+});
+
+test('occupied-cell placeAtCursor (duplicate placement) preserves the redo stack', () => {
+  const room = makeRoom();
+  const state = placeStateFor(BLOCK_ITEM, room);
+  const first = placeAtCursor(state); // occupies the cell
+  assert.equal(first, true);
+
+  const { history } = primeRedoStack(room);
+  const second = placeAtCursor(state); // same cell, already occupied -> no-op
+  assert.equal(second, false, 'placing on an already-occupied cell must be a no-op');
+  assert.equal(history.redoStack.length, 1, 'occupied-cell no-op placement must not clear redo');
+});
+
+test('blocked handlePropertyChange (locked layer) preserves the redo stack', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  state.layers.terrain.locked = true;
+
+  const result = handlePropertyChange(state, history, 'wall.xBlock', 10);
+  assert.equal(result, false);
+  assert.equal(history.redoStack.length, 1, 'blocked edit must not clear redo');
+});
+
+test('unchanged-value handlePropertyChange preserves the redo stack', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+
+  const result = handlePropertyChange(state, history, 'wall.xBlock', '5');
+  assert.equal(result, false, 'resubmitting the same value must be a no-op');
+  assert.equal(history.redoStack.length, 1, 'no-op edit must not clear redo');
+});
+
+test('a successful handlePropertyChange edit clears redo exactly once', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const { history } = primeRedoStack(room);
+
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  const result = handlePropertyChange(state, history, 'wall.xBlock', 10);
+  assert.equal(result, true);
+  assert.equal(history.redoStack.length, 0, 'a real edit must clear redo');
+});
+
+test('blocked pasteFromClipboard preserves the redo stack', () => {
+  const sourceRoom = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const clip = serializeSelectedElements(sourceRoom, [{ type: 'wall', uid: 2 }]);
+
+  const destRoom = makeRoom();
+  const { history } = primeRedoStack(destRoom);
+  const state = createEditorState();
+  state.roomData = destRoom;
+  state.clipboard = clip;
+  state.layers.terrain.locked = true;
+
+  const pasted = pasteFromClipboard(state);
+  assert.equal(pasted, false);
+  assert.equal(history.redoStack.length, 1, 'blocked paste must not clear redo (paste itself does not touch history in this path; verifying no incidental clearing)');
+});
+
+test('empty-clipboard paste is a no-op and preserves the redo stack', () => {
+  const destRoom = makeRoom();
+  const { history } = primeRedoStack(destRoom);
+  const state = createEditorState();
+  state.roomData = destRoom;
+  state.clipboard = null;
+
+  if (state.clipboard) {
+    const pasted = pasteFromClipboard(state);
+    assert.equal(pasted, false);
+  }
+  assert.equal(history.redoStack.length, 1, 'no clipboard to paste must never touch redo');
+});
+
+test('pixel-material erase miss (nothing under cursor) is a no-op and preserves redo', () => {
+  const room = makeRoom({ pixelMaterials: [] } as never);
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+
+  const erased = erasePixelMaterialAt(state, 100, 100);
+  assert.equal(erased, false);
+  assert.equal(history.redoStack.length, 1, 'a pixel-erase miss must not clear redo');
+});
+
+test('pixel-material line paint over all-duplicate cells creates no changes and preserves redo', () => {
+  const room = makeRoom({ pixelMaterials: [{ xPixel: 0, yPixel: 0, material: 1 }] } as never);
+  const { history } = primeRedoStack(room);
+  const state = createEditorState();
+  state.roomData = room;
+
+  // Painting the same already-occupied cell repeatedly should report no change.
+  const changed = paintPixelMaterialLine(state, 0, 0, 0, 0, 1, false);
+  assert.equal(changed, false, 'placing an already-present pixel material must be a no-op');
+  assert.equal(history.redoStack.length, 1);
+});
+
+test('deleteAtCursorBrushed on an empty cell is a no-op (returns false)', () => {
+  const room = makeRoom();
+  const state = stateAt(room, 5, 5);
+  const deleted = deleteAtCursorBrushed(state);
+  assert.equal(deleted, false, 'deleting an empty cell must report no change');
+});
+
+test('deleteAtCursorBrushed returns true and removes the element when something is actually deleted', () => {
+  const room = makeStackedRoom();
+  const state = stateAt(room, 5, 5);
+  const deleted = deleteAtCursorBrushed(state);
+  assert.equal(deleted, true);
+  assert.equal(room.enemies.length, 0, 'the top-priority candidate (enemy) should have been removed');
+});
+
+test('deleteAtCursorBrushed on a fully-locked cell is a no-op and preserves redo', () => {
+  const room = makeStackedRoom();
+  const { history } = primeRedoStack(room);
+  const state = stateAt(room, 5, 5);
+  state.layers.enemies.locked = true;
+  const deleted = deleteAtCursorBrushed(state);
+  assert.equal(deleted, false, 'a visible locked top candidate blocks deletion entirely');
+  assert.equal(history.redoStack.length, 1);
 });

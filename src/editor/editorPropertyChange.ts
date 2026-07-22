@@ -41,7 +41,7 @@ import type {
 } from './editorState';
 import { normalizeRequiredSpeed } from '../levels/gateDefs';
 import type { EditorHistory } from './editorHistory';
-import { pushSnapshot } from './editorHistory';
+import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 import { canMutateElement } from './editorLayers';
 
@@ -520,7 +520,7 @@ export function handlePropertyChange(
     return ref === undefined ? undefined : structuredClone(ref);
   });
 
-  pushSnapshot(history, roomData);
+  const pending = capturePendingSnapshot(roomData);
 
   for (const el of selectedElements) {
     applyPropertyToElement(roomData, el, prop, value, selectedPointIndex);
@@ -534,10 +534,11 @@ export function handlePropertyChange(
 
   if (!changed) {
     // Nothing actually changed (e.g. resubmitting the same value, or a value
-    // that normalizes to the current one) — drop the speculative snapshot so
-    // undo history and the redo stack aren't polluted by a no-op edit.
-    history.undoStack.pop();
+    // that normalizes to the current one) — the snapshot was only captured,
+    // never committed, so undo history and the redo stack are left
+    // completely untouched by dropping `pending` here.
     return false;
   }
+  commitPendingSnapshot(history, pending);
   return true;
 }

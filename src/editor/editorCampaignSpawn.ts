@@ -10,8 +10,8 @@
 
 import type { EditorState } from './editorState';
 import type { EditableCampaignSession } from './editableCampaignSession';
-import type { EditorHistory } from './editorHistory';
-import { pushSnapshot } from './editorHistory';
+import type { EditorHistory, PendingSnapshot } from './editorHistory';
+import { pushSnapshot, capturePendingSnapshot } from './editorHistory';
 
 /** Shared dependencies injected into all campaign-spawn helpers. */
 export interface CampaignSpawnContext {
@@ -33,6 +33,23 @@ export function pushCampaignSpawnSnapshot(ctx: CampaignSpawnContext, history: Ed
   const spawn = campaignSession?.campaign.campaign.campaignSpawn;
   const initialRoomId = campaignSession?.campaign.campaign.initialRoomId;
   pushSnapshot(history, state.roomData, spawn, initialRoomId, true);
+}
+
+/**
+ * Lazy-capture counterpart to `pushCampaignSpawnSnapshot`: clones the
+ * current room + campaign-spawn state WITHOUT touching undoStack/redoStack.
+ * Callers whose mutation may turn out to be a no-op should capture with
+ * this, then only call `commitPendingSnapshot` (from editorHistory) if the
+ * mutation actually changed something — leaving history completely
+ * untouched otherwise. Returns `null` if there's no room to snapshot (mirrors
+ * `pushCampaignSpawnSnapshot`'s early return).
+ */
+export function captureCampaignSpawnPendingSnapshot(ctx: CampaignSpawnContext): PendingSnapshot | null {
+  const { state, campaignSession } = ctx;
+  if (!state.roomData) return null;
+  const spawn = campaignSession?.campaign.campaign.campaignSpawn;
+  const initialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+  return capturePendingSnapshot(state.roomData, spawn, initialRoomId, true);
 }
 
 /**

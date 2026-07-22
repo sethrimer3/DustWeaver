@@ -46,7 +46,7 @@ import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
 import { loadRoomForGameplayAsync } from '../levels/roomFileLoader';
-import { createEditorHistory, pushSnapshot, clearHistory } from './editorHistory';
+import { createEditorHistory, pushSnapshot, clearHistory, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import {
   storeDragStartPositions, moveSelectedElements,
@@ -67,6 +67,7 @@ import {
   placeCampaignSpawn,
   showCampaignSpawnReplaceModal,
   pushCampaignSpawnSnapshot,
+  captureCampaignSpawnPendingSnapshot,
 } from './editorCampaignSpawn';
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
@@ -1424,10 +1425,12 @@ export function createEditorController(
           showEditorToast(uiRoot, `"${LAYER_LABELS[getActiveLayerId(state)]}" layer is locked, hidden, or excluded — placement is blocked here.`);
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           const px = pixelFromCursor(state);
-          pushSnapshot(history, state.roomData);
+          const pending = capturePendingSnapshot(state.roomData);
           const placed = placePixelMaterialAt(state, px.x, px.y, state.selectedPaletteItem.pixelMaterialId ?? 1);
-          if (placed) applyEdits('placement');
-          else history.undoStack.pop();
+          if (placed) {
+            commitPendingSnapshot(history, pending);
+            applyEdits('placement');
+          }
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.id === 'campaign_spawn') {
@@ -1462,9 +1465,12 @@ export function createEditorController(
             state.brushRectStartBlockY = state.cursorBlockY;
           } else {
             const totalPlacementStartMs = import.meta.env.DEV ? performance.now() : 0;
-            // Measure pushSnapshot cost separately on the placement hot path.
+            // Measure snapshot-capture cost separately on the placement hot path.
+            // Capturing is side-effect-free (doesn't touch undo/redo), so a
+            // no-op placement below can discard `pending` without having
+            // disturbed history at all.
             const snapshotStartMs = import.meta.env.DEV ? performance.now() : 0;
-            pushSnapshot(history, state.roomData);
+            const pending = capturePendingSnapshot(state.roomData);
             const snapshotElapsedMs = import.meta.env.DEV ? performance.now() - snapshotStartMs : 0;
             if (import.meta.env.DEV) {
               logEditorPerfWarned('pushSnapshot (undo)', snapshotStartMs, state.roomData.id);
@@ -1481,11 +1487,11 @@ export function createEditorController(
               state.brushRectStartBlockX = null;
               state.brushRectStartBlockY = null;
             }
-            if (!placed) {
-              // No-op placement (blocked layer, dedup, overlap) — drop the
-              // undo snapshot we speculatively pushed above and skip the
-              // rebuild/dirty-marking work entirely.
-              history.undoStack.pop();
+            if (placed) {
+              // Only now commit the snapshot to the undo stack and clear
+              // redo — a no-op placement (blocked layer, dedup, overlap)
+              // leaves undo/redo completely untouched.
+              commitPendingSnapshot(history, pending);
             }
             const applyEditsStartMs = import.meta.env.DEV ? performance.now() : 0;
             if (placed) applyEdits('placement');
@@ -1549,17 +1555,22 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Delete && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           const px = pixelFromCursor(state);
-          pushSnapshot(history, state.roomData);
+          const pending = capturePendingSnapshot(state.roomData);
           const erased = erasePixelMaterialAt(state, px.x, px.y);
-          if (erased) applyEdits('placement');
-          else history.undoStack.pop();
+          if (erased) {
+            commitPendingSnapshot(history, pending);
+            applyEdits('placement');
+          }
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
-          pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
-          deleteAtCursorBrushed(state);
-          syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
-          applyEdits('placement');
+          const pending = captureCampaignSpawnPendingSnapshot(campaignSpawnCtx);
+          const deleted = deleteAtCursorBrushed(state);
+          if (deleted) {
+            if (pending) commitPendingSnapshot(history, pending);
+            syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+            applyEdits('placement');
+          }
           lastDragBlockX = state.cursorBlockX;
           lastDragBlockY = state.cursorBlockY;
         }
@@ -1571,20 +1582,24 @@ export function createEditorController(
     // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
       if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
-        pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
+        const pending = captureCampaignSpawnPendingSnapshot(campaignSpawnCtx);
+        let changed: boolean;
         if (state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           // Pixel-material tool: right-click erases the exact native pixel
           // under the cursor, not whatever block-grid element deleteAtCursor
           // would otherwise find there.
           const px = pixelFromCursor(state);
-          erasePixelMaterialAt(state, px.x, px.y);
+          changed = erasePixelMaterialAt(state, px.x, px.y);
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else {
-          deleteAtCursorBrushed(state);
-          syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+          changed = deleteAtCursorBrushed(state);
+          if (changed) syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
         }
-        applyEdits('placement');
+        if (changed) {
+          if (pending) commitPendingSnapshot(history, pending);
+          applyEdits('placement');
+        }
         lastDragBlockX = state.cursorBlockX;
         lastDragBlockY = state.cursorBlockY;
       }
@@ -1764,8 +1779,8 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Delete) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
-          deleteAtCursorBrushed(state);
-          applyEdits('placement');
+          const deleted = deleteAtCursorBrushed(state);
+          if (deleted) applyEdits('placement');
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
@@ -1804,8 +1819,8 @@ export function createEditorController(
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
         lastDragBlockX = state.cursorBlockX;
         lastDragBlockY = state.cursorBlockY;
-        deleteAtCursorBrushed(state);
-        applyEdits('placement');
+        const deleted = deleteAtCursorBrushed(state);
+        if (deleted) applyEdits('placement');
       }
     }
 

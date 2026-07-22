@@ -52,8 +52,8 @@ function removeByUid<T extends { uid: number }>(arr: T[] | undefined, uid: numbe
 /**
  * Deletes the element at the cursor location.
  */
-export function deleteAtCursor(state: EditorState): void {
-  deleteAt(state, state.cursorBlockX, state.cursorBlockY);
+export function deleteAtCursor(state: EditorState): boolean {
+  return deleteAt(state, state.cursorBlockX, state.cursorBlockY);
 }
 
 /**
@@ -61,17 +61,21 @@ export function deleteAtCursor(state: EditorState): void {
  * (single/3x3/5x5/rect/fill) the same way `placeAtCursor` does for placement.
  * Used for right-click delete and right-drag erase so all brush tools can
  * also be used to remove elements, not just place them.
+ *
+ * Returns whether at least one cell in the brush actually removed something —
+ * callers should skip history/dirty work entirely when this is `false`.
  */
-export function deleteAtCursorBrushed(state: EditorState): void {
+export function deleteAtCursorBrushed(state: EditorState): boolean {
   const room = state.roomData;
-  if (room === null) return;
+  if (room === null) return false;
 
   if (state.brushMode === 'fill') {
     const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, 'tile' as FillKind);
+    let changed = false;
     for (const cell of cells) {
-      deleteAt(state, cell.x, cell.y);
+      if (deleteAt(state, cell.x, cell.y)) changed = true;
     }
-    return;
+    return changed;
   }
 
   if (state.brushMode !== 'single') {
@@ -82,13 +86,14 @@ export function deleteAtCursorBrushed(state: EditorState): void {
       state.brushRectStartBlockX,
       state.brushRectStartBlockY,
     );
+    let changed = false;
     for (const cell of cells) {
-      deleteAt(state, cell.x, cell.y);
+      if (deleteAt(state, cell.x, cell.y)) changed = true;
     }
-    return;
+    return changed;
   }
 
-  deleteAt(state, state.cursorBlockX, state.cursorBlockY);
+  return deleteAt(state, state.cursorBlockX, state.cursorBlockY);
 }
 
 /**
@@ -117,9 +122,9 @@ export function deleteAtCursorBrushed(state: EditorState): void {
  *    intentionally left matching prior behaviour rather than given new,
  *    separately-defined semantics.
  */
-function deleteAt(state: EditorState, bx: number, by: number): void {
+function deleteAt(state: EditorState, bx: number, by: number): boolean {
   const room = state.roomData;
-  if (room === null) return;
+  if (room === null) return false;
 
   const savedCursorX = state.cursorBlockX;
   const savedCursorY = state.cursorBlockY;
@@ -135,13 +140,13 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
   state.cursorBlockX = savedCursorX;
   state.cursorBlockY = savedCursorY;
 
-  if (target === null) return;
+  if (target === null) return false;
   // Visible+locked candidates are returned by the predicate above so the
   // walk stops on them (rather than silently skipping past a protector), but
   // they must never actually be deleted — check again here explicitly.
-  if (isLayerLocked(state, getLayerForElementType(target.element.type))) return;
+  if (isLayerLocked(state, getLayerForElementType(target.element.type))) return false;
 
-  deleteResolvedCandidate(state, target, Math.floor(bx), Math.floor(by));
+  return deleteResolvedCandidate(state, target, Math.floor(bx), Math.floor(by));
 }
 
 /**
@@ -150,11 +155,12 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
  * point index) — so the deleted element is guaranteed to be the one that was
  * permission-checked.
  */
-function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandidate, cellX: number, cellY: number): void {
+function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandidate, cellX: number, cellY: number): boolean {
   const room = state.roomData;
-  if (room === null) return;
+  if (room === null) return false;
   const { element } = candidate;
   const uid = element.uid;
+  let removed = true;
 
   switch (element.type) {
     case 'campaignSpawn':
@@ -162,60 +168,60 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       break;
     case 'playerSpawn':
       // Singleton marker — not deletable, matches prior behaviour.
-      return;
+      return false;
     case 'transition':
-      removeByUid(room.transitions, uid);
+      removed = removeByUid(room.transitions, uid);
       break;
     case 'enemy':
-      removeByUid(room.enemies, uid);
+      removed = removeByUid(room.enemies, uid);
       break;
     case 'saveTomb':
-      removeByUid(room.saveTombs, uid);
+      removed = removeByUid(room.saveTombs, uid);
       break;
     case 'skillTomb':
-      removeByUid(room.skillTombs, uid);
+      removed = removeByUid(room.skillTombs, uid);
       break;
     case 'zipMoveBlock':
-      removeByUid(room.zipMoveBlocks, uid);
+      removed = removeByUid(room.zipMoveBlocks, uid);
       break;
     case 'challengeField':
-      removeByUid(room.challengeFields, uid);
+      removed = removeByUid(room.challengeFields, uid);
       break;
     case 'challengeGate':
-      removeByUid(room.challengeGates, uid);
+      removed = removeByUid(room.challengeGates, uid);
       break;
     case 'gate':
-      removeByUid(room.gates, uid);
+      removed = removeByUid(room.gates, uid);
       break;
     case 'challengeTotem':
-      removeByUid(room.challengeTotems, uid);
+      removed = removeByUid(room.challengeTotems, uid);
       break;
     case 'dustContainer':
-      removeByUid(room.dustContainers, uid);
+      removed = removeByUid(room.dustContainers, uid);
       break;
     case 'dustContainerPiece':
-      removeByUid(room.dustContainerPieces, uid);
+      removed = removeByUid(room.dustContainerPieces, uid);
       break;
     case 'dustBoostJar':
-      removeByUid(room.dustBoostJars, uid);
+      removed = removeByUid(room.dustBoostJars, uid);
       break;
     case 'dustSwarm':
-      removeByUid(room.dustSwarms, uid);
+      removed = removeByUid(room.dustSwarms, uid);
       break;
     case 'lambdaAnchor':
-      removeByUid(room.lambdaAnchors, uid);
+      removed = removeByUid(room.lambdaAnchors, uid);
       break;
     case 'fireflyJar':
-      removeByUid(room.fireflyJars, uid);
+      removed = removeByUid(room.fireflyJars, uid);
       break;
     case 'springboard':
-      removeByUid(room.springboards, uid);
+      removed = removeByUid(room.springboards, uid);
       break;
     case 'breakableBlock': {
       // Removing an entire shared group at once, matching prior behaviour.
       const breakableBlocks = room.breakableBlocks ?? [];
       const target = breakableBlocks.find(b => b.uid === uid);
-      if (!target) break;
+      if (!target) return false;
       const groupId = target.groupId;
       const removedUids = new Set<number>();
       if (groupId !== undefined) {
@@ -230,39 +236,39 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
         removeByUid(breakableBlocks, uid);
       }
       state.selectedElements = state.selectedElements.filter(e => !removedUids.has(e.uid));
-      return;
+      return true;
     }
     case 'dustPile':
-      removeByUid(room.dustPiles, uid);
+      removed = removeByUid(room.dustPiles, uid);
       break;
     case 'grasshopperArea':
-      removeByUid(room.grasshopperAreas, uid);
+      removed = removeByUid(room.grasshopperAreas, uid);
       break;
     case 'fireflyArea':
-      removeByUid(room.fireflyAreas, uid);
+      removed = removeByUid(room.fireflyAreas, uid);
       break;
     case 'decoration':
-      removeByUid(room.decorations, uid);
+      removed = removeByUid(room.decorations, uid);
       break;
     case 'wall':
-      removeByUid(room.interiorWalls, uid);
+      removed = removeByUid(room.interiorWalls, uid);
       break;
     case 'lightSource':
-      removeByUid(room.lightSources, uid);
+      removed = removeByUid(room.lightSources, uid);
       break;
     case 'sunbeam':
-      removeByUid(room.sunbeams, uid);
+      removed = removeByUid(room.sunbeams, uid);
       break;
     case 'sceneLight':
-      removeByUid(room.sceneLights, uid);
+      removed = removeByUid(room.sceneLights, uid);
       break;
     case 'ambientLightBlocker':
-      removeByUid(room.ambientLightBlockers, uid);
+      removed = removeByUid(room.ambientLightBlockers, uid);
       break;
     case 'waterZone': {
       const zones = room.waterZones ?? [];
       const zone = zones.find(z => z.uid === uid);
-      if (!zone) break;
+      if (!zone) return false;
       removeByUid(zones, uid);
       for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
         zones.push({ uid: allocateUid(state), ...piece });
@@ -273,7 +279,7 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
     case 'lavaZone': {
       const zones = room.lavaZones ?? [];
       const zone = zones.find(z => z.uid === uid);
-      if (!zone) break;
+      if (!zone) return false;
       removeByUid(zones, uid);
       for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
         zones.push({ uid: allocateUid(state), ...piece });
@@ -284,7 +290,7 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
     case 'timeStopField': {
       const zones = room.timeStopFields ?? [];
       const zone = zones.find(z => z.uid === uid);
-      if (!zone) break;
+      if (!zone) return false;
       removeByUid(zones, uid);
       for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
         zones.push({ uid: allocateUid(state), ...piece });
@@ -292,37 +298,37 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       break;
     }
     case 'crumbleBlock':
-      removeByUid(room.crumbleBlocks, uid);
+      removed = removeByUid(room.crumbleBlocks, uid);
       break;
     case 'fallingBlock':
-      removeByUid(room.fallingBlocks, uid);
+      removed = removeByUid(room.fallingBlocks, uid);
       break;
     case 'backgroundBlock':
-      removeByUid(room.backgroundBlocks, uid);
+      removed = removeByUid(room.backgroundBlocks, uid);
       break;
     case 'spike':
-      removeByUid(room.spikes, uid);
+      removed = removeByUid(room.spikes, uid);
       break;
     case 'bouncePad':
-      removeByUid(room.bouncePads, uid);
+      removed = removeByUid(room.bouncePads, uid);
       break;
     case 'kineticBlock':
-      removeByUid(room.kineticBlocks, uid);
+      removed = removeByUid(room.kineticBlocks, uid);
       break;
     case 'grappleCarryBlock':
-      removeByUid(room.grappleCarryBlocks, uid);
+      removed = removeByUid(room.grappleCarryBlocks, uid);
       break;
     case 'phantasmalTile':
-      removeByUid(room.phantasmalTiles, uid);
+      removed = removeByUid(room.phantasmalTiles, uid);
       break;
     case 'dialogueTrigger':
-      removeByUid(room.dialogueTriggers, uid);
+      removed = removeByUid(room.dialogueTriggers, uid);
       break;
     case 'guideDustPath': {
       const paths = room.guideDustPaths ?? [];
       const path = paths.find(p => p.uid === uid);
       const pointIndex = candidate.guideDustPathPointIndex;
-      if (!path || pointIndex === undefined) break;
+      if (!path || pointIndex === undefined) return false;
       if (path.points.length <= 2) {
         removeByUid(paths, uid);
       } else {
@@ -330,16 +336,18 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       }
       state.guideDustPathSelectedPointIndex = null;
       state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
-      return;
+      return true;
     }
     case 'customBlock':
-      removeByUid(room.customBlockPlacements, uid);
+      removed = removeByUid(room.customBlockPlacements, uid);
       break;
     default:
       // Element types without deletion support (e.g. those not reachable via
       // hit-testing at all) fall through as a no-op.
-      return;
+      return false;
   }
 
+  if (!removed) return false;
   state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
+  return true;
 }
