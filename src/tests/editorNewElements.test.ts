@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PALETTE_ITEMS } from '../editor/editorPaletteItems';
-import { createEditorState } from '../editor/editorState';
+import { createEditorState, EditorTool } from '../editor/editorState';
 import type { EditorRoomData } from '../editor/editorElementTypes';
 import { placeAtCursor } from '../editor/editorPlaceTool';
 import { placeEnemyAtCursor } from '../editor/editorEnemyPlacer';
@@ -71,6 +71,7 @@ function makeStateWithItem(
 ) {
   const state = existingState ?? createEditorState();
   state.roomData = room;
+  state.activeTool = EditorTool.Place;
   const item = PALETTE_ITEMS.find(i => i.id === itemId);
   assert.ok(item, `palette item ${itemId} must exist`);
   state.selectedPaletteItem = item!;

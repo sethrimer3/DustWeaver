@@ -18,6 +18,7 @@ import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
 import { anchorForMaterial } from './editorPixelMaterialTool';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { getRectBrushPreview, getSquareBrushPreview } from './editorBrush';
+import { getPlacementStatus } from './editorLayers';
 import {
   PREVIEW_COLOR, PREVIEW_RAMP_COLOR, PREVIEW_STAIRS_COLOR, PREVIEW_PLATFORM_COLOR, PREVIEW_PILLAR_HALF_COLOR,
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,
@@ -134,6 +135,49 @@ function drawBlockSpriteGhost(
 // Placement preview (cursor ghost for the active Place tool item)
 // ============================================================================
 
+/**
+ * Draws a blocked-placement treatment over the given pixel-space rect:
+ * diagonal hatch fill (works at any zoom/resolution, unlike a thin dashed
+ * line), a warning-orange/red outline (not relying on red/green alone), and
+ * a small lock glyph. Used for every preview type — when the destination
+ * layer itself is blocked, the WHOLE footprint (including multi-cell
+ * brushes) is covered by one blocked overlay rather than per-cell styling.
+ */
+function drawBlockedPlacementOverlay(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(120,20,20,0.22)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,140,90,0.9)';
+  ctx.lineWidth = 1;
+  const step = Math.max(6, Math.min(14, w / 3));
+  for (let d = -h; d < w; d += step) {
+    ctx.beginPath();
+    ctx.moveTo(x + d, y + h);
+    ctx.lineTo(x + d + h, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,120,70,0.95)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  const cx = x + w / 2;
+  const cy = y + h / 2;
+  const s = Math.max(6, Math.min(14, Math.min(w, h) * 0.4));
+  ctx.font = `${Math.round(s)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,235,225,0.95)';
+  ctx.fillText('🚫', cx, cy);
+  ctx.textAlign = 'start';
+  ctx.textBaseline = 'alphabetic';
+}
+
 export function drawPlacementPreview(
   ctx: CanvasRenderingContext2D,
   room: EditorRoomData,
@@ -143,6 +187,8 @@ export function drawPlacementPreview(
   zoom: number,
 ): void {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return;
+
+  const placementStatus = getPlacementStatus(state);
 
   // Pixel-material tool: highlight the exact footprint that will be painted
   // (a single native pixel for Sand 1x1, a snapped 2x2 block for Sand 2x2).
@@ -156,6 +202,10 @@ export function drawPlacementPreview(
     const x = anchor.x * zoom + offsetXPx;
     const y = anchor.y * zoom + offsetYPx;
     const wh = cellPx * footprint;
+    if (!placementStatus.allowed) {
+      drawBlockedPlacementOverlay(ctx, x, y, wh, wh);
+      return;
+    }
     ctx.fillStyle = 'rgba(255,230,150,0.55)';
     ctx.fillRect(x, y, wh, wh);
     // Thicker stroke for the larger footprint so it reads as a distinct
@@ -163,6 +213,46 @@ export function drawPlacementPreview(
     ctx.strokeStyle = 'rgba(255,240,190,0.9)';
     ctx.lineWidth = footprint > 1 ? 2 : 1;
     ctx.strokeRect(x, y, wh, wh);
+    return;
+  }
+
+  // Any other placement type: if the destination layer itself is blocked
+  // (hidden/locked/solo/select-only), show the whole footprint as blocked
+  // rather than reproducing the shape-accurate ghost below — this covers
+  // brush modes (rect/3x3/5x5) as one blocked region too, since a blocked
+  // layer blocks the entire brush operation, not per-cell.
+  if (!placementStatus.allowed) {
+    let wBlock = 1;
+    let hBlock = 1;
+    let xBlock = state.cursorBlockX;
+    let yBlock = state.cursorBlockY;
+    const itemPreview = getPlacementPreview(state);
+    if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null) {
+      const rectPreview = getRectBrushPreview(
+        state.cursorBlockX, state.cursorBlockY,
+        state.brushRectStartBlockX, state.brushRectStartBlockY,
+        itemPreview?.wBlock ?? 1, itemPreview?.hBlock ?? 1,
+      );
+      if (rectPreview !== null) {
+        xBlock = rectPreview.x; yBlock = rectPreview.y; wBlock = rectPreview.w; hBlock = rectPreview.h;
+      }
+    } else if (state.brushMode === '3x3' || state.brushMode === '5x5') {
+      const squarePreview = getSquareBrushPreview(
+        state.brushMode, state.cursorBlockX, state.cursorBlockY,
+        itemPreview?.wBlock ?? 1, itemPreview?.hBlock ?? 1,
+      );
+      if (squarePreview !== null) {
+        xBlock = squarePreview.x; yBlock = squarePreview.y; wBlock = squarePreview.w; hBlock = squarePreview.h;
+      }
+    } else if (itemPreview !== null) {
+      wBlock = itemPreview.wBlock;
+      hBlock = itemPreview.hBlock;
+    }
+    const x = xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const y = yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const w = wBlock * BLOCK_SIZE_SMALL * zoom;
+    const h = hBlock * BLOCK_SIZE_SMALL * zoom;
+    if (w > 0 && h > 0) drawBlockedPlacementOverlay(ctx, x, y, w, h);
     return;
   }
 

@@ -22,6 +22,7 @@ import {
   selectBlockTheme,
   activateBlockThemeSlot,
   assignBlockThemeSlot,
+  EditorTool,
 } from '../editor/editorState';
 import type { EditorRoomData } from '../editor/editorElementTypes';
 import { placeAtCursor } from '../editor/editorPlaceTool';
@@ -80,6 +81,7 @@ test('no PALETTE_ITEMS entry sets isBackgroundBlockItem any more', () => {
 test('Background modifier on an ordinary 1x1 block placement creates a background block, no wall', () => {
   const room = makeRoom();
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = room;
   const item = PALETTE_ITEMS.find(i => i.id === 'block_1x1')!;
   state.selectedPaletteItem = item;
@@ -103,6 +105,7 @@ test('Background modifier on an ordinary 1x1 block placement creates a backgroun
 test('Background modifier on a 2x2 block placement uses the 2x2 footprint', () => {
   const room = makeRoom();
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = room;
   const item = PALETTE_ITEMS.find(i => i.id === 'block_2x2')!;
   state.selectedPaletteItem = item;
@@ -121,6 +124,7 @@ test('Background modifier on a 2x2 block placement uses the 2x2 footprint', () =
 test('Background modifier with "blocks ambient light" enabled sets isLightBlockingFlag: 1', () => {
   const room = makeRoom();
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = room;
   const item = PALETTE_ITEMS.find(i => i.id === 'block_1x1')!;
   state.selectedPaletteItem = item;
@@ -138,6 +142,7 @@ test('Background modifier with "blocks ambient light" enabled sets isLightBlocki
 
 test('the background modifier field never simultaneously holds a cracked/falling value', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   // pendingBlockPlacementModifier is a single field, so setting it to
   // 'background' inherently clears out 'cracked'/'tough'/'sensitive'/'crumbling'.
   state.pendingBlockPlacementModifier = 'cracked';
@@ -149,6 +154,7 @@ test('the background modifier field never simultaneously holds a cracked/falling
 test('placing with the background modifier never creates a crumble or falling block', () => {
   const room = makeRoom();
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = room;
   const item = PALETTE_ITEMS.find(i => i.id === 'block_1x1')!;
   state.selectedPaletteItem = item;
@@ -183,6 +189,7 @@ test('existing (legacy) background blocks round-trip unchanged through editor JS
 
 test('activateBlockThemeSlot switches selectedBlockTheme without touching other placement state', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.blockThemeSlots = ['blackRock', 'brownRock', 'dirt', 'blackRock'];
   state.activeBlockThemeSlotIndex = 0;
   state.selectedBlockTheme = 'blackRock';
@@ -203,6 +210,7 @@ test('activateBlockThemeSlot switches selectedBlockTheme without touching other 
 
 test('assignBlockThemeSlot assigns, activates the slot, and updates selectedBlockTheme', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.blockThemeSlots = ['blackRock', 'brownRock', 'dirt', 'blackRock'];
   state.activeBlockThemeSlotIndex = 0;
 
@@ -215,6 +223,7 @@ test('assignBlockThemeSlot assigns, activates the slot, and updates selectedBloc
 
 test('selectBlockTheme (plain theme-chip pick) does not disturb the 4 theme slots', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   const slotsBefore = state.blockThemeSlots.slice();
   selectBlockTheme(state, 'dirt');
   assert.deepEqual(state.blockThemeSlots, slotsBefore);
@@ -223,6 +232,7 @@ test('selectBlockTheme (plain theme-chip pick) does not disturb the 4 theme slot
 
 test('createEditorState seeds 4 always-valid theme slots and a valid active index', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   assert.equal(state.blockThemeSlots.length, 4);
   for (const t of state.blockThemeSlots) assert.equal(typeof t, 'string');
   assert.ok(state.activeBlockThemeSlotIndex >= 0 && state.activeBlockThemeSlotIndex < 4);

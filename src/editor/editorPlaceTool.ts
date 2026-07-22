@@ -37,7 +37,7 @@ import {
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
-import { canPlaceOnLayer, getActiveLayerId } from './editorLayers';
+import { canPlaceOnLayer, getPlacementTargetLayer } from './editorLayers';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -109,7 +109,8 @@ export function placeAtCursor(state: EditorState): boolean {
   const room = state.roomData;
   const item = state.selectedPaletteItem;
   if (room === null || item === null) return false;
-  if (!canPlaceOnLayer(state, getActiveLayerId(state))) return false;
+  const targetLayer = getPlacementTargetLayer(state);
+  if (targetLayer === null || !canPlaceOnLayer(state, targetLayer)) return false;
 
   const uidBefore = state.nextUid;
 

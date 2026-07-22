@@ -35,7 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
-import { ensureActiveLayerVisible, LAYER_LABELS, getActiveLayerId, canMutateElement, canMutateSelection, canPlaceOnLayer } from './editorLayers';
+import { getPlacementStatus, describePlacementBlockReason, canMutateElement, canMutateSelection } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -203,6 +203,12 @@ export function createEditorController(
   // Drag-paint tracking for the pixel-material tool, at native-pixel granularity.
   let lastDragPixelX = INVALID_DRAG_BLOCK;
   let lastDragPixelY = INVALID_DRAG_BLOCK;
+  // Throttles the blocked-placement toast so a held/repeated click on the
+  // same blocked target doesn't spam a toast every attempt — a genuinely
+  // different reason (or target) shows immediately.
+  let lastBlockedPlacementSig = '';
+  let lastBlockedPlacementToastAt = 0;
+  const BLOCKED_PLACEMENT_TOAST_THROTTLE_MS = 1500;
 
   // Saved source room data for transition linking across rooms
   let linkSourceRoomData: typeof state.roomData = null;
@@ -513,12 +519,11 @@ export function createEditorController(
       const campaignTitle = activeCampaignSession.campaign.campaign.title;
       ui = createEditorUI(uiRoot, campaignTitle);
       ui.setCallbacks({
-        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; ensureActiveLayerVisible(state); },
-        onCategoryChange: (cat) => { state.activeCategory = cat; ensureActiveLayerVisible(state); },
+        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
+        onCategoryChange: (cat) => { state.activeCategory = cat; },
         onPaletteItemSelect: (item) => {
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
-          ensureActiveLayerVisible(state);
         },
         onExport: () => {
           if (state.roomData) exportRoomAsJson(state.roomData);
@@ -889,7 +894,6 @@ export function createEditorController(
           };
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
-          ensureActiveLayerVisible(state);
           ui?.update(state);
         },
         onLayerStateChange: (id, patch) => {
@@ -1543,8 +1547,15 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
           }
-        } else if (state.activeTool === EditorTool.Place && !canPlaceOnLayer(state, getActiveLayerId(state))) {
-          showEditorToast(uiRoot, `"${LAYER_LABELS[getActiveLayerId(state)]}" layer is locked, hidden, or excluded — placement is blocked here.`);
+        } else if (state.activeTool === EditorTool.Place && !getPlacementStatus(state).allowed) {
+          const status = getPlacementStatus(state);
+          const sig = `${status.targetLayer ?? ''}:${status.reason ?? ''}`;
+          const now = performance.now();
+          if (sig !== lastBlockedPlacementSig || now - lastBlockedPlacementToastAt > BLOCKED_PLACEMENT_TOAST_THROTTLE_MS) {
+            showEditorToast(uiRoot, describePlacementBlockReason(status.reason, status.targetLayer));
+            lastBlockedPlacementSig = sig;
+            lastBlockedPlacementToastAt = now;
+          }
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           const px = pixelFromCursor(state);
           const pending = capturePendingSnapshot(state.roomData);

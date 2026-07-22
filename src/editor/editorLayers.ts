@@ -200,24 +200,44 @@ export function getLayerForPaletteItem(item: PaletteItem): LayerId {
 }
 
 /**
- * The layer that the current palette/tool selection targets. This drives the
- * active-layer highlight in the layers panel, and gates placement.
+ * The layer that the current placement action would target, or `null` if the
+ * editor is not currently in a state where placement targets any layer.
+ *
+ * This ONLY returns a layer when `activeTool === EditorTool.Place` AND a
+ * palette item is actually selected — it never falls back to `activeCategory`
+ * the way the old overloaded "active layer" concept did (that fallback made
+ * the layers panel highlight a layer even while using Select/Delete, which
+ * misleadingly implied placement was about to happen there). Non-place tools,
+ * or Place with no item selected, get `null` — no destination layer, no
+ * misleading highlight.
  *
  * Special-cased: ordinary block placement (`blocks` category) can target
  * either Terrain or Background depending on the "Background" placement
  * modifier — the one existing "tile family that spans multiple layers".
  */
-export function getActiveLayerId(state: EditorState): LayerId {
+export function getPlacementTargetLayer(state: EditorState): LayerId | null {
+  if (state.activeTool !== EditorTool.Place) return null;
   const item = state.selectedPaletteItem;
-  if (state.activeTool === EditorTool.Place && item !== null) {
-    const override = PALETTE_ITEM_LAYER_OVERRIDES[item.id];
-    if (override !== undefined) return override;
-    if (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'background') {
-      return 'background';
-    }
-    return CATEGORY_DEFAULT_LAYER[item.category];
+  if (item === null) return null;
+  const override = PALETTE_ITEM_LAYER_OVERRIDES[item.id];
+  if (override !== undefined) return override;
+  if (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'background') {
+    return 'background';
   }
-  return CATEGORY_DEFAULT_LAYER[state.activeCategory] ?? 'terrain';
+  return CATEGORY_DEFAULT_LAYER[item.category];
+}
+
+/**
+ * The set of layers represented by the current selection — purely
+ * informational (drives the layers panel's "contains selection" marker).
+ * Never reads or mutates visibility/lock/solo/select-only/selection state.
+ */
+export function getSelectedElementLayers(state: EditorState): ReadonlySet<LayerId> {
+  const layers = new Set<LayerId>();
+  for (const el of state.selectedElements) {
+    layers.add(getLayerForElementType(el.type));
+  }
+  return layers;
 }
 
 // ── Visibility / lock / solo / select-only queries ───────────────────────
@@ -277,24 +297,82 @@ export function canPlaceOnLayer(state: EditorState, layerId: LayerId): boolean {
   return isLayerEditable(state, layerId);
 }
 
-/**
- * Called whenever the active tool/category/palette item changes. If the
- * layer the new selection targets is currently invisible, reveals it (joining
- * the solo set if one is active, or simply un-hiding it otherwise) so the
- * designer can immediately place into it — per "hidden active layer"
- * auto-reveal UX rather than a silent no-op or requiring a manual toggle.
- */
-export function ensureActiveLayerVisible(state: EditorState): void {
-  const id = getActiveLayerId(state);
-  const layer = state.layers[id];
-  if (isAnyLayerSoloed(state)) {
-    if (!layer.solo) layer.solo = true;
-  } else if (!layer.visible) {
-    layer.visible = true;
-  }
+// ── Placement block-reason model ─────────────────────────────────────────
+
+export type PlacementBlockReason =
+  | 'no-room'
+  | 'no-item'
+  | 'hidden'
+  | 'locked'
+  | 'solo-excluded'
+  | 'select-only-excluded'
+  | 'invalid-location'
+  | 'occupied'
+  | 'capacity'
+  | null;
+
+export interface PlacementStatus {
+  targetLayer: LayerId | null;
+  allowed: boolean;
+  reason: PlacementBlockReason;
 }
 
-/** Whether the active layer (current tool/palette target) is locked — placement should be blocked. */
-export function isActiveLayerLocked(state: EditorState): boolean {
-  return isLayerLocked(state, getActiveLayerId(state));
+/**
+ * Pure, advisory/UI-only placement-status helper — centralizes "why would
+ * placement be blocked right now" for the layers panel, preview styling, and
+ * toast feedback. The actual mutation functions (`placeAtCursor`/`placeAt`/
+ * `placePixelMaterialAt`) remain the sole authority on whether a placement is
+ * actually performed; this never mutates state.
+ *
+ * `isValidLocation`, if provided, lets a caller fold in a cheap location
+ * check (in-bounds, doesn't overlap an existing element, etc.) without this
+ * helper duplicating the full placement dispatcher's occupancy/capacity
+ * logic — most location-specific reasons (`occupied`, `capacity`) are only
+ * distinguished if the caller's predicate reports them; otherwise an invalid
+ * location is reported generically as `invalid-location`.
+ */
+export function getPlacementStatus(
+  state: EditorState,
+  isValidLocation?: () => boolean | PlacementBlockReason,
+): PlacementStatus {
+  if (state.roomData === null) return { targetLayer: null, allowed: false, reason: 'no-room' };
+
+  const targetLayer = getPlacementTargetLayer(state);
+  if (targetLayer === null) return { targetLayer: null, allowed: false, reason: 'no-item' };
+
+  const layer = state.layers[targetLayer];
+  if (!isLayerVisible(state, targetLayer)) {
+    return { targetLayer, allowed: false, reason: isAnyLayerSoloed(state) && !layer.solo ? 'solo-excluded' : 'hidden' };
+  }
+  if (layer.locked) {
+    return { targetLayer, allowed: false, reason: 'locked' };
+  }
+  if (isAnySelectOnlyActive(state) && !layer.selectOnly) {
+    return { targetLayer, allowed: false, reason: 'select-only-excluded' };
+  }
+
+  if (isValidLocation !== undefined) {
+    const result = isValidLocation();
+    if (result === false) return { targetLayer, allowed: false, reason: 'invalid-location' };
+    if (typeof result === 'string') return { targetLayer, allowed: false, reason: result };
+  }
+
+  return { targetLayer, allowed: true, reason: null };
+}
+
+/** Human-readable, one-line reason text for toast/tooltip use. */
+export function describePlacementBlockReason(reason: PlacementBlockReason, layerId: LayerId | null): string {
+  const label = layerId !== null ? LAYER_LABELS[layerId] : 'This layer';
+  switch (reason) {
+    case 'no-room': return 'No room is loaded.';
+    case 'no-item': return 'No placeable item is selected.';
+    case 'hidden': return `${label} layer is hidden.`;
+    case 'locked': return `${label} layer is locked.`;
+    case 'solo-excluded': return `${label} is excluded by Solo mode.`;
+    case 'select-only-excluded': return `${label} is outside the current select-only scope.`;
+    case 'invalid-location': return 'That location is not valid for placement.';
+    case 'occupied': return 'That location is already occupied.';
+    case 'capacity': return 'Placement limit reached.';
+    case null: return '';
+  }
 }

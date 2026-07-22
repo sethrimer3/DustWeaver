@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import type { EditorRoomData, EditorTimeStopField } from '../editor/editorElementTypes';
-import { createEditorState } from '../editor/editorState';
+import { createEditorState, EditorTool } from '../editor/editorState';
 import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
 import { serializeSelectedElements, pasteFromClipboard } from '../editor/editorDragCopyPaste';
 import { createEditorHistory, pushSnapshot, undo, redo } from '../editor/editorHistory';
@@ -66,6 +66,7 @@ function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
 
 test('placing a TimeStop Field tile via the Place tool adds it to room.timeStopFields', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = makeRoom();
   const item = PALETTE_ITEMS.find(i => i.id === 'timestop_field');
   assert.ok(item, 'palette must contain the timestop_field item');
@@ -84,6 +85,7 @@ test('placing a TimeStop Field tile via the Place tool adds it to room.timeStopF
 
 test('placing the same cell twice is idempotent (no duplicate)', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = makeRoom();
   state.selectedPaletteItem = PALETTE_ITEMS.find(i => i.id === 'timestop_field')!;
   state.cursorBlockX = 2;
@@ -95,6 +97,7 @@ test('placing the same cell twice is idempotent (no duplicate)', () => {
 
 test('erasing a placed TimeStop Field tile removes it', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = makeRoom();
   state.selectedPaletteItem = PALETTE_ITEMS.find(i => i.id === 'timestop_field')!;
   state.cursorBlockX = 3;
@@ -108,6 +111,7 @@ test('erasing a placed TimeStop Field tile removes it', () => {
 
 test('erasing one cell of a larger placed rectangle splits it, keeping the rest', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = makeRoom({
     timeStopFields: [{ uid: 1, xBlock: 0, yBlock: 0, wBlock: 3, hBlock: 1 }],
   });
@@ -124,6 +128,7 @@ test('erasing one cell of a larger placed rectangle splits it, keeping the rest'
 
 test('placing a TimeStop Field tile does not affect existing water/lava zones or walls', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   state.roomData = makeRoom({
     waterZones: [{ uid: 10, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 }],
     interiorWalls: [{ uid: 11, xBlock: 0, yBlock: 0, wBlock: 1, hBlock: 1 } as never],
@@ -269,6 +274,7 @@ test('undo restores TimeStop Field cells removed by a subsequent edit; redo re-r
 
 test('copy-pasting a TimeStop Field tile preserves its type and gets a fresh distinct uid', () => {
   const state = createEditorState();
+  state.activeTool = EditorTool.Place;
   const room = makeRoom({ timeStopFields: [{ uid: 42, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 }] });
   state.roomData = room;
   state.nextUid = 100;

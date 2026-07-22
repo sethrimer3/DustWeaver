@@ -9,7 +9,11 @@
  */
 
 import type { EditorState, EditorUICallbacks } from './editorState';
-import { LAYER_IDS, LAYER_LABELS, getActiveLayerId, type LayerId, type EditorLayerState } from './editorLayers';
+import {
+  LAYER_IDS, LAYER_LABELS, getPlacementTargetLayer, getSelectedElementLayers,
+  getPlacementStatus, describePlacementBlockReason, getLayerForElementType,
+  type LayerId, type EditorLayerState,
+} from './editorLayers';
 import { PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
 
 export interface EditorLayersPanel {
@@ -75,10 +79,13 @@ export function createEditorLayersPanel(
   interface RowRefs {
     row: HTMLDivElement;
     label: HTMLDivElement;
+    marker: HTMLDivElement;
     visibleBtn: HTMLButtonElement;
     lockBtn: HTMLButtonElement;
     soloBtn: HTMLButtonElement;
     selectOnlyBtn: HTMLButtonElement;
+    /** Cached signature of the last-applied presentation, to avoid redundant DOM writes. */
+    lastSig: string;
   }
   const rows = new Map<LayerId, RowRefs>();
 
@@ -114,40 +121,99 @@ export function createEditorLayersPanel(
     label.textContent = LAYER_LABELS[id];
     label.style.cssText = 'flex: 1; font-size: 10.5px; color: rgba(220,255,225,0.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
 
+    // Status marker: shows target/selection/restricted state via icon + text
+    // (never color alone). Kept as a distinct trailing element so target and
+    // selection markers can combine (e.g. "target, also restricted").
+    const marker = document.createElement('div');
+    marker.style.cssText = 'font-size: 10px; min-width: 12px; text-align: right; white-space: nowrap;';
+    marker.setAttribute('aria-hidden', 'false');
+
     row.appendChild(visibleBtn);
     row.appendChild(lockBtn);
     row.appendChild(soloBtn);
     row.appendChild(selectOnlyBtn);
     row.appendChild(label);
+    row.appendChild(marker);
     rowsContainer.appendChild(row);
 
-    rows.set(id, { row, label, visibleBtn, lockBtn, soloBtn, selectOnlyBtn });
+    rows.set(id, { row, label, marker, visibleBtn, lockBtn, soloBtn, selectOnlyBtn, lastSig: '' });
+  }
+
+  function toggleSig(l: EditorLayerState): string {
+    return `${l.visible ? 1 : 0}${l.locked ? 1 : 0}${l.solo ? 1 : 0}${l.selectOnly ? 1 : 0}`;
   }
 
   function sync(state: EditorState): void {
-    const activeLayerId = getActiveLayerId(state);
+    const targetLayer = getPlacementTargetLayer(state);
+    const selectedLayers = getSelectedElementLayers(state);
+    // Count elements per selected layer, for the "N selected" marker.
+    const selectionCountByLayer = new Map<LayerId, number>();
+    for (const el of state.selectedElements) {
+      const layerId = getLayerForElementType(el.type);
+      selectionCountByLayer.set(layerId, (selectionCountByLayer.get(layerId) ?? 0) + 1);
+    }
+
+    const status = getPlacementStatus(state);
+    const restrictedReasons = new Set(['hidden', 'locked', 'solo-excluded', 'select-only-excluded']);
+    const targetIsRestricted = targetLayer !== null && restrictedReasons.has(status.reason ?? '');
+
     for (const id of LAYER_IDS) {
       const r = rows.get(id)!;
       const layer = state.layers[id];
+      const sig = toggleSig(layer);
+      if (sig !== r.lastSig) {
+        r.lastSig = sig;
+        r.visibleBtn.dataset.on = layer.visible ? '1' : '0';
+        r.visibleBtn.style.background = layer.visible ? TOGGLE_ON_BG : TOGGLE_OFF_BG;
+        r.visibleBtn.style.opacity = layer.visible ? '1' : '0.55';
 
-      r.visibleBtn.dataset.on = layer.visible ? '1' : '0';
-      r.visibleBtn.style.background = layer.visible ? TOGGLE_ON_BG : TOGGLE_OFF_BG;
-      r.visibleBtn.style.opacity = layer.visible ? '1' : '0.55';
+        r.lockBtn.dataset.on = layer.locked ? '1' : '0';
+        r.lockBtn.style.background = layer.locked ? LOCK_ON_BG : TOGGLE_OFF_BG;
 
-      r.lockBtn.dataset.on = layer.locked ? '1' : '0';
-      r.lockBtn.style.background = layer.locked ? LOCK_ON_BG : TOGGLE_OFF_BG;
+        r.soloBtn.dataset.on = layer.solo ? '1' : '0';
+        r.soloBtn.style.background = layer.solo ? SOLO_ON_BG : TOGGLE_OFF_BG;
 
-      r.soloBtn.dataset.on = layer.solo ? '1' : '0';
-      r.soloBtn.style.background = layer.solo ? SOLO_ON_BG : TOGGLE_OFF_BG;
+        r.selectOnlyBtn.dataset.on = layer.selectOnly ? '1' : '0';
+        r.selectOnlyBtn.style.background = layer.selectOnly ? SELECT_ONLY_ON_BG : TOGGLE_OFF_BG;
+      }
 
-      r.selectOnlyBtn.dataset.on = layer.selectOnly ? '1' : '0';
-      r.selectOnlyBtn.style.background = layer.selectOnly ? SELECT_ONLY_ON_BG : TOGGLE_OFF_BG;
+      const isTarget = id === targetLayer;
+      const isRestrictedTarget = isTarget && targetIsRestricted;
+      const containsSelection = selectedLayers.has(id);
+      const selCount = selectionCountByLayer.get(id) ?? 0;
 
-      const isActive = id === activeLayerId;
-      r.row.style.background = isActive ? 'rgba(120,200,255,0.14)' : 'transparent';
-      r.row.style.boxShadow = isActive ? 'inset 0 0 0 1px rgba(120,200,255,0.55)' : 'none';
-      r.label.style.color = isActive ? '#eaf6ff' : 'rgba(220,255,225,0.85)';
-      r.label.style.fontWeight = isActive ? 'bold' : 'normal';
+      let markerText = '';
+      let title = '';
+      if (isTarget) {
+        markerText = isRestrictedTarget ? '⛔ target' : '▶ target';
+        title = isRestrictedTarget
+          ? `Placement target — blocked: ${describePlacementBlockReason(status.reason, targetLayer)}`
+          : 'Placement target for the active tool';
+      } else if (containsSelection) {
+        markerText = `● sel${selCount > 1 ? ` (${selCount})` : ''}`;
+        title = 'Contains part of the current selection';
+      }
+
+      const presentationSig = `${isTarget}|${isRestrictedTarget}|${containsSelection}|${markerText}|${selCount}`;
+      if (presentationSig !== (r.row.dataset.presentationSig ?? '')) {
+        r.row.dataset.presentationSig = presentationSig;
+        r.row.style.background = isTarget
+          ? (isRestrictedTarget ? 'rgba(255,120,80,0.12)' : 'rgba(120,200,255,0.14)')
+          : containsSelection ? 'rgba(230,190,40,0.08)' : 'transparent';
+        r.row.style.boxShadow = isTarget
+          ? `inset 0 0 0 1px ${isRestrictedTarget ? 'rgba(255,120,80,0.7)' : 'rgba(120,200,255,0.55)'}`
+          : containsSelection ? 'inset 0 0 0 1px rgba(230,190,40,0.4)' : 'none';
+        r.label.style.color = isTarget ? '#eaf6ff' : 'rgba(220,255,225,0.85)';
+        r.label.style.fontWeight = isTarget ? 'bold' : 'normal';
+        r.marker.textContent = markerText;
+        r.marker.title = title;
+        r.marker.style.color = isRestrictedTarget ? '#ffb08a' : isTarget ? '#9fd8ff' : '#e0c96a';
+        r.row.setAttribute('aria-current', isTarget ? 'true' : 'false');
+        r.row.setAttribute(
+          'aria-label',
+          `${LAYER_LABELS[id]}${isTarget ? ', placement target' : ''}${isRestrictedTarget ? ', blocked: ' + describePlacementBlockReason(status.reason, targetLayer) : ''}${containsSelection ? ', contains selection' : ''}`,
+        );
+      }
     }
   }
 
