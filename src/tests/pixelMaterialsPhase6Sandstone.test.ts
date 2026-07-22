@@ -43,6 +43,7 @@ import {
 import { placePixelMaterialAt, erasePixelMaterialAt } from '../editor/editorPixelMaterialTool';
 import { editorRoomDataToJson, jsonToEditorRoomData } from '../editor/roomJson';
 import type { EditorRoomData } from '../editor/editorState';
+import { createDefaultEditorLayers } from '../editor/editorLayers';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ function makeEditorState(room: EditorRoomData) {
   return {
     roomData: room,
     selectedElements: [],
+    layers: createDefaultEditorLayers(),
     get nextUid() { return nextUid.current; },
     set nextUid(v: number) { nextUid.current = v; },
   } as unknown as Parameters<typeof placePixelMaterialAt>[0];

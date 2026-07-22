@@ -37,7 +37,7 @@ import {
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
-import { isActiveLayerLocked } from './editorLayers';
+import { canPlaceOnLayer, getActiveLayerId } from './editorLayers';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -91,13 +91,27 @@ export function getPlacementPreview(state: EditorState): { wBlock: number; hBloc
 
 /**
  * Places the currently selected palette item at the cursor location,
- * respecting the active brush mode for tile-like items.
+ * respecting the active brush mode for tile-like items. Enforces the
+ * shared layer-mutation policy (hidden/locked/solo-excluded/select-only-
+ * excluded) INSIDE this function, using the actual destination layer for
+ * the selected palette item + pending placement modifier (not merely "the
+ * active layer" in the general sense) — every brush mode (single, fill,
+ * rect, 3x3, 5x5) routes through this same check since they all funnel
+ * through this one entry point.
+ *
+ * Returns `true` if at least one element was actually placed, `false` if
+ * the placement was blocked or was a no-op (nothing to do / everything
+ * rejected) — callers should skip history/dirty work when this returns
+ * `false`. Blocked placement returns before allocating any UIDs or
+ * touching room data.
  */
-export function placeAtCursor(state: EditorState): void {
+export function placeAtCursor(state: EditorState): boolean {
   const room = state.roomData;
   const item = state.selectedPaletteItem;
-  if (room === null || item === null) return;
-  if (isActiveLayerLocked(state)) return;
+  if (room === null || item === null) return false;
+  if (!canPlaceOnLayer(state, getActiveLayerId(state))) return false;
+
+  const uidBefore = state.nextUid;
 
   // Brush painting: tile-like items support multi-cell brushes.
   const isBrushable =
@@ -118,7 +132,7 @@ export function placeAtCursor(state: EditorState): void {
     for (const cell of cells) {
       placeAt(state, cell.x, cell.y);
     }
-    return;
+    return state.nextUid !== uidBefore;
   }
 
   if (isBrushable && state.brushMode !== 'single') {
@@ -136,10 +150,11 @@ export function placeAtCursor(state: EditorState): void {
     for (const cell of cells) {
       placeAt(state, cell.x, cell.y);
     }
-    return;
+    return state.nextUid !== uidBefore;
   }
 
   placeAt(state, state.cursorBlockX, state.cursorBlockY);
+  return state.nextUid !== uidBefore;
 }
 
 /**

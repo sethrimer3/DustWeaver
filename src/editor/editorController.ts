@@ -35,7 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
-import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId, canMutateElement } from './editorLayers';
+import { ensureActiveLayerVisible, LAYER_LABELS, getActiveLayerId, canMutateElement, canPlaceOnLayer } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -532,8 +532,10 @@ export function createEditorController(
             }
             return; // No applyEdits needed — campaign spawn is not in room data
           }
-          if (state.roomData) handlePropertyChange(state.roomData, state.selectedElements, history, prop, value, state.guideDustPathSelectedPointIndex);
-          applyEdits('metadata');
+          const propertyChanged = state.roomData
+            ? handlePropertyChange(state, history, prop, value, state.guideDustPathSelectedPointIndex)
+            : false;
+          if (propertyChanged) applyEdits('metadata');
         },
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
           if (state.roomData) applyRoomDimensionChange(state.roomData, dimProp, value);
@@ -1418,13 +1420,14 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
           }
-        } else if (state.activeTool === EditorTool.Place && isActiveLayerLocked(state)) {
-          showEditorToast(uiRoot, `"${LAYER_LABELS[getActiveLayerId(state)]}" layer is locked — unlock it to place here.`);
+        } else if (state.activeTool === EditorTool.Place && !canPlaceOnLayer(state, getActiveLayerId(state))) {
+          showEditorToast(uiRoot, `"${LAYER_LABELS[getActiveLayerId(state)]}" layer is locked, hidden, or excluded — placement is blocked here.`);
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
-          pushSnapshot(history, state.roomData);
           const px = pixelFromCursor(state);
-          placePixelMaterialAt(state, px.x, px.y, state.selectedPaletteItem.pixelMaterialId ?? 1);
-          applyEdits('placement');
+          pushSnapshot(history, state.roomData);
+          const placed = placePixelMaterialAt(state, px.x, px.y, state.selectedPaletteItem.pixelMaterialId ?? 1);
+          if (placed) applyEdits('placement');
+          else history.undoStack.pop();
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.id === 'campaign_spawn') {
@@ -1468,7 +1471,7 @@ export function createEditorController(
             }
             const transCountBefore = state.roomData.transitions.length;
             const placementMutationStartMs = import.meta.env.DEV ? performance.now() : 0;
-            placeAtCursor(state);
+            const placed = placeAtCursor(state);
             const placementMutationElapsedMs = import.meta.env.DEV ? performance.now() - placementMutationStartMs : 0;
             if (import.meta.env.DEV) {
               logEditorPerfWarned('placeAtCursor mutation', placementMutationStartMs, state.roomData.id);
@@ -1478,8 +1481,14 @@ export function createEditorController(
               state.brushRectStartBlockX = null;
               state.brushRectStartBlockY = null;
             }
+            if (!placed) {
+              // No-op placement (blocked layer, dedup, overlap) — drop the
+              // undo snapshot we speculatively pushed above and skip the
+              // rebuild/dirty-marking work entirely.
+              history.undoStack.pop();
+            }
             const applyEditsStartMs = import.meta.env.DEV ? performance.now() : 0;
-            applyEdits('placement');
+            if (placed) applyEdits('placement');
             const applyEditsElapsedMs = import.meta.env.DEV ? performance.now() - applyEditsStartMs : 0;
             if (import.meta.env.DEV) {
               const totalElapsedMs = performance.now() - totalPlacementStartMs;
@@ -1539,10 +1548,11 @@ export function createEditorController(
             }
           }
         } else if (state.activeTool === EditorTool.Delete && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
-          pushSnapshot(history, state.roomData);
           const px = pixelFromCursor(state);
-          erasePixelMaterialAt(state, px.x, px.y);
-          applyEdits('placement');
+          pushSnapshot(history, state.roomData);
+          const erased = erasePixelMaterialAt(state, px.x, px.y);
+          if (erased) applyEdits('placement');
+          else history.undoStack.pop();
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
@@ -1732,14 +1742,14 @@ export function createEditorController(
       if (px.x !== lastDragPixelX || px.y !== lastDragPixelY) {
         const fromX = lastDragPixelX === INVALID_DRAG_BLOCK ? px.x : lastDragPixelX;
         const fromY = lastDragPixelY === INVALID_DRAG_BLOCK ? px.y : lastDragPixelY;
-        paintPixelMaterialLine(
+        const changed = paintPixelMaterialLine(
           state, fromX, fromY, px.x, px.y,
           state.selectedPaletteItem.pixelMaterialId ?? 1,
           state.activeTool === EditorTool.Delete,
         );
         lastDragPixelX = px.x;
         lastDragPixelY = px.y;
-        applyEdits('placement');
+        if (changed) applyEdits('placement');
       }
     } else if (canDragPaint) {
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
@@ -1747,8 +1757,8 @@ export function createEditorController(
         lastDragBlockY = state.cursorBlockY;
         if (state.activeTool === EditorTool.Place) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
-          placeAtCursor(state);
-          applyEdits('placement');
+          const placed = placeAtCursor(state);
+          if (placed) applyEdits('placement');
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
@@ -1781,14 +1791,14 @@ export function createEditorController(
       if (px.x !== lastDragPixelX || px.y !== lastDragPixelY) {
         const fromX = lastDragPixelX === INVALID_DRAG_BLOCK ? px.x : lastDragPixelX;
         const fromY = lastDragPixelY === INVALID_DRAG_BLOCK ? px.y : lastDragPixelY;
-        paintPixelMaterialLine(
+        const changed = paintPixelMaterialLine(
           state, fromX, fromY, px.x, px.y,
           state.selectedPaletteItem.pixelMaterialId ?? 1,
           true,
         );
         lastDragPixelX = px.x;
         lastDragPixelY = px.y;
-        applyEdits('placement');
+        if (changed) applyEdits('placement');
       }
     } else if (canRightDragPaint) {
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {

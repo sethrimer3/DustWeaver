@@ -18,7 +18,8 @@ import {
   EditorZipMoveBlock,
 } from './editorState';
 import { canAddLimitedEnemy } from './editorEnemyCapacity';
-import { canMutateElement } from './editorLayers';
+import { canMutateElement, canPlaceOnLayer, getLayerForElementType, type LayerId } from './editorLayers';
+import type { SelectedElementType } from './editorElementTypes';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
 
@@ -432,12 +433,78 @@ export function serializeSelectedElements(
   return JSON.stringify(data);
 }
 
+/** Maps each clipboard array key to the `SelectedElementType` it holds, so
+ *  paste can determine every layer represented in the clipboard before
+ *  inserting anything. Kept in sync with `serializeSelectedElements`'s output
+ *  shape and `pasteFromClipboard`'s parsed `data` shape below. */
+const CLIPBOARD_KEY_TYPE: Readonly<Record<string, SelectedElementType>> = {
+  walls: 'wall',
+  enemies: 'enemy',
+  saveTombs: 'saveTomb',
+  skillTombs: 'skillTomb',
+  challengeFields: 'challengeField',
+  challengeGates: 'challengeGate',
+  gates: 'gate',
+  challengeTotems: 'challengeTotem',
+  zipMoveBlocks: 'zipMoveBlock',
+  dustContainers: 'dustContainer',
+  dustContainerPieces: 'dustContainerPiece',
+  dustBoostJars: 'dustBoostJar',
+  dustSwarms: 'dustSwarm',
+  lambdaAnchors: 'lambdaAnchor',
+  fireflyJars: 'fireflyJar',
+  springboards: 'springboard',
+  breakableBlocks: 'breakableBlock',
+  dustPiles: 'dustPile',
+  decorations: 'decoration',
+  lightSources: 'lightSource',
+  sunbeams: 'sunbeam',
+  waterZones: 'waterZone',
+  lavaZones: 'lavaZone',
+  timeStopFields: 'timeStopField',
+  crumbleBlocks: 'crumbleBlock',
+  spikes: 'spike',
+  bouncePads: 'bouncePad',
+  grasshopperAreas: 'grasshopperArea',
+  fireflyAreas: 'fireflyArea',
+  fallingBlocks: 'fallingBlock',
+  guideDustPaths: 'guideDustPath',
+};
+
+/**
+ * Determines every layer represented across the clipboard's parsed content
+ * and checks whether all of them are currently editable. Used to enforce
+ * all-or-nothing paste: if ANY represented layer is hidden/locked/solo-
+ * excluded/select-only-excluded, the entire paste is blocked before any UID
+ * is allocated or any element inserted.
+ */
+function areAllClipboardLayersEditable(
+  s: EditorState,
+  data: Record<string, unknown[] | undefined>,
+): boolean {
+  const layers = new Set<LayerId>();
+  for (const [key, type] of Object.entries(CLIPBOARD_KEY_TYPE)) {
+    const arr = data[key];
+    if (arr && arr.length > 0) layers.add(getLayerForElementType(type));
+  }
+  for (const layerId of layers) {
+    if (!canPlaceOnLayer(s, layerId)) return false;
+  }
+  return true;
+}
+
 /**
  * Parses `s.clipboard` and inserts all pasted elements at the cursor position,
  * assigning fresh UIDs and updating `s.selectedElements` to the pasted set.
+ *
+ * All-or-nothing: if any layer represented in the clipboard is currently
+ * hidden/locked/solo-excluded/select-only-excluded, the ENTIRE paste is
+ * blocked — no UID consumption, no selection change, no room mutation.
+ * Returns `true` if the paste occurred, `false` if it was blocked or the
+ * clipboard was empty/invalid.
  */
-export function pasteFromClipboard(s: EditorState): void {
-  if (!s.roomData || !s.clipboard) return;
+export function pasteFromClipboard(s: EditorState): boolean {
+  if (!s.roomData || !s.clipboard) return false;
   let data: {
     walls: EditorWall[];
     enemies: EditorEnemy[];
@@ -474,7 +541,11 @@ export function pasteFromClipboard(s: EditorState): void {
   try {
     data = JSON.parse(s.clipboard) as typeof data;
   } catch {
-    return;
+    return false;
+  }
+
+  if (!areAllClipboardLayersEditable(s, data as unknown as Record<string, unknown[] | undefined>)) {
+    return false;
   }
 
   const newElements: SelectedElement[] = [];
@@ -830,4 +901,5 @@ export function pasteFromClipboard(s: EditorState): void {
     newElements.push({ type: 'guideDustPath', uid: newUid });
   }
   s.selectedElements = newElements;
+  return true;
 }

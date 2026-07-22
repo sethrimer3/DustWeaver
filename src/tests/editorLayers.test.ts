@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createEditorState } from '../editor/editorState';
+import { EditorTool, createEditorState } from '../editor/editorState';
 import type { EditorRoomData } from '../editor/editorElementTypes';
+import type { PaletteItem } from '../editor/editorPaletteItems';
 import {
   isLayerVisible,
   isLayerLocked,
@@ -14,8 +15,12 @@ import {
   rotateSelectedElement, flipSelectedTransition,
 } from '../editor/editorTools';
 import { deleteAtCursor, deleteAtCursorBrushed } from '../editor/editorDeleteTool';
-import { moveSelectedElements, storeDragStartPositions } from '../editor/editorDragCopyPaste';
+import { moveSelectedElements, storeDragStartPositions, serializeSelectedElements, pasteFromClipboard } from '../editor/editorDragCopyPaste';
 import { canMutateElement, canMutateSelection } from '../editor/editorLayers';
+import { placeAtCursor } from '../editor/editorPlaceTool';
+import { placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from '../editor/editorPixelMaterialTool';
+import { handlePropertyChange } from '../editor/editorPropertyChange';
+import { createEditorHistory } from '../editor/editorHistory';
 
 function makeRoom(overrides: Partial<EditorRoomData> = {}): EditorRoomData {
   return {
@@ -341,4 +346,256 @@ test('backdrop gating: soloing one gated layer isolates it from the other gated 
   for (const id of ['background', 'terrain', 'enemies', 'powder', 'objects', 'dynamicGeometry'] as const) {
     assert.equal(isLayerVisible(state, id), false, `${id} should be isolated out while hazards is soloed`);
   }
+});
+
+// ── Phase 1.5, item 1: placeAtCursor enforces the full layer policy ──────
+
+const DUST_PILE_ITEM: PaletteItem = { id: 'dust_pile', label: 'Dust Pile', category: 'dust' };
+const BLOCK_ITEM: PaletteItem = {
+  id: 'block_1x1', label: 'Block', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1,
+};
+
+function placeStateFor(item: PaletteItem, room = makeRoom()): ReturnType<typeof createEditorState> {
+  const state = createEditorState();
+  state.roomData = room;
+  state.activeTool = EditorTool.Place;
+  state.selectedPaletteItem = item;
+  state.cursorBlockX = 5;
+  state.cursorBlockY = 5;
+  return state;
+}
+
+test('placeAtCursor blocks placement onto a hidden destination layer (Powder), no UID consumed', () => {
+  const room = makeRoom();
+  const state = placeStateFor(DUST_PILE_ITEM, room);
+  state.layers.powder.visible = false;
+  const uidBefore = state.nextUid;
+  const placed = placeAtCursor(state);
+  assert.equal(placed, false);
+  assert.equal(room.dustPiles.length, 0);
+  assert.equal(state.nextUid, uidBefore, 'blocked placement must not allocate a UID');
+});
+
+test('placeAtCursor blocks placement onto a solo-excluded destination layer (Powder)', () => {
+  const room = makeRoom();
+  const state = placeStateFor(DUST_PILE_ITEM, room);
+  state.layers.terrain.solo = true; // some OTHER layer is soloed; powder is not
+  const placed = placeAtCursor(state);
+  assert.equal(placed, false);
+  assert.equal(room.dustPiles.length, 0);
+});
+
+test('placeAtCursor blocks placement onto a select-only-excluded destination layer (Powder)', () => {
+  const room = makeRoom();
+  const state = placeStateFor(DUST_PILE_ITEM, room);
+  state.layers.terrain.selectOnly = true; // some OTHER layer is select-only; powder is not
+  const placed = placeAtCursor(state);
+  assert.equal(placed, false);
+  assert.equal(room.dustPiles.length, 0);
+});
+
+test('placeAtCursor succeeds onto an editable destination layer (sanity check for the guard)', () => {
+  const room = makeRoom();
+  const state = placeStateFor(DUST_PILE_ITEM, room);
+  const placed = placeAtCursor(state);
+  assert.equal(placed, true);
+  assert.equal(room.dustPiles.length, 1);
+});
+
+for (const brushMode of ['single', 'rect', 'fill', '3x3', '5x5'] as const) {
+  test(`placeAtCursor: brush mode "${brushMode}" obeys the same locked-layer policy as single placement`, () => {
+    const room = makeRoom();
+    const state = placeStateFor(BLOCK_ITEM, room);
+    state.brushMode = brushMode;
+    if (brushMode === 'rect') {
+      state.brushRectStartBlockX = 4;
+      state.brushRectStartBlockY = 4;
+    }
+    state.layers.terrain.locked = true;
+    const uidBefore = state.nextUid;
+    const placed = placeAtCursor(state);
+    assert.equal(placed, false, `brush mode ${brushMode} must refuse to place on a locked layer`);
+    assert.equal(room.interiorWalls.length, 0);
+    assert.equal(state.nextUid, uidBefore, 'no UID should be allocated for a blocked brush placement');
+  });
+}
+
+// ── Phase 1.5, item 2: pixel-material placement/erasure/line-paint ───────
+
+test('placePixelMaterialAt refuses to place onto a locked Powder layer', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.powder.locked = true;
+  const placed = placePixelMaterialAt(state, 10, 10, 1);
+  assert.equal(placed, false);
+  assert.equal((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length, 0);
+});
+
+test('placePixelMaterialAt refuses to place onto a hidden Powder layer', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.powder.visible = false;
+  assert.equal(placePixelMaterialAt(state, 10, 10, 1), false);
+});
+
+test('placePixelMaterialAt refuses to place onto a select-only-excluded Powder layer', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.terrain.selectOnly = true;
+  assert.equal(placePixelMaterialAt(state, 10, 10, 1), false);
+});
+
+test('placePixelMaterialAt succeeds on an editable Powder layer (sanity check)', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  assert.equal(placePixelMaterialAt(state, 10, 10, 1), true);
+  assert.equal((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length, 1);
+});
+
+test('erasePixelMaterialAt refuses to erase from a locked Powder layer', () => {
+  const room = makeRoom({
+    pixelMaterials: [{ uid: 1, xPixel: 10, yPixel: 10, material: 1 }],
+  } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.powder.locked = true;
+  const erased = erasePixelMaterialAt(state, 10, 10);
+  assert.equal(erased, false);
+  assert.equal((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length, 1, 'locked powder layer must resist erasure too');
+});
+
+test('paintPixelMaterialLine is a no-op on a hidden Powder layer (left-drag paint)', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.powder.visible = false;
+  const changed = paintPixelMaterialLine(state, 0, 0, 20, 0, 1, false);
+  assert.equal(changed, false);
+  assert.equal((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length, 0);
+});
+
+test('paintPixelMaterialLine is a no-op on a locked Powder layer (right-drag erase)', () => {
+  const room = makeRoom({
+    pixelMaterials: [{ uid: 1, xPixel: 0, yPixel: 0, material: 1 }],
+  } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  state.layers.powder.locked = true;
+  const changed = paintPixelMaterialLine(state, 0, 0, 20, 0, 1, true);
+  assert.equal(changed, false);
+  assert.equal((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length, 1);
+});
+
+test('paintPixelMaterialLine reports a real change on an editable Powder layer (sanity check)', () => {
+  const room = makeRoom({ pixelMaterials: [] } as unknown as Partial<EditorRoomData>);
+  const state = createEditorState();
+  state.roomData = room;
+  const changed = paintPixelMaterialLine(state, 0, 0, 4, 0, 1, false);
+  assert.equal(changed, true);
+  assert.ok((room as unknown as { pixelMaterials: unknown[] }).pixelMaterials.length > 0);
+});
+
+// ── Phase 1.5, item 3: inspector/property-change mutation policy ─────────
+
+test('handlePropertyChange blocks editing an element on a locked layer, and pushes no history', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  state.layers.terrain.locked = true;
+  const history = createEditorHistory();
+  const result = handlePropertyChange(state, history, 'wall.xBlock', 10);
+  assert.equal(result, false);
+  assert.equal(room.interiorWalls[0].xBlock, 5, 'locked wall must not be edited');
+  assert.equal(history.undoStack.length, 0, 'a blocked edit must not push an undo snapshot');
+});
+
+test('handlePropertyChange mixed selection is all-or-nothing: one ineligible element blocks the whole edit', () => {
+  const room = makeRoom({
+    interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never],
+    enemies: [{ uid: 1, xBlock: 3, yBlock: 3, type: 'basic' } as never],
+  });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }, { type: 'enemy', uid: 1 }];
+  state.layers.enemies.locked = true; // only the enemy is ineligible
+  const history = createEditorHistory();
+  const result = handlePropertyChange(state, history, 'wall.xBlock', 10);
+  assert.equal(result, false, 'edit must be blocked entirely, not partially applied to the wall');
+  assert.equal(room.interiorWalls[0].xBlock, 5, 'the otherwise-eligible wall must NOT have been edited either');
+  assert.equal(history.undoStack.length, 0);
+});
+
+test('handlePropertyChange creates no history when the submitted value does not change anything', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  const history = createEditorHistory();
+  const result = handlePropertyChange(state, history, 'wall.xBlock', '5');
+  assert.equal(result, false, 'resubmitting the current value (as a string) must be treated as a no-op');
+  assert.equal(history.undoStack.length, 0);
+});
+
+test('handlePropertyChange applies the edit and pushes exactly one snapshot when the value actually changes', () => {
+  const room = makeRoom({ interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never] });
+  const state = createEditorState();
+  state.roomData = room;
+  state.selectedElements = [{ type: 'wall', uid: 2 }];
+  const history = createEditorHistory();
+  const result = handlePropertyChange(state, history, 'wall.xBlock', 10);
+  assert.equal(result, true);
+  assert.equal(room.interiorWalls[0].xBlock, 10);
+  assert.equal(history.undoStack.length, 1);
+});
+
+// ── Phase 1.5, item 4: paste is all-or-nothing across every clipboard layer ─
+
+test('pasteFromClipboard is blocked when any represented clipboard layer is restricted; no UID/selection/room change', () => {
+  const sourceRoom = makeRoom({
+    interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never],
+    dustPiles: [{ uid: 3, xBlock: 6, yBlock: 6, dustCount: 5 }],
+  });
+  const clip = serializeSelectedElements(sourceRoom, [{ type: 'wall', uid: 2 }, { type: 'dustPile', uid: 3 }]);
+
+  const destRoom = makeRoom();
+  const state = createEditorState();
+  state.roomData = destRoom;
+  state.clipboard = clip;
+  state.cursorBlockX = 10;
+  state.cursorBlockY = 10;
+  state.layers.powder.locked = true; // dustPile's layer is restricted
+  const uidBefore = state.nextUid;
+
+  const pasted = pasteFromClipboard(state);
+  assert.equal(pasted, false, 'paste must be blocked entirely — not even the eligible wall should be pasted');
+  assert.equal(destRoom.interiorWalls.length, 0);
+  assert.equal(destRoom.dustPiles.length, 0);
+  assert.equal(state.nextUid, uidBefore, 'blocked paste must not consume any UIDs');
+  assert.deepEqual(state.selectedElements, [], 'blocked paste must not change selection');
+});
+
+test('pasteFromClipboard succeeds across multiple layers when all are editable', () => {
+  const sourceRoom = makeRoom({
+    interiorWalls: [{ uid: 2, xBlock: 5, yBlock: 5, wBlock: 1, hBlock: 1 } as never],
+    dustPiles: [{ uid: 3, xBlock: 6, yBlock: 6, dustCount: 5 }],
+  });
+  const clip = serializeSelectedElements(sourceRoom, [{ type: 'wall', uid: 2 }, { type: 'dustPile', uid: 3 }]);
+
+  const destRoom = makeRoom();
+  const state = createEditorState();
+  state.roomData = destRoom;
+  state.clipboard = clip;
+  state.cursorBlockX = 10;
+  state.cursorBlockY = 10;
+
+  const pasted = pasteFromClipboard(state);
+  assert.equal(pasted, true);
+  assert.equal(destRoom.interiorWalls.length, 1);
+  assert.equal(destRoom.dustPiles.length, 1);
+  assert.equal(state.selectedElements.length, 2);
 });

@@ -12,6 +12,7 @@
 
 import type {
   EditorRoomData,
+  EditorState,
   EditorWall,
   EditorEnemy,
   EditorTransition,
@@ -42,6 +43,7 @@ import { normalizeRequiredSpeed } from '../levels/gateDefs';
 import type { EditorHistory } from './editorHistory';
 import { pushSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
+import { canMutateElement } from './editorLayers';
 
 // Guide dust path property validation bounds
 const MIN_MOTE_COUNT      = 3;
@@ -431,29 +433,111 @@ export function applyPropertyToElement(
 }
 
 /**
+ * Finds the actual referenced element (or, for the singleton `playerSpawn`,
+ * the coordinate tuple) backing a `SelectedElement` — used only for a
+ * targeted before/after equality check, never for applying the edit itself
+ * (that's still `applyPropertyToElement`'s job).
+ */
+function findElementRef(room: EditorRoomData, el: SelectedElement): unknown {
+  switch (el.type) {
+    case 'wall': return room.interiorWalls.find(w => w.uid === el.uid);
+    case 'enemy': return room.enemies.find(e => e.uid === el.uid);
+    case 'transition': return room.transitions.find(t => t.uid === el.uid);
+    case 'waterZone': return (room.waterZones ?? []).find(z => z.uid === el.uid);
+    case 'lavaZone': return (room.lavaZones ?? []).find(z => z.uid === el.uid);
+    case 'timeStopField': return (room.timeStopFields ?? []).find(z => z.uid === el.uid);
+    case 'zipMoveBlock': return (room.zipMoveBlocks ?? []).find(z => z.uid === el.uid);
+    case 'challengeField': return (room.challengeFields ?? []).find(z => z.uid === el.uid);
+    case 'challengeGate': return (room.challengeGates ?? []).find(z => z.uid === el.uid);
+    case 'gate': return (room.gates ?? []).find(g => g.uid === el.uid);
+    case 'challengeTotem': return (room.challengeTotems ?? []).find(t => t.uid === el.uid);
+    case 'crumbleBlock': return (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
+    case 'bouncePad': return (room.bouncePads ?? []).find(b => b.uid === el.uid);
+    case 'spike': return (room.spikes ?? []).find(s => s.uid === el.uid);
+    case 'dustContainer': return (room.dustContainers ?? []).find(c => c.uid === el.uid);
+    case 'dustContainerPiece': return (room.dustContainerPieces ?? []).find(c => c.uid === el.uid);
+    case 'dustBoostJar': return (room.dustBoostJars ?? []).find(j => j.uid === el.uid);
+    case 'dustSwarm': return (room.dustSwarms ?? []).find(s => s.uid === el.uid);
+    case 'playerSpawn': return [...room.playerSpawnBlock];
+    case 'saveTomb': return room.saveTombs.find(t => t.uid === el.uid);
+    case 'skillTomb': return room.skillTombs.find(t => t.uid === el.uid);
+    case 'dustPile': return room.dustPiles.find(p => p.uid === el.uid);
+    case 'grasshopperArea': return room.grasshopperAreas.find(a => a.uid === el.uid);
+    case 'fireflyArea': return (room.fireflyAreas ?? []).find(a => a.uid === el.uid);
+    case 'decoration': return (room.decorations ?? []).find(d => d.uid === el.uid);
+    case 'lightSource': return (room.lightSources ?? []).find(l => l.uid === el.uid);
+    case 'sunbeam': return (room.sunbeams ?? []).find(s => s.uid === el.uid);
+    case 'rope': return (room.ropes ?? []).find(r => r.uid === el.uid);
+    case 'dialogueTrigger': return (room.dialogueTriggers ?? []).find(t => t.uid === el.uid);
+    case 'guideDustPath': return (room.guideDustPaths ?? []).find(p => p.uid === el.uid);
+    default: return undefined;
+  }
+}
+
+/**
  * Pushes an undo snapshot and applies a property change to all currently-selected
- * elements that are present in `roomData`.
+ * elements that are present in `roomData`, enforcing the layer mutation policy
+ * and skipping no-op submissions.
  *
- * @param roomData          The room data to mutate.
- * @param selectedElements  The currently-selected elements.
+ * Policy:
+ *  - All-or-nothing: if ANY selected element is currently ineligible for
+ *    mutation (locked/hidden/solo-excluded/select-only-excluded layer), the
+ *    entire edit is blocked — no partial application to only the eligible
+ *    elements.
+ *  - No snapshot/mutation-signal is produced when the submitted value would
+ *    not actually change anything (e.g. re-submitting the same value, or a
+ *    value that normalizes to the current one) — detected via a *targeted*
+ *    before/after comparison of just the affected elements, not a whole-room
+ *    diff.
+ *
+ * @param state             Editor state — supplies room data, selection, and
+ *                           layer state so mutation eligibility can be checked.
  * @param history           The editor undo/redo history.
  * @param prop              Dot-separated property name.
  * @param value             New value.
+ * @returns `true` if the edit was applied (and a snapshot pushed), `false`
+ *          if it was blocked or was a no-op.
  */
 export function handlePropertyChange(
-  roomData: EditorRoomData,
-  selectedElements: SelectedElement[],
+  state: Pick<EditorState, 'roomData' | 'selectedElements'>,
   history: EditorHistory,
   prop: string,
   value: string | number,
   selectedPointIndex?: number | null,
-): void {
-  if (selectedElements.length === 0) return;
+): boolean {
+  const roomData = state.roomData;
+  const selectedElements = state.selectedElements;
+  if (roomData === null || selectedElements.length === 0) return false;
+
+  // All-or-nothing eligibility check across the whole selection.
+  for (const el of selectedElements) {
+    if (!canMutateElement(state as EditorState, el)) return false;
+  }
+
+  // Targeted (per-element, not whole-room) before snapshot for change detection.
+  const before = selectedElements.map(el => {
+    const ref = findElementRef(roomData, el);
+    return ref === undefined ? undefined : structuredClone(ref);
+  });
 
   pushSnapshot(history, roomData);
 
-  // Apply property to all selected elements of matching type
   for (const el of selectedElements) {
     applyPropertyToElement(roomData, el, prop, value, selectedPointIndex);
   }
+
+  const changed = selectedElements.some((el, i) => {
+    const ref = findElementRef(roomData, el);
+    const after = ref === undefined ? undefined : structuredClone(ref);
+    return JSON.stringify(before[i]) !== JSON.stringify(after);
+  });
+
+  if (!changed) {
+    // Nothing actually changed (e.g. resubmitting the same value, or a value
+    // that normalizes to the current one) — drop the speculative snapshot so
+    // undo history and the redo stack aren't polluted by a no-op edit.
+    history.undoStack.pop();
+    return false;
+  }
+  return true;
 }

@@ -9,6 +9,7 @@ import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
 import type { EditorRoomData } from '../editor/editorState';
 import { canPlacePixelMaterialAt } from '../editor/editorHitTest';
 import { pixelFromCursor, placePixelMaterialAt, paintPixelMaterialLine } from '../editor/editorPixelMaterialTool';
+import { createDefaultEditorLayers } from '../editor/editorLayers';
 
 function makeSystem(width: number, height: number): PixelMaterialSystem {
   const solid = new SolidMask(width, height);
@@ -337,6 +338,7 @@ test('drag-paint line fill leaves no gaps between two pixel points', () => {
   const state = {
     roomData: room,
     selectedElements: [],
+    layers: createDefaultEditorLayers(),
     get nextUid() { return nextUid.current; },
     set nextUid(v: number) { nextUid.current = v; },
   } as unknown as Parameters<typeof paintPixelMaterialLine>[0];
@@ -360,6 +362,7 @@ test('placing a pixel-material particle does not affect block-grid tile arrays',
   const state = {
     roomData: room,
     selectedElements: [],
+    layers: createDefaultEditorLayers(),
     get nextUid() { return nextUid.current; },
     set nextUid(v: number) { nextUid.current = v; },
   } as unknown as Parameters<typeof placePixelMaterialAt>[0];

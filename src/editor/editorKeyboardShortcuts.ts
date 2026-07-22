@@ -160,10 +160,17 @@ export function handleEditorKeyboardShortcuts(
     state.clipboard = clipData;
   }
 
-  // Paste (Ctrl+V)
+  // Paste (Ctrl+V) — all-or-nothing: pasteFromClipboard() itself refuses to
+  // mutate anything if any represented layer is currently ineligible, so the
+  // speculative snapshot pushed here is simply dropped again on a blocked/
+  // empty paste rather than left as a no-op undo entry.
   if (inputState.isPastePressed && state.roomData && state.clipboard) {
     pushSnapshot(history, state.roomData);
-    pasteFromClipboard(state);
-    applyEdits();
+    const pasted = pasteFromClipboard(state);
+    if (pasted) {
+      applyEdits();
+    } else {
+      history.undoStack.pop();
+    }
   }
 }

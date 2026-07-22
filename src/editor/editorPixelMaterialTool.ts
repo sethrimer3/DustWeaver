@@ -17,6 +17,7 @@
 import type { EditorState, EditorPixelMaterial } from './editorState';
 import { canPlacePixelMaterialAt } from './editorHitTest';
 import { MATERIAL_SAND, getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
+import { canPlaceOnLayer } from './editorLayers';
 
 /** Converts the editor's world-space cursor position (already in native
  *  pixels — 1 world unit = 1 native px) to an integer pixel cell. */
@@ -51,6 +52,11 @@ export function placePixelMaterialAt(
 ): boolean {
   const room = state.roomData;
   if (room === null) return false;
+  // Enforce the Powder-layer mutation policy (hidden/locked/solo-excluded/
+  // select-only-excluded) INSIDE this function, not just via controller-side
+  // branching — a controller bug that skips its own gating check must not be
+  // able to place pixel material onto a locked/hidden/excluded Powder layer.
+  if (!canPlaceOnLayer(state, 'powder')) return false;
   const anchor = anchorForMaterial(xPixel, yPixel, material);
   if (!canPlacePixelMaterialAt(room, anchor.x, anchor.y, material)) return false;
   if (!room.pixelMaterials) room.pixelMaterials = [];
@@ -63,6 +69,9 @@ export function placePixelMaterialAt(
 export function erasePixelMaterialAt(state: EditorState, xPixel: number, yPixel: number): boolean {
   const room = state.roomData;
   if (room === null || !room.pixelMaterials) return false;
+  // Same Powder-layer policy applies to erasure — a locked/hidden/excluded
+  // Powder layer must resist deletion too, not just placement.
+  if (!canPlaceOnLayer(state, 'powder')) return false;
   const i = room.pixelMaterials.findIndex(p => {
     const size = getMaterialFootprintSize(p.material);
     return xPixel >= p.xPixel && xPixel < p.xPixel + size &&
@@ -83,6 +92,12 @@ export function erasePixelMaterialAt(state: EditorState, xPixel: number, yPixel:
  * divide/multiply by `size`) rather than raw pixels — this keeps painted 2x2
  * particles edge-to-edge instead of every-other-pixel-overlapping-then-
  * rejected. For `size === 1` this is identical to the original per-pixel walk.
+ *
+ * Returns `true` if at least one cell along the line was actually placed or
+ * erased, `false` if the whole line was a no-op (e.g. the Powder layer is
+ * currently locked/hidden/excluded, or every cell along the path was already
+ * empty/occupied) — callers should skip the rebuild/dirty-marking work when
+ * this returns `false`.
  */
 export function paintPixelMaterialLine(
   state: EditorState,
@@ -90,7 +105,11 @@ export function paintPixelMaterialLine(
   x1: number, y1: number,
   material: number,
   erase: boolean,
-): void {
+): boolean {
+  // Single up-front check avoids walking the whole line (and repeatedly
+  // failing the same per-cell check) when the layer itself is blocked.
+  if (!canPlaceOnLayer(state, 'powder')) return false;
+
   const size = getMaterialFootprintSize(material);
   let gx = Math.floor(x0 / size);
   let gy = Math.floor(y0 / size);
@@ -102,15 +121,17 @@ export function paintPixelMaterialLine(
   const sy = gy < gy1 ? 1 : -1;
   let err = dx + dy;
 
+  let changed = false;
   for (;;) {
     const px = gx * size;
     const py = gy * size;
-    if (erase) erasePixelMaterialAt(state, px, py);
-    else placePixelMaterialAt(state, px, py, material);
+    const didChange = erase ? erasePixelMaterialAt(state, px, py) : placePixelMaterialAt(state, px, py, material);
+    changed = changed || didChange;
 
     if (gx === gx1 && gy === gy1) break;
     const e2 = 2 * err;
     if (e2 >= dy) { err += dy; gx += sx; }
     if (e2 <= dx) { err += dx; gy += sy; }
   }
+  return changed;
 }
