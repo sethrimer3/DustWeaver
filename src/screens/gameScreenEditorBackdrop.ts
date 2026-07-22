@@ -28,6 +28,7 @@ import type { HudState } from '../render/hud/overlay';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { resetCanvasPass } from '../render/canvasViewport';
+import { isLayerVisible } from '../editor/editorLayers';
 
 /**
  * Renders gameplay scene as a static backdrop while world editor consumes input.
@@ -66,45 +67,72 @@ export function renderEditorBackdrop(
     ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   }
 
-  renderWorldBackground(
-    ctx,
-    currentRoom.worldNumber,
-    virtualWidthPx,
-    virtualHeightPx,
-    offsetXPx,
-    offsetYPx,
-    currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
-    currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
-    zoom,
-    currentRoom.backgroundId,
-  );
-  if (isTheroShowcaseRoom(currentRoom.id)) {
-    renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+  const layerState = editorController.state;
+  const backgroundVisible = isLayerVisible(layerState, 'background');
+  const terrainVisible = isLayerVisible(layerState, 'terrain');
+  const hazardsVisible = isLayerVisible(layerState, 'hazards');
+  const enemiesVisible = isLayerVisible(layerState, 'enemies');
+  const powderVisible = isLayerVisible(layerState, 'powder');
+  const objectsVisible = isLayerVisible(layerState, 'objects');
+  const dynamicGeometryVisible = isLayerVisible(layerState, 'dynamicGeometry');
+
+  if (backgroundVisible) {
+    renderWorldBackground(
+      ctx,
+      currentRoom.worldNumber,
+      virtualWidthPx,
+      virtualHeightPx,
+      offsetXPx,
+      offsetYPx,
+      currentRoom.widthBlocks * BLOCK_SIZE_SMALL,
+      currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
+      zoom,
+      currentRoom.backgroundId,
+    );
+    if (isTheroShowcaseRoom(currentRoom.id)) {
+      renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());
+    }
+    const renderedTheroBackground = renderTheroBackgroundEffect(
+      ctx,
+      currentRoom.backgroundId,
+      virtualWidthPx,
+      virtualHeightPx,
+      performance.now(),
+    );
+    if (!renderedTheroBackground && currentRoom.backgroundId === 'crystallineCracks') {
+      renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
+    }
   }
-  const renderedTheroBackground = renderTheroBackgroundEffect(
-    ctx,
-    currentRoom.backgroundId,
-    virtualWidthPx,
-    virtualHeightPx,
-    performance.now(),
-  );
-  if (!renderedTheroBackground && currentRoom.backgroundId === 'crystallineCracks') {
-    renderCrystallineCracksBackground(ctx, virtualWidthPx, virtualHeightPx, performance.now());
+  if (terrainVisible) {
+    renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+    renderCustomBlockSprites(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
   }
-  renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
-  renderCustomBlockSprites(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
-  renderHazards(ctx, world, offsetXPx, offsetYPx, zoom, world.tick);
+  if (hazardsVisible) {
+    renderHazards(ctx, world, offsetXPx, offsetYPx, zoom, world.tick);
+  }
+  // renderClusters draws a mix of content spanning several layers (terrain
+  // hazards, dynamic geometry, cosmetic effects); it isn't gated per-layer
+  // here because splitting it would require deeper changes to the cluster
+  // renderer itself. See follow-up note below.
   renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
-  renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);
-  renderRadiantTether(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
-  renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
-  renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
+  if (enemiesVisible) {
+    renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);
+  }
+  if (dynamicGeometryVisible) {
+    renderRadiantTether(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+    renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+    renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
+  }
   drawTunnelDarkness(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
-  environmentalDust.render(ctx, offsetXPx, offsetYPx, zoom, true);
-  skillTombRenderer.render(ctx, offsetXPx, offsetYPx, zoom);
-  skillTombEffectRenderer.renderBehind(ctx, offsetXPx, offsetYPx, zoom);
-  skillTombEffectRenderer.renderSprite(ctx, offsetXPx, offsetYPx, zoom);
-  skillTombEffectRenderer.renderFront(ctx, offsetXPx, offsetYPx, zoom);
+  if (powderVisible) {
+    environmentalDust.render(ctx, offsetXPx, offsetYPx, zoom, true);
+  }
+  if (objectsVisible) {
+    skillTombRenderer.render(ctx, offsetXPx, offsetYPx, zoom);
+    skillTombEffectRenderer.renderBehind(ctx, offsetXPx, offsetYPx, zoom);
+    skillTombEffectRenderer.renderSprite(ctx, offsetXPx, offsetYPx, zoom);
+    skillTombEffectRenderer.renderFront(ctx, offsetXPx, offsetYPx, zoom);
+  }
 
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, offsetXPx, offsetYPx, zoom);
