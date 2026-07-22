@@ -6,16 +6,9 @@
  */
 
 import { EditorState, allocateUid } from './editorState';
-import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
-import {
-  hitTestZone,
-  hitTestWall,
-  hitTestPoint,
-  hitTestTransition,
-} from './editorHitTest';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
-import { selectAtCursorAnyLayer } from './editorTools';
+import { getHitCandidatesAnyLayer, type EditorHitCandidate } from './editorTools';
 import { canSelectElementType } from './editorLayers';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
@@ -45,6 +38,15 @@ function splitZoneAroundCell(zone: BlockRect, cellX: number, cellY: number): Blo
     pieces.push({ xBlock: cellX + 1, yBlock: cellY, wBlock: x1 - (cellX + 1), hBlock: 1 });
   }
   return pieces;
+}
+
+/** Removes the first element with the given uid from arr, if present. Returns whether it was found. */
+function removeByUid<T extends { uid: number }>(arr: T[] | undefined, uid: number): boolean {
+  if (!arr) return false;
+  const i = arr.findIndex(e => e.uid === uid);
+  if (i === -1) return false;
+  arr.splice(i, 1);
+  return true;
 }
 
 /**
@@ -91,184 +93,109 @@ export function deleteAtCursorBrushed(state: EditorState): void {
 
 /**
  * Deletes the element at the given block coordinates.
+ *
+ * Resolves candidates via the SAME `getHitCandidatesAnyLayer` function the
+ * Select tool uses (see editorTools.ts), applies the delete policy (locked,
+ * hidden, or select-only-excluded layers are never deletable — identical to
+ * the select-eligibility policy today), takes exactly the single top-eligible
+ * candidate, and deletes exactly that element. There is no second, separately
+ * ordered hit-test or priority chain — this guarantees deletion can never
+ * target a different element than the one permission-checked, and can never
+ * reach "through" a locked/hidden element to something else.
  */
 function deleteAt(state: EditorState, bx: number, by: number): void {
   const room = state.roomData;
   if (room === null) return;
 
-  // Layer gate: figure out what (if anything) sits at this cell regardless of
-  // layer state, then bail without mutating if that element's layer is
-  // hidden, locked, or excluded by an active select-only layer. Mirrors the
-  // same top-hit priority order the Select tool uses (selectAtCursorAnyLayer),
-  // so "what would be selected" and "what would be deleted" stay consistent.
   const savedCursorX = state.cursorBlockX;
   const savedCursorY = state.cursorBlockY;
   state.cursorBlockX = bx;
   state.cursorBlockY = by;
-  const hit = selectAtCursorAnyLayer(state);
+  const candidates = getHitCandidatesAnyLayer(state)
+    .filter(c => canSelectElementType(state, c.element.type));
   state.cursorBlockX = savedCursorX;
   state.cursorBlockY = savedCursorY;
-  if (hit !== null && !canSelectElementType(state, hit.type)) return;
 
-  // Check campaign spawn first (campaign-level singleton marker)
-  if (state.campaignSpawnBlock !== null &&
-      hitTestPoint(state.campaignSpawnBlock[0], state.campaignSpawnBlock[1], bx, by)) {
-    state.campaignSpawnBlock = null;
-    state.selectedElements = state.selectedElements.filter(e => e.type !== 'campaignSpawn');
-    return;
-  }
+  if (candidates.length === 0) return;
+  let target = candidates[0];
+  for (const c of candidates) if (c.priority < target.priority) target = c;
 
-  // Check transitions first
-  for (let i = 0; i < room.transitions.length; i++) {
-    if (hitTestTransition(room.transitions[i], bx, by, room)) {
-      const removedUid = room.transitions[i].uid;
-      room.transitions.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+  deleteResolvedCandidate(state, target, Math.floor(bx), Math.floor(by));
+}
+
+/**
+ * Deletes exactly the element identified by `candidate` — no re-scanning by
+ * position, only by type + uid (or, for guide-dust-path points, the resolved
+ * point index) — so the deleted element is guaranteed to be the one that was
+ * permission-checked.
+ */
+function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandidate, cellX: number, cellY: number): void {
+  const room = state.roomData;
+  if (room === null) return;
+  const { element } = candidate;
+  const uid = element.uid;
+
+  switch (element.type) {
+    case 'campaignSpawn':
+      state.campaignSpawnBlock = null;
+      break;
+    case 'playerSpawn':
+      // Singleton marker — not deletable, matches prior behaviour.
       return;
-    }
-  }
-
-  // Check enemies
-  for (let i = 0; i < room.enemies.length; i++) {
-    if (hitTestPoint(room.enemies[i].xBlock, room.enemies[i].yBlock, bx, by)) {
-      const removedUid = room.enemies[i].uid;
-      room.enemies.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check save tombs
-  for (let i = 0; i < room.saveTombs.length; i++) {
-    if (hitTestPoint(room.saveTombs[i].xBlock, room.saveTombs[i].yBlock, bx, by)) {
-      const removedUid = room.saveTombs[i].uid;
-      room.saveTombs.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check skill tombs
-  for (let i = 0; i < room.skillTombs.length; i++) {
-    if (hitTestPoint(room.skillTombs[i].xBlock, room.skillTombs[i].yBlock, bx, by)) {
-      const removedUid = room.skillTombs[i].uid;
-      room.skillTombs.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  for (const [elements, isPoint] of [
-    [room.zipMoveBlocks ?? [], false],
-    [room.challengeFields ?? [], false],
-    [room.challengeGates ?? [], false],
-    [room.gates ?? [], false],
-    [room.challengeTotems ?? [], true],
-  ] as const) {
-    for (let i = 0; i < elements.length; i++) {
-      const element = elements[i];
-      const hit = isPoint
-        ? hitTestPoint(element.xBlock, element.yBlock, bx, by)
-        : hitTestZone(element as BlockRect, bx, by);
-      if (hit) {
-        const removedUid = element.uid;
-        elements.splice(i, 1);
-        state.selectedElements = state.selectedElements.filter(selected => selected.uid !== removedUid);
-        return;
-      }
-    }
-  }
-  for (let i = 0; i < (room.gates ?? []).length; i++) {
-    const gate = room.gates![i];
-    if (hitTestZone(gate, bx, by)) {
-      room.gates!.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(selected => selected.uid !== gate.uid);
-      return;
-    }
-  }
-
-  // Check dust containers
-  const dustContainers = room.dustContainers ?? [];
-  for (let i = 0; i < dustContainers.length; i++) {
-    if (hitTestPoint(dustContainers[i].xBlock, dustContainers[i].yBlock, bx, by)) {
-      const removedUid = dustContainers[i].uid;
-      dustContainers.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check dust container pieces
-  const dustContainerPieces = room.dustContainerPieces ?? [];
-  for (let i = 0; i < dustContainerPieces.length; i++) {
-    if (hitTestPoint(dustContainerPieces[i].xBlock, dustContainerPieces[i].yBlock, bx, by)) {
-      const removedUid = dustContainerPieces[i].uid;
-      dustContainerPieces.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check dust boost jars
-  const dustBoostJars = room.dustBoostJars ?? [];
-  for (let i = 0; i < dustBoostJars.length; i++) {
-    if (hitTestPoint(dustBoostJars[i].xBlock, dustBoostJars[i].yBlock, bx, by)) {
-      const removedUid = dustBoostJars[i].uid;
-      dustBoostJars.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check dust swarms
-  const dustSwarms = room.dustSwarms ?? [];
-  for (let i = 0; i < dustSwarms.length; i++) {
-    if (hitTestPoint(dustSwarms[i].xBlock, dustSwarms[i].yBlock, bx, by)) {
-      const removedUid = dustSwarms[i].uid;
-      dustSwarms.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check lambda anchors
-  const lambdaAnchors = room.lambdaAnchors ?? [];
-  for (let i = 0; i < lambdaAnchors.length; i++) {
-    if (hitTestPoint(lambdaAnchors[i].xBlock, lambdaAnchors[i].yBlock, bx, by)) {
-      const removedUid = lambdaAnchors[i].uid;
-      lambdaAnchors.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check firefly jars
-  const fireflyJars = room.fireflyJars ?? [];
-  for (let i = 0; i < fireflyJars.length; i++) {
-    if (hitTestPoint(fireflyJars[i].xBlock, fireflyJars[i].yBlock, bx, by)) {
-      const removedUid = fireflyJars[i].uid;
-      fireflyJars.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check springboards
-  const springboards = room.springboards ?? [];
-  for (let i = 0; i < springboards.length; i++) {
-    if (hitTestPoint(springboards[i].xBlock, springboards[i].yBlock, bx, by)) {
-      const removedUid = springboards[i].uid;
-      springboards.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check breakable blocks (removing an entire shared group at once)
-  const breakableBlocks = room.breakableBlocks ?? [];
-  for (let i = 0; i < breakableBlocks.length; i++) {
-    if (hitTestPoint(breakableBlocks[i].xBlock, breakableBlocks[i].yBlock, bx, by)) {
-      const groupId = breakableBlocks[i].groupId;
+    case 'transition':
+      removeByUid(room.transitions, uid);
+      break;
+    case 'enemy':
+      removeByUid(room.enemies, uid);
+      break;
+    case 'saveTomb':
+      removeByUid(room.saveTombs, uid);
+      break;
+    case 'skillTomb':
+      removeByUid(room.skillTombs, uid);
+      break;
+    case 'zipMoveBlock':
+      removeByUid(room.zipMoveBlocks, uid);
+      break;
+    case 'challengeField':
+      removeByUid(room.challengeFields, uid);
+      break;
+    case 'challengeGate':
+      removeByUid(room.challengeGates, uid);
+      break;
+    case 'gate':
+      removeByUid(room.gates, uid);
+      break;
+    case 'challengeTotem':
+      removeByUid(room.challengeTotems, uid);
+      break;
+    case 'dustContainer':
+      removeByUid(room.dustContainers, uid);
+      break;
+    case 'dustContainerPiece':
+      removeByUid(room.dustContainerPieces, uid);
+      break;
+    case 'dustBoostJar':
+      removeByUid(room.dustBoostJars, uid);
+      break;
+    case 'dustSwarm':
+      removeByUid(room.dustSwarms, uid);
+      break;
+    case 'lambdaAnchor':
+      removeByUid(room.lambdaAnchors, uid);
+      break;
+    case 'fireflyJar':
+      removeByUid(room.fireflyJars, uid);
+      break;
+    case 'springboard':
+      removeByUid(room.springboards, uid);
+      break;
+    case 'breakableBlock': {
+      // Removing an entire shared group at once, matching prior behaviour.
+      const breakableBlocks = room.breakableBlocks ?? [];
+      const target = breakableBlocks.find(b => b.uid === uid);
+      if (!target) break;
+      const groupId = target.groupId;
       const removedUids = new Set<number>();
       if (groupId !== undefined) {
         for (let j = breakableBlocks.length - 1; j >= 0; j--) {
@@ -278,299 +205,120 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
           }
         }
       } else {
-        removedUids.add(breakableBlocks[i].uid);
-        breakableBlocks.splice(i, 1);
+        removedUids.add(uid);
+        removeByUid(breakableBlocks, uid);
       }
       state.selectedElements = state.selectedElements.filter(e => !removedUids.has(e.uid));
       return;
     }
-  }
-
-  // Check dust piles
-  for (let i = 0; i < room.dustPiles.length; i++) {
-    if (hitTestPoint(room.dustPiles[i].xBlock, room.dustPiles[i].yBlock, bx, by)) {
-      const removedUid = room.dustPiles[i].uid;
-      room.dustPiles.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check grasshopper areas
-  for (let i = 0; i < room.grasshopperAreas.length; i++) {
-    if (hitTestZone(room.grasshopperAreas[i], bx, by)) {
-      const removedUid = room.grasshopperAreas[i].uid;
-      room.grasshopperAreas.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-  // Check firefly areas
-  const fireflyAreas = room.fireflyAreas ?? [];
-  for (let i = 0; i < fireflyAreas.length; i++) {
-    if (hitTestZone(fireflyAreas[i], bx, by)) {
-      const removedUid = fireflyAreas[i].uid;
-      fireflyAreas.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check decorations
-  const decos = room.decorations ?? [];
-  for (let i = 0; i < decos.length; i++) {
-    if (hitTestPoint(decos[i].xBlock, decos[i].yBlock, bx, by)) {
-      const removedUid = decos[i].uid;
-      decos.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check walls
-  for (let i = 0; i < room.interiorWalls.length; i++) {
-    if (hitTestWall(room.interiorWalls[i], bx, by)) {
-      const removedUid = room.interiorWalls[i].uid;
-      room.interiorWalls.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check light sources (before blockers so the bigger icon wins).
-  const lights = room.lightSources ?? [];
-  for (let i = 0; i < lights.length; i++) {
-    if (hitTestPoint(lights[i].xBlock, lights[i].yBlock, bx, by)) {
-      const removedUid = lights[i].uid;
-      lights.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check sunbeams.
-  const sunbeams = room.sunbeams ?? [];
-  for (let i = 0; i < sunbeams.length; i++) {
-    if (hitTestPoint(sunbeams[i].xBlock, sunbeams[i].yBlock, bx, by)) {
-      const removedUid = sunbeams[i].uid;
-      sunbeams.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check scene lights.
-  const sceneLights = room.sceneLights ?? [];
-  for (let i = 0; i < sceneLights.length; i++) {
-    const slBx = sceneLights[i].xWorld / BLOCK_SIZE_MEDIUM;
-    const slBy = sceneLights[i].yWorld / BLOCK_SIZE_MEDIUM;
-    if (hitTestPoint(slBx, slBy, bx, by)) {
-      const removedUid = sceneLights[i].uid;
-      sceneLights.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check ambient-light blockers (single-cell match).
-  const blockers = room.ambientLightBlockers ?? [];
-  const bxFloor = Math.floor(bx);
-  const byFloor = Math.floor(by);
-  for (let i = 0; i < blockers.length; i++) {
-    if (blockers[i].xBlock === bxFloor && blockers[i].yBlock === byFloor) {
-      const removedUid = blockers[i].uid;
-      blockers.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check water zones. If the hit zone spans more than one tile, split it
-  // into the remaining rectangles instead of removing the whole thing.
-  const waterZones = room.waterZones ?? [];
-  for (let i = 0; i < waterZones.length; i++) {
-    const zone = waterZones[i];
-    if (hitTestZone(zone, bx, by)) {
-      const removedUid = zone.uid;
-      waterZones.splice(i, 1);
-      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
-        waterZones.push({ uid: allocateUid(state), ...piece });
+    case 'dustPile':
+      removeByUid(room.dustPiles, uid);
+      break;
+    case 'grasshopperArea':
+      removeByUid(room.grasshopperAreas, uid);
+      break;
+    case 'fireflyArea':
+      removeByUid(room.fireflyAreas, uid);
+      break;
+    case 'decoration':
+      removeByUid(room.decorations, uid);
+      break;
+    case 'wall':
+      removeByUid(room.interiorWalls, uid);
+      break;
+    case 'lightSource':
+      removeByUid(room.lightSources, uid);
+      break;
+    case 'sunbeam':
+      removeByUid(room.sunbeams, uid);
+      break;
+    case 'sceneLight':
+      removeByUid(room.sceneLights, uid);
+      break;
+    case 'ambientLightBlocker':
+      removeByUid(room.ambientLightBlockers, uid);
+      break;
+    case 'waterZone': {
+      const zones = room.waterZones ?? [];
+      const zone = zones.find(z => z.uid === uid);
+      if (!zone) break;
+      removeByUid(zones, uid);
+      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+        zones.push({ uid: allocateUid(state), ...piece });
       }
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       markLiquidBodiesDirty();
-      return;
+      break;
     }
-  }
-
-  // Check lava zones. Same split-instead-of-remove behaviour as water zones.
-  const lavaZones = room.lavaZones ?? [];
-  for (let i = 0; i < lavaZones.length; i++) {
-    const zone = lavaZones[i];
-    if (hitTestZone(zone, bx, by)) {
-      const removedUid = zone.uid;
-      lavaZones.splice(i, 1);
-      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
-        lavaZones.push({ uid: allocateUid(state), ...piece });
+    case 'lavaZone': {
+      const zones = room.lavaZones ?? [];
+      const zone = zones.find(z => z.uid === uid);
+      if (!zone) break;
+      removeByUid(zones, uid);
+      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+        zones.push({ uid: allocateUid(state), ...piece });
       }
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
       markLiquidBodiesDirty();
-      return;
+      break;
     }
-  }
-
-  // Check TimeStop Field tiles. Same split-instead-of-remove behaviour as
-  // water/lava zones.
-  const timeStopFields = room.timeStopFields ?? [];
-  for (let i = 0; i < timeStopFields.length; i++) {
-    const zone = timeStopFields[i];
-    if (hitTestZone(zone, bx, by)) {
-      const removedUid = zone.uid;
-      timeStopFields.splice(i, 1);
-      for (const piece of splitZoneAroundCell(zone, Math.floor(bx), Math.floor(by))) {
-        timeStopFields.push({ uid: allocateUid(state), ...piece });
+    case 'timeStopField': {
+      const zones = room.timeStopFields ?? [];
+      const zone = zones.find(z => z.uid === uid);
+      if (!zone) break;
+      removeByUid(zones, uid);
+      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+        zones.push({ uid: allocateUid(state), ...piece });
       }
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
+      break;
     }
-  }
-
-  // Check crumble blocks
-  const crumbleBlocks = room.crumbleBlocks ?? [];
-  for (let i = 0; i < crumbleBlocks.length; i++) {
-    if (hitTestPoint(crumbleBlocks[i].xBlock, crumbleBlocks[i].yBlock, bx, by)) {
-      const removedUid = crumbleBlocks[i].uid;
-      crumbleBlocks.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check falling block tiles
-  const fallingBlocks = room.fallingBlocks ?? [];
-  for (let i = 0; i < fallingBlocks.length; i++) {
-    if (hitTestPoint(fallingBlocks[i].xBlock, fallingBlocks[i].yBlock, bx, by)) {
-      const removedUid = fallingBlocks[i].uid;
-      fallingBlocks.splice(i, 1);
-      if (room.fallingBlocks) room.fallingBlocks = fallingBlocks;
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check background blocks
-  const backgroundBlocks = room.backgroundBlocks ?? [];
-  for (let i = 0; i < backgroundBlocks.length; i++) {
-    if (hitTestZone({ xBlock: backgroundBlocks[i].xBlock, yBlock: backgroundBlocks[i].yBlock, wBlock: backgroundBlocks[i].wBlock, hBlock: backgroundBlocks[i].hBlock }, bx, by)) {
-      const removedUid = backgroundBlocks[i].uid;
-      backgroundBlocks.splice(i, 1);
-      room.backgroundBlocks = backgroundBlocks;
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check spikes
-  const spikes = room.spikes ?? [];
-  for (let i = 0; i < spikes.length; i++) {
-    const spSize = spikes[i].size === '2x2' ? 2 : 1;
-    if (hitTestZone({ xBlock: spikes[i].xBlock, yBlock: spikes[i].yBlock, wBlock: spSize, hBlock: spSize }, bx, by)) {
-      const removedUid = spikes[i].uid;
-      spikes.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check bounce pads
-  const bouncePads = room.bouncePads ?? [];
-  for (let i = 0; i < bouncePads.length; i++) {
-    if (hitTestZone({ xBlock: bouncePads[i].xBlock, yBlock: bouncePads[i].yBlock, wBlock: bouncePads[i].wBlock, hBlock: bouncePads[i].hBlock }, bx, by)) {
-      const removedUid = bouncePads[i].uid;
-      bouncePads.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check kinetic blocks
-  const kineticBlocks = room.kineticBlocks ?? [];
-  for (let i = 0; i < kineticBlocks.length; i++) {
-    if (hitTestZone({ xBlock: kineticBlocks[i].xBlock, yBlock: kineticBlocks[i].yBlock, wBlock: kineticBlocks[i].wBlock, hBlock: kineticBlocks[i].hBlock }, bx, by)) {
-      const removedUid = kineticBlocks[i].uid;
-      kineticBlocks.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  const grappleCarryBlocks = room.grappleCarryBlocks ?? [];
-  for (let i = 0; i < grappleCarryBlocks.length; i++) {
-    if (hitTestPoint(grappleCarryBlocks[i].xBlock, grappleCarryBlocks[i].yBlock, bx, by)) {
-      const removedUid = grappleCarryBlocks[i].uid;
-      grappleCarryBlocks.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  const phantasmalTiles = room.phantasmalTiles ?? [];
-  for (let i = 0; i < phantasmalTiles.length; i++) {
-    if (hitTestPoint(phantasmalTiles[i].xBlock, phantasmalTiles[i].yBlock, bx, by)) {
-      const removedUid = phantasmalTiles[i].uid;
-      phantasmalTiles.splice(i, 1);
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check dialogue triggers
-  const dialogueTriggers = room.dialogueTriggers ?? [];
-  for (let i = 0; i < dialogueTriggers.length; i++) {
-    if (hitTestZone({ xBlock: dialogueTriggers[i].xBlock, yBlock: dialogueTriggers[i].yBlock, wBlock: dialogueTriggers[i].wBlock, hBlock: dialogueTriggers[i].hBlock }, bx, by)) {
-      const removedUid = dialogueTriggers[i].uid;
-      dialogueTriggers.splice(i, 1);
-      if (room.dialogueTriggers) room.dialogueTriggers = dialogueTriggers;
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
-      return;
-    }
-  }
-
-  // Check guide dust paths — clicking near a control point removes that point
-  // (or the whole path if it would drop below 2 points). Clicking anywhere on
-  // the bounding region of a path deletes the entire path.
-  const guideDustPaths = room.guideDustPaths ?? [];
-  for (let i = 0; i < guideDustPaths.length; i++) {
-    const p = guideDustPaths[i];
-    // First check control-point proximity (1.5 block pick radius)
-    for (let pi = 0; pi < p.points.length; pi++) {
-      const pt = p.points[pi];
-      const dx = bx - pt.xBlock;
-      const dy = by - pt.yBlock;
-      if (dx * dx + dy * dy <= 1.5 * 1.5) {
-        if (p.points.length <= 2) {
-          // Delete the whole path
-          guideDustPaths.splice(i, 1);
-          room.guideDustPaths = guideDustPaths;
-          state.selectedElements = state.selectedElements.filter(e => e.uid !== p.uid);
-        } else {
-          p.points.splice(pi, 1);
-        }
-        state.guideDustPathSelectedPointIndex = null;
-        return;
+    case 'crumbleBlock':
+      removeByUid(room.crumbleBlocks, uid);
+      break;
+    case 'fallingBlock':
+      removeByUid(room.fallingBlocks, uid);
+      break;
+    case 'backgroundBlock':
+      removeByUid(room.backgroundBlocks, uid);
+      break;
+    case 'spike':
+      removeByUid(room.spikes, uid);
+      break;
+    case 'bouncePad':
+      removeByUid(room.bouncePads, uid);
+      break;
+    case 'kineticBlock':
+      removeByUid(room.kineticBlocks, uid);
+      break;
+    case 'grappleCarryBlock':
+      removeByUid(room.grappleCarryBlocks, uid);
+      break;
+    case 'phantasmalTile':
+      removeByUid(room.phantasmalTiles, uid);
+      break;
+    case 'dialogueTrigger':
+      removeByUid(room.dialogueTriggers, uid);
+      break;
+    case 'guideDustPath': {
+      const paths = room.guideDustPaths ?? [];
+      const path = paths.find(p => p.uid === uid);
+      const pointIndex = candidate.guideDustPathPointIndex;
+      if (!path || pointIndex === undefined) break;
+      if (path.points.length <= 2) {
+        removeByUid(paths, uid);
+      } else {
+        path.points.splice(pointIndex, 1);
       }
-    }
-  }
-
-  // Custom block placements
-  const placements = room.customBlockPlacements ?? [];
-  for (let i = 0; i < placements.length; i++) {
-    const p = placements[i];
-    if (bx >= p.xBlock && bx < p.xBlock + p.tileWidth &&
-        by >= p.yBlock && by < p.yBlock + p.tileHeight) {
-      placements.splice(i, 1);
-      room.customBlockPlacements = placements;
-      state.selectedElements = state.selectedElements.filter(e => e.uid !== p.uid);
+      state.guideDustPathSelectedPointIndex = null;
+      state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
       return;
     }
+    case 'customBlock':
+      removeByUid(room.customBlockPlacements, uid);
+      break;
+    default:
+      // Element types without deletion support (e.g. those not reachable via
+      // hit-testing at all) fall through as a no-op.
+      return;
   }
+
+  state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
 }
