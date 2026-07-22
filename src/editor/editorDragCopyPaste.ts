@@ -18,6 +18,7 @@ import {
   EditorZipMoveBlock,
 } from './editorState';
 import { canAddLimitedEnemy } from './editorEnemyCapacity';
+import { canMutateElement } from './editorLayers';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
 
@@ -148,6 +149,10 @@ export function moveSelectedElements(
 ): void {
   if (!s.roomData) return;
   for (const el of s.selectedElements) {
+    // Permission check lives here, inside the mutation function itself, so a
+    // controller-side gating bug can't move an element on a locked/hidden/
+    // select-only-excluded layer (see editorLayers.ts `canMutateElement`).
+    if (!canMutateElement(s, el)) continue;
     const key = el.type === 'playerSpawn' ? 0 : el.uid;
     const orig = positions.get(key);
     if (!orig) continue;

@@ -35,7 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
-import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId } from './editorLayers';
+import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId, canMutateElement, canMutateSelection } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -824,6 +824,20 @@ export function createEditorController(
         },
         onLayerStateChange: (id, patch) => {
           Object.assign(state.layers[id], patch);
+          // A layer flipping to hidden/locked/select-only-excluded can make
+          // previously-valid selection or an in-progress drag/resize invalid.
+          // Drop the now-invalid parts rather than letting them keep
+          // mutating an element the designer just restricted.
+          state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
+          if (state.isDragging && !canMutateSelection(state)) {
+            state.isDragging = false;
+          }
+          if (challengeResize !== null && !canMutateElement(state, { type: challengeResize.type })) {
+            challengeResize = null;
+          }
+          if (state.isResizingTransition && !canMutateElement(state, { type: 'transition' })) {
+            state.isResizingTransition = false;
+          }
           ui?.update(state);
         },
       });
@@ -1554,7 +1568,10 @@ export function createEditorController(
       const elements = challengeResize.type === 'challengeField'
         ? state.roomData.challengeFields : challengeResize.type === 'gate' ? state.roomData.gates : challengeResize.type === 'zipMoveBlock' ? state.roomData.zipMoveBlocks : state.roomData.challengeGates;
       const rect = (elements ?? []).find(element => element.uid === challengeResize!.uid);
-      if (rect) Object.assign(rect, resizeBlockRect(
+      // Permission check lives in the resize call site itself (not just the
+      // handle's initial hit-test), so a locked/hidden layer can't be resized
+      // via an in-progress drag even if the layer state changed mid-drag.
+      if (rect && canMutateElement(state, { type: challengeResize.type })) Object.assign(rect, resizeBlockRect(
         challengeResize.original,
         challengeResize.edge,
         state.cursorBlockX,

@@ -16,7 +16,7 @@
  * `CATEGORY_DEFAULT_LAYER`) rather than touching selection/render call sites.
  */
 
-import { EditorTool, type EditorState } from './editorState';
+import { EditorTool, type EditorState, type SelectedElement } from './editorState';
 import type { SelectedElementType } from './editorElementTypes';
 import type { PaletteCategory, PaletteItem } from './editorPaletteItems';
 
@@ -251,6 +251,30 @@ export function isLayerEditable(state: EditorState, id: LayerId): boolean {
 
 export function canSelectElementType(state: EditorState, type: SelectedElementType): boolean {
   return isLayerEditable(state, getLayerForElementType(type));
+}
+
+// ── Centralized mutation-permission policy ───────────────────────────────
+//
+// These helpers are the single source of truth for "is this mutation allowed
+// right now" — call them from INSIDE the mutation functions themselves
+// (placement, deletion, drag-move, resize), not only from mouse-controller
+// branches. A controller bug that skips its own gating check must not be able
+// to mutate a locked/hidden/select-only-excluded element; the mutation
+// function must refuse on its own.
+
+/** Whether an element may currently be placed, moved, resized, or deleted, given its layer. */
+export function canMutateElement(state: EditorState, element: Pick<SelectedElement, 'type'>): boolean {
+  return isLayerEditable(state, getLayerForElementType(element.type));
+}
+
+/** Whether every element in the current selection may currently be mutated. */
+export function canMutateSelection(state: EditorState): boolean {
+  return state.selectedElements.every(el => canMutateElement(state, el));
+}
+
+/** Whether new elements may currently be placed onto the given layer. */
+export function canPlaceOnLayer(state: EditorState, layerId: LayerId): boolean {
+  return isLayerEditable(state, layerId);
 }
 
 /**
