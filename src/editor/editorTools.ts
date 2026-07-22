@@ -18,7 +18,7 @@ import {
   hitTestTransition,
   hitTestTransitionRect,
 } from './editorHitTest';
-import { canSelectElementType } from './editorLayers';
+import { canSelectElementType, canMutateElement } from './editorLayers';
 export { deleteAtCursor, deleteAtCursorBrushed } from './editorDeleteTool';
 
 // ── Select tool ──────────────────────────────────────────────────────────────
@@ -45,116 +45,150 @@ export interface EditorHitCandidate {
  * and by the delete tool, so both features agree on exactly the same set of
  * candidates and tie-break order — one hit-test to keep in sync, not two.
  */
-export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate[] {
+/**
+ * Walks every selectable element under the cursor in the same deterministic
+ * priority order `getHitCandidatesAnyLayer` documents, invoking `visit` for
+ * each one. `visit` returns `true` to stop the walk immediately (used by
+ * `findTopEligibleHitCandidate` for an early-return, allocation-free single-
+ * candidate lookup) or `false` to keep scanning (used by
+ * `getHitCandidatesAnyLayer` to build the exhaustive list). Shared here so
+ * the two callers can never drift out of sync on ordering.
+ */
+function walkHitCandidatesAnyLayer(
+  state: EditorState,
+  visit: (element: SelectedElement, guideDustPathPointIndex?: number) => boolean,
+): void {
   const room = state.roomData;
-  if (room === null) return [];
+  if (room === null) return;
 
   const bx = state.cursorBlockX;
   const by = state.cursorBlockY;
-  const candidates: EditorHitCandidate[] = [];
-  let priority = 0;
+  let stopped = false;
   const push = (element: SelectedElement, guideDustPathPointIndex?: number) => {
-    candidates.push({ element, priority: priority++, guideDustPathPointIndex });
+    if (stopped) return;
+    if (visit(element, guideDustPathPointIndex)) stopped = true;
   };
 
   // Check transitions first (they occupy boundary edges)
   for (const t of room.transitions) {
     if (hitTestTransition(t, bx, by, room)) push({ type: 'transition', uid: t.uid });
   }
+  if (stopped) return;
 
   // Check enemies
   for (const e of room.enemies) {
     if (hitTestPoint(e.xBlock, e.yBlock, bx, by)) push({ type: 'enemy', uid: e.uid });
   }
+  if (stopped) return;
 
   // Check save tombs
   for (const s of room.saveTombs) {
     if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) push({ type: 'saveTomb', uid: s.uid });
   }
+  if (stopped) return;
 
   // Check skill tombs
   for (const s of room.skillTombs) {
     if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) push({ type: 'skillTomb', uid: s.uid });
   }
+  if (stopped) return;
   for (const field of room.challengeFields ?? []) {
     if (hitTestZone(field, bx, by)) push({ type: 'challengeField', uid: field.uid });
   }
+  if (stopped) return;
   for (const block of room.zipMoveBlocks ?? []) {
     if (hitTestZone(block, bx, by)) push({ type: 'zipMoveBlock', uid: block.uid });
   }
+  if (stopped) return;
   for (const gate of room.challengeGates ?? []) {
     if (hitTestZone(gate, bx, by)) push({ type: 'challengeGate', uid: gate.uid });
   }
+  if (stopped) return;
   for (const gate of room.gates ?? []) {
     if (hitTestZone(gate, bx, by)) push({ type: 'gate', uid: gate.uid });
   }
+  if (stopped) return;
   for (const totem of room.challengeTotems ?? []) {
     if (hitTestPoint(totem.xBlock, totem.yBlock, bx, by)) push({ type: 'challengeTotem', uid: totem.uid });
   }
+  if (stopped) return;
 
   // Check dust containers
   for (const c of (room.dustContainers ?? [])) {
     if (hitTestPoint(c.xBlock, c.yBlock, bx, by)) push({ type: 'dustContainer', uid: c.uid });
   }
+  if (stopped) return;
 
   // Check dust container pieces
   for (const c of (room.dustContainerPieces ?? [])) {
     if (hitTestPoint(c.xBlock, c.yBlock, bx, by)) push({ type: 'dustContainerPiece', uid: c.uid });
   }
+  if (stopped) return;
 
   // Check dust boost jars
   for (const j of (room.dustBoostJars ?? [])) {
     if (hitTestPoint(j.xBlock, j.yBlock, bx, by)) push({ type: 'dustBoostJar', uid: j.uid });
   }
+  if (stopped) return;
 
   // Check dust swarms
   for (const s of (room.dustSwarms ?? [])) {
     if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) push({ type: 'dustSwarm', uid: s.uid });
   }
+  if (stopped) return;
 
   // Check lambda anchors
   for (const a of (room.lambdaAnchors ?? [])) {
     if (hitTestPoint(a.xBlock, a.yBlock, bx, by)) push({ type: 'lambdaAnchor', uid: a.uid });
   }
+  if (stopped) return;
 
   // Check firefly jars
   for (const j of (room.fireflyJars ?? [])) {
     if (hitTestPoint(j.xBlock, j.yBlock, bx, by)) push({ type: 'fireflyJar', uid: j.uid });
   }
+  if (stopped) return;
 
   // Check springboards
   for (const s of (room.springboards ?? [])) {
     if (hitTestPoint(s.xBlock, s.yBlock, bx, by)) push({ type: 'springboard', uid: s.uid });
   }
+  if (stopped) return;
 
   // Check breakable blocks
   for (const b of (room.breakableBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) push({ type: 'breakableBlock', uid: b.uid });
   }
+  if (stopped) return;
 
   // Check dust piles
   for (const p of room.dustPiles) {
     if (hitTestPoint(p.xBlock, p.yBlock, bx, by)) push({ type: 'dustPile', uid: p.uid });
   }
+  if (stopped) return;
 
   // Check grasshopper areas
   for (const a of room.grasshopperAreas) {
     if (hitTestZone(a, bx, by)) push({ type: 'grasshopperArea', uid: a.uid });
   }
+  if (stopped) return;
   // Check firefly areas
   for (const a of (room.fireflyAreas ?? [])) {
     if (hitTestZone(a, bx, by)) push({ type: 'fireflyArea', uid: a.uid });
   }
+  if (stopped) return;
 
   // Check light sources (point selection at block centre).
   for (const ls of (room.lightSources ?? [])) {
     if (hitTestPoint(ls.xBlock, ls.yBlock, bx, by)) push({ type: 'lightSource', uid: ls.uid });
   }
+  if (stopped) return;
 
   // Check sunbeams (point selection at origin block).
   for (const sb of (room.sunbeams ?? [])) {
     if (hitTestPoint(sb.xBlock, sb.yBlock, bx, by)) push({ type: 'sunbeam', uid: sb.uid });
   }
+  if (stopped) return;
 
   // Check scene lights (point selection at world position converted to block coords).
   for (const sl of (room.sceneLights ?? [])) {
@@ -162,31 +196,37 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
     const slBy = sl.yWorld / BLOCK_SIZE_MEDIUM;
     if (hitTestPoint(slBx, slBy, bx, by)) push({ type: 'sceneLight', uid: sl.uid });
   }
+  if (stopped) return;
 
   // Check water zones
   for (const z of (room.waterZones ?? [])) {
     if (hitTestZone(z, bx, by)) push({ type: 'waterZone', uid: z.uid });
   }
+  if (stopped) return;
 
   // Check lava zones
   for (const z of (room.lavaZones ?? [])) {
     if (hitTestZone(z, bx, by)) push({ type: 'lavaZone', uid: z.uid });
   }
+  if (stopped) return;
 
   // Check TimeStop Field tiles
   for (const z of (room.timeStopFields ?? [])) {
     if (hitTestZone(z, bx, by)) push({ type: 'timeStopField', uid: z.uid });
   }
+  if (stopped) return;
 
   // Check crumble blocks
   for (const b of (room.crumbleBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) push({ type: 'crumbleBlock', uid: b.uid });
   }
+  if (stopped) return;
 
   // Check falling block tiles
   for (const fb of (room.fallingBlocks ?? [])) {
     if (hitTestPoint(fb.xBlock, fb.yBlock, bx, by)) push({ type: 'fallingBlock', uid: fb.uid });
   }
+  if (stopped) return;
 
   // Check background blocks
   for (const b of (room.backgroundBlocks ?? [])) {
@@ -194,14 +234,17 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       push({ type: 'backgroundBlock', uid: b.uid });
     }
   }
+  if (stopped) return;
 
   for (const b of (room.grappleCarryBlocks ?? [])) {
     if (hitTestPoint(b.xBlock, b.yBlock, bx, by)) push({ type: 'grappleCarryBlock', uid: b.uid });
   }
+  if (stopped) return;
 
   for (const t of (room.phantasmalTiles ?? [])) {
     if (hitTestPoint(t.xBlock, t.yBlock, bx, by)) push({ type: 'phantasmalTile', uid: t.uid });
   }
+  if (stopped) return;
 
   // Check dialogue triggers
   for (const dt of (room.dialogueTriggers ?? [])) {
@@ -209,6 +252,7 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       push({ type: 'dialogueTrigger', uid: dt.uid });
     }
   }
+  if (stopped) return;
 
   // Check guide dust paths — hit-test control points (1.5 block pick radius)
   for (const p of (room.guideDustPaths ?? [])) {
@@ -222,6 +266,7 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       }
     }
   }
+  if (stopped) return;
 
   // Check bounce pads
   for (const b of (room.bouncePads ?? [])) {
@@ -229,6 +274,7 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       push({ type: 'bouncePad', uid: b.uid });
     }
   }
+  if (stopped) return;
 
   // Check spikes
   for (const sp of (room.spikes ?? [])) {
@@ -237,11 +283,13 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       push({ type: 'spike', uid: sp.uid });
     }
   }
+  if (stopped) return;
 
   // Check decorations
   for (const d of (room.decorations ?? [])) {
     if (hitTestPoint(d.xBlock, d.yBlock, bx, by)) push({ type: 'decoration', uid: d.uid });
   }
+  if (stopped) return;
 
   // Check campaign spawn (campaign-level singleton; if present in this room)
   if (state.campaignSpawnBlock !== null &&
@@ -261,11 +309,13 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
       push({ type: 'customBlock', uid: p.uid });
     }
   }
+  if (stopped) return;
 
   // Check interior walls
   for (const w of room.interiorWalls) {
     if (hitTestWall(w, bx, by)) push({ type: 'wall', uid: w.uid });
   }
+  if (stopped) return;
 
   // Check ambient-light blockers last — they're single cells and shouldn't
   // block selection of things authored above them.
@@ -274,8 +324,60 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
   for (const b of (room.ambientLightBlockers ?? [])) {
     if (b.xBlock === bxFloor && b.yBlock === byFloor) push({ type: 'ambientLightBlocker', uid: b.uid });
   }
+  if (stopped) return;
 
+}
+
+/**
+ * Gathers every selectable element under the cursor's block coordinates,
+ * ignoring layer visibility/lock/select-only state, ordered by an explicit
+ * priority (see `EditorHitCandidate`). Used by `selectAtCursor` (click/hover)
+ * and by the delete tool, so both features agree on exactly the same set of
+ * candidates and tie-break order — one hit-test to keep in sync, not two.
+ *
+ * This exhaustively enumerates every candidate and allocates a
+ * `EditorHitCandidate` for each — appropriate when genuine overlap
+ * enumeration is needed (e.g. rect-select). Callers that only want the
+ * single best eligible candidate (hover, click-select, single-point delete)
+ * should use `findTopEligibleHitCandidate` instead, which returns as soon as
+ * it finds an eligible match without allocating an array or scanning the
+ * remainder of the candidate list.
+ */
+export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate[] {
+  const candidates: EditorHitCandidate[] = [];
+  let priority = 0;
+  walkHitCandidatesAnyLayer(state, (element, guideDustPathPointIndex) => {
+    candidates.push({ element, priority: priority++, guideDustPathPointIndex });
+    return false; // never stop — exhaustive by design
+  });
   return candidates;
+}
+
+/**
+ * Early-return, allocation-light lookup of the single top-priority candidate
+ * under the cursor that satisfies `predicate` (e.g. `canSelectElementType` or
+ * a delete-specific eligibility check). Walks candidates in the exact same
+ * priority order as `getHitCandidatesAnyLayer`/`walkHitCandidatesAnyLayer`,
+ * but stops at the first eligible match instead of scanning every
+ * collection and building a full array — used by hover, click-select, and
+ * single-point deletion, all of which only ever need "what's the first
+ * eligible thing here".
+ */
+export function findTopEligibleHitCandidate(
+  state: EditorState,
+  predicate: (element: SelectedElement) => boolean,
+): EditorHitCandidate | null {
+  let found: EditorHitCandidate | null = null;
+  let priority = 0;
+  walkHitCandidatesAnyLayer(state, (element, guideDustPathPointIndex) => {
+    const p = priority++;
+    if (predicate(element)) {
+      found = { element, priority: p, guideDustPathPointIndex };
+      return true; // stop — first eligible match wins
+    }
+    return false;
+  });
+  return found;
 }
 
 /**
@@ -285,10 +387,8 @@ export function getHitCandidatesAnyLayer(state: EditorState): EditorHitCandidate
  * `getHitCandidatesAnyLayer` for callers that just want "what's on top".
  */
 export function selectAtCursorAnyLayer(state: EditorState): SelectedElement | null {
-  const candidates = getHitCandidatesAnyLayer(state);
-  if (candidates.length === 0) return null;
-  let top = candidates[0];
-  for (const c of candidates) if (c.priority < top.priority) top = c;
+  const top = findTopEligibleHitCandidate(state, () => true);
+  if (top === null) return null;
   if (top.element.type === 'guideDustPath' && top.guideDustPathPointIndex !== undefined) {
     state.guideDustPathSelectedPointIndex = top.guideDustPathPointIndex;
   }
@@ -306,11 +406,8 @@ export function selectAtCursorAnyLayer(state: EditorState): SelectedElement | nu
  * considered.
  */
 export function selectAtCursor(state: EditorState): SelectedElement | null {
-  const candidates = getHitCandidatesAnyLayer(state)
-    .filter(c => canSelectElementType(state, c.element.type));
-  if (candidates.length === 0) return null;
-  let top = candidates[0];
-  for (const c of candidates) if (c.priority < top.priority) top = c;
+  const top = findTopEligibleHitCandidate(state, el => canSelectElementType(state, el.type));
+  if (top === null) return null;
   if (top.element.type === 'guideDustPath' && top.guideDustPathPointIndex !== undefined) {
     state.guideDustPathSelectedPointIndex = top.guideDustPathPointIndex;
   }
@@ -328,6 +425,9 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
 export function rotateSelectedElement(state: EditorState): void {
   const sel = state.selectedElements[0] ?? null;
   if (sel === null || state.roomData === null) return;
+  // Defend this mutation directly — don't rely solely on the layer-toggle
+  // callback having cancelled/pruned the selection after the fact.
+  if (!canMutateElement(state, sel)) return;
   if (sel.type === 'wall') {
     const wall = state.roomData.interiorWalls.find(w => w.uid === sel.uid);
     if (wall) {
@@ -368,6 +468,9 @@ export function rotateSelectedElement(state: EditorState): void {
 export function flipSelectedTransition(state: EditorState): void {
   const sel = state.selectedElements[0] ?? null;
   if (sel === null || sel.type !== 'transition' || state.roomData === null) return;
+  // Defend this mutation directly — don't rely solely on the layer-toggle
+  // callback having cancelled/pruned the selection after the fact.
+  if (!canMutateElement(state, sel)) return;
   const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
   if (!t) return;
   let newDir: TransitionDirection;

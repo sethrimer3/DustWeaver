@@ -60,6 +60,11 @@ export function renderEditorBackdrop(
   resetCanvasPass(ctx, virtualCanvas.width, virtualCanvas.height, false);
   bloomSystem.beginFrame();
 
+  // NOTE (Phase 1 known limitation): the WebGL particle path is NOT
+  // layer-gated — it renders unconditionally regardless of the powder/
+  // objects/etc. layer visibility toggles. Gating it would require passing
+  // layer-visibility flags down into the WebGL renderer's own particle
+  // classification, which is out of scope for this pass.
   if (webglRenderer.isAvailable) {
     webglRenderer.render(snapshot, offsetXPx, offsetYPx, zoom);
   } else {
@@ -123,6 +128,9 @@ export function renderEditorBackdrop(
     renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
     renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }
+  // NOTE (Phase 1 known limitation): tunnel-darkness is a room-wide overlay
+  // effect, not tied to any single content layer, so it is intentionally left
+  // unconditional here.
   drawTunnelDarkness(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
   if (powderVisible) {
     environmentalDust.render(ctx, offsetXPx, offsetYPx, zoom, true);
@@ -134,6 +142,9 @@ export function renderEditorBackdrop(
     skillTombEffectRenderer.renderFront(ctx, offsetXPx, offsetYPx, zoom);
   }
 
+  // NOTE (Phase 1 known limitation): the canvas2D fallback particle path (used
+  // when WebGL is unavailable) is NOT layer-gated, for the same reason as the
+  // WebGL path above — it has no per-layer classification of particles today.
   if (!webglRenderer.isAvailable) {
     renderParticles(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }
@@ -146,6 +157,9 @@ export function renderEditorBackdrop(
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+  // NOTE (Phase 1 known limitation): the high-resolution debug overlay is a
+  // device-space diagnostic overlay independent of any content layer, so it
+  // is intentionally left unconditional here.
   renderHighResolutionDebugOverlay({
     deviceCtx,
     canvas,

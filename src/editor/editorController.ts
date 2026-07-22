@@ -35,7 +35,7 @@ import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
-import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId, canMutateElement, canMutateSelection } from './editorLayers';
+import { ensureActiveLayerVisible, isActiveLayerLocked, LAYER_LABELS, getActiveLayerId, canMutateElement } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
 import type { RoomEdge } from './editorUI';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
@@ -826,17 +826,33 @@ export function createEditorController(
           Object.assign(state.layers[id], patch);
           // A layer flipping to hidden/locked/select-only-excluded can make
           // previously-valid selection or an in-progress drag/resize invalid.
-          // Drop the now-invalid parts rather than letting them keep
-          // mutating an element the designer just restricted.
-          state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
-          if (state.isDragging && !canMutateSelection(state)) {
+          //
+          // IMPORTANT: this check must run against the selection as it stood
+          // BEFORE any pruning below. Checking `canMutateSelection` after
+          // already filtering out the ineligible elements is vacuously true
+          // (a pruned/empty selection trivially "every() passes"), so an
+          // active drag would never actually be detected as invalid. Policy:
+          // if ANY currently-dragged element becomes ineligible, the whole
+          // drag is cancelled (all-or-nothing) — we do not silently continue
+          // dragging only the remaining eligible subset. Post-drag selection
+          // pruning (below) is a separate, independent concern and is allowed
+          // to keep just the eligible subset.
+          const dragSelectionBecameInvalid = state.selectedElements.some(el => !canMutateElement(state, el));
+          if (state.isDragging && dragSelectionBecameInvalid) {
             state.isDragging = false;
+            dragOriginalPositions.clear();
           }
+          // Selection-list pruning for post-drag/idle state: drop elements
+          // that are no longer eligible so future operations don't act on
+          // them. This is independent of (and happens after) the drag-cancel
+          // decision above, which used the pre-prune selection.
+          state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
           if (challengeResize !== null && !canMutateElement(state, { type: challengeResize.type })) {
             challengeResize = null;
           }
           if (state.isResizingTransition && !canMutateElement(state, { type: 'transition' })) {
             state.isResizingTransition = false;
+            resizeOriginalGeometry = null;
           }
           ui?.update(state);
         },
@@ -1586,7 +1602,9 @@ export function createEditorController(
     // Edge-resize for a selected transition
     if (state.isResizingTransition && inputState.isMouseDown && state.roomData && resizeOriginalGeometry) {
       const trans = state.roomData.transitions.find((t: EditorTransition) => t.uid === state.resizeTransitionUid);
-      if (trans) {
+      // Defend this mutation directly — don't rely solely on
+      // onLayerStateChange having cancelled the resize after the fact.
+      if (trans && canMutateElement(state, { type: 'transition' })) {
         const orig = resizeOriginalGeometry;
         const isHoriz = trans.direction === 'left' || trans.direction === 'right';
         const cx = state.cursorBlockX;

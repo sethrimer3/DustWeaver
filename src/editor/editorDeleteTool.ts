@@ -8,8 +8,8 @@
 import { EditorState, allocateUid } from './editorState';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
-import { getHitCandidatesAnyLayer, type EditorHitCandidate } from './editorTools';
-import { canSelectElementType } from './editorLayers';
+import { findTopEligibleHitCandidate, type EditorHitCandidate } from './editorTools';
+import { canMutateElement, getLayerForElementType, isLayerLocked, isLayerVisible } from './editorLayers';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
 
@@ -94,14 +94,28 @@ export function deleteAtCursorBrushed(state: EditorState): void {
 /**
  * Deletes the element at the given block coordinates.
  *
- * Resolves candidates via the SAME `getHitCandidatesAnyLayer` function the
- * Select tool uses (see editorTools.ts), applies the delete policy (locked,
- * hidden, or select-only-excluded layers are never deletable — identical to
- * the select-eligibility policy today), takes exactly the single top-eligible
- * candidate, and deletes exactly that element. There is no second, separately
- * ordered hit-test or priority chain — this guarantees deletion can never
- * target a different element than the one permission-checked, and can never
- * reach "through" a locked/hidden element to something else.
+ * Resolves the target via `findTopEligibleHitCandidate` (see editorTools.ts)
+ * walking the SAME deterministic priority order the Select tool uses, so
+ * deletion can never target a different element than the one permission-
+ * checked. Uses `canMutateElement` — not `canSelectElementType` — as the
+ * mutation-eligibility check, so selection-eligibility and mutation-
+ * eligibility remain architecturally distinct predicates even though they
+ * happen to agree today.
+ *
+ * Explicit destructive click-through policy (distinct from selection, which
+ * always falls through locked AND hidden elements unchanged):
+ *  - A HIDDEN top candidate is treated as absent — there's nothing visible to
+ *    protect, so deletion falls through to whatever is beneath it.
+ *  - A VISIBLE LOCKED top candidate BLOCKS destructive click-through: nothing
+ *    is deleted at all, neither the locked element itself nor anything
+ *    beneath it. A locked object is meant to protect what's under it from an
+ *    accidental click, and deleting through it would be surprising.
+ *  - A visible, unlocked candidate excluded only by an active select-only
+ *    filter is treated like selection's existing select-only behaviour
+ *    (skipped, falls through to the next candidate) — select-only doesn't
+ *    interact with the lock/hidden click-through policy above; this is
+ *    intentionally left matching prior behaviour rather than given new,
+ *    separately-defined semantics.
  */
 function deleteAt(state: EditorState, bx: number, by: number): void {
   const room = state.roomData;
@@ -111,14 +125,21 @@ function deleteAt(state: EditorState, bx: number, by: number): void {
   const savedCursorY = state.cursorBlockY;
   state.cursorBlockX = bx;
   state.cursorBlockY = by;
-  const candidates = getHitCandidatesAnyLayer(state)
-    .filter(c => canSelectElementType(state, c.element.type));
+  const target = findTopEligibleHitCandidate(state, el => {
+    const layerId = getLayerForElementType(el.type);
+    if (!isLayerVisible(state, layerId)) return false; // hidden -> absent, fall through
+    if (isLayerLocked(state, layerId)) return true; // visible+locked -> stop here; blocks below
+    if (!canMutateElement(state, el)) return false; // select-only-excluded -> fall through
+    return true; // eligible deletion target
+  });
   state.cursorBlockX = savedCursorX;
   state.cursorBlockY = savedCursorY;
 
-  if (candidates.length === 0) return;
-  let target = candidates[0];
-  for (const c of candidates) if (c.priority < target.priority) target = c;
+  if (target === null) return;
+  // Visible+locked candidates are returned by the predicate above so the
+  // walk stops on them (rather than silently skipping past a protector), but
+  // they must never actually be deleted — check again here explicitly.
+  if (isLayerLocked(state, getLayerForElementType(target.element.type))) return;
 
   deleteResolvedCandidate(state, target, Math.floor(bx), Math.floor(by));
 }
