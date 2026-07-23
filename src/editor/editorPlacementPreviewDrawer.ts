@@ -13,7 +13,7 @@
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import type { EditorState, EditorRoomData, EditorWall, EditorTransition } from './editorState';
 import { EditorTool } from './editorState';
-import { getPlacementPreview, wouldPlacementSucceedAt } from './editorPlaceTool';
+import { getPlacementPreview, evaluateBrushOperation } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
 import { anchorForMaterial } from './editorPixelMaterialTool';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -188,7 +188,10 @@ export function drawPlacementPreview(
 ): void {
   if (state.activeTool !== EditorTool.Place || state.selectedPaletteItem === null) return;
 
-  const placementStatus = getPlacementStatus(state, () => wouldPlacementSucceedAt(state, state.cursorBlockX, state.cursorBlockY));
+  const placementStatus = getPlacementStatus(state, () => {
+    const op = evaluateBrushOperation(state);
+    return op.validCount > 0 ? true : (op.reason ?? false);
+  });
 
   // Pixel-material tool: highlight the exact footprint that will be painted
   // (a single native pixel for Sand 1x1, a snapped 2x2 block for Sand 2x2).

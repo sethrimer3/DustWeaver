@@ -62,7 +62,7 @@ export interface EditorHitCandidate {
  * marquee selection (`getAllElementsInRect`, below), which iterates every
  * registered type.
  */
-const CLICK_PRIORITY_ORDER: readonly SelectedElementType[] = [
+export const CLICK_PRIORITY_ORDER: readonly SelectedElementType[] = [
   'transition', 'enemy', 'saveTomb', 'skillTomb', 'challengeField', 'zipMoveBlock',
   'challengeGate', 'gate', 'challengeTotem', 'dustContainer', 'dustContainerPiece',
   'dustBoostJar', 'dustSwarm', 'lambdaAnchor', 'fireflyJar', 'springboard', 'breakableBlock',

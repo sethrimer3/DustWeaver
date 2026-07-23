@@ -78,22 +78,48 @@ function pointInMarquee(x: number, y: number, r: MarqueeRect): boolean {
   return x >= r.minX && x <= r.maxX && y >= r.minY && y <= r.maxY;
 }
 
-function boundingRectOfPoints(points: readonly { xBlock: number; yBlock: number }[]): { minX: number; minY: number; maxX: number; maxY: number } {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const p of points) {
-    if (p.xBlock < minX) minX = p.xBlock;
-    if (p.yBlock < minY) minY = p.yBlock;
-    if (p.xBlock > maxX) maxX = p.xBlock;
-    if (p.yBlock > maxY) maxY = p.yBlock;
-  }
-  return { minX, minY, maxX, maxY };
+/** A 2D point, in BLOCK coordinates. */
+export interface Vec2 { x: number; y: number }
+
+function pointInRect(p: Vec2, r: MarqueeRect): boolean {
+  return p.x >= r.minX && p.x <= r.maxX && p.y >= r.minY && p.y <= r.maxY;
 }
 
-function rectsOverlap(
-  aMinX: number, aMinY: number, aMaxX: number, aMaxY: number,
-  r: MarqueeRect,
-): boolean {
-  return aMaxX >= r.minX && aMinX <= r.maxX + 1 && aMaxY >= r.minY && aMinY <= r.maxY + 1;
+/** Standard parametric segment/segment intersection test (no AABB shortcuts). */
+function segmentsIntersect(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2): boolean {
+  const d1x = p2.x - p1.x, d1y = p2.y - p1.y;
+  const d2x = p4.x - p3.x, d2y = p4.y - p3.y;
+  const denom = d1x * d2y - d1y * d2x;
+  // Parallel (including collinear) segments never register as an
+  // intersection here — the endpoint-in-rect checks in
+  // `segmentIntersectsRect` already cover the practically-relevant touching
+  // cases (an endpoint landing inside or on the marquee).
+  if (denom === 0) return false;
+  const t = ((p3.x - p1.x) * d2y - (p3.y - p1.y) * d2x) / denom;
+  const u = ((p3.x - p1.x) * d1y - (p3.y - p1.y) * d1x) / denom;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+}
+
+/**
+ * True if the line segment p1→p2 intersects the (inclusive) marquee rect —
+ * either endpoint lies inside the rect, or the segment crosses one of the
+ * rect's four edges. Used by path-like elements (ropes, guide dust paths) so
+ * marquee selection tests actual segment geometry instead of a bounding box,
+ * which would false-positive when the marquee only clips empty space inside
+ * the path's bounding box.
+ */
+export function segmentIntersectsRect(p1: Vec2, p2: Vec2, r: MarqueeRect): boolean {
+  if (pointInRect(p1, r) || pointInRect(p2, r)) return true;
+  const corners: readonly Vec2[] = [
+    { x: r.minX, y: r.minY },
+    { x: r.maxX, y: r.minY },
+    { x: r.maxX, y: r.maxY },
+    { x: r.minX, y: r.maxY },
+  ];
+  for (let i = 0; i < 4; i++) {
+    if (segmentsIntersect(p1, p2, corners[i], corners[(i + 1) % 4])) return true;
+  }
+  return false;
 }
 
 // ── Generic adapter factories ─────────────────────────────────────────────
@@ -267,16 +293,15 @@ const ropeAdapter: EditorElementAdapter<EditorRope> = {
     const db = Math.hypot(rp.anchorBXBlock - bx, rp.anchorBYBlock - by);
     return da <= tol || db <= tol;
   },
-  // Rope marquee selection: intersect with the bounding rect of both anchor
-  // points (a straight 2-point "path"), per the "bounding rect of control
-  // points" geometry rule for paths.
-  marqueeTest: (rp, r) => {
-    const minX = Math.min(rp.anchorAXBlock, rp.anchorBXBlock);
-    const maxX = Math.max(rp.anchorAXBlock, rp.anchorBXBlock);
-    const minY = Math.min(rp.anchorAYBlock, rp.anchorBYBlock);
-    const maxY = Math.max(rp.anchorAYBlock, rp.anchorBYBlock);
-    return rectsOverlap(minX, minY, maxX, maxY, r);
-  },
+  // Rope marquee selection: test the actual anchor-A→anchor-B segment (and
+  // each control point) against the marquee, not just its bounding box — a
+  // marquee that clips empty space inside the rope's bounding box but never
+  // touches the segment itself must NOT select it.
+  marqueeTest: (rp, r) => segmentIntersectsRect(
+    { x: rp.anchorAXBlock, y: rp.anchorAYBlock },
+    { x: rp.anchorBXBlock, y: rp.anchorBYBlock },
+    r,
+  ),
   guideMetadata: rp => ({
     points: [
       { xBlock: rp.anchorAXBlock, yBlock: rp.anchorAYBlock },
@@ -313,10 +338,25 @@ const guideDustPathAdapter: EditorElementAdapter<EditorGuideDustPath> = {
   // editorTools.ts. This hitTest (hit if the cursor is near ANY point) is
   // still correct and used by the exhaustiveness/registry-parity tests.
   hitTest: (p, bx, by) => p.points.some(pt => Math.hypot(pt.xBlock - bx, pt.yBlock - by) <= 1.5),
+  // Guide dust path marquee selection: test each segment between consecutive
+  // waypoints (and the loop-closing segment, when `loop`) plus each waypoint
+  // itself, instead of the path's bounding box — a marquee that only clips
+  // empty space inside the bounding box must NOT select the path.
   marqueeTest: (p, r) => {
-    if (p.points.length === 0) return false;
-    const b = boundingRectOfPoints(p.points);
-    return rectsOverlap(b.minX, b.minY, b.maxX, b.maxY, r);
+    const pts = p.points;
+    if (pts.length === 0) return false;
+    if (pts.length === 1) return pointInRect({ x: pts[0].xBlock, y: pts[0].yBlock }, r);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a: Vec2 = { x: pts[i].xBlock, y: pts[i].yBlock };
+      const b: Vec2 = { x: pts[i + 1].xBlock, y: pts[i + 1].yBlock };
+      if (segmentIntersectsRect(a, b, r)) return true;
+    }
+    if (p.loop) {
+      const last: Vec2 = { x: pts[pts.length - 1].xBlock, y: pts[pts.length - 1].yBlock };
+      const first: Vec2 = { x: pts[0].xBlock, y: pts[0].yBlock };
+      if (segmentIntersectsRect(last, first, r)) return true;
+    }
+    return false;
   },
   guideMetadata: p => ({ points: p.points, loop: p.loop }),
 };
@@ -416,3 +456,22 @@ export const ELEMENT_ADAPTERS: { readonly [K in SelectedElementType]: EditorElem
 
 /** All element types, in the order object keys were declared above. */
 export const ALL_ELEMENT_TYPES: readonly SelectedElementType[] = Object.keys(ELEMENT_ADAPTERS) as SelectedElementType[];
+
+/**
+ * Element types intentionally absent from `editorTools.ts`'s
+ * `CLICK_PRIORITY_ORDER` — they have no point-click selection path (by
+ * design) even though they DO have a registered adapter and participate in
+ * marquee selection (`getAllElementsInRect`). Kept here (rather than only as
+ * a comment on `CLICK_PRIORITY_ORDER`) so a registry-invariant test can
+ * assert `CLICK_PRIORITY_ORDER` and `CLICK_PRIORITY_OMITTED` together cover
+ * every `SelectedElementType` exactly once, with no silently-forgotten type.
+ */
+export const CLICK_PRIORITY_OMITTED: readonly SelectedElementType[] = [
+  // Grabbed only via drag/marquee — no click-select affordance.
+  'kineticBlock',
+  // Grabbed via its own endpoint-anchor hit test (hitTestRopeAnchor), not the
+  // generic click-priority scan.
+  'rope',
+  // Painted/erased via the pixel-material brush tools; no click-select path.
+  'pixelMaterial',
+];

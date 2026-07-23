@@ -33,7 +33,7 @@ import {
 import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
 import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
-import { placeAtCursor, wouldPlacementSucceedAt } from './editorPlaceTool';
+import { placeAtCursor, evaluateBrushOperation } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { getPlacementStatus, describePlacementBlockReason, canMutateElement, canMutateSelection } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
@@ -1547,8 +1547,14 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
           }
-        } else if (state.activeTool === EditorTool.Place && !getPlacementStatus(state, () => wouldPlacementSucceedAt(state, state.cursorBlockX, state.cursorBlockY)).allowed) {
-          const status = getPlacementStatus(state, () => wouldPlacementSucceedAt(state, state.cursorBlockX, state.cursorBlockY));
+        } else if (state.activeTool === EditorTool.Place && !getPlacementStatus(state, () => {
+          const op = evaluateBrushOperation(state);
+          return op.validCount > 0 ? true : (op.reason ?? false);
+        }).allowed) {
+          const status = getPlacementStatus(state, () => {
+            const op = evaluateBrushOperation(state);
+            return op.validCount > 0 ? true : (op.reason ?? false);
+          });
           const sig = `${status.targetLayer ?? ''}:${status.reason ?? ''}`;
           const now = performance.now();
           if (sig !== lastBlockedPlacementSig || now - lastBlockedPlacementToastAt > BLOCKED_PLACEMENT_TOAST_THROTTLE_MS) {

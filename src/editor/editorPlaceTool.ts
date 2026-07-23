@@ -38,7 +38,10 @@ import {
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
-import { canPlaceOnLayer, getPlacementTargetLayer, type PlacementBlockReason } from './editorLayers';
+import {
+  canPlaceOnLayer, getPlacementTargetLayer, isLayerVisible, isAnyLayerSoloed,
+  type PlacementBlockReason,
+} from './editorLayers';
 import { anchorForMaterial } from './editorPixelMaterialTool';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
@@ -158,6 +161,107 @@ export function placeAtCursor(state: EditorState): boolean {
 
   placeAt(state, state.cursorBlockX, state.cursorBlockY);
   return state.nextUid !== uidBefore;
+}
+
+/** Result of a whole-operation brush preflight — see `evaluateBrushOperation`. */
+export type BrushOperationResult = {
+  validCount: number;
+  blockedCount: number;
+  /** Null whenever at least one cell is valid (`validCount > 0`). */
+  reason: PlacementBlockReason | null;
+};
+
+/**
+ * Side-effect-free, operation-level placement preflight. Evaluates the SAME
+ * set of effective cells `placeAtCursor` would actually touch for the current
+ * brush mode (single / 3x3 / 5x5 / rect / fill / pixel-material) and reports
+ * how many would succeed vs. be blocked — without allocating any UID or
+ * mutating `state.roomData`.
+ *
+ * Policy: the whole operation is only blocked when `validCount === 0` (no
+ * destination cell can succeed). A brush with partial occupancy (e.g. a 3x3
+ * with one occupied center cell) is allowed — `placeAtCursor` already places
+ * only the cells that succeed. Layer restrictions (hidden/locked/solo-
+ * excluded/select-only-excluded) block the entire operation regardless of
+ * cell validity. Rect-brush anchor-pending (first click, no drag yet) is
+ * always allowed since it only records an anchor and mutates nothing.
+ */
+export function evaluateBrushOperation(state: EditorState): BrushOperationResult {
+  const room = state.roomData;
+  const item = state.selectedPaletteItem;
+  if (room === null) return { validCount: 0, blockedCount: 0, reason: 'no-room' };
+  if (item === null) return { validCount: 0, blockedCount: 0, reason: 'no-item' };
+
+  const targetLayer = getPlacementTargetLayer(state);
+  if (targetLayer === null) return { validCount: 0, blockedCount: 0, reason: 'no-item' };
+  if (!canPlaceOnLayer(state, targetLayer)) {
+    const layer = state.layers[targetLayer];
+    let reason: PlacementBlockReason;
+    if (!isLayerVisible(state, targetLayer)) {
+      reason = isAnyLayerSoloed(state) && !layer.solo ? 'solo-excluded' : 'hidden';
+    } else if (layer.locked) {
+      reason = 'locked';
+    } else {
+      reason = 'select-only-excluded';
+    }
+    return { validCount: 0, blockedCount: 0, reason };
+  }
+
+  const isBrushable =
+    item.category === 'blocks' ||
+    item.category === 'specialBlocks' ||
+    item.category === 'liquids' ||
+    item.category === 'timeStop' ||
+    (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
+
+  // Rect-brush first click: only an anchor gets recorded, nothing is placed
+  // yet, so this is always a valid "operation" regardless of what's under
+  // the cursor — mirrors the actual first-click behavior in placeAt/placeAtCursor.
+  if (isBrushable && state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
+    return { validCount: 1, blockedCount: 0, reason: null };
+  }
+
+  let cells: { x: number; y: number }[];
+  if (isBrushable && state.brushMode === 'fill') {
+    let fillKind: FillKind = 'tile';
+    if (item.category === 'liquids') {
+      fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
+    } else if (item.category === 'timeStop') {
+      fillKind = 'timeStop';
+    }
+    cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
+  } else if (isBrushable && state.brushMode !== 'single') {
+    const itemWBlock = getPlacementWidth(item, state.placementRotationSteps);
+    const itemHBlock = getPlacementHeight(item, state.placementRotationSteps);
+    cells = getBrushCells(
+      state.brushMode,
+      state.cursorBlockX,
+      state.cursorBlockY,
+      state.brushRectStartBlockX,
+      state.brushRectStartBlockY,
+      itemWBlock,
+      itemHBlock,
+    );
+  } else {
+    cells = [{ x: state.cursorBlockX, y: state.cursorBlockY }];
+  }
+
+  let validCount = 0;
+  let blockedCount = 0;
+  let firstBlockReason: PlacementBlockReason = null;
+  for (const cell of cells) {
+    const result = wouldPlacementSucceedAt(state, cell.x, cell.y);
+    if (result === true) {
+      validCount++;
+    } else {
+      blockedCount++;
+      if (firstBlockReason === null) {
+        firstBlockReason = result === false ? 'invalid-location' : result;
+      }
+    }
+  }
+
+  return { validCount, blockedCount, reason: validCount > 0 ? null : firstBlockReason };
 }
 
 /**
