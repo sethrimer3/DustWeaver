@@ -31,13 +31,15 @@ import {
   findCeilingBlockRow,
   canPlaceGrappleCarryBlockAt,
   canPlacePhantasmalTileAt,
+  canPlacePixelMaterialAt,
   isCellCoveredByWaterZone,
   isCellCoveredByLavaZone,
   isCellCoveredByTimeStopField,
 } from './editorHitTest';
 import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
-import { canPlaceOnLayer, getPlacementTargetLayer } from './editorLayers';
+import { canPlaceOnLayer, getPlacementTargetLayer, type PlacementBlockReason } from './editorLayers';
+import { anchorForMaterial } from './editorPixelMaterialTool';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -159,6 +161,300 @@ export function placeAtCursor(state: EditorState): boolean {
 }
 
 /**
+ * Side-effect-free placement preflight: reports whether placing the current
+ * palette item at (bx, by) would actually succeed, WITHOUT allocating a UID,
+ * mutating `state.roomData`, or touching any pending-anchor/selection state.
+ *
+ * This mirrors the same occupancy/bounds guard clauses `placeAt` itself uses
+ * for each item category — it deliberately does NOT reimplement the full
+ * placement dispatcher (no object construction, no array pushes, no
+ * `allocateUid` calls); it only re-runs the pure boolean checks that decide
+ * whether `placeAt` would return early. Kept in the same module as `placeAt`
+ * so the two can never drift out of sync on which checks apply to which item.
+ *
+ * Returns `true` when placement would succeed, `false` for a generic
+ * invalid/out-of-bounds location, or one of the specific `PlacementBlockReason`
+ * values ('occupied' | 'capacity') when the caller can usefully distinguish
+ * why. Intended for `getPlacementStatus`'s `isValidLocation` callback — used
+ * by the preview drawer, the controller's blocked-click toast, and (as a
+ * final guard immediately before mutation) `placeAtCursor` itself.
+ */
+export function wouldPlacementSucceedAt(
+  state: EditorState,
+  bx: number,
+  by: number,
+): boolean | PlacementBlockReason {
+  const room = state.roomData;
+  const item = state.selectedPaletteItem;
+  if (room === null || item === null) return false;
+
+  // ── Pixel-material tool ──────────────────────────────────────────────────
+  // Uses native-pixel coordinates (state.cursorWorldX/Y), not the block
+  // coordinates this function otherwise takes — the pixel-material tool's
+  // own preview/placement path (drawPlacementPreview, placePixelMaterialAt)
+  // always operates in pixel space, never block space.
+  if (item.isPixelMaterialItem === 1) {
+    const anchor = anchorForMaterial(Math.floor(state.cursorWorldX), Math.floor(state.cursorWorldY), item.pixelMaterialId ?? 1);
+    return canPlacePixelMaterialAt(room, anchor.x, anchor.y, item.pixelMaterialId ?? 1) ? true : 'occupied';
+  }
+
+  if (!isInsideRoom(room, bx, by)) return false;
+
+  // ── Lighting layer ─────────────────────────────────────────────────────
+  if (item.category === 'lighting') {
+    if (item.isAmbientLightBlockerItem === 1) {
+      const xFloor = Math.floor(bx);
+      const yFloor = Math.floor(by);
+      const already = (room.ambientLightBlockers ?? []).some(
+        b => b.xBlock === xFloor && b.yBlock === yFloor,
+      );
+      return already ? 'occupied' : true;
+    }
+    // Light sources, sunbeams, and scene lights have no dedup/occupancy rule
+    // — any in-bounds cell is valid.
+    return true;
+  }
+
+  // ── Liquids layer ──────────────────────────────────────────────────────
+  if (item.category === 'liquids') {
+    const wBlock = item.defaultWidthBlocks ?? 1;
+    const hBlock = item.defaultHeightBlocks ?? 1;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return false;
+    if (isCellCoveredByWaterZone(room, bx, by) || isCellCoveredByLavaZone(room, bx, by)) return 'occupied';
+    return true;
+  }
+
+  // ── TimeStop Field layer ────────────────────────────────────────────────
+  if (item.category === 'timeStop') {
+    const wBlock = item.defaultWidthBlocks ?? 1;
+    const hBlock = item.defaultHeightBlocks ?? 1;
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return false;
+    if (isCellCoveredByTimeStopField(room, bx, by)) return 'occupied';
+    return true;
+  }
+
+  const isNonWallSpecialBlock = item.id === 'springboard' || item.id === 'breakable_block_1x1' || item.id === 'breakable_block_2x2';
+
+  if (!isNonWallSpecialBlock && (item.category === 'blocks' || item.category === 'specialBlocks')) {
+    const wBlock = getPlacementWidth(item, state.placementRotationSteps);
+    const hBlock = getPlacementHeight(item, state.placementRotationSteps);
+
+    if (item.isBouncePadItem === 1) {
+      const bounceW = getPlacementWidth(item, state.placementRotationSteps);
+      const bounceH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, bounceW, bounceH)) return false;
+      const existingBouncePads = room.bouncePads ?? [];
+      const overlapsBounce = existingBouncePads.some(b =>
+        bx < b.xBlock + b.wBlock && bx + bounceW > b.xBlock &&
+        by < b.yBlock + b.hBlock && by + bounceH > b.yBlock,
+      );
+      if (overlapsBounce) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, bounceW, bounceH)) return 'occupied';
+      return true;
+    }
+
+    if (item.isKineticBlockItem === 1) {
+      const kbW = getPlacementWidth(item, state.placementRotationSteps);
+      const kbH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, kbW, kbH)) return false;
+      const existingKineticBlocks = room.kineticBlocks ?? [];
+      const overlapsKinetic = existingKineticBlocks.some(kb =>
+        bx < kb.xBlock + kb.wBlock && bx + kbW > kb.xBlock &&
+        by < kb.yBlock + kb.hBlock && by + kbH > kb.yBlock,
+      );
+      if (overlapsKinetic) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, kbW, kbH)) return 'occupied';
+      return true;
+    }
+
+    if (item.isGrappleCarryBlockItem === 1) {
+      return canPlaceGrappleCarryBlockAt(room, bx, by) ? true : 'occupied';
+    }
+
+    if (item.isPhantasmalTileItem === 1) {
+      return canPlacePhantasmalTileAt(room, bx, by) ? true : 'occupied';
+    }
+
+    if (item.isSpikeItem === 1) {
+      const spikeSize = item.spikeSize ?? '1x1';
+      const spikeW = getPlacementWidth(item, state.placementRotationSteps);
+      const spikeH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, spikeW, spikeH)) return false;
+      const spikes = room.spikes ?? [];
+      const spikeSizeBlocks = spikeSize === '2x2' ? 2 : 1;
+      const overlapsSpike = spikes.some(sp => {
+        const spSize = sp.size === '2x2' ? 2 : 1;
+        return bx < sp.xBlock + spSize && bx + spikeSizeBlocks > sp.xBlock &&
+               by < sp.yBlock + spSize && by + spikeSizeBlocks > sp.yBlock;
+      });
+      if (overlapsSpike) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, spikeW, spikeH)) return 'occupied';
+      return true;
+    }
+
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
+      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
+      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
+      const crumbles = room.crumbleBlocks ?? [];
+      const overlapsCrumble = crumbles.some(b => {
+        const bw = b.wBlock ?? 1;
+        const bh = b.hBlock ?? 1;
+        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
+               by < b.yBlock + bh && by + crumbleH > b.yBlock;
+      });
+      if (overlapsCrumble) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return 'occupied';
+      return true;
+    }
+
+    if (item.isFallingBlockItem === 1 || (
+      item.category === 'blocks' &&
+      (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
+    )) {
+      const fallingW = getPlacementWidth(item, state.placementRotationSteps);
+      const fallingH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, fallingW, fallingH)) return false;
+      if (rectOverlapsSolidEditorObject(room, bx, by, fallingW, fallingH)) return 'occupied';
+      for (let yOffset = 0; yOffset < fallingH; yOffset++) {
+        for (let xOffset = 0; xOffset < fallingW; xOffset++) {
+          if (isFallingBlockAt(room, bx + xOffset, by + yOffset)) return 'occupied';
+        }
+      }
+      return true;
+    }
+
+    if (
+      item.category === 'blocks' &&
+      item.isBackgroundBlockItem !== 1 &&
+      item.isPlatformItem !== 1 &&
+      item.isRampItem !== 1 &&
+      item.isStairsItem !== 1 &&
+      state.pendingBlockPlacementModifier === 'background'
+    ) {
+      const bgW = getPlacementWidth(item, state.placementRotationSteps);
+      const bgH = getPlacementHeight(item, state.placementRotationSteps);
+      return rectFitsInsideRoom(room, bx, by, bgW, bgH);
+    }
+
+    if (item.isBackgroundBlockItem === 1) {
+      const bgW = getPlacementWidth(item, state.placementRotationSteps);
+      const bgH = getPlacementHeight(item, state.placementRotationSteps);
+      return rectFitsInsideRoom(room, bx, by, bgW, bgH);
+    }
+
+    if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return false;
+    const overlaps = room.interiorWalls.some(w => wallsOverlap(w, bx, by, wBlock, hBlock));
+    if (overlaps) return 'occupied';
+    if (rectOverlapsFallingBlocks(room, bx, by, wBlock, hBlock)) return 'occupied';
+    return true;
+  }
+
+  // ── Dedup-by-position "singleton per cell" objects ───────────────────────
+  const dedupPointArrays: (readonly { xBlock: number; yBlock: number }[] | undefined)[] = [];
+  if (item.id === 'challenge_totem') dedupPointArrays.push(room.challengeTotems);
+  if (item.id === 'save_tomb') dedupPointArrays.push(room.saveTombs);
+  if (item.id === 'skill_tomb') dedupPointArrays.push(room.skillTombs);
+  if (item.isDustContainerItem === 1 || item.id === 'dust_container') dedupPointArrays.push(room.dustContainers);
+  if (item.isDustContainerPieceItem === 1 || item.id === 'dust_container_piece') dedupPointArrays.push(room.dustContainerPieces);
+  if (item.isDustSwarmItem === 1 || item.id === 'dust_swarm') dedupPointArrays.push(room.dustSwarms);
+  if (item.isLambdaAnchorItem === 1 || item.id === 'lambda_anchor') dedupPointArrays.push(room.lambdaAnchors);
+  if (item.id === 'firefly_jar') dedupPointArrays.push(room.fireflyJars);
+  if (item.id === 'springboard') dedupPointArrays.push(room.springboards);
+  if (item.id === 'breakable_block_1x1') dedupPointArrays.push(room.breakableBlocks);
+  for (const arr of dedupPointArrays) {
+    if ((arr ?? []).some(p => p.xBlock === bx && p.yBlock === by)) return 'occupied';
+  }
+  if (dedupPointArrays.length > 0) return true;
+
+  if (item.id === 'breakable_block_2x2') {
+    const cells: Array<[number, number]> = [[bx, by], [bx + 1, by], [bx, by + 1], [bx + 1, by + 1]];
+    for (const [cx, cy] of cells) {
+      if (!isInsideRoom(room, cx, cy)) return false;
+      if ((room.breakableBlocks ?? []).some(a => a.xBlock === cx && a.yBlock === cy)) return 'occupied';
+    }
+    return true;
+  }
+
+  if (item.id === 'decoration_mushroom' || item.id === 'decoration_glowgrass' || item.id === 'decoration_vine') {
+    const isVine = item.id === 'decoration_vine';
+    const targetRow = isVine
+      ? findCeilingBlockRow(room, bx, by)
+      : findFloorBlockRow(room, bx, by);
+    if (targetRow === null) return false;
+    const kind = item.id === 'decoration_mushroom' ? 'mushroom' : item.id === 'decoration_glowgrass' ? 'glowGrass' : 'vine';
+    const alreadyPlaced = (room.decorations ?? []).some(d => d.xBlock === bx && d.yBlock === targetRow && d.kind === kind);
+    return alreadyPlaced ? 'occupied' : true;
+  }
+
+  if (item.category === 'ropes') {
+    // First click of a rope only sets a pending anchor — always "valid" as a
+    // location (the second click is what can actually fail min-length/wall-
+    // crossing checks, and this preflight has no way to know the anchor a
+    // hypothetical second click would use without mutating state).
+    if (state.pendingRopeAnchorXBlock === null) return true;
+    const ax = state.pendingRopeAnchorXBlock;
+    const ay = state.pendingRopeAnchorYBlock!;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lenBlocks = Math.sqrt(dx * dx + dy * dy);
+    if (lenBlocks <= MIN_ROPE_LENGTH_BLOCKS) return false;
+    if (ropeLineCrossesWall(room, ax, ay, bx, by)) return false;
+    return true;
+  }
+
+  if (item.isGuideDustPathItem === 1) {
+    // Always valid — either starts a new path or extends the active one.
+    return true;
+  }
+
+  if (item.isCustomBlockItem === 1 && item.customBlockId !== undefined) {
+    const tw = item.customBlockTileWidth ?? 1;
+    const th = item.customBlockTileHeight ?? 1;
+    if (!rectFitsInsideRoom(room, bx, by, tw, th)) return false;
+    for (const w of room.interiorWalls) {
+      if (bx < w.xBlock + w.wBlock && bx + tw > w.xBlock &&
+          by < w.yBlock + w.hBlock && by + th > w.yBlock) return 'occupied';
+    }
+    const existingPlacements = room.customBlockPlacements ?? [];
+    for (const ep of existingPlacements) {
+      if (bx < ep.xBlock + ep.tileWidth && bx + tw > ep.xBlock &&
+          by < ep.yBlock + ep.tileHeight && by + th > ep.yBlock) return 'occupied';
+    }
+    return true;
+  }
+
+  if (item.zipMoveBlockVariant !== undefined) {
+    const startX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
+    const startY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
+    const xBlock = startX === null ? bx : Math.min(startX, bx);
+    const yBlock = startY === null ? by : Math.min(startY, by);
+    const requestedW = startX === null ? 3 : Math.abs(bx - startX) + 1;
+    const requestedH = startY === null ? 3 : Math.abs(by - startY) + 1;
+    const wBlock = Math.min(Math.max(3, requestedW), room.widthBlocks - xBlock);
+    const hBlock = Math.min(Math.max(3, requestedH), room.heightBlocks - yBlock);
+    return wBlock >= 3 && hBlock >= 3;
+  }
+
+  if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
+    const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
+    const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
+    const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
+    const yBlock = rectStartY === null ? by : Math.min(rectStartY, by);
+    const requestedW = rectStartX === null ? item.defaultWidthBlocks ?? 1 : Math.abs(bx - rectStartX) + 1;
+    const requestedH = rectStartY === null ? item.defaultHeightBlocks ?? 1 : Math.abs(by - rectStartY) + 1;
+    const wBlock = Math.min(requestedW, room.widthBlocks - xBlock);
+    const hBlock = Math.min(requestedH, room.heightBlocks - yBlock);
+    return wBlock >= 1 && hBlock >= 1;
+  }
+
+  // Enemies, player spawn, room transitions, campaign spawn (handled via its
+  // own singleton modal flow in the controller), and grasshopper areas have
+  // no occupancy rule beyond being in-bounds, which was already checked above.
+  return true;
+}
+
+/**
  * Places the currently selected palette item at the given block coordinates.
  * Internal helper — use placeAtCursor() externally.
  */
@@ -168,6 +464,13 @@ function placeAt(state: EditorState, bx: number, by: number): void {
   if (room === null || item === null) return;
 
   if (!isInsideRoom(room, bx, by)) return;
+
+  // Authoritative preflight guard: re-run the exact same side-effect-free
+  // checks the preview/toast layer used to decide this placement looked
+  // valid. Keeps this function as the sole mutation authority — a caller
+  // that skipped its own `getPlacementStatus` check (or a preflight that's
+  // out of sync) still can't cause a mutation past this point.
+  if (wouldPlacementSucceedAt(state, bx, by) !== true) return;
 
   // ── Lighting layer ─────────────────────────────────────────────────────
   if (item.category === 'lighting') {

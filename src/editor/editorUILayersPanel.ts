@@ -12,9 +12,63 @@ import type { EditorState, EditorUICallbacks } from './editorState';
 import {
   LAYER_IDS, LAYER_LABELS, getPlacementTargetLayer, getSelectedElementLayers,
   getPlacementStatus, describePlacementBlockReason, getLayerForElementType,
-  type LayerId, type EditorLayerState,
+  type LayerId, type EditorLayerState, type PlacementStatus,
 } from './editorLayers';
 import { PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
+
+/**
+ * Pure computation of one layer row's combined presentation state — split out
+ * from `sync()` so it's independently testable without a DOM. A layer can
+ * simultaneously be the placement TARGET, contain part of the current
+ * SELECTION, and be RESTRICTED (locked/hidden) — all three markers combine
+ * instead of one hiding the others (the bug this replaced: an `if` / `else
+ * if` chain that only ever showed a single state at a time).
+ */
+export interface LayerRowPresentation {
+  isTarget: boolean;
+  isRestrictedTarget: boolean;
+  markerText: string;
+  title: string;
+}
+
+const LAYER_RESTRICTED_REASONS = new Set(['hidden', 'locked', 'solo-excluded', 'select-only-excluded']);
+
+export function computeLayerRowPresentation(
+  id: LayerId,
+  targetLayer: LayerId | null,
+  status: PlacementStatus,
+  layer: EditorLayerState,
+  containsSelection: boolean,
+  selCount: number,
+): LayerRowPresentation {
+  const isTarget = id === targetLayer;
+  const targetIsRestricted = targetLayer !== null && LAYER_RESTRICTED_REASONS.has(status.reason ?? '');
+  const isRestrictedTarget = isTarget && targetIsRestricted;
+
+  const markerParts: string[] = [];
+  const titleParts: string[] = [];
+  if (isTarget) {
+    markerParts.push(isRestrictedTarget ? '⛔ target' : '▶ target');
+    titleParts.push(isRestrictedTarget
+      ? `Placement target — blocked: ${describePlacementBlockReason(status.reason, targetLayer)}`
+      : 'Placement target for the active tool');
+  }
+  if (containsSelection) {
+    markerParts.push(`● sel${selCount > 1 ? ` (${selCount})` : ''}`);
+    titleParts.push('Contains part of the current selection');
+  }
+  if (!isTarget && (layer.locked || !layer.visible)) {
+    markerParts.push(layer.locked ? '🔒' : '🚫');
+    titleParts.push(layer.locked ? 'Layer is locked' : 'Layer is hidden');
+  }
+
+  return {
+    isTarget,
+    isRestrictedTarget,
+    markerText: markerParts.join('  '),
+    title: titleParts.join(' — '),
+  };
+}
 
 export interface EditorLayersPanel {
   readonly div: HTMLDivElement;
@@ -153,9 +207,13 @@ export function createEditorLayersPanel(
       selectionCountByLayer.set(layerId, (selectionCountByLayer.get(layerId) ?? 0) + 1);
     }
 
+    // Deliberately NOT passing a location predicate here: the layers panel's
+    // "target, blocked" marker communicates LAYER-level restrictions (hidden/
+    // locked/solo/select-only), not moment-to-moment cursor validity — mixing
+    // in occupied/out-of-bounds would make the panel flicker as the mouse
+    // moves, which isn't what this indicator is for. The preview drawer and
+    // controller toast are what surface cursor-position-specific reasons.
     const status = getPlacementStatus(state);
-    const restrictedReasons = new Set(['hidden', 'locked', 'solo-excluded', 'select-only-excluded']);
-    const targetIsRestricted = targetLayer !== null && restrictedReasons.has(status.reason ?? '');
 
     for (const id of LAYER_IDS) {
       const r = rows.get(id)!;
@@ -177,22 +235,11 @@ export function createEditorLayersPanel(
         r.selectOnlyBtn.style.background = layer.selectOnly ? SELECT_ONLY_ON_BG : TOGGLE_OFF_BG;
       }
 
-      const isTarget = id === targetLayer;
-      const isRestrictedTarget = isTarget && targetIsRestricted;
-      const containsSelection = selectedLayers.has(id);
       const selCount = selectionCountByLayer.get(id) ?? 0;
-
-      let markerText = '';
-      let title = '';
-      if (isTarget) {
-        markerText = isRestrictedTarget ? '⛔ target' : '▶ target';
-        title = isRestrictedTarget
-          ? `Placement target — blocked: ${describePlacementBlockReason(status.reason, targetLayer)}`
-          : 'Placement target for the active tool';
-      } else if (containsSelection) {
-        markerText = `● sel${selCount > 1 ? ` (${selCount})` : ''}`;
-        title = 'Contains part of the current selection';
-      }
+      const containsSelection = selectedLayers.has(id);
+      const { isTarget, isRestrictedTarget, markerText, title } = computeLayerRowPresentation(
+        id, targetLayer, status, layer, containsSelection, selCount,
+      );
 
       const presentationSig = `${isTarget}|${isRestrictedTarget}|${containsSelection}|${markerText}|${selCount}`;
       if (presentationSig !== (r.row.dataset.presentationSig ?? '')) {
@@ -207,7 +254,7 @@ export function createEditorLayersPanel(
         r.label.style.fontWeight = isTarget ? 'bold' : 'normal';
         r.marker.textContent = markerText;
         r.marker.title = title;
-        r.marker.style.color = isRestrictedTarget ? '#ffb08a' : isTarget ? '#9fd8ff' : '#e0c96a';
+        r.marker.style.color = isRestrictedTarget ? '#ffb08a' : isTarget ? '#9fd8ff' : containsSelection ? '#e0c96a' : '#d0d0d0';
         r.row.setAttribute('aria-current', isTarget ? 'true' : 'false');
         r.row.setAttribute(
           'aria-label',

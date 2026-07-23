@@ -33,7 +33,7 @@ import {
 import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
 import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
-import { placeAtCursor } from './editorPlaceTool';
+import { placeAtCursor, wouldPlacementSucceedAt } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { getPlacementStatus, describePlacementBlockReason, canMutateElement, canMutateSelection } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
@@ -1547,8 +1547,8 @@ export function createEditorController(
             state.selectionBoxStartBlockY = state.cursorBlockY;
           }
           }
-        } else if (state.activeTool === EditorTool.Place && !getPlacementStatus(state).allowed) {
-          const status = getPlacementStatus(state);
+        } else if (state.activeTool === EditorTool.Place && !getPlacementStatus(state, () => wouldPlacementSucceedAt(state, state.cursorBlockX, state.cursorBlockY)).allowed) {
+          const status = getPlacementStatus(state, () => wouldPlacementSucceedAt(state, state.cursorBlockX, state.cursorBlockY));
           const sig = `${status.targetLayer ?? ''}:${status.reason ?? ''}`;
           const now = performance.now();
           if (sig !== lastBlockedPlacementSig || now - lastBlockedPlacementToastAt > BLOCKED_PLACEMENT_TOAST_THROTTLE_MS) {
