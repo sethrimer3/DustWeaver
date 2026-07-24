@@ -408,7 +408,10 @@ export function buildWallLayout(
   // when the layout cache itself rebuilds, never per-frame. See
   // surfaceRimDistanceField.ts for why this is safe to compute unconditionally
   // even for rooms with no custom rim styles: it's O(occupied tiles) either way.
-  const interiorRimDistanceField = buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks);
+  const needsInteriorDistance = [...tileSurfaceRim.values()].some(style => style.mode === 'inverted');
+  const interiorRimDistanceField = needsInteriorDistance
+    ? buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks)
+    : new Map<string, number>();
 
   const layout: CachedWallLayout = {
     signature,

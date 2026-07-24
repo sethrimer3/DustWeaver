@@ -110,8 +110,8 @@ function makeWallSnapshot(rects: Array<{ x: number; y: number; w: number; h: num
     isInvisibleFlag: new Uint8Array(count),
     rampOrientationIndex: new Uint8Array(count).fill(255),
     isPillarHalfWidthFlag: new Uint8Array(count),
-    surfaceRimStyleIndex: new Uint16Array(count).fill(0xFFFF),
-    surfaceRimStyleTable: [],
+    surfaceRimStyleIndex: new Uint16Array(count),
+    surfaceRimStyleTable: [normalizeSurfaceRimStyle({ mode: 'inverted' })],
   };
 }
 
@@ -236,4 +236,11 @@ test('cache invalidation: interiorRimDistanceField is rebuilt when wall geometry
   const layoutB = getWallLayoutCache(snapshotB, BLOCK_SIZE, 20, 20);
   assert.equal(layoutB.interiorRimDistanceField.get(`${OFFSET + 2},${OFFSET + 2}`), 2, 'the new shape\'s true center must reflect the new, larger exposure map');
   assert.notEqual(layoutA, layoutB, 'geometry change must produce a fresh layout object, not reuse the old one');
+});
+
+test('performance: layouts without inverted styles do not construct an interior distance field', () => {
+  const snapshot = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 5 * BLOCK_SIZE, h: 5 * BLOCK_SIZE }]);
+  snapshot.surfaceRimStyleIndex.fill(0xFFFF);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 20, 20);
+  assert.equal(layout.interiorRimDistanceField.size, 0);
 });

@@ -534,7 +534,7 @@ export function handlePropertyChange(
     return ref === undefined ? undefined : structuredClone(ref);
   });
 
-  const pending = capturePendingSnapshot(roomData);
+  const pending = capturePendingSnapshot(roomData, undefined, undefined, false, `Property:${prop}`);
 
   for (const el of selectedElements) {
     applyPropertyToElement(roomData, el, prop, value, selectedPointIndex);

@@ -589,6 +589,7 @@ export function renderSurfaceEdgeOverlayPass(
   if (params.interiorTileCoords && params.getInteriorDistanceForTile && params.getStyleForTile) {
     for (const { col, row } of params.interiorTileCoords) {
       if (!_inFilterRange(col, row, params)) continue;
+      if (surfaceExposureMap.masks.has(`${col},${row}`)) continue;
       const style = params.getStyleForTile(col, row);
       if (!style || style.mode !== 'inverted' || style.interiorDarkness <= 0) continue;
 

@@ -74,6 +74,8 @@ export function normalizeSurfaceRimStyle(input: Partial<SurfaceRimStyle> | undef
   const mode: SurfaceRimMode = SURFACE_RIM_MODES.includes(input.mode as SurfaceRimMode)
     ? (input.mode as SurfaceRimMode)
     : DEFAULT_SURFACE_RIM_STYLE.mode;
+  if (mode === 'default') return DEFAULT_SURFACE_RIM_STYLE;
+  if (mode === 'none') return { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'none' };
   const falloff: SurfaceRimFalloff = SURFACE_RIM_FALLOFFS.includes(input.falloff as SurfaceRimFalloff)
     ? (input.falloff as SurfaceRimFalloff)
     : DEFAULT_SURFACE_RIM_STYLE.falloff;
@@ -82,8 +84,10 @@ export function normalizeSurfaceRimStyle(input: Partial<SurfaceRimStyle> | undef
     color: normalizeSurfaceRimColor(input.color),
     widthPx: Math.round(_clamp(input.widthPx ?? DEFAULT_SURFACE_RIM_STYLE.widthPx, _MIN_WIDTH_PX, _MAX_WIDTH_PX)),
     opacity: _clamp(input.opacity ?? DEFAULT_SURFACE_RIM_STYLE.opacity, 0, 1),
-    falloff,
-    interiorDarkness: _clamp(input.interiorDarkness ?? DEFAULT_SURFACE_RIM_STYLE.interiorDarkness, 0, 1),
+    falloff: mode === 'solid' ? DEFAULT_SURFACE_RIM_STYLE.falloff : falloff,
+    interiorDarkness: mode === 'inverted'
+      ? _clamp(input.interiorDarkness ?? DEFAULT_SURFACE_RIM_STYLE.interiorDarkness, 0, 1)
+      : DEFAULT_SURFACE_RIM_STYLE.interiorDarkness,
   };
 }
 
@@ -93,14 +97,14 @@ export function isDefaultSurfaceRimStyle(style: SurfaceRimStyle): boolean {
 }
 
 export function surfaceRimStylesEqual(a: SurfaceRimStyle, b: SurfaceRimStyle): boolean {
-  if (a === b) return true;
-  if (a.mode !== b.mode) return false;
-  if (a.mode === 'none') return true; // no other field matters for 'none'
-  if (a.color !== b.color) return false;
-  if (a.widthPx !== b.widthPx) return false;
-  if (a.opacity !== b.opacity) return false;
-  if (a.falloff !== b.falloff) return false;
-  if (a.mode === 'inverted' && a.interiorDarkness !== b.interiorDarkness) return false;
+  const ca = normalizeSurfaceRimStyle(a);
+  const cb = normalizeSurfaceRimStyle(b);
+  if (ca === cb) return true;
+  if (ca.mode !== cb.mode) return false;
+  if (ca.mode === 'none') return true;
+  if (ca.color !== cb.color || ca.widthPx !== cb.widthPx || ca.opacity !== cb.opacity) return false;
+  if (ca.mode !== 'solid' && ca.falloff !== cb.falloff) return false;
+  if (ca.mode === 'inverted' && ca.interiorDarkness !== cb.interiorDarkness) return false;
   return true;
 }
 
@@ -110,18 +114,19 @@ export function surfaceRimStylesEqual(a: SurfaceRimStyle, b: SurfaceRimStyle): b
  * layout cache without needing to stringify the whole style.
  */
 export function hashSurfaceRimStyle(style: SurfaceRimStyle): number {
+  const canonical = normalizeSurfaceRimStyle(style);
   let h = 0;
   const mix = (n: number): void => {
     h = Math.imul(h, 1664525) + 1013904223 | 0;
     h ^= n | 0;
   };
-  mix(SURFACE_RIM_MODES.indexOf(style.mode));
-  if (style.mode === 'none') return h >>> 0;
-  mix(parseInt(style.color, 16) | 0);
-  mix(style.widthPx);
-  mix(Math.round(style.opacity * 1000));
-  mix(SURFACE_RIM_FALLOFFS.indexOf(style.falloff));
-  if (style.mode === 'inverted') mix(Math.round(style.interiorDarkness * 1000));
+  mix(SURFACE_RIM_MODES.indexOf(canonical.mode));
+  if (canonical.mode === 'default' || canonical.mode === 'none') return h >>> 0;
+  mix(parseInt(canonical.color, 16) | 0);
+  mix(canonical.widthPx);
+  mix(Math.round(canonical.opacity * 1000));
+  if (canonical.mode !== 'solid') mix(SURFACE_RIM_FALLOFFS.indexOf(canonical.falloff));
+  if (canonical.mode === 'inverted') mix(Math.round(canonical.interiorDarkness * 1000));
   return h >>> 0;
 }
 
@@ -151,20 +156,30 @@ const _CODE_FALLOFF: readonly SurfaceRimFalloff[] = ['hard', 'linear', 'smooth',
  */
 export type CompactSurfaceRimStyle =
   | readonly [mode: 'n']
-  | readonly [mode: 's', color: string, widthPx: number, opacity: number]
-  | readonly [mode: 'g', color: string, widthPx: number, opacity: number, falloff: number]
-  | readonly [mode: 'i', color: string, widthPx: number, opacity: number, falloff: number, interiorDarkness: number];
+  | readonly [mode: 's', color?: string, widthPx?: number, opacity?: number]
+  | readonly [mode: 'g', color?: string, widthPx?: number, opacity?: number, falloff?: number]
+  | readonly [mode: 'i', color?: string, widthPx?: number, opacity?: number, falloff?: number, interiorDarkness?: number];
 
 export function encodeSurfaceRimStyle(style: SurfaceRimStyle): CompactSurfaceRimStyle {
-  if (style.mode === 'default') {
+  const canonical = normalizeSurfaceRimStyle(style);
+  if (canonical.mode === 'default') {
     throw new Error('encodeSurfaceRimStyle: default styles must not be interned');
   }
-  if (style.mode === 'none') return ['n'];
-  const opacity = Math.round(style.opacity * 1000) / 1000;
-  if (style.mode === 'solid') return ['s', style.color, style.widthPx, opacity];
-  if (style.mode === 'gradient') return ['g', style.color, style.widthPx, opacity, _FALLOFF_CODE[style.falloff]];
-  return ['i', style.color, style.widthPx, opacity, _FALLOFF_CODE[style.falloff],
-    Math.round(style.interiorDarkness * 1000) / 1000];
+  if (canonical.mode === 'none') return ['n'];
+  const values: Array<string | number | undefined> = [
+    _MODE_CODE[canonical.mode], canonical.color, canonical.widthPx,
+    Math.round(canonical.opacity * 1000) / 1000,
+  ];
+  if (canonical.mode !== 'solid') values.push(_FALLOFF_CODE[canonical.falloff]);
+  if (canonical.mode === 'inverted') values.push(Math.round(canonical.interiorDarkness * 1000) / 1000);
+  const defaults: Array<string | number> = [
+    _MODE_CODE[canonical.mode], DEFAULT_SURFACE_RIM_STYLE.color,
+    DEFAULT_SURFACE_RIM_STYLE.widthPx, DEFAULT_SURFACE_RIM_STYLE.opacity,
+  ];
+  if (canonical.mode !== 'solid') defaults.push(_FALLOFF_CODE[DEFAULT_SURFACE_RIM_STYLE.falloff]);
+  if (canonical.mode === 'inverted') defaults.push(DEFAULT_SURFACE_RIM_STYLE.interiorDarkness);
+  while (values.length > 1 && values[values.length - 1] === defaults[values.length - 1]) values.pop();
+  return values as unknown as CompactSurfaceRimStyle;
 }
 
 export function decodeSurfaceRimStyle(entry: unknown): SurfaceRimStyle {

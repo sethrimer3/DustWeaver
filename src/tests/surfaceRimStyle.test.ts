@@ -26,7 +26,7 @@ test('normalizeSurfaceRimStyle: clamps width/opacity/interiorDarkness to valid r
   const s = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 9999, opacity: 5, interiorDarkness: -3 });
   assert.ok(s.widthPx <= 32 && s.widthPx >= 1);
   assert.equal(s.opacity, 1);
-  assert.equal(s.interiorDarkness, 0);
+  assert.equal(s.interiorDarkness, DEFAULT_SURFACE_RIM_STYLE.interiorDarkness);
 });
 
 test('normalizeSurfaceRimColor: strips leading #, lowercases, rejects malformed hex', () => {
@@ -48,6 +48,38 @@ test('isDefaultSurfaceRimStyle / surfaceRimStylesEqual', () => {
   const none1 = normalizeSurfaceRimStyle({ mode: 'none', color: 'ff0000' });
   const none2 = normalizeSurfaceRimStyle({ mode: 'none', color: '00ff00' });
   assert.ok(surfaceRimStylesEqual(none1, none2));
+});
+
+test('mode-specific canonicalization removes all visually irrelevant fields', () => {
+  assert.equal(normalizeSurfaceRimStyle({
+    mode: 'default', color: 'ff0000', widthPx: 32, opacity: 1,
+    falloff: 'exponential', interiorDarkness: 1,
+  }), DEFAULT_SURFACE_RIM_STYLE);
+  assert.deepEqual(
+    normalizeSurfaceRimStyle({ mode: 'none', color: 'ff0000', widthPx: 32, opacity: 1 }),
+    { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'none' },
+  );
+  const solid = normalizeSurfaceRimStyle({
+    mode: 'solid', color: 'ff0000', widthPx: 8, opacity: 0.7,
+    falloff: 'exponential', interiorDarkness: 1,
+  });
+  assert.equal(solid.falloff, DEFAULT_SURFACE_RIM_STYLE.falloff);
+  assert.equal(solid.interiorDarkness, DEFAULT_SURFACE_RIM_STYLE.interiorDarkness);
+  const gradient = normalizeSurfaceRimStyle({
+    mode: 'gradient', falloff: 'smooth', interiorDarkness: 1,
+  });
+  assert.equal(gradient.interiorDarkness, DEFAULT_SURFACE_RIM_STYLE.interiorDarkness);
+});
+
+test('equality and hashing agree for styles differing only in irrelevant fields', () => {
+  const solidA = { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'solid', falloff: 'hard', interiorDarkness: 0 } as const;
+  const solidB = { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'solid', falloff: 'exponential', interiorDarkness: 1 } as const;
+  assert.ok(surfaceRimStylesEqual(solidA, solidB));
+  assert.equal(hashSurfaceRimStyle(solidA), hashSurfaceRimStyle(solidB));
+  const gradientA = { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'gradient', interiorDarkness: 0 } as const;
+  const gradientB = { ...DEFAULT_SURFACE_RIM_STYLE, mode: 'gradient', interiorDarkness: 1 } as const;
+  assert.ok(surfaceRimStylesEqual(gradientA, gradientB));
+  assert.equal(hashSurfaceRimStyle(gradientA), hashSurfaceRimStyle(gradientB));
 });
 
 test('hashSurfaceRimStyle: deterministic, distinguishes distinct styles, ignores irrelevant fields for none', () => {
@@ -73,6 +105,20 @@ test('encode/decode round-trip for every non-default mode', () => {
     const decoded = decodeSurfaceRimStyle(encoded);
     assert.ok(surfaceRimStylesEqual(style, decoded), `round-trip mismatch for mode ${style.mode}`);
   }
+});
+
+test('compact encoding omits safe trailing defaults and decoding accepts old and new tuple lengths', () => {
+  assert.deepEqual(encodeSurfaceRimStyle(normalizeSurfaceRimStyle({ mode: 'solid' })), ['s']);
+  assert.deepEqual(encodeSurfaceRimStyle(normalizeSurfaceRimStyle({ mode: 'gradient' })), ['g']);
+  assert.deepEqual(encodeSurfaceRimStyle(normalizeSurfaceRimStyle({ mode: 'inverted' })), ['i']);
+  assert.ok(surfaceRimStylesEqual(
+    decodeSurfaceRimStyle(['s']),
+    decodeSurfaceRimStyle(['s', 'ffffff', 3, 0.3]),
+  ));
+  assert.ok(surfaceRimStylesEqual(
+    decodeSurfaceRimStyle(['i']),
+    decodeSurfaceRimStyle(['i', 'ffffff', 3, 0.3, 1, 0.5]),
+  ));
 });
 
 test('encodeSurfaceRimStyle throws for default styles (must never be interned)', () => {

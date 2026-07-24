@@ -1,112 +1,358 @@
 /**
- * Editor undo/redo history system.
- * Stores snapshots of EditorRoomData (and, when relevant, campaign-spawn
- * metadata) for undo/redo operations.
+ * Transactional editor undo/redo.
+ *
+ * Common room edits are stored as UID-addressed element patches. Room resize,
+ * changes to unsupported room-level structure, and entries whose compact
+ * representation would be unsafe use the explicit snapshot fallback. History
+ * is editor-session state only and is never included in room/campaign JSON.
  */
-
 import type { EditorRoomData } from './editorState';
 import type { CampaignSpawnData } from '../levels/campaignSchema';
 
-const MAX_HISTORY_SIZE = 50;
+export const EDITOR_HISTORY_BYTE_BUDGET = 8 * 1024 * 1024;
+export const EDITOR_HISTORY_ENTRY_CAP = 200;
+const MAX_SINGLE_ENTRY_BYTES = EDITOR_HISTORY_BYTE_BUDGET;
+const ENTRY_OVERHEAD_BYTES = 96;
 
-/**
- * A single undo/redo snapshot. `campaignSpawn`/`initialRoomId` are only
- * populated when the mutation being snapshotted could affect campaign-spawn
- * placement; callers that don't touch campaign spawn state may omit them,
- * in which case undo/redo leaves the current campaign spawn untouched.
- */
-export interface HistorySnapshot {
-  roomData: EditorRoomData;
-  /** Present only for snapshots that touch campaign spawn state. */
+type JsonRecord = Record<string, unknown>;
+type Direction = 'before' | 'after';
+
+export interface CampaignSpawnHistoryState {
   campaignSpawn?: CampaignSpawnData;
   initialRoomId?: string;
-  /** Distinguishes "no campaign spawn" (undefined campaignSpawn + tracked) from "untracked". */
+}
+
+export interface ElementChange {
+  collection: ElementCollectionKey;
+  uid: number;
+  before?: JsonRecord;
+  after?: JsonRecord;
+  beforeIndex: number;
+  afterIndex: number;
+}
+
+export interface RoomFieldChange {
+  field: RoomFieldKey;
+  before: unknown;
+  after: unknown;
+}
+
+interface EntryBase {
+  label: string;
+  timestamp: number;
+  estimatedBytes: number;
+  revisionBefore: number;
+  revisionAfter: number;
+  campaignSpawnBefore?: CampaignSpawnHistoryState;
+  campaignSpawnAfter?: CampaignSpawnHistoryState;
+}
+
+export interface ElementPatchHistoryEntry extends EntryBase {
+  type: 'element-patch';
+  elements: ElementChange[];
+  roomFields: RoomFieldChange[];
+}
+
+export interface TileRegionHistoryEntry extends EntryBase {
+  type: 'tile-region';
+  elements: ElementChange[];
+  roomFields: RoomFieldChange[];
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+export interface SnapshotHistoryEntry extends EntryBase {
+  type: 'snapshot';
+  reason: 'room-resize' | 'unsupported-complex-mutation' | 'oversized-patch';
+  before: EditorRoomData;
+  after: EditorRoomData;
+  /** Compatibility bridge for Phase 1-6 callers that push immediately before
+   * mutation. Materialized once, at the first undo. */
+  legacyLiveData?: EditorRoomData;
+}
+
+export type EditorHistoryEntry =
+  | ElementPatchHistoryEntry
+  | TileRegionHistoryEntry
+  | SnapshotHistoryEntry;
+
+export interface HistorySnapshot {
+  roomData: EditorRoomData;
+  campaignSpawn?: CampaignSpawnData;
+  initialRoomId?: string;
   campaignSpawnTracked?: boolean;
 }
 
 export interface EditorHistory {
-  undoStack: HistorySnapshot[];
-  redoStack: HistorySnapshot[];
+  undoStack: EditorHistoryEntry[];
+  redoStack: EditorHistoryEntry[];
+  estimatedBytes: number;
+  currentRevision: number;
+  savedRevision: number | null;
+  nextRevision: number;
+}
+
+export interface PendingSnapshot {
+  readonly before: EditorRoomData;
+  readonly liveData: EditorRoomData;
+  readonly label: string;
+  readonly timestamp: number;
+  readonly campaignSpawnBefore?: CampaignSpawnHistoryState;
+  readonly campaignSpawnTracked: boolean;
+}
+
+const COLLECTIONS = [
+  'interiorWalls', 'enemies', 'transitions', 'saveTombs', 'skillTombs',
+  'challengeFields', 'challengeGates', 'challengeTotems', 'gates',
+  'dustContainers', 'dustContainerPieces', 'dustBoostJars', 'dustSwarms',
+  'lambdaAnchors', 'fireflyJars', 'springboards', 'breakableBlocks',
+  'dustPiles', 'grasshopperAreas', 'fireflyAreas', 'decorations',
+  'ambientLightBlockers', 'lightSources', 'waterZones', 'lavaZones',
+  'timeStopFields', 'crumbleBlocks', 'spikes', 'bouncePads', 'kineticBlocks',
+  'grappleCarryBlocks', 'zipMoveBlocks', 'phantasmalTiles', 'pixelMaterials',
+  'ropes', 'sunbeams', 'sceneLights', 'fallingBlocks', 'dialogueTriggers',
+  'backgroundBlocks', 'guideDustPaths', 'customBlockPlacements',
+] as const satisfies readonly (keyof EditorRoomData)[];
+export type ElementCollectionKey = typeof COLLECTIONS[number];
+
+const ROOM_FIELDS = [
+  'id', 'name', 'worldNumber', 'mapX', 'mapY', 'blockTheme', 'backgroundId',
+  'lightingEffect', 'ambientLightDirection', 'directionalBias',
+  'sideExposureStrength', 'minimumWallLight', 'falloffPower',
+  'backgroundLightSpill', 'solidLightSoftness', 'blockSeamBlending',
+  'voidEdgeStyle', 'songId', 'playerSpawnBlock', 'sunrays',
+] as const satisfies readonly (keyof EditorRoomData)[];
+export type RoomFieldKey = typeof ROOM_FIELDS[number];
+
+const TILE_COLLECTIONS = new Set<ElementCollectionKey>([
+  'ambientLightBlockers', 'pixelMaterials', 'phantasmalTiles',
+]);
+
+function clone<T>(value: T): T {
+  return structuredClone(value) as T;
+}
+
+function equal(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function byteCost(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
+}
+
+function collection(room: EditorRoomData, key: ElementCollectionKey): JsonRecord[] {
+  return ((room[key] ?? []) as unknown as JsonRecord[]);
+}
+
+function createElementChanges(before: EditorRoomData, after: EditorRoomData): ElementChange[] {
+  const changes: ElementChange[] = [];
+  for (const key of COLLECTIONS) {
+    const a = collection(before, key);
+    const b = collection(after, key);
+    const aByUid = new Map(a.map((value, index) => [value.uid as number, { value, index }]));
+    const bByUid = new Map(b.map((value, index) => [value.uid as number, { value, index }]));
+    const uids = new Set([...aByUid.keys(), ...bByUid.keys()]);
+    for (const uid of uids) {
+      const av = aByUid.get(uid);
+      const bv = bByUid.get(uid);
+      if (av && bv && av.index === bv.index && equal(av.value, bv.value)) continue;
+      changes.push({
+        collection: key,
+        uid,
+        before: av ? clone(av.value) : undefined,
+        after: bv ? clone(bv.value) : undefined,
+        beforeIndex: av?.index ?? -1,
+        afterIndex: bv?.index ?? -1,
+      });
+    }
+  }
+  return changes;
+}
+
+function createRoomFieldChanges(before: EditorRoomData, after: EditorRoomData): RoomFieldChange[] {
+  const changes: RoomFieldChange[] = [];
+  for (const field of ROOM_FIELDS) {
+    if (!equal(before[field], after[field])) {
+      changes.push({ field, before: clone(before[field]), after: clone(after[field]) });
+    }
+  }
+  return changes;
+}
+
+function tileBounds(changes: ElementChange[]): TileRegionHistoryEntry['bounds'] | null {
+  const points: { x: number; y: number }[] = [];
+  for (const change of changes) {
+    if (!TILE_COLLECTIONS.has(change.collection)) return null;
+    for (const value of [change.before, change.after]) {
+      if (!value) continue;
+      const x = Number(value.xBlock ?? value.xPixel);
+      const y = Number(value.yBlock ?? value.yPixel);
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y });
+    }
+  }
+  if (points.length === 0) return null;
+  return {
+    minX: Math.min(...points.map(p => p.x)), minY: Math.min(...points.map(p => p.y)),
+    maxX: Math.max(...points.map(p => p.x)), maxY: Math.max(...points.map(p => p.y)),
+  };
+}
+
+function applyEntry(entry: EditorHistoryEntry, current: EditorRoomData, direction: Direction): EditorRoomData {
+  if (entry.type === 'snapshot') return clone(entry[direction]);
+  const room = clone(current);
+  for (const fieldChange of entry.roomFields) {
+    (room as unknown as Record<string, unknown>)[fieldChange.field] = clone(fieldChange[direction]);
+  }
+  const grouped = new Map<ElementCollectionKey, ElementChange[]>();
+  for (const change of entry.elements) {
+    const list = grouped.get(change.collection) ?? [];
+    list.push(change);
+    grouped.set(change.collection, list);
+  }
+  for (const [key, changes] of grouped) {
+    const values = collection(room, key);
+    const changedUids = new Set(changes.map(c => c.uid));
+    const retained = values.filter(value => !changedUids.has(value.uid as number));
+    const inserts = changes
+      .filter(change => change[direction] !== undefined)
+      .sort((a, b) => (direction === 'before' ? a.beforeIndex - b.beforeIndex : a.afterIndex - b.afterIndex));
+    for (const change of inserts) {
+      const index = direction === 'before' ? change.beforeIndex : change.afterIndex;
+      retained.splice(Math.max(0, Math.min(index, retained.length)), 0, clone(change[direction]!));
+    }
+    (room as unknown as Record<string, unknown>)[key] = retained;
+  }
+  return room;
+}
+
+function campaignState(
+  campaignSpawn: CampaignSpawnData | undefined,
+  initialRoomId: string | undefined,
+  tracked: boolean,
+): CampaignSpawnHistoryState | undefined {
+  return tracked ? { campaignSpawn: clone(campaignSpawn), initialRoomId } : undefined;
+}
+
+function makeEntry(history: EditorHistory, pending: PendingSnapshot): EditorHistoryEntry | null {
+  const before = pending.before;
+  const after = pending.liveData;
+  if (equal(before, after) && !pending.campaignSpawnTracked) return null;
+  const revisionBefore = history.currentRevision;
+  const revisionAfter = history.nextRevision++;
+  const base = {
+    label: pending.label,
+    timestamp: pending.timestamp,
+    estimatedBytes: 0,
+    revisionBefore,
+    revisionAfter,
+    campaignSpawnBefore: pending.campaignSpawnBefore,
+  };
+  const resized = before.widthBlocks !== after.widthBlocks || before.heightBlocks !== after.heightBlocks;
+  if (resized) {
+    const entry: SnapshotHistoryEntry = {
+      ...base, type: 'snapshot', reason: 'room-resize', before: clone(before), after: clone(after),
+    };
+    entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost(entry);
+    return entry;
+  }
+  const elements = createElementChanges(before, after);
+  const roomFields = createRoomFieldChanges(before, after);
+  const bounds = roomFields.length === 0 ? tileBounds(elements) : null;
+  const entry: ElementPatchHistoryEntry | TileRegionHistoryEntry = bounds
+    ? { ...base, type: 'tile-region', elements, roomFields, bounds }
+    : { ...base, type: 'element-patch', elements, roomFields };
+  entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost(entry);
+  if (entry.estimatedBytes > MAX_SINGLE_ENTRY_BYTES) {
+    const fallback: SnapshotHistoryEntry = {
+      ...base, type: 'snapshot', reason: 'oversized-patch', before: clone(before), after: clone(after),
+      estimatedBytes: 0,
+    };
+    fallback.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost(fallback);
+    return fallback;
+  }
+  return entry;
+}
+
+function totalBytes(entries: readonly EditorHistoryEntry[]): number {
+  return entries.reduce((sum, entry) => sum + entry.estimatedBytes, 0);
+}
+
+function enforceBounds(history: EditorHistory): void {
+  history.estimatedBytes = totalBytes(history.undoStack) + totalBytes(history.redoStack);
+  while (
+    history.undoStack.length > 0 &&
+    (history.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET ||
+      history.undoStack.length + history.redoStack.length > EDITOR_HISTORY_ENTRY_CAP)
+  ) {
+    history.undoStack.shift();
+    history.estimatedBytes = totalBytes(history.undoStack) + totalBytes(history.redoStack);
+  }
+  // A single entry larger than the entire budget is rejected atomically.
+  if (history.undoStack.length === 1 && history.undoStack[0].estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) {
+    history.undoStack.length = 0;
+    history.estimatedBytes = totalBytes(history.redoStack);
+  }
 }
 
 export function createEditorHistory(): EditorHistory {
-  return { undoStack: [], redoStack: [] };
+  return { undoStack: [], redoStack: [], estimatedBytes: 0, currentRevision: 0, savedRevision: 0, nextRevision: 1 };
 }
 
-/**
- * A snapshot that has been captured (cloned from current room data) but not
- * yet committed to the undo stack. Capturing is side-effect-free — it does
- * NOT touch undoStack/redoStack — so a caller that ends up discovering its
- * operation was a no-op can simply drop the `PendingSnapshot` on the floor
- * without any history/redo state ever having been disturbed. This replaces
- * the old "push then pop if no-op" pattern, which cleared the redo stack as
- * a side effect of pushSnapshot() and could NOT be undone by popping the
- * undo entry back off afterward.
- */
-export interface PendingSnapshot {
-  snapshot: HistorySnapshot;
-}
-
-function cloneSnapshot(
-  data: EditorRoomData,
-  campaignSpawn?: CampaignSpawnData,
-  initialRoomId?: string,
-  campaignSpawnTracked?: boolean,
-): HistorySnapshot {
-  const t0 = import.meta.env?.DEV ? performance.now() : 0;
-  const snapshot: HistorySnapshot = {
-    roomData: structuredClone(data) as EditorRoomData,
-  };
-  if (campaignSpawnTracked) {
-    snapshot.campaignSpawnTracked = true;
-    snapshot.campaignSpawn = campaignSpawn !== undefined
-      ? (structuredClone(campaignSpawn) as CampaignSpawnData)
-      : undefined;
-    snapshot.initialRoomId = initialRoomId;
-  }
-  if (import.meta.env?.DEV) {
-    const elapsedMs = performance.now() - t0;
-    const wallCount = data.interiorWalls.length;
-    if (elapsedMs > 50) {
-      console.error(`[editor-perf] ⛔ pushSnapshot: ${elapsedMs.toFixed(2)}ms (>50ms blocking!) walls=${wallCount} strategy=structuredClone`);
-    } else if (elapsedMs > 16) {
-      console.warn(`[editor-perf] ⚠️ pushSnapshot: ${elapsedMs.toFixed(2)}ms (>16ms slow) walls=${wallCount} strategy=structuredClone`);
-    } else {
-      console.log(`[editor-perf] pushSnapshot: ${elapsedMs.toFixed(2)}ms walls=${wallCount} strategy=structuredClone`);
-    }
-  }
-  return snapshot;
-}
-
-/**
- * Captures a snapshot of the current room (and, when tracked, campaign
- * spawn) state WITHOUT touching undoStack/redoStack. Call this immediately
- * before performing a mutation whose success is not yet known; if the
- * mutation turns out to be a no-op, simply discard the returned
- * PendingSnapshot — history is left completely untouched. If the mutation
- * did change something, pass it to `commitPendingSnapshot`.
- */
 export function capturePendingSnapshot(
   data: EditorRoomData,
   campaignSpawn?: CampaignSpawnData,
   initialRoomId?: string,
-  campaignSpawnTracked?: boolean,
+  campaignSpawnTracked = false,
+  label = 'Edit room',
 ): PendingSnapshot {
-  return { snapshot: cloneSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked) };
+  return {
+    before: clone(data),
+    liveData: data,
+    label,
+    timestamp: Date.now(),
+    campaignSpawnBefore: campaignState(campaignSpawn, initialRoomId, campaignSpawnTracked),
+    campaignSpawnTracked,
+  };
 }
 
-/**
- * Commits a previously-captured PendingSnapshot: pushes it onto the undo
- * stack, trims to MAX_HISTORY_SIZE, and clears the redo stack. Only call
- * this once a mutation is known to have actually changed something.
- */
-export function commitPendingSnapshot(history: EditorHistory, pending: PendingSnapshot): void {
-  history.undoStack.push(pending.snapshot);
-  if (history.undoStack.length > MAX_HISTORY_SIZE) {
-    history.undoStack.shift();
+export function commitPendingSnapshot(
+  history: EditorHistory,
+  pending: PendingSnapshot,
+  campaignSpawnAfter?: CampaignSpawnData,
+  initialRoomIdAfter?: string,
+): boolean {
+  let effectivePending = pending;
+  const previous = history.undoStack[history.undoStack.length - 1];
+  if (
+    previous &&
+    pending.label.startsWith('Property:') &&
+    previous.label === pending.label &&
+    pending.timestamp - previous.timestamp <= 1500
+  ) {
+    effectivePending = {
+      ...pending,
+      before: applyEntry(previous, pending.before, 'before'),
+    };
+    history.undoStack.pop();
+    history.currentRevision = previous.revisionBefore;
   }
-  // Any new action clears redo stack
+  const entry = makeEntry(history, effectivePending);
+  if (!entry) return false;
+  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) return false;
+  if (pending.campaignSpawnTracked) {
+    entry.campaignSpawnAfter = campaignState(campaignSpawnAfter, initialRoomIdAfter, true);
+  }
+  // Branching makes a saved point in the discarded future unreachable.
+  if (history.redoStack.length > 0 && history.savedRevision !== null && history.currentRevision !== history.savedRevision) {
+    const savedWasInDiscardedFuture = history.redoStack.some(
+      e => e.revisionBefore === history.savedRevision || e.revisionAfter === history.savedRevision,
+    );
+    if (savedWasInDiscardedFuture) history.savedRevision = null;
+  }
+  history.undoStack.push(entry);
   history.redoStack.length = 0;
+  history.currentRevision = entry.revisionAfter;
+  enforceBounds(history);
+  return history.undoStack.includes(entry);
 }
 
 export function pushSnapshot(
@@ -116,19 +362,28 @@ export function pushSnapshot(
   initialRoomId?: string,
   campaignSpawnTracked?: boolean,
 ): void {
-  commitPendingSnapshot(history, capturePendingSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked));
+  const revisionBefore = history.currentRevision;
+  const entry: SnapshotHistoryEntry = {
+    type: 'snapshot',
+    reason: 'unsupported-complex-mutation',
+    label: 'Legacy mutation',
+    timestamp: Date.now(),
+    estimatedBytes: 0,
+    revisionBefore,
+    revisionAfter: history.nextRevision++,
+    before: clone(data),
+    after: clone(data),
+    legacyLiveData: data,
+    campaignSpawnBefore: campaignState(campaignSpawn, initialRoomId, Boolean(campaignSpawnTracked)),
+  };
+  entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost({ ...entry, legacyLiveData: undefined });
+  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) return;
+  history.undoStack.push(entry);
+  history.redoStack.length = 0;
+  history.currentRevision = entry.revisionAfter;
+  enforceBounds(history);
 }
 
-/**
- * Runs a mutation that may or may not actually change anything, capturing
- * history lazily: the pre-mutation snapshot is captured up front (it has to
- * be, since `mutate` may mutate `data` in place), but it is only committed
- * to the undo stack (and the redo stack only cleared) if `mutate` reports a
- * real change. A no-op `mutate` — including one that throws — leaves
- * undoStack/redoStack completely unchanged; the try/finally ensures a
- * thrown exception can never leave history half-updated (e.g. redo cleared
- * but no undo entry recorded, or vice versa).
- */
 export function runLazyMutation(
   history: EditorHistory,
   data: EditorRoomData,
@@ -143,69 +398,87 @@ export function runLazyMutation(
     changed = mutate();
     return changed;
   } finally {
-    if (changed) {
-      commitPendingSnapshot(history, pending);
-    }
+    if (changed) commitPendingSnapshot(history, pending);
   }
 }
 
-function cloneCurrent(
-  currentData: EditorRoomData,
-  currentCampaignSpawn: CampaignSpawnData | undefined,
-  currentInitialRoomId: string | undefined,
-  currentCampaignSpawnTracked: boolean | undefined,
-): HistorySnapshot {
-  const snapshot: HistorySnapshot = { roomData: structuredClone(currentData) as EditorRoomData };
-  if (currentCampaignSpawnTracked) {
-    snapshot.campaignSpawnTracked = true;
-    snapshot.campaignSpawn = currentCampaignSpawn !== undefined
-      ? (structuredClone(currentCampaignSpawn) as CampaignSpawnData)
-      : undefined;
-    snapshot.initialRoomId = currentInitialRoomId;
-  }
-  return snapshot;
-}
-
-function materialize(snapshot: HistorySnapshot): HistorySnapshot {
+function result(entry: EditorHistoryEntry, roomData: EditorRoomData, direction: Direction): HistorySnapshot {
+  const spawn = direction === 'before' ? entry.campaignSpawnBefore : entry.campaignSpawnAfter;
   return {
-    roomData: structuredClone(snapshot.roomData) as EditorRoomData,
-    campaignSpawnTracked: snapshot.campaignSpawnTracked,
-    campaignSpawn: snapshot.campaignSpawn !== undefined
-      ? (structuredClone(snapshot.campaignSpawn) as CampaignSpawnData)
-      : undefined,
-    initialRoomId: snapshot.initialRoomId,
+    roomData,
+    campaignSpawnTracked: spawn !== undefined,
+    campaignSpawn: clone(spawn?.campaignSpawn),
+    initialRoomId: spawn?.initialRoomId,
   };
 }
 
 export function undo(
   history: EditorHistory,
   currentData: EditorRoomData,
-  currentCampaignSpawn?: CampaignSpawnData,
-  currentInitialRoomId?: string,
-  currentCampaignSpawnTracked?: boolean,
+  _currentCampaignSpawn?: CampaignSpawnData,
+  _currentInitialRoomId?: string,
+  _currentCampaignSpawnTracked?: boolean,
 ): HistorySnapshot | null {
-  if (history.undoStack.length === 0) return null;
-  const snapshot = history.undoStack.pop();
-  if (snapshot === undefined) return null;
-  history.redoStack.push(cloneCurrent(currentData, currentCampaignSpawn, currentInitialRoomId, currentCampaignSpawnTracked));
-  return materialize(snapshot);
+  const entry = history.undoStack.pop();
+  if (!entry) return null;
+  const legacySnapshot = entry as unknown as { roomData?: EditorRoomData };
+  if (legacySnapshot.roomData) {
+    return { roomData: clone(legacySnapshot.roomData) };
+  }
+  if (entry.type === 'snapshot' && entry.legacyLiveData) {
+    entry.after = clone(currentData);
+    entry.legacyLiveData = undefined;
+    entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost(entry);
+  }
+  history.redoStack.push(entry);
+  history.currentRevision = entry.revisionBefore;
+  history.estimatedBytes = totalBytes(history.undoStack) + totalBytes(history.redoStack);
+  return result(entry, applyEntry(entry, currentData, 'before'), 'before');
 }
 
 export function redo(
   history: EditorHistory,
   currentData: EditorRoomData,
-  currentCampaignSpawn?: CampaignSpawnData,
-  currentInitialRoomId?: string,
-  currentCampaignSpawnTracked?: boolean,
+  _currentCampaignSpawn?: CampaignSpawnData,
+  _currentInitialRoomId?: string,
+  _currentCampaignSpawnTracked?: boolean,
 ): HistorySnapshot | null {
-  if (history.redoStack.length === 0) return null;
-  const snapshot = history.redoStack.pop();
-  if (snapshot === undefined) return null;
-  history.undoStack.push(cloneCurrent(currentData, currentCampaignSpawn, currentInitialRoomId, currentCampaignSpawnTracked));
-  return materialize(snapshot);
+  const entry = history.redoStack.pop();
+  if (!entry) return null;
+  history.undoStack.push(entry);
+  history.currentRevision = entry.revisionAfter;
+  history.estimatedBytes = totalBytes(history.undoStack) + totalBytes(history.redoStack);
+  return result(entry, applyEntry(entry, currentData, 'after'), 'after');
+}
+
+export function markHistorySaved(history: EditorHistory): void {
+  history.savedRevision = history.currentRevision;
+}
+
+export function isHistoryDirty(history: EditorHistory): boolean {
+  return history.savedRevision === null || history.currentRevision !== history.savedRevision;
+}
+
+export function getHistoryDiagnostics(history: EditorHistory): {
+  undoCount: number; redoCount: number; estimatedBytes: number;
+  entries: { stack: 'undo' | 'redo'; type: EditorHistoryEntry['type']; label: string; estimatedBytes: number }[];
+} {
+  return {
+    undoCount: history.undoStack.length,
+    redoCount: history.redoStack.length,
+    estimatedBytes: history.estimatedBytes,
+    entries: [
+      ...history.undoStack.map(e => ({ stack: 'undo' as const, type: e.type, label: e.label, estimatedBytes: e.estimatedBytes })),
+      ...history.redoStack.map(e => ({ stack: 'redo' as const, type: e.type, label: e.label, estimatedBytes: e.estimatedBytes })),
+    ],
+  };
 }
 
 export function clearHistory(history: EditorHistory): void {
   history.undoStack.length = 0;
   history.redoStack.length = 0;
+  history.estimatedBytes = 0;
+  history.currentRevision = 0;
+  history.savedRevision = 0;
+  history.nextRevision = 1;
 }

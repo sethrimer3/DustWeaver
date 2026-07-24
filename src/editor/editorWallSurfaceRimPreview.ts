@@ -29,7 +29,7 @@ import { BLOCK_SIZE_SMALL, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
 import { wallShapeOrientationIndex } from '../levels/stairsGeometry';
 import { buildWallLayout, type CachedWallLayout } from '../render/walls/blockWallLayoutCache';
 import type { WallSnapshot } from '../render/snapshotTypes';
-import { internSurfaceRimStyle, type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
+import { hashSurfaceRimStyle, internSurfaceRimStyle, normalizeSurfaceRimStyle, type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { renderSurfaceEdgeOverlayPass } from '../render/walls/surfaceEdgeOverlay';
 
 /** Converts live editor wall data into a `WallSnapshot`, mirroring gameRoomWalls.ts's block-unit → world-px conversion. */
@@ -74,7 +74,7 @@ function _signatureFor(walls: readonly EditorWall[], widthBlocks: number, height
   for (const w of walls) {
     s += `|${w.xBlock},${w.yBlock},${w.wBlock},${w.hBlock},${w.isPlatformFlag},${w.platformEdge},` +
       `${w.rampOrientation ?? ''},${w.stairsOrientation ?? ''},${w.isPillarHalfWidthFlag},` +
-      `${w.surfaceRim ? JSON.stringify(w.surfaceRim) : ''}`;
+      `${w.surfaceRim ? hashSurfaceRimStyle(normalizeSurfaceRimStyle(w.surfaceRim)) : ''}`;
   }
   return s;
 }

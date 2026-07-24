@@ -11,7 +11,7 @@
 import type { EditorState } from './editorState';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import type { EditorHistory, PendingSnapshot } from './editorHistory';
-import { pushSnapshot, capturePendingSnapshot } from './editorHistory';
+import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 
 /** Shared dependencies injected into all campaign-spawn helpers. */
 export interface CampaignSpawnContext {
@@ -27,12 +27,22 @@ export interface CampaignSpawnContext {
  * deletion, and starting-option edits. Call this immediately before any
  * mutation that may affect campaign spawn state.
  */
-export function pushCampaignSpawnSnapshot(ctx: CampaignSpawnContext, history: EditorHistory): void {
+export function captureCampaignSpawnSnapshot(ctx: CampaignSpawnContext, label = 'Campaign spawn'): PendingSnapshot | null {
   const { state, campaignSession } = ctx;
-  if (!state.roomData) return;
+  if (!state.roomData) return null;
   const spawn = campaignSession?.campaign.campaign.campaignSpawn;
   const initialRoomId = campaignSession?.campaign.campaign.initialRoomId;
-  pushSnapshot(history, state.roomData, spawn, initialRoomId, true);
+  return capturePendingSnapshot(state.roomData, spawn, initialRoomId, true, label);
+}
+
+export function commitCampaignSpawnSnapshot(
+  ctx: CampaignSpawnContext,
+  history: EditorHistory,
+  pending: PendingSnapshot | null,
+): boolean {
+  if (!pending) return false;
+  const campaign = ctx.campaignSession?.campaign.campaign;
+  return commitPendingSnapshot(history, pending, campaign?.campaignSpawn, campaign?.initialRoomId);
 }
 
 /**
@@ -49,7 +59,7 @@ export function captureCampaignSpawnPendingSnapshot(ctx: CampaignSpawnContext): 
   if (!state.roomData) return null;
   const spawn = campaignSession?.campaign.campaign.campaignSpawn;
   const initialRoomId = campaignSession?.campaign.campaign.initialRoomId;
-  return capturePendingSnapshot(state.roomData, spawn, initialRoomId, true);
+  return capturePendingSnapshot(state.roomData, spawn, initialRoomId, true, 'Delete campaign spawn');
 }
 
 /**
@@ -191,8 +201,9 @@ export function showCampaignSpawnReplaceModal(
 
   yesBtn.addEventListener('click', () => {
     dismiss();
-    pushCampaignSpawnSnapshot(ctx, history);
+    const pending = captureCampaignSpawnSnapshot(ctx, 'Move campaign spawn');
     placeCampaignSpawn(ctx, newXBlock, newYBlock);
+    commitCampaignSpawnSnapshot(ctx, history, pending);
     // Auto-select the marker so the inspector shows it immediately.
     state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
   });

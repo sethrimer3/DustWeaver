@@ -68,6 +68,33 @@ test('a wall with the explicit default style also omits `r` (default is never in
   assert.equal(json.rimStyles, undefined);
 });
 
+test('custom style reset to mode default canonicalizes away and exports safely', () => {
+  const staleCustomizedDefault = {
+    mode: 'default', color: 'ff0000', widthPx: 32, opacity: 1,
+    falloff: 'exponential', interiorDarkness: 1,
+  } as const;
+  const room = makeRoom([makeWall(0, { surfaceRim: staleCustomizedDefault })]);
+  const json = editorRoomDataToJson(room);
+  assert.equal(json.interiorWalls[0].r, undefined);
+  assert.equal(json.rimStyles, undefined);
+});
+
+test('visually equivalent solid styles deduplicate despite stale hidden fields', () => {
+  const room = makeRoom([
+    makeWall(0, { surfaceRim: {
+      ...normalizeSurfaceRimStyle({ mode: 'solid', color: 'abcdef' }),
+      falloff: 'hard', interiorDarkness: 0,
+    } }),
+    makeWall(1, { surfaceRim: {
+      ...normalizeSurfaceRimStyle({ mode: 'solid', color: 'abcdef' }),
+      falloff: 'exponential', interiorDarkness: 1,
+    } }),
+  ]);
+  const json = editorRoomDataToJson(room);
+  assert.equal(json.rimStyles?.length, 1);
+  assert.equal(json.interiorWalls[0].r, json.interiorWalls[1].r);
+});
+
 test('identical non-default styles on different walls are deduplicated to one table entry', () => {
   const style = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff7a18', widthPx: 3, opacity: 0.5 });
   const room = makeRoom([

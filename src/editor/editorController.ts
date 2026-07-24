@@ -52,7 +52,10 @@ import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
 import { ROOM_REGISTRY, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
 import { loadRoomForGameplayAsync } from '../levels/roomFileLoader';
-import { createEditorHistory, clearHistory, capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
+import {
+  createEditorHistory, clearHistory, capturePendingSnapshot, commitPendingSnapshot,
+  markHistorySaved, isHistoryDirty, getHistoryDiagnostics,
+} from './editorHistory';
 import type { EditorHistory } from './editorHistory';
 import { beginGesture, finishGesture, rollbackGesture, type EditorGestureTransaction } from './editorGesture';
 import {
@@ -100,9 +103,11 @@ import {
   syncCampaignSpawnToSessionAfterDelete,
   placeCampaignSpawn,
   showCampaignSpawnReplaceModal,
-  pushCampaignSpawnSnapshot,
+  captureCampaignSpawnSnapshot,
+  commitCampaignSpawnSnapshot,
   captureCampaignSpawnPendingSnapshot,
 } from './editorCampaignSpawn';
+import type { PendingSnapshot } from './editorHistory';
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
 import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
@@ -191,6 +196,12 @@ export function createEditorController(
   const state = createEditorState();
   const inputState = createEditorInputState();
   const history: EditorHistory = createEditorHistory();
+  let activePaintPending: PendingSnapshot | null = null;
+  let activePaintTracksCampaignSpawn = false;
+  if (import.meta.env.DEV) {
+    (window as unknown as { __dwEditorHistory?: () => ReturnType<typeof getHistoryDiagnostics> }).__dwEditorHistory =
+      () => getHistoryDiagnostics(history);
+  }
   let inputCleanup: (() => void) | null = null;
   let ui: EditorUI | null = null;
   let worldMapCleanup: (() => void) | null = null;
@@ -250,6 +261,20 @@ export function createEditorController(
    * shares one rollback path instead of duplicating it.
    */
   function cancelActiveGesture(): void {
+    if (activePaintPending) {
+      state.roomData = structuredClone(activePaintPending.before) as EditorRoomData;
+      if (activePaintTracksCampaignSpawn && activeCampaignSession?.campaign?.campaign) {
+        const campaign = activeCampaignSession.campaign.campaign;
+        const before = activePaintPending.campaignSpawnBefore;
+        if (before?.campaignSpawn) campaign.campaignSpawn = structuredClone(before.campaignSpawn);
+        else delete campaign.campaignSpawn;
+        if (before?.initialRoomId !== undefined) campaign.initialRoomId = before.initialRoomId;
+        syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
+      }
+      activePaintPending = null;
+      activePaintTracksCampaignSpawn = false;
+      isCurrentRoomDirty = isHistoryDirty(history);
+    }
     if (activeGesture) {
       rollbackGesture(activeGesture);
       activeGesture = null;
@@ -372,6 +397,7 @@ export function createEditorController(
       pendingRoomEdits.set(roomId, deepCloneRoomData(state.roomData));
     }
     isCurrentRoomDirty = false;
+    markHistorySaved(history);
     if (import.meta.env.DEV) {
       console.log(`[editor-perf] commitActiveRoomToCampaign reason=${reason} room=${roomId}`);
     }
@@ -586,7 +612,7 @@ export function createEditorController(
           if (prop.startsWith('campaignSpawn.')) {
             // Campaign spawn properties are not stored in room data — update state + session directly.
             if (state.campaignSpawnBlock !== null && activeCampaignSession.campaign?.campaign != null) {
-              pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
+              const pending = captureCampaignSpawnSnapshot(campaignSpawnCtx, `Property:${prop}`);
               const spawn = activeCampaignSession.campaign.campaign.campaignSpawn;
               const numVal = typeof value === 'number' ? value : parseInt(String(value));
               if (prop === 'campaignSpawn.xBlock' && !isNaN(numVal)) {
@@ -650,6 +676,7 @@ export function createEditorController(
                   state.campaignSpawnStartingOptions.startingPassives = spawn.startingPassives;
                 }
               }
+              commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
             }
             return; // No applyEdits needed — campaign spawn is not in room data
           }
@@ -1095,7 +1122,7 @@ export function createEditorController(
    */
   function applyEdits(changeKind: 'placement' | 'metadata' = 'metadata'): void {
     if (!state.roomData) return;
-    isCurrentRoomDirty = true;
+    isCurrentRoomDirty = isHistoryDirty(history) || activePaintPending !== null;
     state.pendingComplexityCheck = true;
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
@@ -1140,6 +1167,7 @@ export function createEditorController(
     // originals/pending snapshot referred to the outgoing room's data and
     // must not be carried over or left dangling against the new room.
     cancelActiveGesture();
+    clearHistory(history);
     // Reset complexity-warning state for the newly-loaded room so a density
     // warning already shown for a previous room doesn't suppress a fresh
     // warning here, and so this room doesn't inherit a stale check flag.
@@ -1667,8 +1695,9 @@ export function createEditorController(
               showCampaignSpawnReplaceModal(campaignSpawnCtx, bx, by, history);
             } else {
                 // Either no spawn yet, or spawn is already in this room — update silently.
-              pushCampaignSpawnSnapshot(campaignSpawnCtx, history);
+              const pending = captureCampaignSpawnSnapshot(campaignSpawnCtx, 'Place campaign spawn');
               placeCampaignSpawn(campaignSpawnCtx, bx, by);
+              commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
               // Auto-select the marker so the inspector shows it immediately.
               state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
             }
@@ -1705,7 +1734,8 @@ export function createEditorController(
               // Only now commit the snapshot to the undo stack and clear
               // redo — a no-op placement (blocked layer, dedup, overlap)
               // leaves undo/redo completely untouched.
-              commitPendingSnapshot(history, pending);
+              activePaintPending = pending;
+              activePaintTracksCampaignSpawn = false;
             }
             const applyEditsStartMs = import.meta.env.DEV ? performance.now() : 0;
             if (placed) applyEdits('placement');
@@ -1772,7 +1802,8 @@ export function createEditorController(
           const pending = capturePendingSnapshot(state.roomData);
           const erased = erasePixelMaterialAt(state, px.x, px.y);
           if (erased) {
-            commitPendingSnapshot(history, pending);
+            activePaintPending = pending;
+            activePaintTracksCampaignSpawn = false;
             applyEdits('placement');
           }
           lastDragPixelX = px.x;
@@ -1781,8 +1812,9 @@ export function createEditorController(
           const pending = captureCampaignSpawnPendingSnapshot(campaignSpawnCtx);
           const deleted = deleteAtCursorBrushed(state);
           if (deleted) {
-            if (pending) commitPendingSnapshot(history, pending);
             syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+            activePaintPending = pending;
+            activePaintTracksCampaignSpawn = true;
             applyEdits('placement');
           }
           lastDragBlockX = state.cursorBlockX;
@@ -1811,7 +1843,11 @@ export function createEditorController(
           if (changed) syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
         }
         if (changed) {
-          if (pending) commitPendingSnapshot(history, pending);
+          if (state.selectedPaletteItem?.isPixelMaterialItem !== 1) {
+            syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+          }
+          activePaintPending = pending;
+          activePaintTracksCampaignSpawn = true;
           applyEdits('placement');
         }
         lastDragBlockX = state.cursorBlockX;
@@ -1917,6 +1953,16 @@ export function createEditorController(
 
     // Mouse release
     if (!inputState.isMouseDown) {
+      if (activePaintPending && !inputState.isRightMouseDown) {
+        if (activePaintTracksCampaignSpawn) {
+          commitCampaignSpawnSnapshot(campaignSpawnCtx, history, activePaintPending);
+        } else {
+          commitPendingSnapshot(history, activePaintPending);
+        }
+        activePaintPending = null;
+        activePaintTracksCampaignSpawn = false;
+        isCurrentRoomDirty = isHistoryDirty(history);
+      }
       if (state.isDragging) {
         state.isDragging = false;
         dragOriginalPositions.clear();
