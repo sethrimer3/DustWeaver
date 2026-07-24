@@ -14,9 +14,18 @@ import { indexToBlockTheme, WALL_THEME_DEFAULT_INDEX } from '../../levels/roomDe
 import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
-import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
-import { type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from './surfaceRimStyle';
-import { buildInteriorRimDistanceField } from './surfaceRimDistanceField';
+import {
+  decodeStairsOrientationIndex,
+  isPlainRectOrientationIndex,
+  isRampOrientationIndex,
+  isStairsOrientationIndex,
+  isStairsSolidAtLocalPx,
+} from '../../levels/stairsGeometry';
+import {
+  hashSurfaceRimStyle,
+  type SurfaceRimStyle,
+  SURFACE_RIM_STYLE_INDEX_DEFAULT,
+} from './surfaceRimStyle';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -60,6 +69,12 @@ function _computeLayoutSignature(walls: WallSnapshot, blockSizePx: number): stri
     // exceed its remaining bit budget once a room has many distinct styles).
     h = Math.imul(h, 1664525) + 1013904223 | 0;
     h = h ^ (walls.surfaceRimStyleIndex[wi] | 0);
+    const rimIndex = walls.surfaceRimStyleIndex[wi];
+    if (rimIndex !== SURFACE_RIM_STYLE_INDEX_DEFAULT) {
+      const style = walls.surfaceRimStyleTable[rimIndex];
+      h = Math.imul(h, 1664525) + 1013904223 | 0;
+      h ^= style ? hashSurfaceRimStyle(style) : 0;
+    }
   }
   return `${visible}|${h >>> 0}`;
 }
@@ -87,6 +102,13 @@ export interface HalfPillarWallInfo {
   readonly wallIndex: number;
 }
 
+export interface CachedSurfaceRimPixel {
+  readonly xWorldPx: number;
+  readonly yWorldPx: number;
+  readonly distancePx: number;
+  readonly style: SurfaceRimStyle;
+}
+
 export interface CachedWallLayout {
   signature: string;
   blockSizePx: number;
@@ -106,13 +128,9 @@ export interface CachedWallLayout {
    * Absence (no map entry) means "use the default exposed-edge presentation".
    */
   tileSurfaceRim: Map<string, SurfaceRimStyle>;
-  /**
-   * Per-tile distance (in tiles) to the nearest exposed edge, via BFS over
-   * `occupied` seeded from `surfaceExposureMap.masks`. Powers the 'inverted'
-   * Surface Rim mode's interior darkening falloff (see surfaceEdgeOverlay.ts).
-   * Missing entry = unreachable pocket, treated as "at least max distance".
-   */
+  /** @deprecated Empty compatibility map; custom rims use world-pixel samples. */
   interiorRimDistanceField: Map<string, number>;
+  customSurfaceRimPixels: CachedSurfaceRimPixel[];
   /**
    * Authoritative tile-level open-air exposure, built from the same
    * `occupied` set above but room-bounds aware (out-of-bounds neighbours
@@ -159,6 +177,7 @@ export interface CachedWallLayout {
    * Each entry is [topLeftKey, wallThemeIndex].
    */
   solid2x2ByChunkKey: Map<string, Array<readonly [string, number]>>;
+  customSurfaceRimByChunkKey: Map<string, CachedSurfaceRimPixel[]>;
 }
 
 // ── Module-level layout cache ─────────────────────────────────────────────────
@@ -236,6 +255,140 @@ function _buildSolid2x2Map(walls: WallSnapshot, blockSizePx: number): Map<string
   }
 
   return topLeftMap;
+}
+
+const _PIXEL_NEIGHBORS: readonly (readonly [number, number])[] = [
+  [0, -1], [1, 0], [0, 1], [-1, 0],
+];
+
+function _pixelKey(x: number, y: number): string {
+  return `${x},${y}`;
+}
+
+function _wallContainsVisiblePixel(walls: WallSnapshot, wi: number, x: number, y: number): boolean {
+  const left = Math.floor(walls.xWorld[wi]);
+  const top = Math.floor(walls.yWorld[wi]);
+  const width = Math.max(0, Math.ceil(walls.xWorld[wi] + walls.wWorld[wi]) - left);
+  const height = Math.max(0, Math.ceil(walls.yWorld[wi] + walls.hWorld[wi]) - top);
+  const lx = x - left;
+  const ly = y - top;
+  if (lx < 0 || ly < 0 || lx >= width || ly >= height) return false;
+
+  if (walls.isPlatformFlag[wi] === 1) {
+    const edge = walls.platformEdge[wi];
+    return edge === 0 ? ly < 3
+      : edge === 1 ? ly >= height - 3
+      : edge === 2 ? lx < 3
+      : lx >= width - 3;
+  }
+
+  const orientation = walls.rampOrientationIndex[wi];
+  if (isStairsOrientationIndex(orientation)) {
+    return isStairsSolidAtLocalPx(
+      decodeStairsOrientationIndex(orientation), width, height, lx, ly,
+    );
+  }
+  if (isRampOrientationIndex(orientation)) {
+    const nx = (lx + 0.5) / Math.max(1, width);
+    const ny = (ly + 0.5) / Math.max(1, height);
+    switch (orientation) {
+      case 0: return ny >= 1 - nx;
+      case 1: return ny >= nx;
+      case 2: return ny <= nx;
+      default: return ny <= 1 - nx;
+    }
+  }
+  return true;
+}
+
+/**
+ * Rasterizes only authored/runtime wall placements (never the room bounds),
+ * then performs a bounded, per-placement multi-source BFS. Global solidity
+ * decides whether a pixel is exposed; propagation is restricted to the
+ * placement's own pixels so neighboring styles cannot shorten its field.
+ */
+function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixel[] {
+  let hasCustom = false;
+  for (let wi = 0; wi < walls.count; wi++) {
+    if (walls.isInvisibleFlag[wi] === 1) continue;
+    const styleIndex = walls.surfaceRimStyleIndex[wi];
+    const style = styleIndex === SURFACE_RIM_STYLE_INDEX_DEFAULT
+      ? undefined
+      : walls.surfaceRimStyleTable[styleIndex];
+    if (style && style.mode !== 'default' && style.mode !== 'none') {
+      hasCustom = true;
+      break;
+    }
+  }
+  if (!hasCustom) return [];
+
+  const globalSolid = new Set<string>();
+  const pixelsByWall: string[][] = Array.from({ length: walls.count }, () => []);
+  for (let wi = 0; wi < walls.count; wi++) {
+    if (walls.isInvisibleFlag[wi] === 1) continue;
+    const x0 = Math.floor(walls.xWorld[wi]);
+    const y0 = Math.floor(walls.yWorld[wi]);
+    const x1 = Math.ceil(walls.xWorld[wi] + walls.wWorld[wi]);
+    const y1 = Math.ceil(walls.yWorld[wi] + walls.hWorld[wi]);
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        if (!_wallContainsVisiblePixel(walls, wi, x, y)) continue;
+        const key = _pixelKey(x, y);
+        globalSolid.add(key);
+        pixelsByWall[wi].push(key);
+      }
+    }
+  }
+
+  const output: CachedSurfaceRimPixel[] = [];
+  const painted = new Set<string>();
+  for (let wi = 0; wi < walls.count; wi++) {
+    const styleIndex = walls.surfaceRimStyleIndex[wi];
+    if (styleIndex === SURFACE_RIM_STYLE_INDEX_DEFAULT) continue;
+    const style = walls.surfaceRimStyleTable[styleIndex];
+    if (!style || style.mode === 'default' || style.mode === 'none') continue;
+
+    const owned = new Set(pixelsByWall[wi]);
+    const distance = new Map<string, number>();
+    const queue: string[] = [];
+    for (const key of owned) {
+      const comma = key.indexOf(',');
+      const x = Number(key.slice(0, comma));
+      const y = Number(key.slice(comma + 1));
+      if (_PIXEL_NEIGHBORS.some(([dx, dy]) => !globalSolid.has(_pixelKey(x + dx, y + dy)))) {
+        distance.set(key, 0);
+        queue.push(key);
+      }
+    }
+    for (let head = 0; head < queue.length; head++) {
+      const key = queue[head];
+      const d = distance.get(key)!;
+      if (style.mode !== 'inverted' && d + 1 >= style.widthPx) continue;
+      const comma = key.indexOf(',');
+      const x = Number(key.slice(0, comma));
+      const y = Number(key.slice(comma + 1));
+      for (const [dx, dy] of _PIXEL_NEIGHBORS) {
+        const next = _pixelKey(x + dx, y + dy);
+        if (!owned.has(next) || distance.has(next)) continue;
+        distance.set(next, d + 1);
+        queue.push(next);
+      }
+    }
+    for (const key of owned) {
+      const d = distance.get(key);
+      const relevant = style.mode === 'inverted' || (d !== undefined && d < style.widthPx);
+      if (!relevant || painted.has(key)) continue;
+      const comma = key.indexOf(',');
+      output.push({
+        xWorldPx: Number(key.slice(0, comma)),
+        yWorldPx: Number(key.slice(comma + 1)),
+        distancePx: d ?? style.widthPx,
+        style,
+      });
+      painted.add(key);
+    }
+  }
+  return output;
 }
 
 // ── Layout cache builder ──────────────────────────────────────────────────────
@@ -404,14 +557,10 @@ export function buildWallLayout(
     isSolidAt: (col: number, row: number): boolean => occupied.has(wallTileKey(col, row)),
   };
   const surfaceExposureMap = buildSurfaceExposureMap(solidityGrid);
-  // Cheap BFS over `occupied`/`masks` (already computed above) — only runs
-  // when the layout cache itself rebuilds, never per-frame. See
-  // surfaceRimDistanceField.ts for why this is safe to compute unconditionally
-  // even for rooms with no custom rim styles: it's O(occupied tiles) either way.
-  const needsInteriorDistance = [...tileSurfaceRim.values()].some(style => style.mode === 'inverted');
-  const interiorRimDistanceField = needsInteriorDistance
-    ? buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks)
-    : new Map<string, number>();
+  // Custom work is placement-bounded and skipped entirely when no custom style
+  // exists. The old room-wide tile BFS is intentionally no longer constructed.
+  const customSurfaceRimPixels = _buildCustomSurfaceRimPixels(walls);
+  const interiorRimDistanceField = new Map<string, number>();
 
   const layout: CachedWallLayout = {
     signature,
@@ -425,6 +574,7 @@ export function buildWallLayout(
     tileTheme,
     tileSurfaceRim,
     interiorRimDistanceField,
+    customSurfaceRimPixels,
     surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
@@ -433,6 +583,7 @@ export function buildWallLayout(
     shapedByChunkKey:       new Map(),
     halfPillarByChunkKey: new Map(),
     solid2x2ByChunkKey:   new Map(),
+    customSurfaceRimByChunkKey: new Map(),
   };
 
   // Build per-chunk buckets AFTER all arrays are populated so the bucket maps
@@ -455,6 +606,18 @@ export function buildWallLayout(
  */
 function _buildChunkBuckets(layout: CachedWallLayout, walls: WallSnapshot): void {
   const BSZ = layout.blockSizePx;
+
+  for (const pixel of layout.customSurfaceRimPixels) {
+    const col = Math.floor(pixel.xWorldPx / BSZ);
+    const row = Math.floor(pixel.yWorldPx / BSZ);
+    const ck = `${Math.floor(col / CHUNK_SIZE_BLOCKS)},${Math.floor(row / CHUNK_SIZE_BLOCKS)}`;
+    let arr = layout.customSurfaceRimByChunkKey.get(ck);
+    if (arr === undefined) {
+      arr = [];
+      layout.customSurfaceRimByChunkKey.set(ck, arr);
+    }
+    arr.push(pixel);
+  }
 
   // ── 1×1 occupied tiles: each tile belongs to exactly one chunk ─────────────
   for (const tile of layout.occupiedTiles) {

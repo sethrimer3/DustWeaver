@@ -1,246 +1,172 @@
-/**
- * surfaceRimDistanceField.test.ts — Coverage for the 'inverted'-mode interior
- * darkening distance field: `buildInteriorRimDistanceField` (pure BFS) plus
- * its render-time consumer in `surfaceEdgeOverlay.ts` (falloff curves,
- * distance-0 exemption, no double-painting, cache invalidation via
- * `getWallLayoutCache`).
- */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildInteriorRimDistanceField } from '../render/walls/surfaceRimDistanceField';
-import type { SurfaceMask } from '../sim/world/surfaceExposure';
 import type { WallSnapshot } from '../render/snapshotTypes';
 import { getWallLayoutCache } from '../render/walls/blockWallLayoutCache';
-import { renderSurfaceEdgeOverlayPass, type SurfaceEdgeOverlayParams } from '../render/walls/surfaceEdgeOverlay';
+import { CHUNK_SIZE_BLOCKS } from '../render/walls/chunkRenderCache';
 import { normalizeSurfaceRimStyle, type SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
+import { renderSurfaceEdgeOverlayPass } from '../render/walls/surfaceEdgeOverlay';
 
-const BLOCK_SIZE = 8;
+const B = 8;
 
-// ── buildInteriorRimDistanceField (pure BFS) ────────────────────────────────────
-
-function fullyExposedMask(): SurfaceMask {
-  return { top: true, right: true, bottom: true, left: true };
-}
-function noMask(): SurfaceMask {
-  return { top: false, right: false, bottom: false, left: false };
-}
-
-test('buildInteriorRimDistanceField: seed tiles (in masks) get distance 0', () => {
-  const occupied = new Set(['0,0']);
-  const masks = new Map([['0,0', fullyExposedMask()]]);
-  const dist = buildInteriorRimDistanceField(occupied, masks);
-  assert.equal(dist.get('0,0'), 0);
-});
-
-test('buildInteriorRimDistanceField: a straight 5-tile corridor produces distances 0,1,2,1,0', () => {
-  // Row of 5 solid tiles; only the two ends are exposed (imagine a corridor
-  // open at both ends, solid on the long sides — masks only contains the
-  // tiles that actually have a cardinal exposed side).
-  const occupied = new Set(['0,0', '1,0', '2,0', '3,0', '4,0']);
-  const masks = new Map<string, SurfaceMask>([
-    ['0,0', fullyExposedMask()],
-    ['4,0', fullyExposedMask()],
-  ]);
-  const dist = buildInteriorRimDistanceField(occupied, masks);
-  assert.equal(dist.get('0,0'), 0);
-  assert.equal(dist.get('1,0'), 1);
-  assert.equal(dist.get('2,0'), 2);
-  assert.equal(dist.get('3,0'), 1);
-  assert.equal(dist.get('4,0'), 0);
-});
-
-test('buildInteriorRimDistanceField: a sealed interior pocket (unreachable) is absent from the map', () => {
-  // 3x3 solid block: only the perimeter would be in `masks` in a real room,
-  // but here we simulate a fully sealed pocket by giving NO tile a mask
-  // entry at all — nothing is reachable, so the map stays empty.
-  const occupied = new Set(['1,1']);
-  const masks = new Map<string, SurfaceMask>();
-  const dist = buildInteriorRimDistanceField(occupied, masks);
-  assert.equal(dist.has('1,1'), false, 'unreachable tiles must be absent, not zero');
-});
-
-test('buildInteriorRimDistanceField: a 2D block interior is reached via the shortest path around the shape', () => {
-  // 3x3 solid square; only the 8 perimeter tiles are exposed (center has no
-  // cardinal exposure). Center should be distance 1 (adjacent to any edge tile).
-  const occupied = new Set<string>();
-  const masks = new Map<string, SurfaceMask>();
-  for (let r = 0; r < 3; r++) {
-    for (let c = 0; c < 3; c++) {
-      occupied.add(`${c},${r}`);
-      if (!(c === 1 && r === 1)) masks.set(`${c},${r}`, fullyExposedMask());
-    }
-  }
-  const dist = buildInteriorRimDistanceField(occupied, masks);
-  assert.equal(dist.get('1,1'), 1);
-});
-
-void noMask; // referenced for symmetry/documentation of the mask-shape helpers above
-
-// ── Render-time falloff curves ──────────────────────────────────────────────────
-
-interface RecordedRect { x: number; y: number; w: number; h: number; fillStyle: string }
-
-function makeFakeCtx(): { ctx: CanvasRenderingContext2D; rects: RecordedRect[] } {
-  const rects: RecordedRect[] = [];
-  let currentFillStyle = '';
-  const ctx = {
-    globalCompositeOperation: 'source-over',
-    save(): void {}, restore(): void {},
-    set fillStyle(v: string) { currentFillStyle = v; },
-    get fillStyle() { return currentFillStyle; },
-    fillRect(x: number, y: number, w: number, h: number): void {
-      rects.push({ x, y, w, h, fillStyle: currentFillStyle });
-    },
-  };
-  return { ctx: ctx as unknown as CanvasRenderingContext2D, rects };
+interface WallSpec {
+  x: number; y: number; w: number; h: number;
+  style?: SurfaceRimStyle;
+  platform?: number;
+  shape?: number;
+  pillar?: boolean;
 }
 
-function makeWallSnapshot(rects: Array<{ x: number; y: number; w: number; h: number }>): WallSnapshot {
-  const count = rects.length;
-  const xWorld = new Float32Array(count);
-  const yWorld = new Float32Array(count);
-  const wWorld = new Float32Array(count);
-  const hWorld = new Float32Array(count);
-  rects.forEach((r, i) => { xWorld[i] = r.x; yWorld[i] = r.y; wWorld[i] = r.w; hWorld[i] = r.h; });
-  return {
-    count, xWorld, yWorld, wWorld, hWorld,
-    isPlatformFlag: new Uint8Array(count),
-    platformEdge: new Uint8Array(count),
+function snapshot(specs: WallSpec[], styleTable?: SurfaceRimStyle[]): WallSnapshot {
+  const table = styleTable ?? specs.flatMap(s => s.style ? [s.style] : []);
+  const count = specs.length;
+  const result: WallSnapshot = {
+    count,
+    xWorld: Float32Array.from(specs.map(s => s.x)),
+    yWorld: Float32Array.from(specs.map(s => s.y)),
+    wWorld: Float32Array.from(specs.map(s => s.w)),
+    hWorld: Float32Array.from(specs.map(s => s.h)),
+    isPlatformFlag: Uint8Array.from(specs.map(s => s.platform === undefined ? 0 : 1)),
+    platformEdge: Uint8Array.from(specs.map(s => s.platform ?? 0)),
     themeIndex: new Uint8Array(count).fill(255),
     isInvisibleFlag: new Uint8Array(count),
-    rampOrientationIndex: new Uint8Array(count).fill(255),
-    isPillarHalfWidthFlag: new Uint8Array(count),
-    surfaceRimStyleIndex: new Uint16Array(count),
-    surfaceRimStyleTable: [normalizeSurfaceRimStyle({ mode: 'inverted' })],
+    rampOrientationIndex: Uint8Array.from(specs.map(s => s.shape ?? 255)),
+    isPillarHalfWidthFlag: Uint8Array.from(specs.map(s => s.pillar ? 1 : 0)),
+    surfaceRimStyleIndex: Uint16Array.from(specs.map(s => s.style ? table.indexOf(s.style) : 0xFFFF)),
+    surfaceRimStyleTable: table,
   };
+  return result;
 }
 
-function makeParams(overrides: Partial<SurfaceEdgeOverlayParams> & Pick<SurfaceEdgeOverlayParams, 'surfaceExposureMap'>): SurfaceEdgeOverlayParams {
-  return {
-    ambientDepths: null, isBlockTintEnabled: false,
-    offsetXPx: 0, offsetYPx: 0, scalePx: 1, blockSizePx: BLOCK_SIZE,
-    filterColMinBlocks: 0, filterColMaxBlocks: 0x7FFFFFFF,
-    filterRowMinBlocks: 0, filterRowMaxBlocks: 0x7FFFFFFF,
-    ...overrides,
-  };
-}
-
-// Blocks in these fixtures are placed a few tiles in from (0,0) — the room
-// boundary is NOT treated as open air (see buildSurfaceExposureMap's
-// room-bounds awareness), so a block flush against col/row 0 would have its
-// edge-facing-the-room-boundary side silently NOT count as exposed. Offsetting
-// by OFFSET tiles keeps every side of the fixture genuinely open-air-adjacent.
-const OFFSET = 2;
-
-/** A 5-wide x 3-tall solid block: middle row's center tile sits deepest (distance 1 from any edge). */
-function makeThickWallLayout() {
-  const snapshot = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 5 * BLOCK_SIZE, h: 3 * BLOCK_SIZE }]);
-  return getWallLayoutCache(snapshot, BLOCK_SIZE, 20, 20);
-}
-
-function darkenAlphaAt(rects: RecordedRect[], col: number, row: number): number | undefined {
-  const x = col * BLOCK_SIZE;
-  const y = row * BLOCK_SIZE;
-  const r = rects.find(rr => rr.x === x && rr.y === y && /rgba\(0,0,0,/.test(rr.fillStyle));
-  if (!r) return undefined;
-  return parseFloat(/rgba\(0,0,0,([\d.]+)\)/.exec(r.fillStyle)![1]);
-}
-
-function renderInverted(style: SurfaceRimStyle): { rects: RecordedRect[]; wallLayout: ReturnType<typeof makeThickWallLayout> } {
-  const wallLayout = makeThickWallLayout();
-  const { ctx, rects } = makeFakeCtx();
-  const params = makeParams({
-    surfaceExposureMap: wallLayout.surfaceExposureMap,
-    getStyleForTile: () => style,
-    interiorTileCoords: wallLayout.occupiedTiles,
-    getInteriorDistanceForTile: (col, row) => wallLayout.interiorRimDistanceField.get(`${col},${row}`),
+function pixelsFor(widthPx: number, w = 48, h = 48) {
+  const style = normalizeSurfaceRimStyle({
+    mode: 'gradient', color: 'ff0000', widthPx, opacity: 1, falloff: 'linear',
   });
-  renderSurfaceEdgeOverlayPass(ctx, params);
-  return { rects, wallLayout };
+  return getWallLayoutCache(snapshot([{ x: 16, y: 16, w, h, style }]), B, 20, 20)
+    .customSurfaceRimPixels;
 }
 
-test('inverted distance field: the center tile of a thick wall (max distance in this shape) sits at distance 1', () => {
-  // 5x3 block spans col OFFSET..OFFSET+4, row OFFSET..OFFSET+2. Center tile
-  // (col OFFSET+2, row OFFSET+1): 1 tile from top/bottom edge, 2 from left/right — min is 1.
-  const wallLayout = makeThickWallLayout();
-  assert.equal(wallLayout.interiorRimDistanceField.get(`${OFFSET + 2},${OFFSET + 1}`), 1);
+for (const width of [1, 3, 8, 9, 16, 32]) {
+  test(`world-pixel width ${width} is exact and remains inside solid geometry`, () => {
+    const pixels = pixelsFor(width);
+    assert.ok(pixels.length > 0);
+    assert.ok(pixels.every(p => p.xWorldPx >= 16 && p.xWorldPx < 64
+      && p.yWorldPx >= 16 && p.yWorldPx < 64));
+    assert.equal(Math.max(...pixels.map(p => p.distancePx)), Math.min(width - 1, 23));
+    assert.ok(pixels.some(p => p.distancePx === Math.min(width - 1, 23)));
+    assert.equal(new Set(pixels.map(p => `${p.xWorldPx},${p.yWorldPx}`)).size, pixels.length);
+  });
+}
+
+test('wide rims cross tile boundaries', () => {
+  const pixels = pixelsFor(16);
+  assert.ok(pixels.some(p => p.distancePx >= B));
 });
 
-test('inverted falloff: hard mode is a step function (0 at distance 0, full darkness at any distance > 0)', () => {
-  const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 1, opacity: 0.2, falloff: 'hard', interiorDarkness: 0.9 });
-  const { rects } = renderInverted(style);
-  assert.equal(darkenAlphaAt(rects, OFFSET, OFFSET), undefined, 'edge tile (distance 0) must have no darken rect');
-  assert.equal(darkenAlphaAt(rects, OFFSET + 2, OFFSET + 1), 0.9, 'any interior tile (distance > 0) is immediately at full interiorDarkness under hard falloff');
+test('adjacent styles keep ownership and the solid seam receives no rim', () => {
+  const red = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000', widthPx: 8 });
+  const green = normalizeSurfaceRimStyle({ mode: 'solid', color: '00ff00', widthPx: 8 });
+  const layout = getWallLayoutCache(snapshot([
+    { x: 16, y: 16, w: 16, h: 24, style: red },
+    { x: 32, y: 16, w: 16, h: 24, style: green },
+  ]), B, 20, 20);
+  const seamInterior = layout.customSurfaceRimPixels.filter(p =>
+    (p.xWorldPx === 31 || p.xWorldPx === 32) && p.yWorldPx === 28);
+  assert.equal(seamInterior.length, 0);
+  assert.ok(layout.customSurfaceRimPixels.some(p => p.style.color === 'ff0000'));
+  assert.ok(layout.customSurfaceRimPixels.some(p => p.style.color === '00ff00'));
 });
 
-test('inverted falloff: linear mode scales darkness proportionally to normalized distance', () => {
-  const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 1, opacity: 0.2, falloff: 'linear', interiorDarkness: 1.0 });
-  const { rects } = renderInverted(style);
-  const alpha = darkenAlphaAt(rects, OFFSET + 2, OFFSET + 1)!;
-  // distance 1 / max-distance-tiles constant (6) = 1/6.
-  assert.ok(Math.abs(alpha - 1 / 6) < 1e-6, `expected ~${1 / 6}, got ${alpha}`);
+test('inverted distance is world-pixel based and saturates at widthPx', () => {
+  const style = normalizeSurfaceRimStyle({
+    mode: 'inverted', widthPx: 9, interiorDarkness: 0.8, falloff: 'linear',
+  });
+  const pixels = getWallLayoutCache(
+    snapshot([{ x: 8, y: 8, w: 40, h: 40, style }]), B, 10, 10,
+  ).customSurfaceRimPixels;
+  assert.equal(pixels.find(p => p.xWorldPx === 8 && p.yWorldPx === 8)?.distancePx, 0);
+  assert.equal(pixels.find(p => p.xWorldPx === 17 && p.yWorldPx === 17)?.distancePx, 9);
 });
 
-test('inverted falloff: smooth and exponential both start at 0 for distance 0 and rise monotonically', () => {
-  for (const falloff of ['smooth', 'exponential'] as const) {
-    const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 1, opacity: 0.2, falloff, interiorDarkness: 1.0 });
-    const { rects } = renderInverted(style);
-    assert.equal(darkenAlphaAt(rects, OFFSET, OFFSET), undefined, `${falloff}: distance 0 must have no darken rect`);
-    const alpha = darkenAlphaAt(rects, OFFSET + 2, OFFSET + 1)!;
-    assert.ok(alpha > 0 && alpha < 1, `${falloff}: intermediate distance must be strictly between 0 and full darkness, got ${alpha}`);
+test('platform, stair, ramp, half-width pillar, and rectangle pixels are clipped to visible geometry', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 3 });
+  const specs: WallSpec[] = [
+    { x: 8, y: 8, w: 8, h: 8, style, platform: 0 },
+    { x: 24, y: 8, w: 8, h: 8, style, shape: 4 },
+    { x: 40, y: 8, w: 8, h: 8, style, shape: 0 },
+    { x: 56, y: 8, w: 4, h: 8, style, pillar: true },
+    { x: 72, y: 8, w: 8, h: 8, style },
+  ];
+  const pixels = getWallLayoutCache(snapshot(specs), B, 20, 20).customSurfaceRimPixels;
+  assert.equal(pixels.some(p => p.xWorldPx >= 8 && p.xWorldPx < 16 && p.yWorldPx >= 11), false);
+  assert.equal(pixels.some(p => p.xWorldPx === 24 && p.yWorldPx === 8), false);
+  assert.equal(pixels.some(p => p.xWorldPx === 40 && p.yWorldPx === 8), false);
+  assert.equal(pixels.some(p => p.xWorldPx >= 60 && p.xWorldPx < 64), false);
+  assert.ok(pixels.some(p => p.xWorldPx >= 72 && p.xWorldPx < 80));
+});
+
+test('style-table content participates in gameplay cache signature', () => {
+  const red = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000' });
+  const blue = normalizeSurfaceRimStyle({ mode: 'solid', color: '0000ff' });
+  const a = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 8, h: 8, style: red }], [red]), B, 10, 10);
+  const b = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 8, h: 8, style: blue }], [blue]), B, 10, 10);
+  assert.notEqual(a.signature, b.signature);
+  assert.notEqual(a, b);
+});
+
+test('cache reuses same-geometry/style layouts across room snapshots', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'solid', color: 'abcdef' });
+  const a = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 8, h: 8, style }]), B, 10, 10);
+  const b = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 8, h: 8, style }]), B, 10, 10);
+  assert.equal(a, b);
+});
+
+test('no custom style performs no pixel-distance construction', () => {
+  const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 32, h: 32 }]), B, 10, 10);
+  assert.equal(layout.customSurfaceRimPixels.length, 0);
+  assert.equal(layout.customSurfaceRimByChunkKey.size, 0);
+});
+
+test('none mode performs no pixel-distance construction', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'none' });
+  const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 32, h: 32, style }]), B, 10, 10);
+  assert.equal(layout.customSurfaceRimPixels.length, 0);
+  assert.equal(layout.customSurfaceRimByChunkKey.size, 0);
+});
+
+test('custom buckets contain only their chunk pixels', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 3 });
+  const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 400, h: 8, style }]), B, 60, 10);
+  assert.ok(layout.customSurfaceRimByChunkKey.size > 1);
+  for (const [key, pixels] of layout.customSurfaceRimByChunkKey) {
+    const [cx, cy] = key.split(',').map(Number);
+    assert.ok(pixels.every(p =>
+      Math.floor(Math.floor(p.xWorldPx / B) / CHUNK_SIZE_BLOCKS) === cx
+      && Math.floor(Math.floor(p.yWorldPx / B) / CHUNK_SIZE_BLOCKS) === cy));
   }
 });
 
-test('inverted falloff: distance at/beyond the max-distance constant saturates at full interiorDarkness', () => {
-  // Build a much thicker block so some tile sits at/beyond the 6-tile cap.
-  const snapshot = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 15 * BLOCK_SIZE, h: 15 * BLOCK_SIZE }]);
-  const wallLayout = getWallLayoutCache(snapshot, BLOCK_SIZE, 20, 20);
-  const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 1, opacity: 0.2, falloff: 'linear', interiorDarkness: 0.7 });
-  const { ctx, rects } = makeFakeCtx();
-  const params = makeParams({
-    surfaceExposureMap: wallLayout.surfaceExposureMap,
-    getStyleForTile: () => style,
-    interiorTileCoords: wallLayout.occupiedTiles,
-    getInteriorDistanceForTile: (col, row) => wallLayout.interiorRimDistanceField.get(`${col},${row}`),
+test('rendered custom pixels stay in geometry and are painted exactly once', () => {
+  const style = normalizeSurfaceRimStyle({
+    mode: 'inverted', color: 'ff8000', widthPx: 16, interiorDarkness: 0.75,
   });
-  renderSurfaceEdgeOverlayPass(ctx, params);
-  // The exact center of a 15x15 block is 7 tiles from every edge — past the cap.
-  const alpha = darkenAlphaAt(rects, OFFSET + 7, OFFSET + 7);
-  assert.ok(alpha !== undefined && Math.abs(alpha - 0.7) < 1e-6, `expected saturated 0.7, got ${alpha}`);
-});
-
-test('no double-painting: interior darken rects never overlap each other or the exposed-edge rim bands', () => {
-  const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 2, opacity: 0.3, falloff: 'smooth', interiorDarkness: 0.8 });
-  const { rects } = renderInverted(style);
-  for (let i = 0; i < rects.length; i++) {
-    for (let j = i + 1; j < rects.length; j++) {
-      const a = rects[i]; const b = rects[j];
-      const overlapsX = a.x < b.x + b.w && a.x + a.w > b.x;
-      const overlapsY = a.y < b.y + b.h && a.y + a.h > b.y;
-      assert.ok(!(overlapsX && overlapsY), `rects ${i} and ${j} overlap: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
-    }
-  }
-});
-
-// ── Cache invalidation ────────────────────────────────────────────────────────
-
-test('cache invalidation: interiorRimDistanceField is rebuilt when wall geometry (and thus exposure) changes', () => {
-  const snapshotA = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 3 * BLOCK_SIZE, h: 3 * BLOCK_SIZE }]);
-  const layoutA = getWallLayoutCache(snapshotA, BLOCK_SIZE, 20, 20);
-  assert.equal(layoutA.interiorRimDistanceField.get(`${OFFSET + 1},${OFFSET + 1}`), 1);
-
-  // Grow the block so a previously-center tile is no longer the deepest,
-  // proving the field actually recomputes rather than being stale/cached
-  // from the first shape.
-  const snapshotB = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 5 * BLOCK_SIZE, h: 5 * BLOCK_SIZE }]);
-  const layoutB = getWallLayoutCache(snapshotB, BLOCK_SIZE, 20, 20);
-  assert.equal(layoutB.interiorRimDistanceField.get(`${OFFSET + 2},${OFFSET + 2}`), 2, 'the new shape\'s true center must reflect the new, larger exposure map');
-  assert.notEqual(layoutA, layoutB, 'geometry change must produce a fresh layout object, not reuse the old one');
-});
-
-test('performance: layouts without inverted styles do not construct an interior distance field', () => {
-  const snapshot = makeWallSnapshot([{ x: OFFSET * BLOCK_SIZE, y: OFFSET * BLOCK_SIZE, w: 5 * BLOCK_SIZE, h: 5 * BLOCK_SIZE }]);
-  snapshot.surfaceRimStyleIndex.fill(0xFFFF);
-  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 20, 20);
-  assert.equal(layout.interiorRimDistanceField.size, 0);
+  const layout = getWallLayoutCache(snapshot([{ x: 16, y: 16, w: 40, h: 40, style }]), B, 10, 10);
+  const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+  const ctx = {
+    globalCompositeOperation: 'source-over',
+    save() {}, restore() {},
+    set fillStyle(_value: string) {},
+    fillRect(x: number, y: number, w: number, h: number) { rects.push({ x, y, w, h }); },
+  } as unknown as CanvasRenderingContext2D;
+  renderSurfaceEdgeOverlayPass(ctx, {
+    surfaceExposureMap: { masks: new Map(), segments: [], concaveCorners: [] },
+    ambientDepths: null,
+    isBlockTintEnabled: false,
+    offsetXPx: 0, offsetYPx: 0, scalePx: 1, blockSizePx: B,
+    filterColMinBlocks: 0, filterColMaxBlocks: 10,
+    filterRowMinBlocks: 0, filterRowMaxBlocks: 10,
+    customRimPixels: layout.customSurfaceRimPixels,
+  });
+  assert.ok(rects.every(r => r.w === 1 && r.h === 1
+    && r.x >= 16 && r.x < 56 && r.y >= 16 && r.y < 56));
+  assert.equal(new Set(rects.map(r => `${r.x},${r.y}`)).size, rects.length);
 });
