@@ -25,7 +25,10 @@
 
 import type { EditorRoomData } from './editorState';
 import type { CampaignSpawnData } from '../levels/campaignSchema';
-import { capturePendingSnapshot, commitPendingSnapshot, type EditorHistory, type PendingSnapshot } from './editorHistory';
+import {
+  capturePendingSnapshot, commitPendingSnapshot,
+  type EditorHistory, type HistoryCommitResult, type PendingSnapshot,
+} from './editorHistory';
 
 export interface EditorGestureTransaction {
   readonly pending: PendingSnapshot;
@@ -65,10 +68,9 @@ export function beginGesture(
  * completely untouched. Returns whether a commit happened, so the caller
  * knows whether to call `applyEdits()`.
  */
-export function finishGesture(history: EditorHistory, gesture: EditorGestureTransaction): boolean {
-  if (!gesture.hasChanged()) return false;
-  commitPendingSnapshot(history, gesture.pending);
-  return true;
+export function finishGesture(history: EditorHistory, gesture: EditorGestureTransaction): HistoryCommitResult {
+  if (!gesture.hasChanged()) return 'noop';
+  return commitPendingSnapshot(history, gesture.pending);
 }
 
 /**

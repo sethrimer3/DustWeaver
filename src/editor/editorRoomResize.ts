@@ -12,7 +12,7 @@
 
 import type { EditorRoomData } from './editorState';
 import type { EditorHistory } from './editorHistory';
-import { pushSnapshot } from './editorHistory';
+import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import type { RoomEdge } from './editorUI';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
@@ -207,7 +207,6 @@ export function applyEdgeResize(
   edge: RoomEdge,
   delta: 1 | -1,
 ): void {
-  pushSnapshot(history, roomData);
   const room = roomData;
 
   const isHorizontal = edge === 'left' || edge === 'right';
@@ -217,8 +216,11 @@ export function applyEdgeResize(
 
   // Enforce minimum room size of 10
   if (newSize < 10) return;
+  const pending = capturePendingSnapshot(roomData, undefined, undefined, false, 'Room resize');
 
   room[prop] = newSize;
+  const commitResult = commitPendingSnapshot(history, pending);
+  if (commitResult === 'noop') return;
 
   // When adding/removing from top or left, we need to shift all content
   const needsShift = edge === 'top' || edge === 'left';

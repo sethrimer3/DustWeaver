@@ -57,6 +57,8 @@ import {
   markHistorySaved, isHistoryDirty, getHistoryDiagnostics,
 } from './editorHistory';
 import type { EditorHistory } from './editorHistory';
+import { runRoomFieldMutation as transactRoomFieldMutation } from './editorRoomMutation';
+import { beginPaintTransaction } from './editorPaintHistoryCoordinator';
 import { beginGesture, finishGesture, rollbackGesture, type EditorGestureTransaction } from './editorGesture';
 import {
   storeDragStartPositions, moveSelectedElements,
@@ -105,7 +107,6 @@ import {
   showCampaignSpawnReplaceModal,
   captureCampaignSpawnSnapshot,
   commitCampaignSpawnSnapshot,
-  captureCampaignSpawnPendingSnapshot,
 } from './editorCampaignSpawn';
 import type { PendingSnapshot } from './editorHistory';
 
@@ -593,9 +594,14 @@ export function createEditorController(
         sidebarScrollTop: workspacePrefs.sidebarScrollTop,
       });
       ui.setCallbacks({
-        onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
+        onToolChange: (tool) => {
+          cancelActiveGesture();
+          state.activeTool = tool;
+          state.selectedElements = [];
+        },
         onCategoryChange: (cat) => { state.activeCategory = cat; scheduleWorkspaceSave(); },
         onPaletteItemSelect: (item) => {
+          cancelActiveGesture();
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
         },
@@ -676,7 +682,8 @@ export function createEditorController(
                   state.campaignSpawnStartingOptions.startingPassives = spawn.startingPassives;
                 }
               }
-              commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
+              const commitResult = commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
+              if (commitResult !== 'noop') applyEdits('metadata');
             }
             return; // No applyEdits needed — campaign spawn is not in room data
           }
@@ -686,8 +693,7 @@ export function createEditorController(
           if (propertyChanged) applyEdits('metadata');
         },
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
-          if (state.roomData) applyRoomDimensionChange(state.roomData, dimProp, value);
-          applyEdits('metadata');
+          runRoomFieldMutation(dimProp, room => applyRoomDimensionChange(room, dimProp, value));
         },
         onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => {
           if (state.roomData) applyEdgeResize(state.roomData, history, edge, delta);
@@ -705,41 +711,33 @@ export function createEditorController(
           saveBlockThemeSlots(state.blockThemeSlots, state.activeBlockThemeSlotIndex);
         },
         onLightingEffectChange: (lightingEffect: LightingEffect) => {
-          if (state.roomData) state.roomData.lightingEffect = lightingEffect;
-          applyEdits('metadata');
+          runRoomFieldMutation('lightingEffect', room => { room.lightingEffect = lightingEffect; });
         },
         onAmbientLightDirectionChange: (direction: AmbientLightDirection | undefined) => {
-          if (state.roomData) state.roomData.ambientLightDirection = direction;
-          applyEdits('metadata');
+          runRoomFieldMutation('ambientLightDirection', room => { room.ambientLightDirection = direction; });
         },
         onDirectionalBiasChange: (value: number) => {
-          if (state.roomData) state.roomData.directionalBias = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('directionalBias', room => { room.directionalBias = value; });
         },
         onSideExposureStrengthChange: (value: number) => {
-          if (state.roomData) state.roomData.sideExposureStrength = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('sideExposureStrength', room => { room.sideExposureStrength = value; });
         },
         onMinimumWallLightChange: (value: number) => {
-          if (state.roomData) state.roomData.minimumWallLight = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('minimumWallLight', room => { room.minimumWallLight = value; });
         },
         onFalloffPowerChange: (value: number) => {
-          if (state.roomData) state.roomData.falloffPower = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('falloffPower', room => { room.falloffPower = value; });
         },
         onBackgroundLightSpillChange: (value: number) => {
-          if (state.roomData) state.roomData.backgroundLightSpill = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('backgroundLightSpill', room => { room.backgroundLightSpill = value; });
         },
         onSolidLightSoftnessChange: (value: number) => {
-          if (state.roomData) state.roomData.solidLightSoftness = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('solidLightSoftness', room => { room.solidLightSoftness = value; });
         },
         onSunraysEnabledChange: (enabled: boolean) => {
-          if (!state.roomData) return;
-          const prev = state.roomData.sunrays;
-          state.roomData.sunrays = {
+          runRoomFieldMutation('sunrays.enabled', room => {
+            const prev = room.sunrays;
+            room.sunrays = {
             enabled,
             style: prev?.style ?? 'soft',
             source: 'top',
@@ -747,48 +745,39 @@ export function createEditorController(
             intensity: prev?.intensity,
             rayCount: prev?.rayCount,
             animationEnabled: prev?.animationEnabled,
-          };
-          applyEdits('metadata');
+            };
+          });
         },
         onSunraysStyleChange: (style: 'hard' | 'soft') => {
-          if (state.roomData?.sunrays) state.roomData.sunrays.style = style;
-          applyEdits('metadata');
+          runRoomFieldMutation('sunrays.style', room => { if (room.sunrays) room.sunrays.style = style; });
         },
         onSunraysAngleChange: (angleDeg: number) => {
-          if (state.roomData?.sunrays) state.roomData.sunrays.angleDeg = angleDeg;
-          applyEdits('metadata');
+          runRoomFieldMutation('sunrays.angleDeg', room => { if (room.sunrays) room.sunrays.angleDeg = angleDeg; });
         },
         onSunraysIntensityChange: (value: number) => {
-          if (state.roomData?.sunrays) state.roomData.sunrays.intensity = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('sunrays.intensity', room => { if (room.sunrays) room.sunrays.intensity = value; });
         },
         onSunraysRayCountChange: (value: number) => {
-          if (state.roomData?.sunrays) state.roomData.sunrays.rayCount = value;
-          applyEdits('metadata');
+          runRoomFieldMutation('sunrays.rayCount', room => { if (room.sunrays) room.sunrays.rayCount = value; });
         },
         onSunraysAnimationChange: (enabled: boolean) => {
-          if (state.roomData?.sunrays) state.roomData.sunrays.animationEnabled = enabled;
-          applyEdits('metadata');
+          runRoomFieldMutation('sunrays.animationEnabled', room => { if (room.sunrays) room.sunrays.animationEnabled = enabled; });
         },
         onSeamBlendingChange: (mode) => {
-          if (state.roomData) state.roomData.blockSeamBlending = mode;
+          runRoomFieldMutation('blockSeamBlending', room => { room.blockSeamBlending = mode; });
           // Live-preview: update the active renderer immediately so the
           // editor backdrop reflects the change without a full playtest cycle.
           // setActiveSeamBlending already invalidates the chunk cache.
           setActiveSeamBlending(mode);
-          applyEdits('metadata');
         },
         onVoidEdgeStyleChange: (style) => {
-          if (state.roomData) state.roomData.voidEdgeStyle = style;
-          applyEdits('metadata');
+          runRoomFieldMutation('voidEdgeStyle', room => { room.voidEdgeStyle = style; });
         },
         onBackgroundChange: (bgId: BackgroundId) => {
-          if (state.roomData) state.roomData.backgroundId = bgId;
-          applyEdits('metadata');
+          runRoomFieldMutation('backgroundId', room => { room.backgroundId = bgId; });
         },
         onRoomSongChange: (songId: RoomSongId) => {
-          if (state.roomData) state.roomData.songId = songId;
-          applyEdits('metadata');
+          runRoomFieldMutation('songId', room => { room.songId = songId; });
         },
         onSave: () => saveEdits(),
         onConfirm: () => confirmEdits(),
@@ -1139,6 +1128,14 @@ export function createEditorController(
     } else {
       liveEditorRoomDef = null;
     }
+  }
+
+  /** Transactional owner for direct room metadata controls. Repeated input
+   * events for the same field coalesce through the Property: label. */
+  function runRoomFieldMutation(field: string, mutate: (room: EditorRoomData) => void): void {
+    if (!state.roomData) return;
+    const result = transactRoomFieldMutation(history, state.roomData, field, mutate);
+    if (result !== 'noop') applyEdits('metadata');
   }
 
   /**
@@ -1514,6 +1511,21 @@ export function createEditorController(
     if (inputState.isClickFired && state.roomData !== null) {
       // Ignore clicks on the UI panel area (CSS pixel comparison)
       if (inputState.clickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
+        if (
+          activePaintPending === null &&
+          (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete) &&
+          state.selectedPaletteItem?.id !== 'campaign_spawn' &&
+          state.brushMode !== 'rect'
+        ) {
+          activePaintTracksCampaignSpawn = state.activeTool === EditorTool.Delete;
+          const campaign = activeCampaignSession.campaign.campaign;
+          activePaintPending = beginPaintTransaction(
+            state.roomData,
+            campaign.campaignSpawn,
+            campaign.initialRoomId,
+            activePaintTracksCampaignSpawn,
+          ).pending;
+        }
         if (state.isLinkingTransition) {
           // In link mode: clicking a transition completes the link
           const clicked = selectAtCursor(state);
@@ -1667,12 +1679,8 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           const px = pixelFromCursor(state);
-          const pending = capturePendingSnapshot(state.roomData);
           const placed = placePixelMaterialAt(state, px.x, px.y, state.selectedPaletteItem.pixelMaterialId ?? 1);
-          if (placed) {
-            commitPendingSnapshot(history, pending);
-            applyEdits('placement');
-          }
+          if (placed) applyEdits('placement');
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.id === 'campaign_spawn') {
@@ -1697,7 +1705,8 @@ export function createEditorController(
                 // Either no spawn yet, or spawn is already in this room — update silently.
               const pending = captureCampaignSpawnSnapshot(campaignSpawnCtx, 'Place campaign spawn');
               placeCampaignSpawn(campaignSpawnCtx, bx, by);
-              commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
+              const commitResult = commitCampaignSpawnSnapshot(campaignSpawnCtx, history, pending);
+              if (commitResult !== 'noop') applyEdits('metadata');
               // Auto-select the marker so the inspector shows it immediately.
               state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
             }
@@ -1713,7 +1722,7 @@ export function createEditorController(
             // no-op placement below can discard `pending` without having
             // disturbed history at all.
             const snapshotStartMs = import.meta.env.DEV ? performance.now() : 0;
-            const pending = capturePendingSnapshot(state.roomData);
+            const pending = activePaintPending ?? capturePendingSnapshot(state.roomData, undefined, undefined, false, 'Paint stroke');
             const snapshotElapsedMs = import.meta.env.DEV ? performance.now() - snapshotStartMs : 0;
             if (import.meta.env.DEV) {
               logEditorPerfWarned('pushSnapshot (undo)', snapshotStartMs, state.roomData.id);
@@ -1730,7 +1739,7 @@ export function createEditorController(
               state.brushRectStartBlockX = null;
               state.brushRectStartBlockY = null;
             }
-            if (placed) {
+            if (placed && activePaintPending === null) {
               // Only now commit the snapshot to the undo stack and clear
               // redo — a no-op placement (blocked layer, dedup, overlap)
               // leaves undo/redo completely untouched.
@@ -1799,22 +1808,14 @@ export function createEditorController(
           }
         } else if (state.activeTool === EditorTool.Delete && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           const px = pixelFromCursor(state);
-          const pending = capturePendingSnapshot(state.roomData);
           const erased = erasePixelMaterialAt(state, px.x, px.y);
-          if (erased) {
-            activePaintPending = pending;
-            activePaintTracksCampaignSpawn = false;
-            applyEdits('placement');
-          }
+          if (erased) applyEdits('placement');
           lastDragPixelX = px.x;
           lastDragPixelY = px.y;
         } else if (state.activeTool === EditorTool.Delete) {
-          const pending = captureCampaignSpawnPendingSnapshot(campaignSpawnCtx);
           const deleted = deleteAtCursorBrushed(state);
           if (deleted) {
             syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
-            activePaintPending = pending;
-            activePaintTracksCampaignSpawn = true;
             applyEdits('placement');
           }
           lastDragBlockX = state.cursorBlockX;
@@ -1828,7 +1829,13 @@ export function createEditorController(
     // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
       if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
-        const pending = captureCampaignSpawnPendingSnapshot(campaignSpawnCtx);
+        if (activePaintPending === null) {
+          const campaign = activeCampaignSession.campaign.campaign;
+          activePaintPending = beginPaintTransaction(
+            state.roomData, campaign.campaignSpawn, campaign.initialRoomId, true,
+          ).pending;
+          activePaintTracksCampaignSpawn = true;
+        }
         let changed: boolean;
         if (state.selectedPaletteItem?.isPixelMaterialItem === 1) {
           // Pixel-material tool: right-click erases the exact native pixel
@@ -1846,8 +1853,6 @@ export function createEditorController(
           if (state.selectedPaletteItem?.isPixelMaterialItem !== 1) {
             syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
           }
-          activePaintPending = pending;
-          activePaintTracksCampaignSpawn = true;
           applyEdits('placement');
         }
         lastDragBlockX = state.cursorBlockX;
@@ -1954,39 +1959,41 @@ export function createEditorController(
     // Mouse release
     if (!inputState.isMouseDown) {
       if (activePaintPending && !inputState.isRightMouseDown) {
+        let commitResult;
         if (activePaintTracksCampaignSpawn) {
-          commitCampaignSpawnSnapshot(campaignSpawnCtx, history, activePaintPending);
+          commitResult = commitCampaignSpawnSnapshot(campaignSpawnCtx, history, activePaintPending);
         } else {
-          commitPendingSnapshot(history, activePaintPending);
+          commitResult = commitPendingSnapshot(history, activePaintPending);
         }
         activePaintPending = null;
         activePaintTracksCampaignSpawn = false;
         isCurrentRoomDirty = isHistoryDirty(history);
+        if (commitResult !== 'noop') applyEdits('placement');
       }
       if (state.isDragging) {
         state.isDragging = false;
         dragOriginalPositions.clear();
-        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        const committed = activeGesture ? finishGesture(history, activeGesture) : 'noop';
         activeGesture = null;
         // Only rebuild/dirty the room when the drag actually moved something —
         // a click-release with no movement (or a drag that returned to its
         // origin) leaves undo/redo and dirty state completely untouched.
-        if (committed) applyEdits('metadata');
+        if (committed !== 'noop') applyEdits('metadata');
       }
       if (state.isResizingTransition) {
         state.isResizingTransition = false;
         state.resizeTransitionUid = -1;
         state.resizeEdge = null;
         resizeOriginalGeometry = null;
-        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        const committed = activeGesture ? finishGesture(history, activeGesture) : 'noop';
         activeGesture = null;
-        if (committed) applyEdits('metadata');
+        if (committed !== 'noop') applyEdits('metadata');
       }
       if (challengeResize) {
         challengeResize = null;
-        const committed = activeGesture ? finishGesture(history, activeGesture) : false;
+        const committed = activeGesture ? finishGesture(history, activeGesture) : 'noop';
         activeGesture = null;
-        if (committed) applyEdits('metadata');
+        if (committed !== 'noop') applyEdits('metadata');
       }
       if (state.isSelectionBoxActive) {
         state.isSelectionBoxActive = false;

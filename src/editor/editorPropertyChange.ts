@@ -553,6 +553,5 @@ export function handlePropertyChange(
     // completely untouched by dropping `pending` here.
     return false;
   }
-  commitPendingSnapshot(history, pending);
-  return true;
+  return commitPendingSnapshot(history, pending) !== 'noop';
 }

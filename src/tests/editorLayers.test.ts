@@ -828,7 +828,7 @@ test('gesture: zero-delta drag (click release without movement) reports unchange
   );
   // No movement applied at all — release immediately.
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, false, 'a zero-delta drag must not commit a snapshot');
+  assert.equal(committed, 'noop', 'a zero-delta drag must not commit a snapshot');
   assert.equal(history.redoStack.length, 1, 'redo must be preserved by an unchanged gesture');
 });
 
@@ -853,7 +853,7 @@ test('gesture: moving away and returning to the origin before release reports un
   moveSelectedElements(state, positions, 3, 3); // move away
   moveSelectedElements(state, positions, 0, 0); // return to origin
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, false, 'returning to the exact origin must not commit a snapshot');
+  assert.equal(committed, 'noop', 'returning to the exact origin must not commit a snapshot');
   assert.equal(history.redoStack.length, 1, 'redo must be preserved');
 });
 
@@ -878,7 +878,7 @@ test('gesture: a genuine drag commits exactly one undo entry and clears redo', (
   const gesture = beginGesture(room, hasChanged, () => moveSelectedElements(state, positions, 0, 0));
   moveSelectedElements(state, positions, 2, 2);
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, true, 'an actual move must commit');
+  assert.equal(committed, 'committed', 'an actual move must commit');
   assert.equal(history.undoStack.length, undoDepthBefore + 1, 'exactly one undo entry must be added');
   assert.equal(history.redoStack.length, 0, 'redo must be cleared exactly once by the successful drag');
 });
@@ -921,7 +921,7 @@ test('gesture: rect-resize return-to-original-dimensions reports unchanged and p
   rect.wBlock = 6; // resize out
   rect.wBlock = 3; // resize back to original
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, false, 'returning to original dimensions must not commit');
+  assert.equal(committed, 'noop', 'returning to original dimensions must not commit');
   assert.equal(history.redoStack.length, 1, 'redo must be preserved');
 });
 
@@ -940,7 +940,7 @@ test('gesture: a genuine rect-resize commits exactly one undo entry', () => {
   );
   getRect().wBlock = 6;
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, true);
+  assert.equal(committed, 'committed');
   assert.equal(history.undoStack.length, 1, 'exactly one undo entry must be recorded');
 });
 
@@ -987,7 +987,7 @@ test('gesture: transition-resize zero-change preserves redo, successful resize c
   // Zero-change: grab the handle, release without moving it.
   const noopGesture = beginGesture(room, hasChanged, restore);
   const noopCommitted = finishGesture(history, noopGesture);
-  assert.equal(noopCommitted, false, 'a zero-change transition resize must not commit');
+  assert.equal(noopCommitted, 'noop', 'a zero-change transition resize must not commit');
   assert.equal(history.redoStack.length, 1, 'redo must be preserved by a zero-change resize');
 
   // Successful resize: openingSizeBlocks grows, yBlock/positionBlock stay synced.
@@ -997,7 +997,7 @@ test('gesture: transition-resize zero-change preserves redo, successful resize c
   t.yBlock = 3;
   t.positionBlock = 3;
   const committed = finishGesture(history, gesture);
-  assert.equal(committed, true, 'a real resize must commit');
+  assert.equal(committed, 'committed', 'a real resize must commit');
   assert.equal(history.undoStack.length, 1, 'exactly one undo entry must be recorded for the successful resize');
   const restored = undo(history, room);
   assert.ok(restored, 'undo must succeed after the committed resize');

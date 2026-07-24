@@ -10,7 +10,7 @@
 
 import type { EditorState } from './editorState';
 import type { EditableCampaignSession } from './editableCampaignSession';
-import type { EditorHistory, PendingSnapshot } from './editorHistory';
+import type { EditorHistory, HistoryCommitResult, PendingSnapshot } from './editorHistory';
 import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 
 /** Shared dependencies injected into all campaign-spawn helpers. */
@@ -39,8 +39,8 @@ export function commitCampaignSpawnSnapshot(
   ctx: CampaignSpawnContext,
   history: EditorHistory,
   pending: PendingSnapshot | null,
-): boolean {
-  if (!pending) return false;
+): HistoryCommitResult {
+  if (!pending) return 'noop';
   const campaign = ctx.campaignSession?.campaign.campaign;
   return commitPendingSnapshot(history, pending, campaign?.campaignSpawn, campaign?.initialRoomId);
 }
