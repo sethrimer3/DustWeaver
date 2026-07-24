@@ -311,7 +311,11 @@ function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixe
   let hasCustom = false;
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isInvisibleFlag[wi] === 1) continue;
-    if (walls.surfaceRimStyleIndex[wi] !== SURFACE_RIM_STYLE_INDEX_DEFAULT) {
+    const styleIndex = walls.surfaceRimStyleIndex[wi];
+    const style = styleIndex === SURFACE_RIM_STYLE_INDEX_DEFAULT
+      ? undefined
+      : walls.surfaceRimStyleTable[styleIndex];
+    if (style && style.mode !== 'default' && style.mode !== 'none') {
       hasCustom = true;
       break;
     }

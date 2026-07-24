@@ -126,6 +126,13 @@ test('no custom style performs no pixel-distance construction', () => {
   assert.equal(layout.customSurfaceRimByChunkKey.size, 0);
 });
 
+test('none mode performs no pixel-distance construction', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'none' });
+  const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 32, h: 32, style }]), B, 10, 10);
+  assert.equal(layout.customSurfaceRimPixels.length, 0);
+  assert.equal(layout.customSurfaceRimByChunkKey.size, 0);
+});
+
 test('custom buckets contain only their chunk pixels', () => {
   const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 3 });
   const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 400, h: 8, style }]), B, 60, 10);
