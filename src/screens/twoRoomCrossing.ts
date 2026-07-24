@@ -54,6 +54,7 @@ import {
   computeTransitionOpeningOffset,
 } from '../render/transitions/transitionPreviewContext';
 import { getOppositeTransitionDirection } from './gameTransitions';
+import { internSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -316,6 +317,7 @@ export function appendRoomWallsAtOffset(
     world.wallThemeIndex[idx]            = def.blockTheme !== undefined
       ? blockThemeToIndex(def.blockTheme)
       : WALL_THEME_DEFAULT_INDEX;
+    world.wallSurfaceRimStyleIndex[idx]  = internSurfaceRimStyle(world.wallSurfaceRimStyleTable, def.surfaceRim);
     world.wallSoundHardnessIndex[idx]    = blockSoundHardnessToIndex(
       room.soundHardness ?? blockThemeToSoundHardness(def.blockTheme ?? room.blockTheme),
     );

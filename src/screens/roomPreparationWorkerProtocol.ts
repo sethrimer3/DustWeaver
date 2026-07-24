@@ -26,6 +26,8 @@
  * BUILD 388
  */
 
+import type { SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
+
 // ── Serialised wall template ──────────────────────────────────────────────────
 
 /**
@@ -52,6 +54,14 @@ export interface SerializedWallTemplate {
   isIceFlag: ArrayBuffer;
   isUltraIceFlag: ArrayBuffer;
   isRocketBlockFlag: ArrayBuffer;
+  /** Uint16 array (2 bytes × wallCount) — index into `rimStyleTable`. */
+  rimStyleIndex: ArrayBuffer;
+  /**
+   * Dedup table of non-default Surface Rim styles. Small (one entry per
+   * distinct custom style in the room) — structured-cloned directly rather
+   * than transferred, unlike the per-wall typed-array fields above.
+   */
+  rimStyleTable: SurfaceRimStyle[];
 }
 
 // ── Worker outbound messages ──────────────────────────────────────────────────

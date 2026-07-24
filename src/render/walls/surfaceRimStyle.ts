@@ -185,3 +185,23 @@ export function decodeSurfaceRimStyle(entry: unknown): SurfaceRimStyle {
 }
 
 void _MODE_CODE; // retained for documentation/symmetry with _CODE_MODE
+
+// ── Runtime interning helper ────────────────────────────────────────────────
+
+/**
+ * Interns `style` into `table` (appending a new entry only if an equal style
+ * isn't already present) and returns its index, or
+ * `SURFACE_RIM_STYLE_INDEX_DEFAULT` for an absent/default style. Shared by
+ * every wall-loading path that populates `WorldState.wallSurfaceRimStyleIndex`
+ * / `wallSurfaceRimStyleTable` (mirrors the per-wall `themeIndex` convention).
+ */
+export function internSurfaceRimStyle(table: SurfaceRimStyle[], style: SurfaceRimStyle | undefined): number {
+  if (style === undefined) return SURFACE_RIM_STYLE_INDEX_DEFAULT;
+  const normalized = normalizeSurfaceRimStyle(style);
+  if (isDefaultSurfaceRimStyle(normalized)) return SURFACE_RIM_STYLE_INDEX_DEFAULT;
+  for (let i = 0; i < table.length; i++) {
+    if (surfaceRimStylesEqual(table[i], normalized)) return i;
+  }
+  table.push(normalized);
+  return table.length - 1;
+}

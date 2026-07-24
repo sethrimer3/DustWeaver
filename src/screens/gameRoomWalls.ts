@@ -36,10 +36,7 @@ import {
 import {
   type SurfaceRimStyle,
   SURFACE_RIM_STYLE_INDEX_DEFAULT,
-  normalizeSurfaceRimStyle,
-  isDefaultSurfaceRimStyle,
-  hashSurfaceRimStyle,
-  surfaceRimStylesEqual,
+  internSurfaceRimStyle,
 } from '../render/walls/surfaceRimStyle';
 
 // Re-export RoomWallTemplate so existing callers that import it from here are unaffected.
@@ -108,23 +105,6 @@ export function* buildRoomWallTemplateIncremental(
   // alongside the per-wall workspace arrays (mirrors the `rimStyles` dedup
   // table used by room JSON serialization — see surfaceRimStyle.ts).
   const rimStyleTable: SurfaceRimStyle[] = [];
-  const rimStyleHashToIndices = new Map<number, number[]>();
-  const internRimStyle = (style: SurfaceRimStyle | undefined): number => {
-    if (style === undefined) return SURFACE_RIM_STYLE_INDEX_DEFAULT;
-    const normalized = normalizeSurfaceRimStyle(style);
-    if (isDefaultSurfaceRimStyle(normalized)) return SURFACE_RIM_STYLE_INDEX_DEFAULT;
-    const hash = hashSurfaceRimStyle(normalized);
-    const candidates = rimStyleHashToIndices.get(hash);
-    if (candidates) {
-      for (const idx of candidates) {
-        if (surfaceRimStylesEqual(rimStyleTable[idx], normalized)) return idx;
-      }
-    }
-    const idx = rimStyleTable.length;
-    rimStyleTable.push(normalized);
-    if (candidates) candidates.push(idx); else rimStyleHashToIndices.set(hash, [idx]);
-    return idx;
-  };
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -153,7 +133,7 @@ export function* buildRoomWallTemplateIncremental(
     ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
     uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
     rkt.push(resolvedTheme === 'rocketBlock' ? 1 : 0);
-    rs.push(internRimStyle(def.surfaceRim));
+    rs.push(internSurfaceRimStyle(rimStyleTable, def.surfaceRim));
   }
 
   // ── Incremental merge pass ────────────────────────────────────────────────

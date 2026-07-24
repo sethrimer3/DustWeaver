@@ -31,6 +31,110 @@ import { GREEN, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { ALL_PASSIVE_TECHNIQUE_IDS, PASSIVE_TECHNIQUE_DEFINITIONS } from '../progression/passiveTechniques';
 import { buildDialogueTriggerInspector } from './editorDialogueTriggerInspector';
+import type { EditorWall } from './editorElementTypes';
+import {
+  DEFAULT_SURFACE_RIM_STYLE,
+  normalizeSurfaceRimStyle,
+  type SurfaceRimStyle,
+} from '../render/walls/surfaceRimStyle';
+
+const SURFACE_RIM_MODE_OPTIONS: readonly { label: string; value: string }[] = [
+  { label: 'Default', value: 'default' },
+  { label: 'None', value: 'none' },
+  { label: 'Solid', value: 'solid' },
+  { label: 'Gradient', value: 'gradient' },
+  { label: 'Inverted', value: 'inverted' },
+];
+const SURFACE_RIM_FALLOFF_OPTIONS: readonly { label: string; value: string }[] = [
+  { label: 'Hard', value: 'hard' },
+  { label: 'Linear', value: 'linear' },
+  { label: 'Smooth', value: 'smooth' },
+  { label: 'Exponential', value: 'exponential' },
+];
+/**
+ * Renders the "Surface Rim" inspector section for one or more selected walls.
+ *
+ * `walls` is every currently-selected `EditorWall` (length 1 for a single
+ * selection). When their styles differ, each control shows a "(mixed)"
+ * placeholder; editing any control applies the same value to every selected
+ * wall (via the `wall.surfaceRim.<field>` property-change path, which already
+ * fans out through `handlePropertyChange` to all selected elements and
+ * participates in undo/redo the same way every other wall property does).
+ */
+function renderSurfaceRimSection(
+  parent: HTMLElement,
+  walls: readonly EditorWall[],
+  callbacks: EditorUICallbacks | null,
+): void {
+  if (walls.length === 0) return;
+
+  const heading = document.createElement('div');
+  heading.textContent = 'Surface Rim';
+  heading.style.cssText = `color: ${GREEN}; font-size: 12px; margin-top: 10px; margin-bottom: 4px; font-weight: bold; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
+  parent.appendChild(heading);
+
+  const styles = walls.map(w => normalizeSurfaceRimStyle(w.surfaceRim));
+  const mixed = <K extends keyof SurfaceRimStyle>(key: K): boolean =>
+    styles.some(s => s[key] !== styles[0][key]);
+  const first = styles[0];
+  const modeMixed = mixed('mode');
+
+  const set = (field: string, value: string | number): void => {
+    callbacks?.onPropertyChange(`wall.surfaceRim.${field}`, value);
+  };
+
+  addSelect(parent, 'Mode', SURFACE_RIM_MODE_OPTIONS, modeMixed ? '(mixed)' : first.mode, v => set('mode', v));
+
+  // A mode shared by every selected wall (or the single selection's mode)
+  // gates which of the remaining controls are relevant — 'default'/'none'
+  // don't use color/width/opacity/falloff at all, and interiorDarkness is
+  // 'inverted'-only. Mixed-mode selections show every control since no
+  // single mode's relevance rule applies uniformly.
+  const effectiveMode = modeMixed ? null : first.mode;
+  if (effectiveMode === 'default' || effectiveMode === 'none') return;
+
+  const showFalloffAndInterior = effectiveMode === null || effectiveMode === 'gradient' || effectiveMode === 'inverted';
+  const showInteriorDarkness = effectiveMode === null || effectiveMode === 'inverted';
+
+  const colorRow = document.createElement('div');
+  colorRow.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+  const colorLbl = document.createElement('span');
+  colorLbl.textContent = 'Color';
+  colorLbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+  const colorInput = document.createElement('input');
+  colorInput.type = 'color';
+  const colorMixed = mixed('color');
+  colorInput.value = `#${colorMixed ? DEFAULT_SURFACE_RIM_STYLE.color : first.color}`;
+  colorInput.style.cssText = 'flex: 1; height: 22px; padding: 0; border: none; background: none; cursor: pointer;';
+  colorInput.addEventListener('input', () => set('color', colorInput.value.slice(1)));
+  colorInput.addEventListener('click', (e) => e.stopPropagation());
+  colorRow.appendChild(colorLbl);
+  colorRow.appendChild(colorInput);
+  if (colorMixed) {
+    const mixedTag = document.createElement('span');
+    mixedTag.textContent = '(mixed)';
+    mixedTag.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.5);';
+    colorRow.appendChild(mixedTag);
+  }
+  parent.appendChild(colorRow);
+
+  addNumberField(parent, 'Width (px)', mixed('widthPx') ? DEFAULT_SURFACE_RIM_STYLE.widthPx : first.widthPx,
+    1, 32, v => set('widthPx', v));
+
+  addSliderField(parent, 'Opacity (%)',
+    Math.round((mixed('opacity') ? DEFAULT_SURFACE_RIM_STYLE.opacity : first.opacity) * 100), 0, 100,
+    v => set('opacity', v / 100));
+
+  if (showFalloffAndInterior) {
+    addSelect(parent, 'Falloff', SURFACE_RIM_FALLOFF_OPTIONS,
+      mixed('falloff') ? '(mixed)' : first.falloff, v => set('falloff', v));
+  }
+
+  if (showInteriorDarkness) {
+    addSliderField(parent, 'Interior Dark', Math.round((mixed('interiorDarkness') ? DEFAULT_SURFACE_RIM_STYLE.interiorDarkness : first.interiorDarkness) * 255),
+      0, 255, v => set('interiorDarkness', v / 255));
+  }
+}
 
 const KIND_OPTIONS: { label: string; value: string }[] = DUST_KIND_OPTIONS.map(k => ({ label: k, value: k }));
 
@@ -70,6 +174,10 @@ export function updateInspector(
           BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
           '(mixed)',
           v => callbacks?.onPropertyChange('wall.blockTheme', v));
+        const selectedWalls = state.selectedElements
+          .map(e => room.interiorWalls.find(w => w.uid === e.uid))
+          .filter((w): w is NonNullable<typeof w> => w !== undefined);
+        renderSurfaceRimSection(div, selectedWalls, callbacks);
       } else if (type === 'transition') {
         addSelect(div, 'fadeColor',
           FADE_COLOR_OPTIONS,
@@ -114,6 +222,7 @@ export function updateInspector(
       typeDiv.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-top: 4px;`;
       typeDiv.textContent = `Type: ${typeLabel}`;
       div.appendChild(typeDiv);
+      renderSurfaceRimSection(div, [wall], callbacks);
     }
   } else if (el.type === 'enemy') {
     const enemy = room.enemies.find(e => e.uid === el.uid);

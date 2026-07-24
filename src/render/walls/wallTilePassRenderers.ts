@@ -548,6 +548,7 @@ export function renderSurfaceEdgeOverlayPass(
     filterColMaxBlocks: pctx.filterColMaxBlocks,
     filterRowMinBlocks: pctx.filterRowMinBlocks,
     filterRowMaxBlocks: pctx.filterRowMaxBlocks,
+    getStyleForTile: (col, row) => pctx.wallLayout.tileSurfaceRim.get(`${col},${row}`) ?? null,
   });
 }
 

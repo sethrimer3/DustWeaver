@@ -564,6 +564,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isPillarHalfWidthFlag: Array.from(tpl.isPillarHalfWidthFlag),
       isIceFlag:             Array.from(tpl.isIceFlag),
       isUltraIceFlag:        Array.from(tpl.isUltraIceFlag),
+      rimStyleIndex:         Array.from(tpl.rimStyleIndex),
+      rimStyles:             tpl.rimStyleTable.map(encodeSurfaceRimStyle),
     };
   } catch (err) {
     // Non-fatal: export still succeeds; runtime will fall back to buildRoomWallTemplate().

@@ -282,6 +282,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isInvisibleFlag: world.wallIsInvisibleFlag,
       rampOrientationIndex: world.wallRampOrientationIndex,
       isPillarHalfWidthFlag: world.wallIsPillarHalfWidthFlag,
+      surfaceRimStyleIndex: world.wallSurfaceRimStyleIndex,
+      surfaceRimStyleTable: world.wallSurfaceRimStyleTable,
     },
     isGrappleActiveFlag: world.isGrappleActiveFlag,
     isGrappleMissActiveFlag: world.isGrappleMissActiveFlag,

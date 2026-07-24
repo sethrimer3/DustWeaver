@@ -20,6 +20,7 @@ import type { RoomJsonDef, RoomJsonBakedWallTemplate } from '../editor/roomJsonS
 import type { RoomWallTemplate } from './roomDef';
 import { BLOCK_SIZE_MEDIUM } from './roomDef';
 import { blockThemeToIndex, indexToBlockTheme } from './blockTheme';
+import { decodeSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 
 // ── Schema version ────────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ import { blockThemeToIndex, indexToBlockTheme } from './blockTheme';
  * Bump this when the baked template format or wall-geometry algorithm changes.
  * Mismatches cause a safe fallback to `buildRoomWallTemplate()`.
  */
-export const BAKED_WALL_SCHEMA_VERSION = 1;
+export const BAKED_WALL_SCHEMA_VERSION = 2;
 
 // ── Source hash ───────────────────────────────────────────────────────────────
 
@@ -97,7 +98,11 @@ export function computeWallTemplateSourceHash(json: RoomJsonDef): string {
     // mismatch would let a stale baked template survive a stairs edit.
     hashStr(String(w.stairsOrientation ?? ''));
     hashBool(w.isPillarHalfWidth);
+    hashStr(String(w.r ?? ''));
   }
+  // Surface Rim style table content — two rooms with different `rimStyles`
+  // tables (but coincidentally identical `r` indices) must not collide.
+  hashStr(JSON.stringify(json.rimStyles ?? []));
 
   // Return as unsigned 32-bit hex
   const unsigned = h >>> 0;
@@ -163,6 +168,7 @@ export function hydrateAndValidateBakedWallTemplate(
     ['isPillarHalfWidthFlag', baked.isPillarHalfWidthFlag],
     ['isIceFlag', baked.isIceFlag],
     ['isUltraIceFlag', baked.isUltraIceFlag],
+    ['rimStyleIndex', baked.rimStyleIndex],
   ];
   for (const [name, arr] of arrays) {
     if (!Array.isArray(arr) || arr.length !== n) {
@@ -223,5 +229,7 @@ export function hydrateAndValidateBakedWallTemplate(
     isIceFlag:             Uint8Array.from(baked.isIceFlag),
     isUltraIceFlag:        Uint8Array.from(baked.isUltraIceFlag),
     isRocketBlockFlag,
+    rimStyleIndex:         Uint16Array.from(baked.rimStyleIndex),
+    rimStyleTable:         (baked.rimStyles ?? []).map(decodeSurfaceRimStyle),
   };
 }

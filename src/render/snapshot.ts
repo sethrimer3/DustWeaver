@@ -239,6 +239,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
       isInvisibleFlag:      world.wallIsInvisibleFlag,
       rampOrientationIndex: world.wallRampOrientationIndex,
       isPillarHalfWidthFlag: world.wallIsPillarHalfWidthFlag,
+      surfaceRimStyleIndex: world.wallSurfaceRimStyleIndex,
+      surfaceRimStyleTable: world.wallSurfaceRimStyleTable,
     },
     isGrappleActiveFlag:      world.isGrappleActiveFlag,
     isGrappleMissActiveFlag:  world.isGrappleMissActiveFlag,
@@ -730,6 +732,8 @@ export function refreshSnapshotWorldArrayRefs(
   w.isInvisibleFlag       = world.wallIsInvisibleFlag;
   w.rampOrientationIndex  = world.wallRampOrientationIndex;
   w.isPillarHalfWidthFlag = world.wallIsPillarHalfWidthFlag;
+  w.surfaceRimStyleIndex  = world.wallSurfaceRimStyleIndex;
+  w.surfaceRimStyleTable  = world.wallSurfaceRimStyleTable;
 
   // ── Top-level typed-array fields ─────────────────────────────────────────
   raw.grasshopperXWorld              = world.grasshopperXWorld;

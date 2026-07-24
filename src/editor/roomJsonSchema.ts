@@ -616,6 +616,15 @@ export interface RoomJsonBakedWallTemplate {
   isPillarHalfWidthFlag: number[];
   isIceFlag: number[];
   isUltraIceFlag: number[];
+  /**
+   * Per-wall Surface Rim style index — index into `rimStyles`, or
+   * `SURFACE_RIM_STYLE_INDEX_DEFAULT` (0xFFFF) for the default style.
+   * Absent on baked templates predating the Surface Rim system (BAKED_WALL_SCHEMA_VERSION
+   * bump forces those to fall back to buildRoomWallTemplate() instead of guessing).
+   */
+  rimStyleIndex: number[];
+  /** Compact Surface Rim style table referenced by `rimStyleIndex` (see surfaceRimStyle.ts). */
+  rimStyles: CompactSurfaceRimStyle[];
 }
 
 // ── Validation result ────────────────────────────────────────────────────────

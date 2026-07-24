@@ -32,6 +32,8 @@ function makeWallSnapshot(rects: Array<{ x: number; y: number; w: number; h: num
     isInvisibleFlag: new Uint8Array(count),
     rampOrientationIndex: new Uint8Array(count).fill(255),
     isPillarHalfWidthFlag: new Uint8Array(count),
+    surfaceRimStyleIndex: new Uint16Array(count).fill(0xFFFF),
+    surfaceRimStyleTable: [],
   };
 }
 

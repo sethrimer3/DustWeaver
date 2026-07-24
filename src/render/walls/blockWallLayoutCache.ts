@@ -15,6 +15,7 @@ import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
 import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
+import { type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from './surfaceRimStyle';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -53,6 +54,11 @@ function _computeLayoutSignature(walls: WallSnapshot, blockSizePx: number): stri
       (walls.rampOrientationIndex[wi]  << 11) |
       (walls.isPillarHalfWidthFlag[wi] << 20)
     );
+    // Rim style edits must invalidate the layout cache too — fold the index
+    // in separately (it doesn't fit the bitpacked word above: values can
+    // exceed its remaining bit budget once a room has many distinct styles).
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ (walls.surfaceRimStyleIndex[wi] | 0);
   }
   return `${visible}|${h >>> 0}`;
 }
@@ -93,6 +99,12 @@ export interface CachedWallLayout {
   halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
+  /**
+   * Per-tile Surface Rim style: maps tile key → SurfaceRimStyle, only for
+   * tiles belonging to a wall with a non-default style (mirrors `tileTheme`).
+   * Absence (no map entry) means "use the default exposed-edge presentation".
+   */
+  tileSurfaceRim: Map<string, SurfaceRimStyle>;
   /**
    * Authoritative tile-level open-air exposure, built from the same
    * `occupied` set above but room-bounds aware (out-of-bounds neighbours
@@ -250,6 +262,7 @@ export function getWallLayoutCache(
   const platformOccupied = new Set<string>();
   const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
+  const tileSurfaceRim = new Map<string, SurfaceRimStyle>();
   const shapedWalls: ShapedWallInfo[] = [];
   const halfPillarWalls: HalfPillarWallInfo[] = [];
 
@@ -275,6 +288,10 @@ export function getWallLayoutCache(
     const wallTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
       : null;
+    const rimIdx = walls.surfaceRimStyleIndex[wi];
+    const wallRimStyle: SurfaceRimStyle | null = rimIdx !== SURFACE_RIM_STYLE_INDEX_DEFAULT
+      ? (walls.surfaceRimStyleTable[rimIdx] ?? null)
+      : null;
 
     // Half-pillar walls: add to normal occupied for lighting/neighbor purposes but
     // record for separate narrow rendering.
@@ -294,6 +311,13 @@ export function getWallLayoutCache(
           }
         }
       }
+      if (wallRimStyle !== null) {
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c < colCount; c++) {
+            tileSurfaceRim.set(wallTileKey(colStart + c, rowStart + r), wallRimStyle);
+          }
+        }
+      }
       continue;
     }
 
@@ -310,6 +334,9 @@ export function getWallLayoutCache(
         }
         if (wallTheme !== null) {
           tileTheme.set(key, wallTheme);
+        }
+        if (wallRimStyle !== null) {
+          tileSurfaceRim.set(key, wallRimStyle);
         }
       }
     }
@@ -359,6 +386,7 @@ export function getWallLayoutCache(
     shapedWalls,
     halfPillarWalls,
     tileTheme,
+    tileSurfaceRim,
     surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),

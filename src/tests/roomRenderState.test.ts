@@ -180,6 +180,8 @@ function makeEmptyTemplate(): RoomWallTemplate {
     isPillarHalfWidthFlag: new Uint8Array(0),
     isIceFlag: new Uint8Array(0),
     isUltraIceFlag: new Uint8Array(0),
+    rimStyleIndex: new Uint16Array(0),
+    rimStyleTable: [],
   } as RoomWallTemplate;
 }
 
@@ -197,6 +199,8 @@ test('wallTemplateToSnapshot is a zero-copy view (shared typed arrays)', () => {
     isInvisibleFlag: new Uint8Array([0, 0]),
     rampOrientationIndex: new Uint8Array([255, 4]),
     isPillarHalfWidthFlag: new Uint8Array([0, 1]),
+    rimStyleIndex: new Uint16Array([0xFFFF, 0xFFFF]),
+    rimStyleTable: [],
   } as RoomWallTemplate;
   const s = wallTemplateToSnapshot(t);
   assert.equal(s.count, 2);
