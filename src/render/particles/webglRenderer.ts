@@ -221,7 +221,7 @@ export class WebGLParticleRenderer {
 
     // ---- Update trail ring buffers (distance-gated, no allocations) -----
     if (this.trailRenderer !== null) {
-      this.trailRenderer.update(particles);
+      this.trailRenderer.update(particles, mask);
     }
 
     // ---- Pack alive-particle vertex data (no allocations) ---------------
@@ -242,6 +242,7 @@ export class WebGLParticleRenderer {
         particles,
         offsetXPx, offsetYPx, scalePx,
         this.canvas.width, this.canvas.height,
+        mask,
       );
     }
 

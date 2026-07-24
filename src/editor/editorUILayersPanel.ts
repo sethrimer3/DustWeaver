@@ -82,12 +82,42 @@ const LOCK_ON_BG = 'rgba(220,80,60,0.4)';
 const SOLO_ON_BG = 'rgba(230,190,40,0.4)';
 const SELECT_ONLY_ON_BG = 'rgba(80,150,230,0.4)';
 
-function makeToggle(icon: string, title: string, onClick: () => void): HTMLButtonElement {
+/** Compact but usable touch/click target (WCAG 2.5.5 recommends >=24px; the
+ *  original 18px was below that). */
+const TOGGLE_SIZE_PX = 22;
+
+/** Injected once so focus-visible outlines don't rely on per-element inline styles. */
+const FOCUS_STYLE_ID = 'dw-editor-layers-panel-focus-style';
+function ensureFocusStyleInjected(): void {
+  if (document.getElementById(FOCUS_STYLE_ID) !== null) return;
+  const style = document.createElement('style');
+  style.id = FOCUS_STYLE_ID;
+  style.textContent = `
+    .dw-layer-toggle-btn:focus-visible, .dw-layer-header-btn:focus-visible {
+      outline: 2px solid #ffffff;
+      outline-offset: 1px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+let uniqueIdCounter = 0;
+function nextUniqueId(prefix: string): string {
+  uniqueIdCounter += 1;
+  return `${prefix}-${uniqueIdCounter}`;
+}
+
+function makeToggle(icon: string, accessibleName: string, onClick: () => void): HTMLButtonElement {
   const btn = document.createElement('button');
+  btn.type = 'button';
   btn.textContent = icon;
-  btn.title = title;
+  btn.title = accessibleName;
+  btn.setAttribute('aria-label', accessibleName);
+  btn.setAttribute('aria-pressed', 'false');
+  btn.className = 'dw-layer-toggle-btn';
   btn.style.cssText = `
-    width: 18px; height: 18px; line-height: 16px; padding: 0; font-size: 10px;
+    width: ${TOGGLE_SIZE_PX}px; height: ${TOGGLE_SIZE_PX}px; line-height: ${TOGGLE_SIZE_PX - 2}px;
+    padding: 0; font-size: 11px;
     border: 1px solid ${PANEL_BORDER}; border-radius: 2px; cursor: pointer;
     background: ${TOGGLE_OFF_BG}; color: ${TEXT_COLOR};
   `;
@@ -98,28 +128,51 @@ function makeToggle(icon: string, title: string, onClick: () => void): HTMLButto
   return btn;
 }
 
+/** Builds the accessible name for a toggle button, including its current on/off state so screen readers don't rely on color alone. */
+function toggleAccessibleName(action: string, layerName: string, isOn: boolean): string {
+  return `${action} for ${layerName} layer, currently ${isOn ? 'on' : 'off'}`;
+}
+
 export function createEditorLayersPanel(
   getCallbacks: () => EditorUICallbacks | null,
 ): EditorLayersPanel {
+  ensureFocusStyleInjected();
+
   const div = document.createElement('div');
   div.style.cssText = `
     border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
     padding: 6px 8px; margin-bottom: 8px; background: rgba(0,0,0,0.2);
   `;
 
-  const header = document.createElement('div');
-  header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none;';
+  const rowsContainerId = nextUniqueId('dw-layers-panel-rows');
+
+  // Real <button> (not a div with a click handler) so it's natively keyboard-
+  // activatable (Enter/Space) and focusable without extra tabindex wiring.
+  const header = document.createElement('button');
+  header.type = 'button';
+  header.className = 'dw-layer-header-btn';
+  header.setAttribute('aria-expanded', 'true');
+  header.setAttribute('aria-controls', rowsContainerId);
+  header.style.cssText = `
+    display: flex; align-items: center; justify-content: space-between; width: 100%;
+    cursor: pointer; user-select: none; background: none; border: none; padding: 0;
+    color: inherit; font: inherit;
+  `;
   const title = document.createElement('div');
   title.textContent = 'Layers';
   title.style.cssText = `font-size: 11px; color: ${GREEN}; font-weight: bold;`;
   const collapseIndicator = document.createElement('div');
   collapseIndicator.textContent = '▾';
+  collapseIndicator.setAttribute('aria-hidden', 'true');
   collapseIndicator.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.6);';
   header.appendChild(title);
   header.appendChild(collapseIndicator);
   div.appendChild(header);
 
   const rowsContainer = document.createElement('div');
+  rowsContainer.id = rowsContainerId;
+  rowsContainer.setAttribute('role', 'group');
+  rowsContainer.setAttribute('aria-label', 'Layers');
   rowsContainer.style.cssText = 'margin-top: 6px;';
   div.appendChild(rowsContainer);
 
@@ -128,6 +181,7 @@ export function createEditorLayersPanel(
     collapsed = !collapsed;
     rowsContainer.style.display = collapsed ? 'none' : 'block';
     collapseIndicator.textContent = collapsed ? '▸' : '▾';
+    header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
   });
 
   interface RowRefs {
@@ -154,19 +208,20 @@ export function createEditorLayersPanel(
       border-radius: 2px; margin-bottom: 1px;
     `;
 
-    const visibleBtn = makeToggle('👁', 'Toggle visibility', () => {
+    const layerName = LAYER_LABELS[id];
+    const visibleBtn = makeToggle('👁', toggleAccessibleName('Toggle visibility', layerName, false), () => {
       const current = rows.get(id)!;
       patchLayer(id, { visible: current.visibleBtn.dataset.on !== '1' });
     });
-    const lockBtn = makeToggle('🔒', 'Toggle lock (prevents select/move/delete/edit)', () => {
+    const lockBtn = makeToggle('🔒', toggleAccessibleName('Toggle lock (prevents select/move/delete/edit)', layerName, false), () => {
       const current = rows.get(id)!;
       patchLayer(id, { locked: current.lockBtn.dataset.on !== '1' });
     });
-    const soloBtn = makeToggle('S', 'Solo (isolate this layer\'s visibility)', () => {
+    const soloBtn = makeToggle('S', toggleAccessibleName('Solo (isolate this layer\'s visibility)', layerName, false), () => {
       const current = rows.get(id)!;
       patchLayer(id, { solo: current.soloBtn.dataset.on !== '1' });
     });
-    const selectOnlyBtn = makeToggle('T', 'Select-only / target-only (restrict selection & placement to select-only layers)', () => {
+    const selectOnlyBtn = makeToggle('T', toggleAccessibleName('Select-only / target-only (restrict selection & placement to select-only layers)', layerName, false), () => {
       const current = rows.get(id)!;
       patchLayer(id, { selectOnly: current.selectOnlyBtn.dataset.on !== '1' });
     });

@@ -36,6 +36,9 @@
 import { MAX_PARTICLES } from '../../sim/particles/state';
 import type { ParticleSnapshot } from '../snapshotTypes';
 import { KIND_COLOR_R, KIND_COLOR_G, KIND_COLOR_B } from './styles';
+import type { EditorRenderMask } from '../../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
+import { getLayerForParticleKind } from '../../editor/editorParticleLayers';
 
 const BYTES_PER_FLOAT = 4;
 
@@ -335,17 +338,27 @@ export class ParticleTrailRenderer {
    *    TRAIL_SAMPLE_DIST_WORLD units since the previous sample.
    *  - On entry to attack mode the ring buffer is seeded with the current
    *    position; on exit the ring buffer is cleared immediately.
+   *
+   * `mask` (Phase 4.1): a particle whose kind maps to a hidden or
+   * Solo-excluded layer (via `getLayerForParticleKind` — the same
+   * classification particle bodies use) is treated exactly like one that
+   * exited attack mode: it is not sampled into trail history, and any
+   * existing history is cleared immediately. This means re-showing the layer
+   * starts a fresh trail rather than revealing accumulated while-hidden
+   * movement. `null`/omitted mask means runtime — unchanged behavior.
    */
-  update(snapshot: ParticleSnapshot): void {
+  update(snapshot: ParticleSnapshot, mask?: EditorRenderMask | null): void {
     const {
-      particleCount, isAliveFlag, behaviorMode,
+      particleCount, isAliveFlag, behaviorMode, kindBuffer,
       positionXWorld, positionYWorld, velocityXWorld, velocityYWorld,
     } = snapshot;
 
     for (let i = 0; i < particleCount; i++) {
       const wasActive = this.trailActiveFlag[i] !== 0;
+      const isLayerVisible = isLayerVisibleInMask(mask, getLayerForParticleKind(kindBuffer[i]));
       const shouldHaveTrail = isAliveFlag[i] === 1
         && behaviorMode[i] === 1
+        && isLayerVisible
         && isParticleTrailMotionActive(wasActive, velocityXWorld[i], velocityYWorld[i]);
 
       if (!shouldHaveTrail) {
@@ -404,6 +417,16 @@ export class ParticleTrailRenderer {
    *  - Ring buffer is traversed into pre-allocated scratch arrays.
    *  - All alive trail quads are uploaded in a single bufferSubData call and
    *    drawn in a single gl.drawArrays(TRIANGLES) call.
+   *  - `totalVerts` is re-packed from index 0 every frame and
+   *    gl.drawArrays(TRIANGLES, 0, totalVerts) only reads [0, totalVerts) —
+   *    a family hidden this frame (mask filter below, or trailCount already
+   *    zeroed by update()) contributes zero vertices, so no stale prior-frame
+   *    trail geometry can be drawn (same invariant as WebGLParticleRenderer;
+   *    see webglVertexPacking.ts). A full-buffer zero-fill isn't done here —
+   *    unlike the much smaller particle-body buffer, this one is sized for
+   *    MAX_PARTICLES × MAX_TRAIL_SEGMENTS × 6 verts and clearing it every
+   *    frame would undercut this hot path's explicit no-allocation/no-full-
+   *    scan performance goals for no additional correctness.
    */
   render(
     snapshot: ParticleSnapshot,
@@ -412,6 +435,7 @@ export class ParticleTrailRenderer {
     scalePx: number,
     canvasWidthPx: number,
     canvasHeightPx: number,
+    mask?: EditorRenderMask | null,
   ): void {
     if (
       !this.isAvailable ||
@@ -430,6 +454,7 @@ export class ParticleTrailRenderer {
 
     for (let i = 0; i < particleCount; i++) {
       if (isAliveFlag[i] === 0 || behaviorMode[i] !== 1) continue;
+      if (!isLayerVisibleInMask(mask, getLayerForParticleKind(kindBuffer[i]))) continue;
 
       const count = this.trailCount[i];
       if (count < 2) continue;
@@ -554,6 +579,16 @@ export class ParticleTrailRenderer {
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────
+
+  /** Exposed read-only accessor so tests can verify ring-buffer state without a real GL context. */
+  getTrailCountForTesting(particleIndex: number): number {
+    return this.trailCount[particleIndex];
+  }
+
+  /** Exposed read-only accessor so tests can verify trail-active state without a real GL context. */
+  getTrailActiveForTesting(particleIndex: number): boolean {
+    return this.trailActiveFlag[particleIndex] !== 0;
+  }
 
   /** Release GPU resources.  Call when the parent WebGLParticleRenderer is disposed. */
   dispose(): void {
