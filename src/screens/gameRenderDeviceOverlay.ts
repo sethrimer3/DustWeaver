@@ -26,6 +26,8 @@ import { debugPanelVisibility } from '../ui/debugPanelManager';
 import { getPixelMaterialDebugCounterText } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
 import { getAirCurrentsDebugLegendText } from '../render/pixelMaterials/airCurrentsDebugRenderer';
 import { getAirCurrentsDebugEnabled } from '../ui/renderSettings';
+import type { EditorRenderMask } from '../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../editor/editorRenderMask';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -60,6 +62,8 @@ export interface HighResolutionDebugOverlayContext {
   currentRoom: { name: string };
   hudState: HudState;
   renderProfiler?: RenderProfiler;
+  /** Editor render mask; omitted/null means runtime (unchanged behavior). */
+  mask?: EditorRenderMask | null;
 }
 
 /**
@@ -67,8 +71,9 @@ export interface HighResolutionDebugOverlayContext {
  * sharp at native display resolution.
  */
 export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayContext): void {
-  const { deviceCtx, canvas, virtualCanvas, isDebugMode, world, currentRoom, hudState, renderProfiler } = r;
+  const { deviceCtx, canvas, virtualCanvas, isDebugMode, world, currentRoom, hudState, renderProfiler, mask } = r;
   if (!isDebugMode) return;
+  if (!isLayerVisibleInMask(mask, 'debug')) return;
 
   const scaleXPx = canvas.width / virtualCanvas.width;
   const scaleYPx = canvas.height / virtualCanvas.height;

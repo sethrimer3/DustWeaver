@@ -3,6 +3,9 @@ import { getParticleStyle } from './styles';
 import { getKindShape, ParticleShape, ParticleKind } from '../../sim/particles/kinds';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 import { renderPixelLockedDust } from './pixelLockedDustRenderer';
+import type { EditorRenderMask } from '../../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
+import { getLayerForParticleKind } from '../../editor/editorParticleLayers';
 
 // ---- Shape drawing helpers -----------------------------------------------
 
@@ -131,7 +134,14 @@ const MIN_VISIBLE_ALPHA = 0.004;
 // 1.5 world units at zoom 1.0 = 3×3 in-game (virtual) pixels per mote.
 const PARTICLE_RENDER_RADIUS_WORLD = 1.5;
 
-export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSnapshot, offsetXPx: number, offsetYPx: number, scalePx: number): void {
+export function renderParticles(
+  ctx: CanvasRenderingContext2D,
+  snapshot: WorldSnapshot,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+  mask?: EditorRenderMask | null,
+): void {
   const { particles } = snapshot;
   const {
     particleCount, isAliveFlag,
@@ -156,6 +166,8 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
     // Gameplay particles are handled by renderPixelLockedDust() below.
     if (kind !== ParticleKind.Fluid) continue;
 
+    if (!isLayerVisibleInMask(mask, getLayerForParticleKind(kind))) continue;
+
     const style = getParticleStyle(kind);
 
     const screenX = positionXWorld[i] * scalePx + offsetXPx;
@@ -179,6 +191,6 @@ export function renderParticles(ctx: CanvasRenderingContext2D, snapshot: WorldSn
 
   // Render all gameplay-relevant (non-Fluid, non-GrappleChain) particles using
   // the Pixel-Locked Prismatic Dust renderer for crisp, grid-snapped motes.
-  renderPixelLockedDust(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  renderPixelLockedDust(ctx, snapshot, offsetXPx, offsetYPx, scalePx, mask);
 }
 

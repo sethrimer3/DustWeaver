@@ -29,6 +29,7 @@ import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { resetCanvasPass } from '../render/canvasViewport';
 import { isLayerVisible } from '../editor/editorLayers';
+import { buildEditorRenderMask } from '../editor/editorRenderMask';
 
 /**
  * Renders gameplay scene as a static backdrop while world editor consumes input.
@@ -60,19 +61,16 @@ export function renderEditorBackdrop(
   resetCanvasPass(ctx, virtualCanvas.width, virtualCanvas.height, false);
   bloomSystem.beginFrame();
 
-  // NOTE (Phase 1 known limitation): the WebGL particle path is NOT
-  // layer-gated — it renders unconditionally regardless of the powder/
-  // objects/etc. layer visibility toggles. Gating it would require passing
-  // layer-visibility flags down into the WebGL renderer's own particle
-  // classification, which is out of scope for this pass.
+  const layerState = editorController.state;
+  const mask = buildEditorRenderMask(layerState);
+
   if (webglRenderer.isAvailable) {
-    webglRenderer.render(snapshot, offsetXPx, offsetYPx, zoom);
+    webglRenderer.render(snapshot, offsetXPx, offsetYPx, zoom, mask);
   } else {
     ctx.fillStyle = backgroundColor;
     ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   }
 
-  const layerState = editorController.state;
   const backgroundVisible = isLayerVisible(layerState, 'background');
   const terrainVisible = isLayerVisible(layerState, 'terrain');
   const hazardsVisible = isLayerVisible(layerState, 'hazards');
@@ -128,10 +126,8 @@ export function renderEditorBackdrop(
     renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
     renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }
-  // NOTE (Phase 1 known limitation): tunnel-darkness is a room-wide overlay
-  // effect, not tied to any single content layer, so it is intentionally left
-  // unconditional here.
-  drawTunnelDarkness(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
+  // Tunnel darkness is gated by the Lighting layer (see drawTunnelDarkness).
+  drawTunnelDarkness(ctx, currentRoom, offsetXPx, offsetYPx, zoom, mask);
   if (powderVisible) {
     environmentalDust.render(ctx, offsetXPx, offsetYPx, zoom, true);
   }
@@ -142,11 +138,8 @@ export function renderEditorBackdrop(
     skillTombEffectRenderer.renderFront(ctx, offsetXPx, offsetYPx, zoom);
   }
 
-  // NOTE (Phase 1 known limitation): the canvas2D fallback particle path (used
-  // when WebGL is unavailable) is NOT layer-gated, for the same reason as the
-  // WebGL path above — it has no per-layer classification of particles today.
   if (!webglRenderer.isAvailable) {
-    renderParticles(ctx, snapshot, offsetXPx, offsetYPx, zoom);
+    renderParticles(ctx, snapshot, offsetXPx, offsetYPx, zoom, mask);
   }
 
   editorController.render(ctx, offsetXPx, offsetYPx, zoom, virtualWidthPx, virtualHeightPx);
@@ -157,9 +150,7 @@ export function renderEditorBackdrop(
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
-  // NOTE (Phase 1 known limitation): the high-resolution debug overlay is a
-  // device-space diagnostic overlay independent of any content layer, so it
-  // is intentionally left unconditional here.
+  // Gated by the Debug layer (see renderHighResolutionDebugOverlay).
   renderHighResolutionDebugOverlay({
     deviceCtx,
     canvas,
@@ -169,5 +160,6 @@ export function renderEditorBackdrop(
     currentRoom,
     hudState,
     renderProfiler,
+    mask,
   });
 }

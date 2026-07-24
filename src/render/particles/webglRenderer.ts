@@ -24,6 +24,9 @@ import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shad
 import { ParticleTrailRenderer } from './trailRenderer';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 import { ParticleKind } from '../../sim/particles/kinds';
+import type { EditorRenderMask } from '../../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
+import { getLayerForParticleKind } from '../../editor/editorParticleLayers';
 
 /** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive, isSpent] per vertex */
 const FLOATS_PER_VERTEX = 7;
@@ -209,6 +212,7 @@ export class WebGLParticleRenderer {
     offsetXPx: number,
     offsetYPx: number,
     scalePx: number,
+    mask?: EditorRenderMask | null,
   ): void {
     if (
       !this.isAvailable ||
@@ -241,6 +245,7 @@ export class WebGLParticleRenderer {
       // Prismatic Dust renderer (pixelLockedDustRenderer.ts) on the Canvas 2D
       // virtual canvas.  Only Fluid background particles remain in WebGL.
       if (kindBuffer[i] !== ParticleKind.Fluid) continue;
+      if (!isLayerVisibleInMask(mask, getLayerForParticleKind(kindBuffer[i]))) continue;
       const base = vertexCount * FLOATS_PER_VERTEX;
       const lt = lifetimeTicks[i];
       const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
@@ -267,6 +272,10 @@ export class WebGLParticleRenderer {
       );
     }
 
+    // The GPU buffer is re-packed from index 0 every frame and drawArrays only
+    // reads [0, vertexCount) — a layer hidden this frame contributes zero
+    // vertices, so its prior-frame data is never drawn again; no explicit
+    // buffer clear is needed beyond the color clear above.
     if (vertexCount === 0) return;
 
     // ---- Upload only the used slice to the GPU -------------------------

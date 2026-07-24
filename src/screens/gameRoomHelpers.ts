@@ -9,6 +9,8 @@
  */
 
 import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import type { EditorRenderMask } from '../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../editor/editorRenderMask';
 
 /** Background fill colour for each world number. */
 export function worldBgColor(worldNumber: number): string {
@@ -34,7 +36,10 @@ export function drawTunnelDarkness(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  mask?: EditorRenderMask | null,
 ): void {
+  if (!isLayerVisibleInMask(mask, 'lighting')) return;
+
   const roomWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
   const DEFAULT_FADE_BLOCKS = 3;
 

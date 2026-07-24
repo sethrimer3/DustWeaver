@@ -26,6 +26,9 @@ import { ParticleKind } from '../../sim/particles/kinds';
 import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
 import { isDustSwitchBehaviorMode } from '../../sim/particles/dustSwitchBehaviorMode';
 import { getMoteTypeVisual, hasMoteTypeConfig, shadeRgb, rgbToHex } from '../../sim/motes/moteTypeConfig';
+import type { EditorRenderMask } from '../../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
+import { getLayerForParticleKind } from '../../editor/editorParticleLayers';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -202,6 +205,7 @@ export function renderPixelLockedDust(
   offsetXPx: number,
   offsetYPx: number,
   scalePx: number,
+  mask?: EditorRenderMask | null,
 ): void {
   const { particles } = snapshot;
   const {
@@ -231,6 +235,8 @@ export function renderPixelLockedDust(
 
     // Fluid background particles stay in the WebGL layer for disturbance glow.
     if (kind === ParticleKind.Fluid) continue;
+
+    if (!isLayerVisibleInMask(mask, getLayerForParticleKind(kind))) continue;
 
     // ── Alpha / visibility ──────────────────────────────────────────────────
     const lt      = lifetimeTicks[i];
