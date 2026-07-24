@@ -107,7 +107,7 @@ test('Phase 7: Surface Rim property round-trips in an element patch', () => {
 });
 
 test('Phase 7: campaign spawn before/after state is tracked', () => {
-  let data = room();
+  const data = room();
   const history = createEditorHistory();
   const before = { roomId: 'history', xBlock: 1, yBlock: 1 };
   const after = { roomId: 'history', xBlock: 8, yBlock: 9 };

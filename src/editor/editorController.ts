@@ -686,8 +686,15 @@ export function createEditorController(
           if (propertyChanged) applyEdits('metadata');
         },
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
-          if (state.roomData) applyRoomDimensionChange(state.roomData, dimProp, value);
-          applyEdits('metadata');
+          if (state.roomData) {
+            const pending = capturePendingSnapshot(state.roomData, undefined, undefined, false, 'Resize room');
+            const before = state.roomData[dimProp];
+            applyRoomDimensionChange(state.roomData, dimProp, value);
+            if (state.roomData[dimProp] !== before) {
+              commitPendingSnapshot(history, pending);
+              applyEdits('metadata');
+            }
+          }
         },
         onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => {
           if (state.roomData) applyEdgeResize(state.roomData, history, edge, delta);

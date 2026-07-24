@@ -406,7 +406,7 @@ function result(entry: EditorHistoryEntry, roomData: EditorRoomData, direction: 
   const spawn = direction === 'before' ? entry.campaignSpawnBefore : entry.campaignSpawnAfter;
   return {
     roomData,
-    campaignSpawnTracked: spawn !== undefined,
+    campaignSpawnTracked: spawn !== undefined ? true : undefined,
     campaignSpawn: clone(spawn?.campaignSpawn),
     initialRoomId: spawn?.initialRoomId,
   };
@@ -415,9 +415,9 @@ function result(entry: EditorHistoryEntry, roomData: EditorRoomData, direction: 
 export function undo(
   history: EditorHistory,
   currentData: EditorRoomData,
-  _currentCampaignSpawn?: CampaignSpawnData,
-  _currentInitialRoomId?: string,
-  _currentCampaignSpawnTracked?: boolean,
+  currentCampaignSpawn?: CampaignSpawnData,
+  currentInitialRoomId?: string,
+  currentCampaignSpawnTracked?: boolean,
 ): HistorySnapshot | null {
   const entry = history.undoStack.pop();
   if (!entry) return null;
@@ -428,6 +428,9 @@ export function undo(
   if (entry.type === 'snapshot' && entry.legacyLiveData) {
     entry.after = clone(currentData);
     entry.legacyLiveData = undefined;
+    entry.campaignSpawnAfter = campaignState(
+      currentCampaignSpawn, currentInitialRoomId, Boolean(currentCampaignSpawnTracked),
+    );
     entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost(entry);
   }
   history.redoStack.push(entry);
