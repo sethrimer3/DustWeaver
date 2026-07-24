@@ -16,6 +16,7 @@ import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
 import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
 import { type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from './surfaceRimStyle';
+import { buildInteriorRimDistanceField } from './surfaceRimDistanceField';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -105,6 +106,13 @@ export interface CachedWallLayout {
    * Absence (no map entry) means "use the default exposed-edge presentation".
    */
   tileSurfaceRim: Map<string, SurfaceRimStyle>;
+  /**
+   * Per-tile distance (in tiles) to the nearest exposed edge, via BFS over
+   * `occupied` seeded from `surfaceExposureMap.masks`. Powers the 'inverted'
+   * Surface Rim mode's interior darkening falloff (see surfaceEdgeOverlay.ts).
+   * Missing entry = unreachable pocket, treated as "at least max distance".
+   */
+  interiorRimDistanceField: Map<string, number>;
   /**
    * Authoritative tile-level open-air exposure, built from the same
    * `occupied` set above but room-bounds aware (out-of-bounds neighbours
@@ -375,6 +383,11 @@ export function getWallLayoutCache(
     isSolidAt: (col: number, row: number): boolean => occupied.has(wallTileKey(col, row)),
   };
   const surfaceExposureMap = buildSurfaceExposureMap(solidityGrid);
+  // Cheap BFS over `occupied`/`masks` (already computed above) — only runs
+  // when the layout cache itself rebuilds, never per-frame. See
+  // surfaceRimDistanceField.ts for why this is safe to compute unconditionally
+  // even for rooms with no custom rim styles: it's O(occupied tiles) either way.
+  const interiorRimDistanceField = buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks);
 
   _cachedWallLayout = {
     signature,
@@ -387,6 +400,7 @@ export function getWallLayoutCache(
     halfPillarWalls,
     tileTheme,
     tileSurfaceRim,
+    interiorRimDistanceField,
     surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),

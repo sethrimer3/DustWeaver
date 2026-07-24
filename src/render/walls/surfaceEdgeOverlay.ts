@@ -111,6 +111,32 @@ function _customStrengthForDepth(style: SurfaceRimStyle, bandCount: number): (de
   };
 }
 
+// ── 'inverted' mode: interior darkening distance field ─────────────────────────
+
+/**
+ * Distance (in tiles) beyond which interior darkening saturates at the full
+ * configured `interiorDarkness` — a tuning constant, not a hard room-size
+ * limit (see surfaceRimDistanceField.ts for how distances are computed).
+ */
+const _INTERIOR_DARKNESS_MAX_DISTANCE_TILES = 6;
+
+/**
+ * Interior-darkening strength at a given BFS distance (tiles) from the
+ * nearest exposed edge, for 'inverted' mode. Reuses `_falloffMultiplier` —
+ * which is a "1 at the rim, 0 far away" curve for the *rim* bands — mirrored
+ * around `1 - normalizedDistance` so it becomes "0 at the rim (distance 0),
+ * interiorDarkness at/beyond the max distance" for the *interior*. 'hard' is
+ * special-cased to an explicit step (distance 0 → 0, else full darkness)
+ * since `_falloffMultiplier('hard', t)` is a constant 1 regardless of `t` and
+ * would otherwise ignore the "distance 0 = no darkening" requirement.
+ */
+function _interiorDarknessAtDistance(style: SurfaceRimStyle, distanceTiles: number): number {
+  if (distanceTiles <= 0) return 0;
+  if (style.falloff === 'hard') return style.interiorDarkness;
+  const normalized = Math.min(1, distanceTiles / _INTERIOR_DARKNESS_MAX_DISTANCE_TILES);
+  return style.interiorDarkness * _falloffMultiplier(style.falloff, 1 - normalized);
+}
+
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
 /** Number of one-world-pixel-thick inward falloff bands per exposed edge/corner. */
