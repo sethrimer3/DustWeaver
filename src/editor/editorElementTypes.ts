@@ -17,6 +17,7 @@ import type { LightType, LightBlendMode } from '../levels/lightingSchema';
 import type { RoomSongId } from '../audio/musicManager';
 import type { EditorCustomBlockPlacement } from '../levels/customBlocks';
 import type { RoomGateDef } from '../levels/gateDefs';
+import type { SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 export type { EditorCustomBlockPlacement } from '../levels/customBlocks';
 
 // ── Ropes ─────────────────────────────────────────────────────────────────────
@@ -101,6 +102,12 @@ export interface EditorWall {
   stairsOrientation?: 0 | 1 | 2 | 3;
   /** 1 if this pillar wall should be rendered and collide at half-block width. */
   isPillarHalfWidthFlag: 0 | 1;
+  /**
+   * Per-block Surface Rim override (see render/walls/surfaceRimStyle.ts).
+   * Undefined = 'default' style — preserves the original hard-coded
+   * exposed-edge brighten/multiply presentation exactly.
+   */
+  surfaceRim?: SurfaceRimStyle;
 }
 
 // ── Enemies ───────────────────────────────────────────────────────────────────

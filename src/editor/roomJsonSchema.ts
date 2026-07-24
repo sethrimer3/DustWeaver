@@ -8,6 +8,7 @@
 
 import { ParticleKind } from '../sim/particles/kinds';
 import type { TransitionDirection, BlockTheme, BlockThemeId, BlockSoundHardness, BackgroundId, LightingEffect, DecorationKind, AmbientLightDirection, CrumbleVariant, BlockSeamBlending, VoidEdgeStyle } from '../levels/roomDef';
+import type { CompactSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 
 // ── ParticleKind string mapping ──────────────────────────────────────────────
 
@@ -134,6 +135,11 @@ export interface RoomJsonWall {
   stairsOrientation?: 0 | 1 | 2 | 3;
   /** true if this pillar wall is half-block wide (4 px). */
   isPillarHalfWidth?: boolean;
+  /**
+   * Index into the room-level `rimStyles` dedup table (see RoomJsonDef).
+   * Omitted when this block uses the 'default' Surface Rim style.
+   */
+  r?: number;
 }
 
 export interface RoomJsonTransition {
@@ -480,6 +486,12 @@ export interface RoomJsonDef {
   playerSpawnBlock: [number, number];
   /** Interior walls only — boundary walls are regenerated from room dimensions alone. */
   interiorWalls: RoomJsonWall[];
+  /**
+   * Deduplicated Surface Rim style table (see render/walls/surfaceRimStyle.ts
+   * CompactSurfaceRimStyle). `RoomJsonWall.r` indexes into this array.
+   * Omitted when no wall in the room uses a non-default Surface Rim style.
+   */
+  rimStyles?: CompactSurfaceRimStyle[];
   enemies: RoomJsonEnemy[];
   transitions: RoomJsonTransition[];
   /** Save Tombs (stored as "skillTombs" for backward compatibility with existing room files). */
