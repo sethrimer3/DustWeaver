@@ -106,7 +106,16 @@ export interface CachedSurfaceRimPixel {
   readonly xWorldPx: number;
   readonly yWorldPx: number;
   readonly distancePx: number;
+  readonly renderDataIndex: number;
+}
+
+export interface CachedSurfaceRimRenderData {
   readonly style: SurfaceRimStyle;
+  readonly red: number;
+  readonly green: number;
+  readonly blue: number;
+  /** Precomposited rim + inverted-darkness CSS colors for distances 0..widthPx. */
+  readonly fillStyleByDistance: readonly string[];
 }
 
 export interface CachedWallLayout {
@@ -131,6 +140,7 @@ export interface CachedWallLayout {
   /** @deprecated Empty compatibility map; custom rims use world-pixel samples. */
   interiorRimDistanceField: Map<string, number>;
   customSurfaceRimPixels: CachedSurfaceRimPixel[];
+  customSurfaceRimRenderData: CachedSurfaceRimRenderData[];
   /**
    * Authoritative tile-level open-air exposure, built from the same
    * `occupied` set above but room-bounds aware (out-of-bounds neighbours
@@ -307,7 +317,56 @@ function _wallContainsVisiblePixel(walls: WallSnapshot, wi: number, x: number, y
  * decides whether a pixel is exposed; propagation is restricted to the
  * placement's own pixels so neighboring styles cannot shorten its field.
  */
-function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixel[] {
+function _falloffMultiplier(style: SurfaceRimStyle, t: number): number {
+  switch (style.falloff) {
+    case 'hard': return 1;
+    case 'linear': return 1 - t;
+    case 'smooth': {
+      const u = 1 - t;
+      return u * u * (3 - 2 * u);
+    }
+    case 'exponential': return Math.pow(1 - t, 2);
+  }
+}
+
+function _buildRenderData(style: SurfaceRimStyle): CachedSurfaceRimRenderData {
+  const red = parseInt(style.color.slice(0, 2), 16);
+  const green = parseInt(style.color.slice(2, 4), 16);
+  const blue = parseInt(style.color.slice(4, 6), 16);
+  const fillStyleByDistance: string[] = [];
+  for (let distancePx = 0; distancePx <= style.widthPx; distancePx++) {
+    const rimT = style.widthPx <= 1 ? 0 : distancePx / (style.widthPx - 1);
+    const rimAlpha = distancePx < style.widthPx
+      ? style.opacity * (style.mode === 'solid' ? 1 : _falloffMultiplier(style, rimT))
+      : 0;
+    const darknessAlpha = style.mode === 'inverted' && distancePx > 0
+      ? style.interiorDarkness * (
+        style.falloff === 'hard'
+          ? 1
+          : _falloffMultiplier(style, 1 - Math.min(1, distancePx / style.widthPx))
+      )
+      : 0;
+    const alpha = darknessAlpha + rimAlpha * (1 - darknessAlpha);
+    const colorScale = alpha > 0 ? rimAlpha * (1 - darknessAlpha) / alpha : 0;
+    fillStyleByDistance.push(
+      `rgba(${Math.round(red * colorScale)},${Math.round(green * colorScale)},${Math.round(blue * colorScale)},${alpha})`,
+    );
+  }
+  return { style, red, green, blue, fillStyleByDistance };
+}
+
+function _renderPassPriority(walls: WallSnapshot, wi: number): number {
+  if (walls.isPillarHalfWidthFlag[wi] === 1) return 3;
+  if (!isPlainRectOrientationIndex(walls.rampOrientationIndex[wi])) return 2;
+  if (walls.isPlatformFlag[wi] === 1) return 1;
+  return 0;
+}
+
+function _buildCustomSurfaceRimPixels(
+  walls: WallSnapshot,
+  roomWidthPx: number,
+  roomHeightPx: number,
+): { pixels: CachedSurfaceRimPixel[]; renderData: CachedSurfaceRimRenderData[] } {
   let hasCustom = false;
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isInvisibleFlag[wi] === 1) continue;
@@ -320,10 +379,11 @@ function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixe
       break;
     }
   }
-  if (!hasCustom) return [];
+  if (!hasCustom) return { pixels: [], renderData: [] };
 
   const globalSolid = new Set<string>();
   const pixelsByWall: string[][] = Array.from({ length: walls.count }, () => []);
+  const ownerByPixel = new Map<string, number>();
   for (let wi = 0; wi < walls.count; wi++) {
     if (walls.isInvisibleFlag[wi] === 1) continue;
     const x0 = Math.floor(walls.xWorld[wi]);
@@ -336,17 +396,31 @@ function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixe
         const key = _pixelKey(x, y);
         globalSolid.add(key);
         pixelsByWall[wi].push(key);
+        const previousOwner = ownerByPixel.get(key);
+        if (previousOwner === undefined
+          || _renderPassPriority(walls, wi) > _renderPassPriority(walls, previousOwner)
+          || (_renderPassPriority(walls, wi) === _renderPassPriority(walls, previousOwner)
+            && wi > previousOwner)) {
+          ownerByPixel.set(key, wi);
+        }
       }
     }
   }
 
   const output: CachedSurfaceRimPixel[] = [];
-  const painted = new Set<string>();
+  const renderData: CachedSurfaceRimRenderData[] = [];
+  const renderDataIndexByStyleIndex = new Map<number, number>();
   for (let wi = 0; wi < walls.count; wi++) {
     const styleIndex = walls.surfaceRimStyleIndex[wi];
     if (styleIndex === SURFACE_RIM_STYLE_INDEX_DEFAULT) continue;
     const style = walls.surfaceRimStyleTable[styleIndex];
     if (!style || style.mode === 'default' || style.mode === 'none') continue;
+    let renderDataIndex = renderDataIndexByStyleIndex.get(styleIndex);
+    if (renderDataIndex === undefined) {
+      renderDataIndex = renderData.length;
+      renderData.push(_buildRenderData(style));
+      renderDataIndexByStyleIndex.set(styleIndex, renderDataIndex);
+    }
 
     const owned = new Set(pixelsByWall[wi]);
     const distance = new Map<string, number>();
@@ -355,7 +429,12 @@ function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixe
       const comma = key.indexOf(',');
       const x = Number(key.slice(0, comma));
       const y = Number(key.slice(comma + 1));
-      if (_PIXEL_NEIGHBORS.some(([dx, dy]) => !globalSolid.has(_pixelKey(x + dx, y + dy)))) {
+      if (_PIXEL_NEIGHBORS.some(([dx, dy]) => {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= roomWidthPx || ny >= roomHeightPx) return false;
+        return !globalSolid.has(_pixelKey(nx, ny));
+      })) {
         distance.set(key, 0);
         queue.push(key);
       }
@@ -377,18 +456,17 @@ function _buildCustomSurfaceRimPixels(walls: WallSnapshot): CachedSurfaceRimPixe
     for (const key of owned) {
       const d = distance.get(key);
       const relevant = style.mode === 'inverted' || (d !== undefined && d < style.widthPx);
-      if (!relevant || painted.has(key)) continue;
+      if (!relevant || ownerByPixel.get(key) !== wi) continue;
       const comma = key.indexOf(',');
       output.push({
         xWorldPx: Number(key.slice(0, comma)),
         yWorldPx: Number(key.slice(comma + 1)),
-        distancePx: d ?? style.widthPx,
-        style,
+        distancePx: Math.min(d ?? style.widthPx, style.widthPx),
+        renderDataIndex,
       });
-      painted.add(key);
     }
   }
-  return output;
+  return { pixels: output, renderData };
 }
 
 // ── Layout cache builder ──────────────────────────────────────────────────────
@@ -559,7 +637,11 @@ export function buildWallLayout(
   const surfaceExposureMap = buildSurfaceExposureMap(solidityGrid);
   // Custom work is placement-bounded and skipped entirely when no custom style
   // exists. The old room-wide tile BFS is intentionally no longer constructed.
-  const customSurfaceRimPixels = _buildCustomSurfaceRimPixels(walls);
+  const customRim = _buildCustomSurfaceRimPixels(
+    walls,
+    widthBlocks * blockSizePx,
+    heightBlocks * blockSizePx,
+  );
   const interiorRimDistanceField = new Map<string, number>();
 
   const layout: CachedWallLayout = {
@@ -574,7 +656,8 @@ export function buildWallLayout(
     tileTheme,
     tileSurfaceRim,
     interiorRimDistanceField,
-    customSurfaceRimPixels,
+    customSurfaceRimPixels: customRim.pixels,
+    customSurfaceRimRenderData: customRim.renderData,
     surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),

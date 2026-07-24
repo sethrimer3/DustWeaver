@@ -129,5 +129,6 @@ export function drawEditorSurfaceRimOverlay(
     filterRowMaxBlocks: room.heightBlocks - 1,
     getStyleForTile: (col, row) => layout.tileSurfaceRim.get(`${col},${row}`) ?? null,
     customRimPixels: layout.customSurfaceRimPixels,
+    customRimRenderData: layout.customSurfaceRimRenderData,
   });
 }

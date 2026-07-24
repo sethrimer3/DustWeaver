@@ -78,8 +78,9 @@ function _cacheKey(
   openAirSidesMask: number,
   variantBucket: number,
   seed: number,
+  suppressEdgeShading: boolean,
 ): string {
-  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${variantBucket}|${seed}|v${EDGE_SHADING_VERSION}`;
+  return `${baseUrl}|${templateUrl}|${widthPx}|${heightPx}|${flipX ? 1 : 0}${flipY ? 1 : 0}${rotStep}|${openAirSidesMask}|${variantBucket}|${seed}|${suppressEdgeShading ? 'plain' : `v${EDGE_SHADING_VERSION}`}`;
 }
 
 /**
@@ -166,6 +167,7 @@ export function getProceduralSprite(
   seed: number = 0,
   col?: number,
   row?: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   // Compute a bounded variant bucket to prevent per-tile cache explosion.
   // When col/row are provided (all internal callers), use them directly.
@@ -179,13 +181,24 @@ export function getProceduralSprite(
   const bucketWorldX  = variantBucket * widthPx;
   const bucketWorldY  = 0;
 
-  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, variantBucket, seed);
+  const key = _cacheKey(baseUrl, templateUrl, widthPx, heightPx, flipX, flipY, rotStep, openAirSidesMask, variantBucket, seed, suppressEdgeShading);
   const cached = _spriteCache.get(key);
   if (cached !== undefined) return cached;
 
   const base     = loadImg(baseUrl);
   const template = loadImg(templateUrl);
   if (!isSpriteReady(base) || !isSpriteReady(template)) return null;
+
+  if (suppressEdgeShading) {
+    const result = _generateSprite(
+      base, template, widthPx, heightPx,
+      flipX, flipY, rotStep, openAirSidesMask,
+      bucketWorldX, bucketWorldY, seed,
+      false,
+    );
+    _spriteCache.set(key, result);
+    return result;
+  }
 
   // During active gameplay, baking new shaded sprites is forbidden to prevent
   // unexpected getImageData/putImageData stalls.  Return a cheap unshaded

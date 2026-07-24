@@ -553,6 +553,7 @@ export function renderSurfaceEdgeOverlayPass(
     customRimPixels: pctx.chunkKey !== null
       ? (pctx.wallLayout.customSurfaceRimByChunkKey.get(pctx.chunkKey) ?? [])
       : pctx.wallLayout.customSurfaceRimPixels,
+    customRimRenderData: pctx.wallLayout.customSurfaceRimRenderData,
   });
 }
 

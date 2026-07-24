@@ -436,7 +436,10 @@ export interface SurfaceEdgeOverlayParams {
     xWorldPx: number;
     yWorldPx: number;
     distancePx: number;
-    style: SurfaceRimStyle;
+    renderDataIndex: number;
+  }[];
+  customRimRenderData?: readonly {
+    fillStyleByDistance: readonly string[];
   }[];
 }
 
@@ -501,31 +504,25 @@ export function renderSurfaceEdgeOverlayPass(
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
 
-  if (params.customRimPixels) {
+  if (params.customRimPixels && params.customRimRenderData) {
     for (const pixel of params.customRimPixels) {
       const col = Math.floor(pixel.xWorldPx / blockSizePx);
       const row = Math.floor(pixel.yWorldPx / blockSizePx);
       if (!_inFilterRange(col, row, params)) continue;
       const darknessMul = _darknessMulAtTile(col, row, params);
       if (darknessMul === null) continue;
-      const { style, distancePx } = pixel;
-      const x = Math.round(pixel.xWorldPx * scalePx + offsetXPx);
-      const y = Math.round(pixel.yWorldPx * scalePx + offsetYPx);
-      const unit = Math.max(1, Math.round(scalePx));
-      const rimStrength = distancePx < style.widthPx
-        ? _customStrengthForDepth(style, style.widthPx)(distancePx) * darknessMul
-        : 0;
-      const interiorStrength = style.mode === 'inverted' && distancePx > 0
-        ? _interiorDarknessAtDistance(style, distancePx) * darknessMul
-        : 0;
-      if (rimStrength <= 0 && interiorStrength <= 0) continue;
-
-      const [red, green, blue] = _hexToRgbTriplet(style.color).split(',').map(Number);
-      const alpha = interiorStrength + rimStrength * (1 - interiorStrength);
-      const colorScale = alpha > 0 ? rimStrength * (1 - interiorStrength) / alpha : 0;
-      ctx.fillStyle = `rgba(${Math.round(red * colorScale)},${Math.round(green * colorScale)},${Math.round(blue * colorScale)},${alpha})`;
-      ctx.fillRect(x, y, unit, unit);
+      const renderData = params.customRimRenderData[pixel.renderDataIndex];
+      if (!renderData) continue;
+      const x0 = Math.round(pixel.xWorldPx * scalePx + offsetXPx);
+      const x1 = Math.round((pixel.xWorldPx + 1) * scalePx + offsetXPx);
+      const y0 = Math.round(pixel.yWorldPx * scalePx + offsetYPx);
+      const y1 = Math.round((pixel.yWorldPx + 1) * scalePx + offsetYPx);
+      if (x1 <= x0 || y1 <= y0) continue;
+      ctx.globalAlpha = darknessMul;
+      ctx.fillStyle = renderData.fillStyleByDistance[pixel.distancePx];
+      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
     }
+    ctx.globalAlpha = 1;
   }
 
   // ── Pass A: straight side bands + convex (outer) corners ────────────────────
