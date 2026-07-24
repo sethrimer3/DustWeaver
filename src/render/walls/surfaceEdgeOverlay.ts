@@ -114,14 +114,7 @@ function _customStrengthForDepth(style: SurfaceRimStyle, bandCount: number): (de
 // ── 'inverted' mode: interior darkening distance field ─────────────────────────
 
 /**
- * Distance (in tiles) beyond which interior darkening saturates at the full
- * configured `interiorDarkness` — a tuning constant, not a hard room-size
- * limit (see surfaceRimDistanceField.ts for how distances are computed).
- */
-const _INTERIOR_DARKNESS_MAX_DISTANCE_TILES = 6;
-
-/**
- * Interior-darkening strength at a given BFS distance (tiles) from the
+ * Interior-darkening strength at a world-pixel distance from the
  * nearest exposed edge, for 'inverted' mode. Reuses `_falloffMultiplier` —
  * which is a "1 at the rim, 0 far away" curve for the *rim* bands — mirrored
  * around `1 - normalizedDistance` so it becomes "0 at the rim (distance 0),
@@ -130,10 +123,10 @@ const _INTERIOR_DARKNESS_MAX_DISTANCE_TILES = 6;
  * since `_falloffMultiplier('hard', t)` is a constant 1 regardless of `t` and
  * would otherwise ignore the "distance 0 = no darkening" requirement.
  */
-function _interiorDarknessAtDistance(style: SurfaceRimStyle, distanceTiles: number): number {
-  if (distanceTiles <= 0) return 0;
+function _interiorDarknessAtDistance(style: SurfaceRimStyle, distancePx: number): number {
+  if (distancePx <= 0) return 0;
   if (style.falloff === 'hard') return style.interiorDarkness;
-  const normalized = Math.min(1, distanceTiles / _INTERIOR_DARKNESS_MAX_DISTANCE_TILES);
+  const normalized = Math.min(1, distancePx / style.widthPx);
   return style.interiorDarkness * _falloffMultiplier(style.falloff, 1 - normalized);
 }
 
@@ -433,12 +426,18 @@ export interface SurfaceEdgeOverlayParams {
    * present in `surfaceExposureMap.masks`) that should be checked for
    * 'inverted'-mode darkening, together with their cached BFS distance (in
    * tiles) to the nearest exposed edge. Both are already fully precomputed
-   * (see blockWallLayoutCache.ts / surfaceRimDistanceField.ts) — this pass
+   * (see blockWallLayoutCache.ts) — this pass
    * only does O(1) map lookups per tile, no per-frame BFS or pixel scan.
    * Tiles at distance 0 are handled by Pass A above and must not appear here.
    */
   interiorTileCoords?: readonly { col: number; row: number }[];
   getInteriorDistanceForTile?: (col: number, row: number) => number | undefined;
+  customRimPixels?: readonly {
+    xWorldPx: number;
+    yWorldPx: number;
+    distancePx: number;
+    style: SurfaceRimStyle;
+  }[];
 }
 
 /** Width (in world pixels, same units as `SurfaceRimStyle.widthPx`) of one band-unit at the current scale. */
@@ -502,6 +501,33 @@ export function renderSurfaceEdgeOverlayPass(
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
 
+  if (params.customRimPixels) {
+    for (const pixel of params.customRimPixels) {
+      const col = Math.floor(pixel.xWorldPx / blockSizePx);
+      const row = Math.floor(pixel.yWorldPx / blockSizePx);
+      if (!_inFilterRange(col, row, params)) continue;
+      const darknessMul = _darknessMulAtTile(col, row, params);
+      if (darknessMul === null) continue;
+      const { style, distancePx } = pixel;
+      const x = Math.round(pixel.xWorldPx * scalePx + offsetXPx);
+      const y = Math.round(pixel.yWorldPx * scalePx + offsetYPx);
+      const unit = Math.max(1, Math.round(scalePx));
+      const rimStrength = distancePx < style.widthPx
+        ? _customStrengthForDepth(style, style.widthPx)(distancePx) * darknessMul
+        : 0;
+      const interiorStrength = style.mode === 'inverted' && distancePx > 0
+        ? _interiorDarknessAtDistance(style, distancePx) * darknessMul
+        : 0;
+      if (rimStrength <= 0 && interiorStrength <= 0) continue;
+
+      const [red, green, blue] = _hexToRgbTriplet(style.color).split(',').map(Number);
+      const alpha = interiorStrength + rimStrength * (1 - interiorStrength);
+      const colorScale = alpha > 0 ? rimStrength * (1 - interiorStrength) / alpha : 0;
+      ctx.fillStyle = `rgba(${Math.round(red * colorScale)},${Math.round(green * colorScale)},${Math.round(blue * colorScale)},${alpha})`;
+      ctx.fillRect(x, y, unit, unit);
+    }
+  }
+
   // ── Pass A: straight side bands + convex (outer) corners ────────────────────
   // Iterated per-tile (via `masks`, not `segments`) so all of a tile's
   // exposed sides are known together — required to trim bands and own each
@@ -520,6 +546,7 @@ export function renderSurfaceEdgeOverlayPass(
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
     const customStyle = params.getStyleForTile?.(col, row);
+    if (params.customRimPixels && customStyle && customStyle.mode !== 'default') continue;
     const isCustom = !!customStyle && customStyle.mode !== 'default';
     if (isCustom && customStyle!.mode === 'none') continue; // 'none': suppress overlay entirely for this tile
 
@@ -561,6 +588,7 @@ export function renderSurfaceEdgeOverlayPass(
     if (darknessMul === null) continue; // already counted as skipped in pass A when the tile also has a mask entry
 
     const customStyle = params.getStyleForTile?.(col, row);
+    if (params.customRimPixels && customStyle && customStyle.mode !== 'default') continue;
     const isCustom = !!customStyle && customStyle.mode !== 'default';
     if (isCustom && customStyle!.mode === 'none') continue;
 
@@ -585,7 +613,7 @@ export function renderSurfaceEdgeOverlayPass(
   // Tiles with zero exposed cardinal sides never appear in `masks` (Pass A),
   // so this is the only pass that can darken them. One O(1) map-lookup rect
   // per candidate tile — no BFS or pixel work happens here, it was all done
-  // once at layout-cache build time (see surfaceRimDistanceField.ts).
+  // once at layout-cache build time.
   if (params.interiorTileCoords && params.getInteriorDistanceForTile && params.getStyleForTile) {
     for (const { col, row } of params.interiorTileCoords) {
       if (!_inFilterRange(col, row, params)) continue;
@@ -596,7 +624,7 @@ export function renderSurfaceEdgeOverlayPass(
       const darknessMul = _darknessMulAtTile(col, row, params);
       if (darknessMul === null) continue;
 
-      const distance = params.getInteriorDistanceForTile(col, row) ?? _INTERIOR_DARKNESS_MAX_DISTANCE_TILES;
+      const distance = params.getInteriorDistanceForTile(col, row) ?? style.widthPx;
       const strength = _interiorDarknessAtDistance(style, distance) * darknessMul;
       if (strength <= 0) continue;
 

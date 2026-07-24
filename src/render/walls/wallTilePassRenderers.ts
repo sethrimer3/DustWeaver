@@ -549,11 +549,10 @@ export function renderSurfaceEdgeOverlayPass(
     filterRowMinBlocks: pctx.filterRowMinBlocks,
     filterRowMaxBlocks: pctx.filterRowMaxBlocks,
     getStyleForTile: (col, row) => pctx.wallLayout.tileSurfaceRim.get(`${col},${row}`) ?? null,
-    // Pass C ('inverted' interior darkening) safely no-ops for rim tiles
-    // (distance 0 → zero strength), so the full occupied-tile list can be
-    // reused directly without pre-filtering it every frame.
-    interiorTileCoords: pctx.wallLayout.occupiedTiles,
-    getInteriorDistanceForTile: (col, row) => pctx.wallLayout.interiorRimDistanceField.get(`${col},${row}`),
+    // Chunk builds iterate only the custom pixels assigned to this chunk.
+    customRimPixels: pctx.chunkKey !== null
+      ? (pctx.wallLayout.customSurfaceRimByChunkKey.get(pctx.chunkKey) ?? [])
+      : pctx.wallLayout.customSurfaceRimPixels,
   });
 }
 
