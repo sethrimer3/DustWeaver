@@ -140,18 +140,27 @@ test("'gradient' mode: strength falls off inward (outer band strictly stronger t
   assert.ok(Math.abs(maxAlpha - style.opacity) < 1e-6, 'outermost band should hit full configured opacity');
 });
 
-test("'inverted' mode: adds an interior darken rect beyond the rim band width, scaled by interiorDarkness", () => {
+test("'inverted' mode: a rim tile alone (distance 0, no deeper interior tiles) gets zero interior darkening", () => {
+  // A single 1x1 block has only one tile, which is directly exposed (distance
+  // 0) — per spec, distance-0 tiles never receive extra darkening; that's the
+  // rim bands' job. See surfaceRimDistanceField.test.ts for the multi-tile
+  // interior-darkening cases (which need interiorTileCoords/
+  // getInteriorDistanceForTile wired in, exercised via getWallLayoutCache).
   const snapshot = makeWallSnapshot([{ x: 2 * BLOCK_SIZE, y: 2 * BLOCK_SIZE, w: BLOCK_SIZE, h: BLOCK_SIZE }]);
   const wallLayout = getWallLayoutCache(snapshot, BLOCK_SIZE, 10, 10);
   const style = normalizeSurfaceRimStyle({ mode: 'inverted', color: 'ffffff', widthPx: 2, opacity: 0.3, interiorDarkness: 0.8 });
 
   const { ctx, rects } = makeFakeCtx();
-  const params = makeParams({ surfaceExposureMap: wallLayout.surfaceExposureMap, getStyleForTile: () => style });
+  const params = makeParams({
+    surfaceExposureMap: wallLayout.surfaceExposureMap,
+    getStyleForTile: () => style,
+    interiorTileCoords: wallLayout.occupiedTiles,
+    getInteriorDistanceForTile: (col, row) => wallLayout.interiorRimDistanceField.get(`${col},${row}`),
+  });
   renderSurfaceEdgeOverlayPass(ctx, params);
 
   const darkenRects = rects.filter(r => /rgba\(0,0,0,/.test(r.fillStyle));
-  assert.equal(darkenRects.length, 1, 'exactly one interior darken rect per inverted tile');
-  assert.match(darkenRects[0].fillStyle, /rgba\(0,0,0,0\.8\)/);
+  assert.equal(darkenRects.length, 0, 'a distance-0-only tile must receive no interior darkening');
 });
 
 test('custom styles never overlap each other or the trimmed side bands (no double-painting)', () => {

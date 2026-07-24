@@ -428,6 +428,17 @@ export interface SurfaceEdgeOverlayParams {
    * block's color/width/opacity/falloff instead.
    */
   getStyleForTile?: (col: number, row: number) => SurfaceRimStyle | null | undefined;
+  /**
+   * Interior tiles (solid, but with zero exposed cardinal sides — i.e. not
+   * present in `surfaceExposureMap.masks`) that should be checked for
+   * 'inverted'-mode darkening, together with their cached BFS distance (in
+   * tiles) to the nearest exposed edge. Both are already fully precomputed
+   * (see blockWallLayoutCache.ts / surfaceRimDistanceField.ts) — this pass
+   * only does O(1) map lookups per tile, no per-frame BFS or pixel scan.
+   * Tiles at distance 0 are handled by Pass A above and must not appear here.
+   */
+  interiorTileCoords?: readonly { col: number; row: number }[];
+  getInteriorDistanceForTile?: (col: number, row: number) => number | undefined;
 }
 
 /** Width (in world pixels, same units as `SurfaceRimStyle.widthPx`) of one band-unit at the current scale. */
@@ -533,18 +544,10 @@ export function renderSurfaceEdgeOverlayPass(
         tileBandCount, strengthFn, rgbTriplet);
       convexCornerRectsDrawn += tileBandCount * 2 - 1;
     }
-
-    // 'inverted': flat interior darken beyond the rim band, approximating
-    // "darkens by distance from open air" without a full multi-tile distance
-    // field (see module doc / follow-up notes for the exact tradeoff).
-    if (isCustom && customStyle!.mode === 'inverted' && customStyle!.interiorDarkness > 0) {
-      const interiorInset = Math.min(sizeScreen / 2, tileBandCount * tileBandUnit);
-      const interiorSize = sizeScreen - interiorInset * 2;
-      if (interiorSize > 0) {
-        ctx.fillStyle = `rgba(0,0,0,${customStyle!.interiorDarkness * darknessMul})`;
-        ctx.fillRect(tileX + interiorInset, tileY + interiorInset, interiorSize, interiorSize);
-      }
-    }
+    // 'inverted' interior darkening for THIS tile is 0 — it's at BFS distance
+    // 0 (it's in `masks`, i.e. directly exposed), and distance 0 always means
+    // no extra darkening (the rim bands above already mark it). Deeper
+    // interior tiles are darkened by Pass C below.
   }
 
   // ── Pass B: concave (inner) corners ──────────────────────────────────────────
@@ -575,6 +578,31 @@ export function renderSurfaceEdgeOverlayPass(
       _drawCornerRings(ctx, tileX, tileY, sizeScreen, tileBandUnit, corner, col, row, darknessMul,
         tileBandCount, strengthFn, rgbTriplet);
       concaveCornerRectsDrawn += tileBandCount * 2 - 1;
+    }
+  }
+
+  // ── Pass C: 'inverted'-mode interior darkening for deeper tiles ─────────────
+  // Tiles with zero exposed cardinal sides never appear in `masks` (Pass A),
+  // so this is the only pass that can darken them. One O(1) map-lookup rect
+  // per candidate tile — no BFS or pixel work happens here, it was all done
+  // once at layout-cache build time (see surfaceRimDistanceField.ts).
+  if (params.interiorTileCoords && params.getInteriorDistanceForTile && params.getStyleForTile) {
+    for (const { col, row } of params.interiorTileCoords) {
+      if (!_inFilterRange(col, row, params)) continue;
+      const style = params.getStyleForTile(col, row);
+      if (!style || style.mode !== 'inverted' || style.interiorDarkness <= 0) continue;
+
+      const darknessMul = _darknessMulAtTile(col, row, params);
+      if (darknessMul === null) continue;
+
+      const distance = params.getInteriorDistanceForTile(col, row) ?? _INTERIOR_DARKNESS_MAX_DISTANCE_TILES;
+      const strength = _interiorDarknessAtDistance(style, distance) * darknessMul;
+      if (strength <= 0) continue;
+
+      const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
+      const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
+      ctx.fillStyle = `rgba(0,0,0,${strength})`;
+      ctx.fillRect(tileX, tileY, sizeScreen, sizeScreen);
     }
   }
 

@@ -265,7 +265,28 @@ export function getWallLayoutCache(
   }
 
   const _rebuildT0 = import.meta.env?.DEV ? performance.now() : 0;
+  _cachedWallLayout = buildWallLayout(walls, blockSizePx, widthBlocks, heightBlocks, signature);
+  if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
 
+  return _cachedWallLayout;
+}
+
+/**
+ * Pure (non-memoizing) layout builder — the actual computation
+ * `getWallLayoutCache` memoizes into the shared `_cachedWallLayout` module
+ * singleton above. Exported separately so callers that need their OWN
+ * independently-cached layout (e.g. the editor's live wall preview, which
+ * must not thrash the gameplay layout singleton — see
+ * editorWallSurfaceRimPreview.ts) can call this directly and manage their
+ * own memoization, without touching `_cachedWallLayout` at all.
+ */
+export function buildWallLayout(
+  walls: WallSnapshot,
+  blockSizePx: number,
+  widthBlocks: number,
+  heightBlocks: number,
+  signature: string,
+): CachedWallLayout {
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
   const platformEdgeByKey = new Map<string, number>();
@@ -389,7 +410,7 @@ export function getWallLayoutCache(
   // even for rooms with no custom rim styles: it's O(occupied tiles) either way.
   const interiorRimDistanceField = buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks);
 
-  _cachedWallLayout = {
+  const layout: CachedWallLayout = {
     signature,
     blockSizePx,
     occupied,
@@ -413,11 +434,9 @@ export function getWallLayoutCache(
 
   // Build per-chunk buckets AFTER all arrays are populated so the bucket maps
   // reflect the final state and chunk rebuilds are O(items-in-chunk).
-  _buildChunkBuckets(_cachedWallLayout, walls);
+  _buildChunkBuckets(layout, walls);
 
-  if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
-
-  return _cachedWallLayout;
+  return layout;
 }
 
 // ── Per-chunk bucket builder ───────────────────────────────────────────────────
