@@ -3,6 +3,7 @@ import { legacyChallengeGateToRoomGate, gatePersistenceKey } from '../levels/gat
 import { getActiveCampaignId } from '../levels/campaignIdentity';
 import type { PlayerProgress } from '../progression/playerProgress';
 import { MAX_WALLS, type WorldState } from '../sim/world';
+import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { createChallengeModeState, toggleChallengeTotem, updateChallengeFields } from '../sim/challengeMode';
 import {
   clearGateLatchForSave,
@@ -30,6 +31,7 @@ function installGateWall(world: WorldState, gateIndex: number): void {
   world.wallIsPlatformFlag[wallIndex] = 0;
   world.wallPlatformEdge[wallIndex] = 0;
   world.wallThemeIndex[wallIndex] = 255;
+  world.wallSurfaceRimStyleIndex[wallIndex] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
   world.wallSoundHardnessIndex[wallIndex] = 1;
   world.wallIsInvisibleFlag[wallIndex] = gateHasCollision(gate) ? 0 : 1;
   world.wallRampOrientationIndex[wallIndex] = 255;

@@ -14,6 +14,13 @@ import { getMaterialFootprintSize, isKnownMaterialId } from '../sim/pixelMateria
 import type {
   EditorRoomData,
 } from './editorState';
+import type { EditorWall } from './editorElementTypes';
+import {
+  normalizeSurfaceRimStyle,
+  isDefaultSurfaceRimStyle,
+  encodeSurfaceRimStyle,
+  type CompactSurfaceRimStyle,
+} from '../render/walls/surfaceRimStyle';
 import { lightDefToSaved } from '../levels/lightingSchema';
 import type {
   RoomJsonDef,
@@ -39,6 +46,23 @@ import { BAKED_WALL_SCHEMA_VERSION, computeWallTemplateSourceHash } from '../lev
  * is persisted to disk and read back by the loader.
  */
 export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
+  const rimTable: CompactSurfaceRimStyle[] = [];
+  const rimIndexByKey = new Map<string, number>();
+  const rimIndexForWall = (w: EditorWall): number | undefined => {
+    if (w.surfaceRim === undefined) return undefined;
+    const normalized = normalizeSurfaceRimStyle(w.surfaceRim);
+    if (isDefaultSurfaceRimStyle(normalized)) return undefined;
+    const encoded = encodeSurfaceRimStyle(normalized);
+    const key = JSON.stringify(encoded);
+    let idx = rimIndexByKey.get(key);
+    if (idx === undefined) {
+      idx = rimTable.length;
+      rimTable.push(encoded);
+      rimIndexByKey.set(key, idx);
+    }
+    return idx;
+  };
+
   const json: RoomJsonDef = {
     id: data.id,
     name: data.name,
@@ -64,6 +88,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
       if (w.stairsOrientation !== undefined) wall.stairsOrientation = w.stairsOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
+      const rimIndex = rimIndexForWall(w);
+      if (rimIndex !== undefined) wall.r = rimIndex;
       return wall;
     }),
     enemies: data.enemies.map(e => ({
@@ -144,6 +170,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       yBlock: s.yBlock,
     })),
   };
+
+  if (rimTable.length > 0) json.rimStyles = rimTable;
 
   // Always write blockTheme and backgroundId when present
   if (data.blockTheme) {
@@ -536,6 +564,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isPillarHalfWidthFlag: Array.from(tpl.isPillarHalfWidthFlag),
       isIceFlag:             Array.from(tpl.isIceFlag),
       isUltraIceFlag:        Array.from(tpl.isUltraIceFlag),
+      rimStyleIndex:         Array.from(tpl.rimStyleIndex),
+      rimStyles:             tpl.rimStyleTable.map(encodeSurfaceRimStyle),
     };
   } catch (err) {
     // Non-fatal: export still succeeds; runtime will fall back to buildRoomWallTemplate().

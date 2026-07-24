@@ -13,6 +13,7 @@
 
 export type { ClusterSnapshot } from './clusterSnapshotTypes';
 import type { ClusterSnapshot } from './clusterSnapshotTypes';
+import type { SurfaceRimStyle } from './walls/surfaceRimStyle';
 
 export interface ParticleSnapshot {
   readonly positionXWorld:    Float32Array;
@@ -74,6 +75,14 @@ export interface WallSnapshot {
   readonly rampOrientationIndex: Uint8Array;
   /** 1 if the wall is a half-width pillar (4 px wide). */
   readonly isPillarHalfWidthFlag: Uint8Array;
+  /**
+   * Per-wall Surface Rim style index — index into `surfaceRimStyleTable`, or
+   * `SURFACE_RIM_STYLE_INDEX_DEFAULT` (0xFFFF) to use the default (original
+   * hard-coded) exposed-edge presentation.
+   */
+  readonly surfaceRimStyleIndex: Uint16Array;
+  /** Dedup table of non-default Surface Rim styles referenced by `surfaceRimStyleIndex`. */
+  readonly surfaceRimStyleTable: readonly SurfaceRimStyle[];
 }
 
 export interface WorldSnapshot {

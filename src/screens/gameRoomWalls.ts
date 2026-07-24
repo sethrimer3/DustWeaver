@@ -33,6 +33,11 @@ import {
   WALL_THEME_DEFAULT_INDEX,
   indexToBlockTheme,
 } from '../levels/roomDef';
+import {
+  type SurfaceRimStyle,
+  SURFACE_RIM_STYLE_INDEX_DEFAULT,
+  internSurfaceRimStyle,
+} from '../render/walls/surfaceRimStyle';
 
 // Re-export RoomWallTemplate so existing callers that import it from here are unaffected.
 export type { RoomWallTemplate };
@@ -94,6 +99,12 @@ export function* buildRoomWallTemplateIncremental(
   const ic: number[] = []; // isIceFlag (0 or 1)
   const uic: number[] = []; // isUltraIceFlag (0 or 1)
   const rkt: number[] = []; // isRocketBlockFlag (0 or 1)
+  const rs: number[] = []; // rimStyleIndex (SURFACE_RIM_STYLE_INDEX_DEFAULT = default)
+
+  // Room-level dedup table for non-default Surface Rim styles, built once
+  // alongside the per-wall workspace arrays (mirrors the `rimStyles` dedup
+  // table used by room JSON serialization — see surfaceRimStyle.ts).
+  const rimStyleTable: SurfaceRimStyle[] = [];
 
   // Convert block units to world units
   for (let wi = 0; wi < rawCount; wi++) {
@@ -122,6 +133,7 @@ export function* buildRoomWallTemplateIncremental(
     ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
     uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
     rkt.push(resolvedTheme === 'rocketBlock' ? 1 : 0);
+    rs.push(internSurfaceRimStyle(rimStyleTable, def.surfaceRim));
   }
 
   // ── Incremental merge pass ────────────────────────────────────────────────
@@ -147,6 +159,9 @@ export function* buildRoomWallTemplateIncremental(
         if (ts[i] !== ts[j]) continue;
         if (sh[i] !== sh[j]) continue;
         if (iv[i] !== iv[j]) continue;
+        // Never merge walls with different Surface Rim styles — a merged AABB
+        // would lose the per-block distinction (mirrors the themeIndex check above).
+        if (rs[i] !== rs[j]) continue;
         // Never merge shaped walls (stairs, legacy ramps) or half-width pillars
         if (ro[i] !== 255 || ro[j] !== 255) continue;
         if (ph[i] !== 0 || ph[j] !== 0) continue;
@@ -171,7 +186,7 @@ export function* buildRoomWallTemplateIncremental(
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1); rs.splice(j, 1);
             merged = true;
             break;
           }
@@ -197,7 +212,7 @@ export function* buildRoomWallTemplateIncremental(
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1); rs.splice(j, 1);
             merged = true;
             break;
           }
@@ -232,6 +247,8 @@ export function* buildRoomWallTemplateIncremental(
     isIceFlag: new Uint8Array(finalCount),
     isUltraIceFlag: new Uint8Array(finalCount),
     isRocketBlockFlag: new Uint8Array(finalCount),
+    rimStyleIndex: new Uint16Array(finalCount).fill(SURFACE_RIM_STYLE_INDEX_DEFAULT),
+    rimStyleTable,
   };
   for (let wi = 0; wi < finalCount; wi++) {
     template.xWorld[wi] = xs[wi];
@@ -248,6 +265,7 @@ export function* buildRoomWallTemplateIncremental(
     template.isIceFlag[wi] = ic[wi];
     template.isUltraIceFlag[wi] = uic[wi];
     template.isRocketBlockFlag[wi] = rkt[wi];
+    template.rimStyleIndex[wi] = rs[wi];
   }
   return template;
 }
@@ -304,6 +322,9 @@ export function buildRoomWallTemplate(room: RoomDef): RoomWallTemplate {
 export function applyRoomWallTemplate(world: WorldState, template: RoomWallTemplate): void {
   const n = template.wallCount;
   world.wallCount = n;
+  // Room-level rim style table is shared by index across all walls in this
+  // room — copy the reference once rather than per-wall.
+  world.wallSurfaceRimStyleTable = template.rimStyleTable.slice();
   for (let wi = 0; wi < n; wi++) {
     world.wallXWorld[wi] = template.xWorld[wi];
     world.wallYWorld[wi] = template.yWorld[wi];
@@ -312,6 +333,7 @@ export function applyRoomWallTemplate(world: WorldState, template: RoomWallTempl
     world.wallIsPlatformFlag[wi] = template.isPlatformFlag[wi];
     world.wallPlatformEdge[wi] = template.platformEdge[wi];
     world.wallThemeIndex[wi] = template.themeIndex[wi];
+    world.wallSurfaceRimStyleIndex[wi] = template.rimStyleIndex[wi];
     world.wallSoundHardnessIndex[wi] = template.soundHardnessIndex[wi];
     world.wallIsInvisibleFlag[wi] = template.isInvisibleFlag[wi];
     world.wallRampOrientationIndex[wi] = template.rampOrientationIndex[wi];

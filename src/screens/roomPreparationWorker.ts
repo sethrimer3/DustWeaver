@@ -81,6 +81,10 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
         isUltraIceFlag:       new Uint8Array(b.isUltraIceFlag),
         // Not part of the baked schema — derive from theme, same as gameRoomWalls.
         isRocketBlockFlag:    Uint8Array.from(b.themeIndex, idx => (indexToBlockTheme(idx) === 'rocketBlock' ? 1 : 0)),
+        // `room.bakedWallTemplate` is already a hydrated RoomWallTemplate (see
+        // hydrateAndValidateBakedWallTemplate) — rim data is already resolved.
+        rimStyleIndex:        Uint16Array.from(b.rimStyleIndex),
+        rimStyleTable:        b.rimStyleTable.slice(),
       };
       wallSource = 'baked';
     } else {
@@ -146,6 +150,8 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       isIceFlag: wt.isIceFlag.buffer as ArrayBuffer,
       isUltraIceFlag: wt.isUltraIceFlag.buffer as ArrayBuffer,
       isRocketBlockFlag: wt.isRocketBlockFlag.buffer as ArrayBuffer,
+      rimStyleIndex: wt.rimStyleIndex.buffer as ArrayBuffer,
+      rimStyleTable: wt.rimStyleTable.slice(),
     };
 
     // ── Wire encoding for blocker sets ─────────────────────────────────────
@@ -185,6 +191,7 @@ _self.onmessage = (event: MessageEvent<unknown>) => {
       serialisedWt.isIceFlag,
       serialisedWt.isUltraIceFlag,
       serialisedWt.isRocketBlockFlag,
+      serialisedWt.rimStyleIndex,
     ];
 
     _self.postMessage(msg, transfer);

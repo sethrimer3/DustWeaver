@@ -48,7 +48,7 @@ function zeroArrays(n: number): Pick<
   | 'isPlatformFlag' | 'platformEdge'
   | 'soundHardnessIndex' | 'isInvisibleFlag'
   | 'rampOrientationIndex' | 'isPillarHalfWidthFlag'
-  | 'isIceFlag' | 'isUltraIceFlag'
+  | 'isIceFlag' | 'isUltraIceFlag' | 'rimStyleIndex'
 > {
   const z = new Array<number>(n).fill(0);
   return {
@@ -64,6 +64,7 @@ function zeroArrays(n: number): Pick<
     isPillarHalfWidthFlag: [...z],
     isIceFlag: [...z],
     isUltraIceFlag: [...z],
+    rimStyleIndex: new Array<number>(n).fill(0xFFFF),
   };
 }
 
@@ -81,6 +82,7 @@ function makeBaked(
     themeIndex,
     ...(themeNames !== undefined ? { themeNames } : {}),
     ...zeroArrays(n),
+    rimStyles: [],
   };
 }
 

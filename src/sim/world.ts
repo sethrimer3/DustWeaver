@@ -8,6 +8,8 @@ import { PixelMaterialSystem } from './pixelMaterials/pixelMaterialSystem';
 import { NATIVE_WIDTH_PX, NATIVE_HEIGHT_PX } from './pixelMaterials/pixelMaterialTypes';
 import { createChallengeModeState, type ChallengeModeState } from './challengeMode';
 import type { RuntimeGate } from './gates/gateState';
+import type { SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
+import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { createShieldWeaveState, type ShieldWeaveState } from './stormweave/shieldWeave';
 import {
   createTimeStopFieldPlayerState,
@@ -136,6 +138,20 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   wallPlatformEdge: Uint8Array;
   /** Per-wall theme index: 0=blackRock, 1=brownRock, 2=dirt.  255=use room default. */
   wallThemeIndex: Uint8Array;
+  /**
+   * Per-wall Surface Rim style index — index into `wallSurfaceRimStyleTable`,
+   * or `SURFACE_RIM_STYLE_INDEX_DEFAULT` (0xFFFF) to use the default
+   * (original hard-coded) exposed-edge presentation. Mirrors `wallThemeIndex`
+   * — set at room load time and propagated whenever a wall slot is recycled
+   * (falling blocks, crumble blocks, room crossing).
+   */
+  wallSurfaceRimStyleIndex: Uint16Array;
+  /**
+   * Room-level dedup table of non-default Surface Rim styles, indexed by
+   * `wallSurfaceRimStyleIndex`. Rebuilt at room load; small (one entry per
+   * distinct custom style actually used in the room, not per-wall).
+   */
+  wallSurfaceRimStyleTable: SurfaceRimStyle[];
   /** Per-wall sound hardness index: 0=soft, 1=normal, 2=hard. */
   wallSoundHardnessIndex: Uint8Array;
   /** 1 if the corresponding wall is invisible (collision-only boundary, not rendered). */
@@ -770,6 +786,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallIsPlatformFlag: new Uint8Array(MAX_WALLS),
     wallPlatformEdge: new Uint8Array(MAX_WALLS),
     wallThemeIndex: new Uint8Array(MAX_WALLS),
+    wallSurfaceRimStyleIndex: new Uint16Array(MAX_WALLS).fill(SURFACE_RIM_STYLE_INDEX_DEFAULT),
+    wallSurfaceRimStyleTable: [],
     wallSoundHardnessIndex: new Uint8Array(MAX_WALLS),
     wallIsInvisibleFlag: new Uint8Array(MAX_WALLS),
     wallRampOrientationIndex: new Uint8Array(MAX_WALLS).fill(255),

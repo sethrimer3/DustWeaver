@@ -44,6 +44,7 @@ import type { EditorHistory } from './editorHistory';
 import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 import { canMutateElement } from './editorLayers';
+import { normalizeSurfaceRimStyle, isDefaultSurfaceRimStyle, type SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 
 // Guide dust path property validation bounds
 const MIN_MOTE_COUNT      = 3;
@@ -80,6 +81,19 @@ export function applyPropertyToElement(
       if (prop === 'wall.hBlock' && !isNaN(numVal)) wall.hBlock = Math.max(1, numVal);
       if (prop === 'wall.blockTheme' && typeof value === 'string') {
         wall.blockTheme = value as BlockTheme;
+      }
+      if (prop.startsWith('wall.surfaceRim.')) {
+        const field = prop.slice('wall.surfaceRim.'.length);
+        const current = normalizeSurfaceRimStyle(wall.surfaceRim);
+        let patch: Partial<SurfaceRimStyle> = {};
+        if (field === 'mode' && typeof value === 'string') patch = { mode: value as SurfaceRimStyle['mode'] };
+        if (field === 'color' && typeof value === 'string') patch = { color: value };
+        if (field === 'widthPx' && !isNaN(numVal)) patch = { widthPx: numVal };
+        if (field === 'opacity' && !isNaN(numVal)) patch = { opacity: numVal };
+        if (field === 'falloff' && typeof value === 'string') patch = { falloff: value as SurfaceRimStyle['falloff'] };
+        if (field === 'interiorDarkness' && !isNaN(numVal)) patch = { interiorDarkness: numVal };
+        const next = normalizeSurfaceRimStyle({ ...current, ...patch });
+        wall.surfaceRim = isDefaultSurfaceRimStyle(next) ? undefined : next;
       }
     }
   } else if (el.type === 'enemy') {

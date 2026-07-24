@@ -659,6 +659,8 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       isPillarHalfWidthFlag: b.isPillarHalfWidthFlag.slice(),
       isIceFlag:             b.isIceFlag.slice(),
       isUltraIceFlag:        b.isUltraIceFlag.slice(),
+      rimStyleIndex:         (b.rimStyleIndex ?? []).slice(),
+      rimStyles:             (b.rimStyles ?? []).slice(),
     };
   }
 

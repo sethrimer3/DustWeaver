@@ -55,6 +55,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     rampOrientation: w.rampOrientation,
     stairsOrientation: w.stairsOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
+    surfaceRim: w.surfaceRim,
   }));
 
   // Convert custom block placements to walls, resolving each placement's

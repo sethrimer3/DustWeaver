@@ -74,6 +74,68 @@ import {
   type SurfaceMask,
   type CornerSide,
 } from '../../sim/world/surfaceExposure';
+import type { SurfaceRimStyle, SurfaceRimFalloff } from './surfaceRimStyle';
+
+// ── Custom Surface Rim style support ────────────────────────────────────────────
+//
+// A per-tile style resolver (`SurfaceEdgeOverlayParams.getStyleForTile`) lets a
+// placed block opt out of the default guaranteed overlay above and use a
+// configured Surface Rim instead ('none' | 'solid' | 'gradient' | 'inverted').
+// When the resolver is absent, or returns null/'default' for a tile, behavior
+// is byte-for-byte identical to the original hard-coded overlay.
+
+function _hexToRgbTriplet(hex: string): string {
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  return `${r},${g},${b}`;
+}
+
+/** Normalized-depth [0,1) falloff multiplier for a custom rim band. */
+function _falloffMultiplier(falloff: SurfaceRimFalloff, t: number): number {
+  switch (falloff) {
+    case 'hard': return 1;
+    case 'linear': return 1 - t;
+    case 'smooth': { const u = 1 - t; return u * u * (3 - 2 * u); }
+    case 'exponential': return Math.pow(1 - t, 2);
+  }
+}
+
+/** Per-depth strength function for a custom (non-default) Surface Rim style. */
+function _customStrengthForDepth(style: SurfaceRimStyle, bandCount: number): (depth: number) => number {
+  if (style.mode === 'none') return () => 0;
+  return (depth: number): number => {
+    const t = bandCount <= 1 ? 0 : depth / (bandCount - 1);
+    const mul = style.mode === 'solid' ? 1 : _falloffMultiplier(style.falloff, t);
+    return style.opacity * mul;
+  };
+}
+
+// ── 'inverted' mode: interior darkening distance field ─────────────────────────
+
+/**
+ * Distance (in tiles) beyond which interior darkening saturates at the full
+ * configured `interiorDarkness` — a tuning constant, not a hard room-size
+ * limit (see surfaceRimDistanceField.ts for how distances are computed).
+ */
+const _INTERIOR_DARKNESS_MAX_DISTANCE_TILES = 6;
+
+/**
+ * Interior-darkening strength at a given BFS distance (tiles) from the
+ * nearest exposed edge, for 'inverted' mode. Reuses `_falloffMultiplier` —
+ * which is a "1 at the rim, 0 far away" curve for the *rim* bands — mirrored
+ * around `1 - normalizedDistance` so it becomes "0 at the rim (distance 0),
+ * interiorDarkness at/beyond the max distance" for the *interior*. 'hard' is
+ * special-cased to an explicit step (distance 0 → 0, else full darkness)
+ * since `_falloffMultiplier('hard', t)` is a constant 1 regardless of `t` and
+ * would otherwise ignore the "distance 0 = no darkening" requirement.
+ */
+function _interiorDarknessAtDistance(style: SurfaceRimStyle, distanceTiles: number): number {
+  if (distanceTiles <= 0) return 0;
+  if (style.falloff === 'hard') return style.interiorDarkness;
+  const normalized = Math.min(1, distanceTiles / _INTERIOR_DARKNESS_MAX_DISTANCE_TILES);
+  return style.interiorDarkness * _falloffMultiplier(style.falloff, 1 - normalized);
+}
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
@@ -219,8 +281,11 @@ function _drawTrimmedSideBand(
   col: number,
   row: number,
   darknessMul: number,
+  bandCount: number = _BAND_COUNT,
+  strengthForDepth: ((depth: number) => number) | null = null,
+  rgbTriplet: string = '255,255,255',
 ): void {
-  const cornerSpan = _BAND_COUNT * bandUnit;
+  const cornerSpan = bandCount * bandUnit;
 
   // A horizontal band (top/bottom) trims its X extent where left/right are
   // also exposed; a vertical band (left/right) trims its Y extent where
@@ -233,10 +298,10 @@ function _drawTrimmedSideBand(
 
   const runStart = trimStart ? cornerSpan : 0;
 
-  for (let depth = 0; depth < _BAND_COUNT; depth++) {
-    const strength = _bandAlpha(col, row, side, depth) * darknessMul;
+  for (let depth = 0; depth < bandCount; depth++) {
+    const strength = (strengthForDepth ? strengthForDepth(depth) : _bandAlpha(col, row, side, depth)) * darknessMul;
     if (strength <= 0) continue;
-    ctx.fillStyle = `rgba(255,255,255,${strength})`;
+    ctx.fillStyle = `rgba(${rgbTriplet},${strength})`;
     switch (side) {
       case 'top':
         ctx.fillRect(tileX + runStart, tileY + depth * bandUnit, runLength, bandUnit);
@@ -270,6 +335,9 @@ function _drawCornerRings(
   ctx: CanvasRenderingContext2D,
   tileX: number, tileY: number, sizeScreen: number, bandUnit: number,
   corner: CornerSide, col: number, row: number, darknessMul: number,
+  bandCount: number = _BAND_COUNT,
+  strengthForDepth: ((depth: number) => number) | null = null,
+  rgbTriplet: string = '255,255,255',
 ): void {
   const leftAnchor = corner === 'nw' || corner === 'sw';
   const topAnchor  = corner === 'nw' || corner === 'ne';
@@ -290,24 +358,24 @@ function _drawCornerRings(
       ? { y: originY + vStart * bandUnit, h: vLen * bandUnit }
       : { y: originY - (vStart + vLen) * bandUnit, h: vLen * bandUnit };
 
-  for (let depth = 0; depth < _BAND_COUNT; depth++) {
-    const strength = _bandAlpha(col, row, corner, depth) * darknessMul;
+  for (let depth = 0; depth < bandCount; depth++) {
+    const strength = (strengthForDepth ? strengthForDepth(depth) : _bandAlpha(col, row, corner, depth)) * darknessMul;
     if (strength <= 0) continue;
-    ctx.fillStyle = `rgba(255,255,255,${strength})`;
+    ctx.fillStyle = `rgba(${rgbTriplet},${strength})`;
 
     const rects: Rect[] = [];
-    // Ring `depth` = { (u,v) : min(u,v) === depth, u,v in [0, _BAND_COUNT) }.
-    // Part 1: row v = depth, u in [depth, _BAND_COUNT).
+    // Ring `depth` = { (u,v) : min(u,v) === depth, u,v in [0, bandCount) }.
+    // Part 1: row v = depth, u in [depth, bandCount).
     {
-      const uLen = _BAND_COUNT - depth;
+      const uLen = bandCount - depth;
       const { x, w } = uToScreenX(depth, uLen);
       const { y, h } = vToScreenY(depth, 1);
       rects.push({ x, y, w, h });
     }
-    // Part 2: column u = depth, v in [depth+1, _BAND_COUNT) — excludes the
+    // Part 2: column u = depth, v in [depth+1, bandCount) — excludes the
     // (depth, depth) cell already covered by part 1, so the two never overlap.
-    if (depth < _BAND_COUNT - 1) {
-      const vLen = _BAND_COUNT - depth - 1;
+    if (depth < bandCount - 1) {
+      const vLen = bandCount - depth - 1;
       const { x, w } = uToScreenX(depth, 1);
       const { y, h } = vToScreenY(depth + 1, vLen);
       rects.push({ x, y, w, h });
@@ -352,6 +420,30 @@ export interface SurfaceEdgeOverlayParams {
   filterColMaxBlocks: number;
   filterRowMinBlocks: number;
   filterRowMaxBlocks: number;
+  /**
+   * Optional per-tile Surface Rim style lookup. Returning null/undefined or a
+   * 'default'-mode style preserves the original hard-coded overlay exactly
+   * for that tile. Returning 'none' suppresses the overlay for that tile.
+   * Returning 'solid'/'gradient'/'inverted' draws the configured rim in the
+   * block's color/width/opacity/falloff instead.
+   */
+  getStyleForTile?: (col: number, row: number) => SurfaceRimStyle | null | undefined;
+  /**
+   * Interior tiles (solid, but with zero exposed cardinal sides — i.e. not
+   * present in `surfaceExposureMap.masks`) that should be checked for
+   * 'inverted'-mode darkening, together with their cached BFS distance (in
+   * tiles) to the nearest exposed edge. Both are already fully precomputed
+   * (see blockWallLayoutCache.ts / surfaceRimDistanceField.ts) — this pass
+   * only does O(1) map lookups per tile, no per-frame BFS or pixel scan.
+   * Tiles at distance 0 are handled by Pass A above and must not appear here.
+   */
+  interiorTileCoords?: readonly { col: number; row: number }[];
+  getInteriorDistanceForTile?: (col: number, row: number) => number | undefined;
+}
+
+/** Width (in world pixels, same units as `SurfaceRimStyle.widthPx`) of one band-unit at the current scale. */
+function _bandUnitFor(scalePx: number, sizeScreen: number, bandCount: number): number {
+  return Math.max(1, Math.min(Math.round(scalePx), Math.floor(sizeScreen / bandCount)));
 }
 
 function _inFilterRange(col: number, row: number, params: SurfaceEdgeOverlayParams): boolean {
@@ -427,20 +519,35 @@ export function renderSurfaceEdgeOverlayPass(
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
+    const customStyle = params.getStyleForTile?.(col, row);
+    const isCustom = !!customStyle && customStyle.mode !== 'default';
+    if (isCustom && customStyle!.mode === 'none') continue; // 'none': suppress overlay entirely for this tile
+
+    const tileBandCount = isCustom ? customStyle!.widthPx : _BAND_COUNT;
+    const tileBandUnit = isCustom ? _bandUnitFor(scalePx, sizeScreen, tileBandCount) : bandUnit;
+    const strengthFn = isCustom ? _customStrengthForDepth(customStyle!, tileBandCount) : null;
+    const rgbTriplet = isCustom ? _hexToRgbTriplet(customStyle!.color) : '255,255,255';
+
     const sides: readonly SurfaceSide[] = ['top', 'right', 'bottom', 'left'];
     for (const side of sides) {
       if (!mask[side]) continue;
-      _drawTrimmedSideBand(ctx, tileX, tileY, sizeScreen, bandUnit, side, mask, col, row, darknessMul);
-      sideBandRectsDrawn += _BAND_COUNT;
+      _drawTrimmedSideBand(ctx, tileX, tileY, sizeScreen, tileBandUnit, side, mask, col, row, darknessMul,
+        tileBandCount, strengthFn, rgbTriplet);
+      sideBandRectsDrawn += tileBandCount;
     }
 
     const corners: readonly CornerSide[] = ['nw', 'ne', 'sw', 'se'];
     for (const corner of corners) {
       const [sideA, sideB] = _CORNER_ADJACENT_SIDES[corner];
       if (!mask[sideA] || !mask[sideB]) continue; // convex corner requires BOTH adjacent sides exposed
-      _drawCornerRings(ctx, tileX, tileY, sizeScreen, bandUnit, corner, col, row, darknessMul);
-      convexCornerRectsDrawn += _BAND_COUNT * 2 - 1;
+      _drawCornerRings(ctx, tileX, tileY, sizeScreen, tileBandUnit, corner, col, row, darknessMul,
+        tileBandCount, strengthFn, rgbTriplet);
+      convexCornerRectsDrawn += tileBandCount * 2 - 1;
     }
+    // 'inverted' interior darkening for THIS tile is 0 — it's at BFS distance
+    // 0 (it's in `masks`, i.e. directly exposed), and distance 0 always means
+    // no extra darkening (the rim bands above already mark it). Deeper
+    // interior tiles are darkened by Pass C below.
   }
 
   // ── Pass B: concave (inner) corners ──────────────────────────────────────────
@@ -453,14 +560,49 @@ export function renderSurfaceEdgeOverlayPass(
     const darknessMul = _darknessMulAtTile(col, row, params);
     if (darknessMul === null) continue; // already counted as skipped in pass A when the tile also has a mask entry
 
+    const customStyle = params.getStyleForTile?.(col, row);
+    const isCustom = !!customStyle && customStyle.mode !== 'default';
+    if (isCustom && customStyle!.mode === 'none') continue;
+
+    const tileBandCount = isCustom ? customStyle!.widthPx : _BAND_COUNT;
+    const tileBandUnit = isCustom ? _bandUnitFor(scalePx, sizeScreen, tileBandCount) : bandUnit;
+    const strengthFn = isCustom ? _customStrengthForDepth(customStyle!, tileBandCount) : null;
+    const rgbTriplet = isCustom ? _hexToRgbTriplet(customStyle!.color) : '255,255,255';
+
     const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
     const cornerSides: readonly CornerSide[] = ['nw', 'ne', 'sw', 'se'];
     for (const corner of cornerSides) {
       if (!corners[corner]) continue;
-      _drawCornerRings(ctx, tileX, tileY, sizeScreen, bandUnit, corner, col, row, darknessMul);
-      concaveCornerRectsDrawn += _BAND_COUNT * 2 - 1;
+      _drawCornerRings(ctx, tileX, tileY, sizeScreen, tileBandUnit, corner, col, row, darknessMul,
+        tileBandCount, strengthFn, rgbTriplet);
+      concaveCornerRectsDrawn += tileBandCount * 2 - 1;
+    }
+  }
+
+  // ── Pass C: 'inverted'-mode interior darkening for deeper tiles ─────────────
+  // Tiles with zero exposed cardinal sides never appear in `masks` (Pass A),
+  // so this is the only pass that can darken them. One O(1) map-lookup rect
+  // per candidate tile — no BFS or pixel work happens here, it was all done
+  // once at layout-cache build time (see surfaceRimDistanceField.ts).
+  if (params.interiorTileCoords && params.getInteriorDistanceForTile && params.getStyleForTile) {
+    for (const { col, row } of params.interiorTileCoords) {
+      if (!_inFilterRange(col, row, params)) continue;
+      const style = params.getStyleForTile(col, row);
+      if (!style || style.mode !== 'inverted' || style.interiorDarkness <= 0) continue;
+
+      const darknessMul = _darknessMulAtTile(col, row, params);
+      if (darknessMul === null) continue;
+
+      const distance = params.getInteriorDistanceForTile(col, row) ?? _INTERIOR_DARKNESS_MAX_DISTANCE_TILES;
+      const strength = _interiorDarknessAtDistance(style, distance) * darknessMul;
+      if (strength <= 0) continue;
+
+      const tileX = Math.round(col * blockSizePx * scalePx + offsetXPx);
+      const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
+      ctx.fillStyle = `rgba(0,0,0,${strength})`;
+      ctx.fillRect(tileX, tileY, sizeScreen, sizeScreen);
     }
   }
 

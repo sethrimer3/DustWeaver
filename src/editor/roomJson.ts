@@ -14,6 +14,7 @@
 import type { BlockTheme } from '../levels/roomDef';
 import { blockThemeRefToTheme, DEFAULT_ROPE_SEGMENT_COUNT } from '../levels/roomDef';
 import { isKnownMaterialId } from '../sim/pixelMaterials/pixelMaterialTypes';
+import { decodeSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 import { legacyChallengeGateToRoomGate, normalizeRoomGateDef } from '../levels/gateDefs';
 import type {
   EditorRoomData, EditorEnemy, EditorTransition, EditorWall,
@@ -207,6 +208,7 @@ function migrateTransitionPosition(
 export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { data: EditorRoomData; nextUid: number } {
   let uid = startUid;
 
+  const rimStylesTable = json.rimStyles;
   const interiorWalls: EditorWall[] = json.interiorWalls.map(w => ({
     uid: uid++,
     xBlock: w.xBlock,
@@ -219,6 +221,9 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     rampOrientation: w.rampOrientation,
     stairsOrientation: w.stairsOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
+    surfaceRim: w.r !== undefined && rimStylesTable !== undefined
+      ? decodeSurfaceRimStyle(rimStylesTable[w.r])
+      : undefined,
   }));
 
   const enemies: EditorEnemy[] = json.enemies.map(e => ({

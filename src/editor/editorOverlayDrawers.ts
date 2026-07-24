@@ -43,6 +43,7 @@ import {
   getEnemyFootprintBlocks, drawTransitionZone,
 } from './editorRendererHelpers';
 import type { IsElementSelected } from './editorZoneDrawers';
+import { drawEditorSurfaceRimOverlay } from './editorWallSurfaceRimPreview';
 
 // Re-export zone/environment draw helpers and the shared IsElementSelected type
 // so callers can import everything from this single file.
@@ -124,6 +125,11 @@ export function drawEditorWalls(
   // Subtle per-tile grid on top of the fills/outlines so individual tile
   // boundaries stay visible inside merged blocks (a decorating aid).
   drawWallTileGrid(ctx, cellOwner, offsetXPx, offsetYPx, zoom);
+
+  // Surface Rim preview (default hard-coded exposed-edge bands, or a
+  // per-block custom style) — drawn last so it sits on top, matching the
+  // gameplay renderer's draw order (wall sprites, then the overlay pass).
+  drawEditorSurfaceRimOverlay(ctx, room, offsetXPx, offsetYPx, zoom);
 }
 
 // ============================================================================

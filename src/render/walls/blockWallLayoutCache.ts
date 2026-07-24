@@ -15,6 +15,8 @@ import { CHUNK_SIZE_BLOCKS } from './chunkRenderCache';
 import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
 import { isPlainRectOrientationIndex } from '../../levels/stairsGeometry';
+import { type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from './surfaceRimStyle';
+import { buildInteriorRimDistanceField } from './surfaceRimDistanceField';
 
 // ── Fast layout signature hash ─────────────────────────────────────────────────
 
@@ -53,6 +55,11 @@ function _computeLayoutSignature(walls: WallSnapshot, blockSizePx: number): stri
       (walls.rampOrientationIndex[wi]  << 11) |
       (walls.isPillarHalfWidthFlag[wi] << 20)
     );
+    // Rim style edits must invalidate the layout cache too — fold the index
+    // in separately (it doesn't fit the bitpacked word above: values can
+    // exceed its remaining bit budget once a room has many distinct styles).
+    h = Math.imul(h, 1664525) + 1013904223 | 0;
+    h = h ^ (walls.surfaceRimStyleIndex[wi] | 0);
   }
   return `${visible}|${h >>> 0}`;
 }
@@ -93,6 +100,19 @@ export interface CachedWallLayout {
   halfPillarWalls: HalfPillarWallInfo[];
   /** Per-tile theme: maps tile key → BlockTheme (null = use room default). */
   tileTheme: Map<string, BlockTheme | null>;
+  /**
+   * Per-tile Surface Rim style: maps tile key → SurfaceRimStyle, only for
+   * tiles belonging to a wall with a non-default style (mirrors `tileTheme`).
+   * Absence (no map entry) means "use the default exposed-edge presentation".
+   */
+  tileSurfaceRim: Map<string, SurfaceRimStyle>;
+  /**
+   * Per-tile distance (in tiles) to the nearest exposed edge, via BFS over
+   * `occupied` seeded from `surfaceExposureMap.masks`. Powers the 'inverted'
+   * Surface Rim mode's interior darkening falloff (see surfaceEdgeOverlay.ts).
+   * Missing entry = unreachable pocket, treated as "at least max distance".
+   */
+  interiorRimDistanceField: Map<string, number>;
   /**
    * Authoritative tile-level open-air exposure, built from the same
    * `occupied` set above but room-bounds aware (out-of-bounds neighbours
@@ -245,11 +265,33 @@ export function getWallLayoutCache(
   }
 
   const _rebuildT0 = import.meta.env?.DEV ? performance.now() : 0;
+  _cachedWallLayout = buildWallLayout(walls, blockSizePx, widthBlocks, heightBlocks, signature);
+  if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
 
+  return _cachedWallLayout;
+}
+
+/**
+ * Pure (non-memoizing) layout builder — the actual computation
+ * `getWallLayoutCache` memoizes into the shared `_cachedWallLayout` module
+ * singleton above. Exported separately so callers that need their OWN
+ * independently-cached layout (e.g. the editor's live wall preview, which
+ * must not thrash the gameplay layout singleton — see
+ * editorWallSurfaceRimPreview.ts) can call this directly and manage their
+ * own memoization, without touching `_cachedWallLayout` at all.
+ */
+export function buildWallLayout(
+  walls: WallSnapshot,
+  blockSizePx: number,
+  widthBlocks: number,
+  heightBlocks: number,
+  signature: string,
+): CachedWallLayout {
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
   const platformEdgeByKey = new Map<string, number>();
   const tileTheme = new Map<string, BlockTheme | null>();
+  const tileSurfaceRim = new Map<string, SurfaceRimStyle>();
   const shapedWalls: ShapedWallInfo[] = [];
   const halfPillarWalls: HalfPillarWallInfo[] = [];
 
@@ -275,6 +317,10 @@ export function getWallLayoutCache(
     const wallTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
       : null;
+    const rimIdx = walls.surfaceRimStyleIndex[wi];
+    const wallRimStyle: SurfaceRimStyle | null = rimIdx !== SURFACE_RIM_STYLE_INDEX_DEFAULT
+      ? (walls.surfaceRimStyleTable[rimIdx] ?? null)
+      : null;
 
     // Half-pillar walls: add to normal occupied for lighting/neighbor purposes but
     // record for separate narrow rendering.
@@ -294,6 +340,13 @@ export function getWallLayoutCache(
           }
         }
       }
+      if (wallRimStyle !== null) {
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c < colCount; c++) {
+            tileSurfaceRim.set(wallTileKey(colStart + c, rowStart + r), wallRimStyle);
+          }
+        }
+      }
       continue;
     }
 
@@ -310,6 +363,9 @@ export function getWallLayoutCache(
         }
         if (wallTheme !== null) {
           tileTheme.set(key, wallTheme);
+        }
+        if (wallRimStyle !== null) {
+          tileSurfaceRim.set(key, wallRimStyle);
         }
       }
     }
@@ -348,8 +404,13 @@ export function getWallLayoutCache(
     isSolidAt: (col: number, row: number): boolean => occupied.has(wallTileKey(col, row)),
   };
   const surfaceExposureMap = buildSurfaceExposureMap(solidityGrid);
+  // Cheap BFS over `occupied`/`masks` (already computed above) — only runs
+  // when the layout cache itself rebuilds, never per-frame. See
+  // surfaceRimDistanceField.ts for why this is safe to compute unconditionally
+  // even for rooms with no custom rim styles: it's O(occupied tiles) either way.
+  const interiorRimDistanceField = buildInteriorRimDistanceField(occupied, surfaceExposureMap.masks);
 
-  _cachedWallLayout = {
+  const layout: CachedWallLayout = {
     signature,
     blockSizePx,
     occupied,
@@ -359,6 +420,8 @@ export function getWallLayoutCache(
     shapedWalls,
     halfPillarWalls,
     tileTheme,
+    tileSurfaceRim,
+    interiorRimDistanceField,
     surfaceExposureMap,
     ambientDepthsByKey: new Map<string, Map<string, number>>(),
     solid2x2Map: _buildSolid2x2Map(walls, blockSizePx),
@@ -371,11 +434,9 @@ export function getWallLayoutCache(
 
   // Build per-chunk buckets AFTER all arrays are populated so the bucket maps
   // reflect the final state and chunk rebuilds are O(items-in-chunk).
-  _buildChunkBuckets(_cachedWallLayout, walls);
+  _buildChunkBuckets(layout, walls);
 
-  if (import.meta.env?.DEV) FP.recordLayoutWork(_sigMs, performance.now() - _rebuildT0, walls.count);
-
-  return _cachedWallLayout;
+  return layout;
 }
 
 // ── Per-chunk bucket builder ───────────────────────────────────────────────────

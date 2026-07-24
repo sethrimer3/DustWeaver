@@ -20,6 +20,7 @@ import {
 } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { markTimeStopFieldsDirty } from '../sim/timeStopField/timeStopFieldCache';
 import {
   type RoomDef,
@@ -122,6 +123,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.wallWWorld[wi] = wBlock * BLOCK_SIZE_MEDIUM;
     world.wallHWorld[wi] = hBlock * BLOCK_SIZE_MEDIUM;
     world.wallThemeIndex[wi] = WALL_THEME_DEFAULT_INDEX;
+    world.wallSurfaceRimStyleIndex[wi] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
     world.wallSoundHardnessIndex[wi] = resolveWallSoundHardnessIndex(room, undefined);
     world.wallIsInvisibleFlag[wi] = 0;
     world.wallIsPlatformFlag[wi] = 0;
@@ -255,6 +257,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
         ? blockThemeToIndex(b.blockTheme)
         : WALL_THEME_DEFAULT_INDEX;
+      world.wallSurfaceRimStyleIndex[wallIdx] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
@@ -337,6 +340,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
         ? blockThemeToIndex(b.blockTheme)
         : WALL_THEME_DEFAULT_INDEX;
+      world.wallSurfaceRimStyleIndex[wallIdx] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
@@ -375,6 +379,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSurfaceRimStyleIndex[wallIdx] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
@@ -412,6 +417,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSurfaceRimStyleIndex[wallIdx] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
       world.wallIsInvisibleFlag[wallIdx] = 1;  // Mark invisible: kinetic block visuals are drawn separately in renderHazards
       world.wallIsPlatformFlag[wallIdx] = 0;

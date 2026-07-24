@@ -516,6 +516,12 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       isPillarHalfWidthFlag: b.isPillarHalfWidthFlag.slice(),
       isIceFlag:             b.isIceFlag.slice(),
       isUltraIceFlag:        b.isUltraIceFlag.slice(),
+      // Absent on saves predating the Surface Rim system (schemaVersion < 2) —
+      // default to "no custom styles"; hydrateAndValidateBakedWallTemplate's
+      // schemaVersion check safely falls back to buildRoomWallTemplate() for
+      // those anyway, so this default is never actually consumed as data.
+      rimStyleIndex:         (b.rimStyleIndex ?? []).slice(),
+      rimStyles:             (b.rimStyles ?? []).slice(),
     };
   }
 
