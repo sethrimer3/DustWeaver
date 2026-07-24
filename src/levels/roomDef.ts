@@ -28,6 +28,7 @@ import type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTy
 export type { RoomPixelMaterialDef } from '../sim/pixelMaterials/pixelMaterialTypes';
 import type { RoomSongId } from '../audio/musicManager';
 import type { BlockTheme, BlockSoundHardness } from './blockTheme';
+import type { SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 import type {
   RoomSpikeDef,
   RoomSpringboardDef,
@@ -442,6 +443,12 @@ export interface RoomWallDef {
    * Only meaningful for walls that are 1×2 blocks and serve as pillars.
    */
   isPillarHalfWidthFlag?: 0 | 1;
+  /**
+   * Per-wall Surface Rim style override (see render/walls/surfaceRimStyle.ts).
+   * Undefined = 'default' style — preserves the original hard-coded
+   * exposed-edge presentation exactly.
+   */
+  surfaceRim?: SurfaceRimStyle;
 }
 
 /** Direction a transition tunnel faces. */
@@ -903,4 +910,14 @@ export interface RoomWallTemplate {
   readonly isUltraIceFlag: Uint8Array;
   /** 1 for walls whose theme is 'rocketBlock' — grants Movement V2 rocket boost on jump-off. */
   readonly isRocketBlockFlag: Uint8Array;
+  /**
+   * Per-wall Surface Rim style index — index into `rimStyleTable`, or
+   * `SURFACE_RIM_STYLE_INDEX_DEFAULT` for the default presentation. Mirrors
+   * `themeIndex`'s role in the merge pass: two walls only merge when their
+   * rim style index also matches, so distinctly-styled adjacent blocks are
+   * never fused into one AABB.
+   */
+  readonly rimStyleIndex: Uint16Array;
+  /** Dedup table of non-default Surface Rim styles referenced by `rimStyleIndex`. */
+  readonly rimStyleTable: readonly SurfaceRimStyle[];
 }

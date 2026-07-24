@@ -30,6 +30,7 @@ function installGateWall(world: WorldState, gateIndex: number): void {
   world.wallIsPlatformFlag[wallIndex] = 0;
   world.wallPlatformEdge[wallIndex] = 0;
   world.wallThemeIndex[wallIndex] = 255;
+  world.wallSurfaceRimStyleIndex[wallIndex] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
   world.wallSoundHardnessIndex[wallIndex] = 1;
   world.wallIsInvisibleFlag[wallIndex] = gateHasCollision(gate) ? 0 : 1;
   world.wallRampOrientationIndex[wallIndex] = 255;

@@ -11,6 +11,7 @@
 import type { WorldState } from '../sim/world';
 import { MAX_WALLS } from '../sim/world';
 import { RoomDef, BLOCK_SIZE_MEDIUM, WALL_THEME_DEFAULT_INDEX, type FallingBlockVariant } from '../levels/roomDef';
+import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { MAX_TILES_PER_GROUP, MAX_LANDING_CONTACTS, type FallingBlockGroup } from '../sim/fallingBlocks/fallingBlockTypes';
 import { resolveWallSoundHardnessIndex } from './gameRoom';
 
@@ -159,6 +160,7 @@ export function loadRoomFallingBlocks(world: WorldState, room: RoomDef): void {
         world.wallIsPlatformFlag[wallIndex]      = 0;
         world.wallPlatformEdge[wallIndex]        = 0;
         world.wallThemeIndex[wallIndex]          = WALL_THEME_DEFAULT_INDEX;
+        world.wallSurfaceRimStyleIndex[wallIndex] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
         world.wallSoundHardnessIndex[wallIndex]  = resolveWallSoundHardnessIndex(room, undefined);
         // Falling block groups render through renderFallingBlocks(). These wall
         // slots exist only for collision/movement integration and must stay

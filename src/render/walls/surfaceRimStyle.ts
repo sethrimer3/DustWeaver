@@ -25,6 +25,15 @@ export interface SurfaceRimStyle {
   readonly interiorDarkness: number;
 }
 
+/**
+ * Sentinel `wallSurfaceRimStyleIndex` value meaning "use the default
+ * (original hard-coded) exposed-edge presentation" — mirrors the
+ * `wallThemeIndex === 255` "use room default" sentinel convention, but sized
+ * for a Uint16Array since the rim style table can exceed 255 entries in a
+ * large room with many distinct custom styles.
+ */
+export const SURFACE_RIM_STYLE_INDEX_DEFAULT = 0xFFFF;
+
 export const SURFACE_RIM_MODES: readonly SurfaceRimMode[] = ['default', 'none', 'solid', 'gradient', 'inverted'];
 export const SURFACE_RIM_FALLOFFS: readonly SurfaceRimFalloff[] = ['hard', 'linear', 'smooth', 'exponential'];
 

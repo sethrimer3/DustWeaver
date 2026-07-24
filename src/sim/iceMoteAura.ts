@@ -22,6 +22,7 @@
 import type { WorldState } from './world';
 import { MAX_WALLS } from './world';
 import { MAX_WATER_ZONES } from './worldHazardState';
+import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { ParticleKind } from './particles/kinds';
 import { MOTE_STATE_AVAILABLE } from './motes/orderedMoteQueue';
@@ -245,6 +246,7 @@ function _freezeZone(world: WorldState, zi: number): void {
   world.wallIsInvisibleFlag[wi]         = 0;
   world.wallIsPillarHalfWidthFlag[wi]   = 0;
   world.wallThemeIndex[wi]              = 255; // use room default
+  world.wallSurfaceRimStyleIndex[wi]    = SURFACE_RIM_STYLE_INDEX_DEFAULT;
   world.wallSoundHardnessIndex[wi]      = 1;   // normal hardness
 
   // ── Update tracking state ────────────────────────────────────────────────
@@ -291,6 +293,7 @@ function _thawZone(world: WorldState, zi: number): void {
     world.wallIsInvisibleFlag[thisWi]          = world.wallIsInvisibleFlag[lastWi];
     world.wallIsPillarHalfWidthFlag[thisWi]    = world.wallIsPillarHalfWidthFlag[lastWi];
     world.wallThemeIndex[thisWi]               = world.wallThemeIndex[lastWi];
+    world.wallSurfaceRimStyleIndex[thisWi]     = world.wallSurfaceRimStyleIndex[lastWi];
     world.wallSoundHardnessIndex[thisWi]       = world.wallSoundHardnessIndex[lastWi];
 
     // Update index maps for the moved zone.
