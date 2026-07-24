@@ -40,6 +40,11 @@ import { dominantCategory, ROOM_COMPLEXITY_CATEGORY_LABELS, type RoomComplexityS
 import {
   computeDensityDisplaySignature, capitalizeSeverity, formatDensityTotalLine, formatDensitySuffixLine,
 } from './editorDensityIndicatorFormat';
+import {
+  computeToolSig, computeBrushSig, computeCategorySig, computePaletteSelectionSig,
+  computeBlockModifierSig, computePaletteStructureSig,
+  computeInspectorIdentitySig, inspectorIdentitySigEquals, type InspectorIdentitySig,
+} from './editorUISignatures';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
@@ -503,13 +508,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
   container.appendChild(paletteDiv);
 
-  // Track rendered palette state to avoid recreating buttons every frame
-  let renderedCategory: PaletteCategory | null = null;
-  let lastRenderedBlockTheme = '';
-  let lastRenderedRecentBlockThemes = '';
+  // Track rendered palette state to avoid recreating buttons every frame.
+  // Single structural signature (computePaletteStructureSig) replaces the old
+  // 3-variable (category/theme/recentThemes) comparison — it also folds in
+  // the Custom Blocks registry so renames/property/usage changes rebuild
+  // while that category stays open, which the old comparison missed.
+  let lastPaletteStructureSig = '';
   /** Which theme slot (0-3) currently has its replace palette open, or null. */
   let themePaletteOpenForSlot: number | null = null;
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
+  let lastPaletteSelectionSig = '';
+  let lastToolSig = '';
+  let lastBrushSig = '';
+  let lastCategorySig = '';
+  let lastBlockModifierSig = '';
+  let lastInspectorIdentitySig: InspectorIdentitySig = { uid: -1, type: '', count: 0, dialogueEntryCount: -1 };
 
   const specialItemPickers = createEditorSpecialItemPickers(() => callbacks);
   const lightingPanel = createEditorLightingPanel(() => callbacks);
@@ -641,12 +654,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   container.appendChild(specialItemPickers.dustJarPickerDiv);
   container.appendChild(inspectorDiv);
 
-  // Track rendered inspector state to avoid recreating fields every frame
-  let inspectorElementUid: number = -1;
-  let inspectorElementType: string = '';
-  let inspectorElementCount: number = 0;
-  let inspectorDialogueEntryCount: number = -1;
-
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
   exportBtn.style.cssText += `
@@ -696,17 +703,29 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       densitySuffixLine.textContent = '';
     }
 
-    // Update tool highlight
-    for (const btn of toolBtns) {
-      btn.style.background = btn.dataset.tool === state.activeTool ? ACTIVE_BG : BTN_BG;
+    // Update tool highlight — only touch button styles when the active tool changed.
+    const toolSig = computeToolSig(state);
+    if (toolSig !== lastToolSig) {
+      lastToolSig = toolSig;
+      for (const btn of toolBtns) {
+        btn.style.background = btn.dataset.tool === state.activeTool ? ACTIVE_BG : BTN_BG;
+      }
     }
-    // Update brush mode highlight
-    for (const btn of brushBtns) {
-      btn.style.background = btn.dataset.brushMode === state.brushMode ? ACTIVE_BG : BTN_BG;
+    // Update brush mode highlight — only when the brush mode changed.
+    const brushSig = computeBrushSig(state);
+    if (brushSig !== lastBrushSig) {
+      lastBrushSig = brushSig;
+      for (const btn of brushBtns) {
+        btn.style.background = btn.dataset.brushMode === state.brushMode ? ACTIVE_BG : BTN_BG;
+      }
     }
-    // Update category highlight
-    for (const btn of catBtns) {
-      btn.style.background = btn.dataset.category === state.activeCategory ? ACTIVE_BG : BTN_BG;
+    // Update category highlight — only when the active category changed.
+    const categorySig = computeCategorySig(state);
+    if (categorySig !== lastCategorySig) {
+      lastCategorySig = categorySig;
+      for (const btn of catBtns) {
+        btn.style.background = btn.dataset.category === state.activeCategory ? ACTIVE_BG : BTN_BG;
+      }
     }
 
     // Update room dimensions section: create inputs on first load, then update values in-place
@@ -761,22 +780,22 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       }
     }
 
-    // Update palette area — recreate when category changes OR when block theme changes
+    // Update palette area — recreate only when the structural signature
+    // changes (category, block theme/slots, or — for Custom Blocks — the
+    // registry/usage signature; see computePaletteStructureSig).
     const currentTheme = state.selectedBlockTheme;
-    const recentBlockThemeSignature = state.recentBlockThemes.join('|') +
-      '|slots:' + state.blockThemeSlots.join(',') + '|active:' + state.activeBlockThemeSlotIndex;
     const currentLighting = state.roomData?.lightingEffect ?? 'DEFAULT';
-    const needsPaletteRebuild = renderedCategory !== state.activeCategory ||
-      (state.activeCategory === 'blocks' && (
-        currentTheme !== lastRenderedBlockTheme ||
-        recentBlockThemeSignature !== lastRenderedRecentBlockThemes
-      ));
+    const paletteStructureSig = computePaletteStructureSig(state, themePaletteOpenForSlot);
+    const needsPaletteRebuild = paletteStructureSig !== lastPaletteStructureSig;
 
     if (needsPaletteRebuild) {
-      renderedCategory = state.activeCategory;
-      lastRenderedBlockTheme = currentTheme;
-      lastRenderedRecentBlockThemes = recentBlockThemeSignature;
-      paletteDiv.innerHTML = '';
+      lastPaletteStructureSig = paletteStructureSig;
+      // Preserve scroll position across a rebuild — a rebuild can happen
+      // while the user is scrolled partway down a long palette (e.g. a
+      // custom-block usage count changing elsewhere shouldn't jump them
+      // back to the top).
+      const savedPaletteScrollTop = paletteDiv.scrollTop;
+      paletteDiv.replaceChildren();
       paletteItems = [];
 
       if (state.activeCategory === 'blocks') {
@@ -807,7 +826,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
             () => callbacks?.onBlockThemeSlotActivate(slotIndex),
             () => {
               themePaletteOpenForSlot = themePaletteOpenForSlot === slotIndex ? null : slotIndex;
-              lastRenderedBlockTheme = '';
+              lastPaletteStructureSig = '';
             },
           );
           slotRow.appendChild(slot);
@@ -826,7 +845,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
             const chip = makeThemeChip(th.id, th.label, th.shortId, th.id === state.blockThemeSlots[targetSlot], () => {
               callbacks?.onBlockThemeSlotAssign(targetSlot, th.id as BlockTheme);
               themePaletteOpenForSlot = null;
-              lastRenderedBlockTheme = '';
+              lastPaletteStructureSig = '';
             });
             themePaletteGrid.appendChild(chip);
           }
@@ -1022,15 +1041,23 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           paletteDiv.appendChild(grid);
         }
       }
+      // Restore scroll position now that the rebuilt content is in place.
+      paletteDiv.scrollTop = savedPaletteScrollTop;
     } else if (state.activeCategory === 'lighting') {
       lightingPanel.syncInPlace(state, currentLighting);
     }
 
-    // Update palette selection highlight
-    for (const { btn, itemId } of paletteItems) {
-      const isSelected = state.selectedPaletteItem?.id === itemId;
-      btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
-      btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
+    // Update palette selection highlight — only touch button styles when the
+    // selected item actually changed (not on every frame, and not as part of
+    // a structural rebuild check above).
+    const paletteSelectionSig = computePaletteSelectionSig(state);
+    if (paletteSelectionSig !== lastPaletteSelectionSig || needsPaletteRebuild) {
+      lastPaletteSelectionSig = paletteSelectionSig;
+      for (const { btn, itemId } of paletteItems) {
+        const isSelected = state.selectedPaletteItem?.id === itemId;
+        btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
+        btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
+      }
     }
 
     specialItemPickers.update(state);
@@ -1043,33 +1070,31 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       item.isBackgroundBlockItem !== 1;
     blockModifierDiv.style.display = isModifierEligible ? '' : 'none';
     if (isModifierEligible) {
-      for (const input of modifierInputs) {
-        input.checked = input.dataset.modifier === state.pendingBlockPlacementModifier;
+      // Only touch modifier checkbox/select DOM when the modifier state
+      // signature changed (not on every frame regardless of change).
+      const blockModifierSig = computeBlockModifierSig(state);
+      if (blockModifierSig !== lastBlockModifierSig) {
+        lastBlockModifierSig = blockModifierSig;
+        for (const input of modifierInputs) {
+          input.checked = input.dataset.modifier === state.pendingBlockPlacementModifier;
+        }
+        modifierCrumbleSelect.style.display = state.pendingBlockPlacementModifier === 'cracked' ? '' : 'none';
+        if (document.activeElement !== modifierCrumbleSelect) {
+          modifierCrumbleSelect.value = state.pendingCrumbleVariant;
+        }
+        const isBackgroundActive = state.pendingBlockPlacementModifier === 'background';
+        bgLightRow.style.display = isBackgroundActive ? 'flex' : 'none';
+        bgLightInput.checked = state.pendingBackgroundBlocksLight;
       }
-      modifierCrumbleSelect.style.display = state.pendingBlockPlacementModifier === 'cracked' ? '' : 'none';
-      if (document.activeElement !== modifierCrumbleSelect) {
-        modifierCrumbleSelect.value = state.pendingCrumbleVariant;
-      }
-      const isBackgroundActive = state.pendingBlockPlacementModifier === 'background';
-      bgLightRow.style.display = isBackgroundActive ? 'flex' : 'none';
-      bgLightInput.checked = state.pendingBackgroundBlocksLight;
     }
 
-    // Update inspector (only recreate when selected element changes)
-    const selUid = state.selectedElements.length > 0 ? state.selectedElements[0].uid : -1;
-    const selType = state.selectedElements.length > 0 ? state.selectedElements[0].type : '';
-    const selCount = state.selectedElements.length;
-    // For dialogue triggers, also rebuild when entry count changes (add/remove/reorder).
-    let dialogueEntryCount = -1;
-    if (selType === 'dialogueTrigger' && state.roomData) {
-      const dt = (state.roomData.dialogueTriggers ?? []).find(t => t.uid === selUid);
-      dialogueEntryCount = dt ? dt.entries.length : -1;
-    }
-    if (inspectorElementUid !== selUid || inspectorElementType !== selType || inspectorElementCount !== selCount || inspectorDialogueEntryCount !== dialogueEntryCount) {
-      inspectorElementUid = selUid;
-      inspectorElementType = selType;
-      inspectorElementCount = selCount;
-      inspectorDialogueEntryCount = dialogueEntryCount;
+    // Update inspector (only recreate when the selected-element identity
+    // changes). A focused inspector input is never replaced by unrelated
+    // tool/layer/palette/lighting/density/room-state updates — this gate is
+    // the reason: it only fires on an actual selection-identity change.
+    const inspectorIdentitySig = computeInspectorIdentitySig(state);
+    if (!inspectorIdentitySigEquals(inspectorIdentitySig, lastInspectorIdentitySig)) {
+      lastInspectorIdentitySig = inspectorIdentitySig;
       updateInspector(inspectorDiv, state, callbacks);
     }
   }
@@ -1079,19 +1104,19 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     update,
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
     destroy: () => {
-      renderedCategory = null;
+      lastPaletteStructureSig = '';
       paletteItems = [];
-      inspectorElementUid = -1;
-      inspectorElementType = '';
-      inspectorElementCount = 0;
-      inspectorDialogueEntryCount = -1;
+      lastPaletteSelectionSig = '';
+      lastToolSig = '';
+      lastBrushSig = '';
+      lastCategorySig = '';
+      lastBlockModifierSig = '';
+      lastInspectorIdentitySig = { uid: -1, type: '', count: 0, dialogueEntryCount: -1 };
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;
       lastRenderedHeightBlocks = -1;
       lastRenderedBackgroundId = '';
       lastRenderedSongId = '';
-      lastRenderedBlockTheme = '';
-      lastRenderedRecentBlockThemes = '';
       lightingPanel.resetState();
       dimWidthInput = null;
       dimHeightInput = null;
