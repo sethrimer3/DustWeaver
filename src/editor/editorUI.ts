@@ -37,6 +37,9 @@ import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import type { BackgroundId } from '../levels/roomDef';
 import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
 import { dominantCategory, ROOM_COMPLEXITY_CATEGORY_LABELS, type RoomComplexitySeverity } from '../levels/roomComplexity';
+import {
+  computeDensityDisplaySignature, capitalizeSeverity, formatDensityTotalLine, formatDensitySuffixLine,
+} from './editorDensityIndicatorFormat';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
@@ -70,9 +73,16 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
 
   // ── Title ────────────────────────────────────────────────────────────────
+  // Built from DOM nodes (not innerHTML) so an authored campaign title can
+  // never be interpreted as markup.
   const title = document.createElement('div');
   if (campaignTitle) {
-    title.innerHTML = `🛠 Custom Campaign Editor<br><span style="font-size:11px;color:#ffcc66;font-weight:normal;">${campaignTitle}</span>`;
+    title.appendChild(document.createTextNode('🛠 Custom Campaign Editor'));
+    title.appendChild(document.createElement('br'));
+    const subtitle = document.createElement('span');
+    subtitle.style.cssText = 'font-size: 11px; color: #ffcc66; font-weight: normal;';
+    subtitle.textContent = campaignTitle;
+    title.appendChild(subtitle);
   } else {
     title.textContent = '🛠 Zone Editor';
   }
@@ -141,7 +151,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     font-size: 10.5px; color: #aaaaaa; margin-bottom: 10px; line-height: 1.5;
     padding: 4px 6px; border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
   `;
+  // Built once as static DOM nodes (no innerHTML) — update() only patches
+  // .textContent/.style.color on these when the underlying values change
+  // (see lastDensitySig below), instead of rebuilding every frame.
+  const densityTotalLine = document.createTextNode('');
+  const densitySeverityLabelLine = document.createTextNode('Severity: ');
+  const densitySeveritySpan = document.createElement('span');
+  densitySeveritySpan.style.fontWeight = 'bold';
+  const densitySuffixLine = document.createTextNode('');
+  densityIndicator.appendChild(densityTotalLine);
+  densityIndicator.appendChild(document.createElement('br'));
+  densityIndicator.appendChild(densitySeverityLabelLine);
+  densityIndicator.appendChild(densitySeveritySpan);
+  densityIndicator.appendChild(densitySuffixLine);
   container.appendChild(densityIndicator);
+  let lastDensitySig = '';
 
   if (import.meta.env.DEV) {
     const devToolsDiv = document.createElement('div');
@@ -650,17 +674,26 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   function update(state: EditorState): void {
     layersPanel.sync(state);
 
-    // Update room density indicator
+    // Update room density indicator — only touch the DOM when the displayed
+    // values actually change (analyzeEditorRoomComplexity itself still runs
+    // every frame; it's cheap. What Phase 5 targets is the unconditional
+    // innerHTML rewrite this replaces).
     if (state.roomData) {
       const report = analyzeEditorRoomComplexity(state.roomData);
-      const severityLabel = report.severity.charAt(0).toUpperCase() + report.severity.slice(1);
       const topCategory = ROOM_COMPLEXITY_CATEGORY_LABELS[dominantCategory(report.categoryCounts)];
-      densityIndicator.innerHTML =
-        `Room density: ${report.totalPlacedCount.toLocaleString()} elements<br>` +
-        `Severity: <span style="color:${DENSITY_SEVERITY_COLORS[report.severity]};font-weight:bold;">${severityLabel}</span> ` +
-        `&mdash; mostly ${topCategory}`;
-    } else {
-      densityIndicator.textContent = '';
+      const sig = computeDensityDisplaySignature(true, report.totalPlacedCount, report.severity, topCategory);
+      if (sig !== lastDensitySig) {
+        lastDensitySig = sig;
+        densityTotalLine.textContent = formatDensityTotalLine(report.totalPlacedCount);
+        densitySeveritySpan.textContent = capitalizeSeverity(report.severity);
+        densitySeveritySpan.style.color = DENSITY_SEVERITY_COLORS[report.severity];
+        densitySuffixLine.textContent = formatDensitySuffixLine(topCategory);
+      }
+    } else if (lastDensitySig !== '') {
+      lastDensitySig = '';
+      densityTotalLine.textContent = '';
+      densitySeveritySpan.textContent = '';
+      densitySuffixLine.textContent = '';
     }
 
     // Update tool highlight

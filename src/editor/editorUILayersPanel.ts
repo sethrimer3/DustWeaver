@@ -129,8 +129,27 @@ function makeToggle(icon: string, accessibleName: string, onClick: () => void): 
 }
 
 /** Builds the accessible name for a toggle button, including its current on/off state so screen readers don't rely on color alone. */
-function toggleAccessibleName(action: string, layerName: string, isOn: boolean): string {
+export function toggleAccessibleName(action: string, layerName: string, isOn: boolean): string {
   return `${action} for ${layerName} layer, currently ${isOn ? 'on' : 'off'}`;
+}
+
+/** Pure signature of a layer's 4 toggle states — a row's toggle DOM is only touched when this changes. */
+export function toggleSig(l: EditorLayerState): string {
+  return `${l.visible ? 1 : 0}${l.locked ? 1 : 0}${l.solo ? 1 : 0}${l.selectOnly ? 1 : 0}`;
+}
+
+/** Pure presentation for the collapse header — split out from the click handler so it's testable without a DOM. */
+export interface CollapseHeaderPresentation {
+  ariaExpanded: 'true' | 'false';
+  indicatorText: '▾' | '▸';
+  rowsDisplay: 'block' | 'none';
+}
+export function computeCollapseHeaderPresentation(collapsed: boolean): CollapseHeaderPresentation {
+  return {
+    ariaExpanded: collapsed ? 'false' : 'true',
+    indicatorText: collapsed ? '▸' : '▾',
+    rowsDisplay: collapsed ? 'none' : 'block',
+  };
 }
 
 export function createEditorLayersPanel(
@@ -179,9 +198,10 @@ export function createEditorLayersPanel(
   let collapsed = false;
   header.addEventListener('click', () => {
     collapsed = !collapsed;
-    rowsContainer.style.display = collapsed ? 'none' : 'block';
-    collapseIndicator.textContent = collapsed ? '▸' : '▾';
-    header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    const presentation = computeCollapseHeaderPresentation(collapsed);
+    rowsContainer.style.display = presentation.rowsDisplay;
+    collapseIndicator.textContent = presentation.indicatorText;
+    header.setAttribute('aria-expanded', presentation.ariaExpanded);
   });
 
   interface RowRefs {
@@ -248,10 +268,6 @@ export function createEditorLayersPanel(
     rows.set(id, { row, label, marker, visibleBtn, lockBtn, soloBtn, selectOnlyBtn, lastSig: '' });
   }
 
-  function toggleSig(l: EditorLayerState): string {
-    return `${l.visible ? 1 : 0}${l.locked ? 1 : 0}${l.solo ? 1 : 0}${l.selectOnly ? 1 : 0}`;
-  }
-
   function sync(state: EditorState): void {
     const targetLayer = getPlacementTargetLayer(state);
     const selectedLayers = getSelectedElementLayers(state);
@@ -276,18 +292,28 @@ export function createEditorLayersPanel(
       const sig = toggleSig(layer);
       if (sig !== r.lastSig) {
         r.lastSig = sig;
+        const layerName = LAYER_LABELS[id];
+
         r.visibleBtn.dataset.on = layer.visible ? '1' : '0';
         r.visibleBtn.style.background = layer.visible ? TOGGLE_ON_BG : TOGGLE_OFF_BG;
         r.visibleBtn.style.opacity = layer.visible ? '1' : '0.55';
+        r.visibleBtn.setAttribute('aria-pressed', layer.visible ? 'true' : 'false');
+        r.visibleBtn.setAttribute('aria-label', toggleAccessibleName('Toggle visibility', layerName, layer.visible));
 
         r.lockBtn.dataset.on = layer.locked ? '1' : '0';
         r.lockBtn.style.background = layer.locked ? LOCK_ON_BG : TOGGLE_OFF_BG;
+        r.lockBtn.setAttribute('aria-pressed', layer.locked ? 'true' : 'false');
+        r.lockBtn.setAttribute('aria-label', toggleAccessibleName('Toggle lock (prevents select/move/delete/edit)', layerName, layer.locked));
 
         r.soloBtn.dataset.on = layer.solo ? '1' : '0';
         r.soloBtn.style.background = layer.solo ? SOLO_ON_BG : TOGGLE_OFF_BG;
+        r.soloBtn.setAttribute('aria-pressed', layer.solo ? 'true' : 'false');
+        r.soloBtn.setAttribute('aria-label', toggleAccessibleName('Solo (isolate this layer\'s visibility)', layerName, layer.solo));
 
         r.selectOnlyBtn.dataset.on = layer.selectOnly ? '1' : '0';
         r.selectOnlyBtn.style.background = layer.selectOnly ? SELECT_ONLY_ON_BG : TOGGLE_OFF_BG;
+        r.selectOnlyBtn.setAttribute('aria-pressed', layer.selectOnly ? 'true' : 'false');
+        r.selectOnlyBtn.setAttribute('aria-label', toggleAccessibleName('Select-only / target-only (restrict selection & placement to select-only layers)', layerName, layer.selectOnly));
       }
 
       const selCount = selectionCountByLayer.get(id) ?? 0;
