@@ -10,6 +10,12 @@ import type { RoomDef } from '../levels/roomDef';
 import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, makeUniqueId, countCustomBlockUsage } from '../levels/customBlocks';
 import { registerCustomBlockSprite, invalidateCustomBlockSprite, updateCustomBlockProperties, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
 import { openCustomBlockDialog } from './editorCustomBlockDialog';
+import {
+  loadEditorWorkspacePreferences, createDebouncedWorkspacePreferencesSaver,
+  applyWorkspacePreferencesToLayers, extractWorkspaceLayerPrefs,
+  applyLayerPreset, resetWorkspaceLayers, defaultEditorWorkspacePreferences,
+  type EditorWorkspacePreferences,
+} from './editorWorkspacePreferences';
 import type { CameraState } from '../render/camera';
 import { CAMERA_DEFAULT_ZOOM, getCameraOffset } from '../render/camera';
 import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
@@ -309,6 +315,29 @@ export function createEditorController(
   const campaignSpawnCtx: CampaignSpawnContext = { state, campaignSession: activeCampaignSession, uiRoot };
   const usesCampaignStore = campaignSession?.campaignStore !== undefined;
 
+  // ── Editor workspace preferences (Phase 6) ────────────────────────────────
+  // Per-campaign, per-browser editor UI preferences (layer visibility/lock/
+  // select-only, layer-panel collapse, active category, brush mode, sidebar
+  // scroll) — never room/campaign data, never dirty/history, never exported.
+  // activeCampaignSession.campaign.campaign.id is stable for the lifetime of
+  // this controller (one controller per campaign-editing session), including
+  // the built-in campaign (id 'DUSTWEAVER_CAMPAIGN').
+  const workspaceCampaignKey = activeCampaignSession.campaign.campaign.id;
+  const workspaceSaver = createDebouncedWorkspacePreferencesSaver(workspaceCampaignKey);
+
+  /** Snapshots the live, persistable slice of workspace state and schedules a debounced write. */
+  function scheduleWorkspaceSave(): void {
+    const prefs: EditorWorkspacePreferences = {
+      ...defaultEditorWorkspacePreferences(),
+      layers: extractWorkspaceLayerPrefs(state.layers),
+      activeCategory: state.activeCategory,
+      brushMode: state.brushMode,
+      layerPanelCollapsed: ui?.getWorkspaceUIPrefsSnapshot().layerPanelCollapsed ?? false,
+      sidebarScrollTop: ui?.getWorkspaceUIPrefsSnapshot().sidebarScrollTop ?? 0,
+    };
+    workspaceSaver.schedule(prefs);
+  }
+
   function logEditorPerf(label: string, startMs: number): void {
     if (!import.meta.env.DEV) return;
     console.log(`[campaignPerf] ${label}: ${(performance.now() - startMs).toFixed(2)}ms`);
@@ -472,6 +501,12 @@ export function createEditorController(
     return liveEditorRoomDef;
   }
 
+  /** Returns `def` with spriteRevision bumped past whatever this block id previously had. */
+  function bumpSpriteRevision(def: import('../levels/customBlocks').CustomBlockDef): import('../levels/customBlocks').CustomBlockDef {
+    const prevRevision = state.customBlockRegistry.get(def.id)?.spriteRevision ?? 0;
+    return { ...def, spriteRevision: prevRevision + 1 };
+  }
+
   function rebuildCustomBlockUsage(): void {
     state.customBlockUsage.clear();
     const allRooms = campaignSession?.campaignStore?.rawRoomsById;
@@ -516,11 +551,24 @@ export function createEditorController(
 
       inputCleanup = attachEditorInputListeners(canvas, inputState, state);
 
+      // Load workspace preferences BEFORE createEditorUI() so the layers
+      // panel and palette are built already reflecting the restored state
+      // (preferences override defaults, never the other way around) —
+      // createEditorState() above already set every layer to its default.
+      const workspacePrefs = loadEditorWorkspacePreferences(workspaceCampaignKey);
+      state.layers = applyWorkspacePreferencesToLayers(workspacePrefs);
+      state.activeCategory = workspacePrefs.activeCategory;
+      state.brushMode = workspacePrefs.brushMode;
+
       const campaignTitle = activeCampaignSession.campaign.campaign.title;
       ui = createEditorUI(uiRoot, campaignTitle);
+      ui.applyWorkspaceUIPrefs({
+        layerPanelCollapsed: workspacePrefs.layerPanelCollapsed,
+        sidebarScrollTop: workspacePrefs.sidebarScrollTop,
+      });
       ui.setCallbacks({
         onToolChange: (tool) => { state.activeTool = tool; state.selectedElements = []; },
-        onCategoryChange: (cat) => { state.activeCategory = cat; },
+        onCategoryChange: (cat) => { state.activeCategory = cat; scheduleWorkspaceSave(); },
         onPaletteItemSelect: (item) => {
           state.selectedPaletteItem = item;
           state.activeTool = EditorTool.Place;
@@ -782,6 +830,7 @@ export function createEditorController(
             state.brushRectStartBlockX = null;
             state.brushRectStartBlockY = null;
           }
+          scheduleWorkspaceSave();
         },
         onCreateCustomBlock: (tileWidth: 1 | 2) => {
           const existingIds = new Set(state.customBlockRegistry.keys());
@@ -792,7 +841,7 @@ export function createEditorController(
               console.error('[editor] Created custom block failed validation:', parsed.errors);
               return;
             }
-            state.customBlockRegistry.set(parsed.def.id, parsed.def);
+            state.customBlockRegistry.set(parsed.def.id, bumpSpriteRevision(parsed.def));
             registerCustomBlockSprite(parsed.def);
             rebuildCustomBlockUsage();
             ui?.update(state);
@@ -809,12 +858,13 @@ export function createEditorController(
               console.error('[editor] Edited custom block failed validation:', parsed.errors);
               return;
             }
-            state.customBlockRegistry.set(parsed.def.id, parsed.def);
-            // Only rebuild the cached canvas when pixel data actually changed —
-            // a properties-only edit (e.g. materialResponse) updates the
-            // cached property bundle in place instead (Phase 2C).
+            // Only bump spriteRevision / rebuild the cached canvas when pixel
+            // data actually changed — a properties-only edit (e.g.
+            // materialResponse) updates the cached property bundle in place
+            // instead (Phase 2C) and doesn't need a sprite-level rebuild.
             const pixelsUnchanged = def.pixelData.length === parsed.def.pixelData.length &&
               def.pixelData.every((byte, i) => byte === parsed.def.pixelData[i]);
+            state.customBlockRegistry.set(parsed.def.id, pixelsUnchanged ? parsed.def : bumpSpriteRevision(parsed.def));
             if (!pixelsUnchanged || !updateCustomBlockProperties(parsed.def.id, parsed.def.properties)) {
               invalidateCustomBlockSprite(parsed.def);
               registerCustomBlockSprite(parsed.def);
@@ -828,10 +878,13 @@ export function createEditorController(
           const trimmed = newName.trim();
           if (trimmed.length === 0) return;
           // Rebuild def with the new name — ID and properties stay unchanged.
+          // spriteRevision carries over as-is (the name itself is already
+          // part of computeCustomBlockRegistrySig, so the rename still
+          // triggers a rebuild; spriteRevision only tracks pixel changes).
           const sourceDef = serializeCustomBlock(def.id, trimmed, def.tileWidth, def.tileHeight, def.pixelData, def.properties);
           const parsed = parseCustomBlockSource(sourceDef, { blockId: def.id });
           if (!parsed.ok) return;
-          state.customBlockRegistry.set(blockId, parsed.def);
+          state.customBlockRegistry.set(blockId, { ...parsed.def, spriteRevision: def.spriteRevision });
           // Sprite pixels didn't change — no need to invalidate the cached canvas.
           ui?.update(state);
         },
@@ -848,7 +901,7 @@ export function createEditorController(
             console.error('[editor] Duplicate custom block failed validation:', parsed.errors);
             return;
           }
-          state.customBlockRegistry.set(parsed.def.id, parsed.def);
+          state.customBlockRegistry.set(parsed.def.id, bumpSpriteRevision(parsed.def));
           registerCustomBlockSprite(parsed.def);
           rebuildCustomBlockUsage();
           ui?.update(state);
@@ -927,6 +980,24 @@ export function createEditorController(
             cancelActiveGesture();
           }
           ui?.update(state);
+          scheduleWorkspaceSave();
+        },
+        onApplyLayerPreset: (presetId) => {
+          // Direct state mutation — deliberately bypasses editorHistory (Phase
+          // 6: presets must never enter room undo history, and this isn't
+          // room data to begin with).
+          state.layers = applyLayerPreset(state.layers, presetId);
+          state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
+          ui?.update(state);
+          scheduleWorkspaceSave();
+        },
+        onResetWorkspace: () => {
+          state.layers = resetWorkspaceLayers();
+          state.activeCategory = 'blocks';
+          state.brushMode = 'single';
+          ui?.applyWorkspaceUIPrefs({ layerPanelCollapsed: false, sidebarScrollTop: 0 });
+          ui?.update(state);
+          scheduleWorkspaceSave();
         },
       });
     } else {
@@ -935,6 +1006,10 @@ export function createEditorController(
   }
 
   function closeEditor(): void {
+    // Flush any pending workspace-preference write BEFORE ui.destroy() so we
+    // can still read the live collapse/scroll state from it.
+    scheduleWorkspaceSave();
+    workspaceSaver.flush();
     // Cancel any in-progress drag/resize gesture BEFORE tearing down state —
     // an uncommitted live mutation must never survive editor close without
     // going through the normal commit/rollback flow.

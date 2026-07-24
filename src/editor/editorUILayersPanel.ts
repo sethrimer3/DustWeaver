@@ -15,6 +15,7 @@ import {
   type LayerId, type EditorLayerState, type PlacementStatus,
 } from './editorLayers';
 import { PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
+import { LAYER_PRESETS } from './editorWorkspacePreferences';
 
 /**
  * Pure computation of one layer row's combined presentation state — split out
@@ -74,6 +75,10 @@ export interface EditorLayersPanel {
   readonly div: HTMLDivElement;
   /** Refresh toggle states and the active-layer highlight from current EditorState. */
   sync(state: EditorState): void;
+  /** Applies a collapsed/expanded state without a user click — used to restore Phase 6 workspace preferences on load. */
+  setCollapsed(value: boolean): void;
+  /** Current collapsed state — read when saving workspace preferences. */
+  isCollapsed(): boolean;
 }
 
 const TOGGLE_ON_BG = 'rgba(0,200,100,0.35)';
@@ -188,6 +193,47 @@ export function createEditorLayersPanel(
   header.appendChild(collapseIndicator);
   div.appendChild(header);
 
+  // ── Built-in visibility presets + Reset Workspace (Phase 6) ───────────────
+  const presetRow = document.createElement('div');
+  presetRow.setAttribute('role', 'group');
+  presetRow.setAttribute('aria-label', 'Layer visibility presets');
+  presetRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px;';
+  for (const preset of LAYER_PRESETS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = preset.label;
+    btn.title = `Show only: ${preset.visibleLayers.map(id => LAYER_LABELS[id]).join(', ')}`;
+    btn.setAttribute('aria-label', `Apply "${preset.label}" layer visibility preset`);
+    btn.className = 'dw-layer-toggle-btn';
+    btn.style.cssText = `
+      flex: 1 1 auto; padding: 3px 6px; font-size: 10px;
+      border: 1px solid ${PANEL_BORDER}; border-radius: 2px; cursor: pointer;
+      background: ${TOGGLE_OFF_BG}; color: ${TEXT_COLOR};
+    `;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      getCallbacks()?.onApplyLayerPreset?.(preset.id);
+    });
+    presetRow.appendChild(btn);
+  }
+  const resetBtn = document.createElement('button');
+  resetBtn.type = 'button';
+  resetBtn.textContent = '↺ Reset Workspace';
+  resetBtn.title = 'Restore all layer visibility/lock/select-only, category, brush mode, and panel layout to defaults';
+  resetBtn.setAttribute('aria-label', 'Reset editor workspace to defaults');
+  resetBtn.className = 'dw-layer-toggle-btn';
+  resetBtn.style.cssText = `
+    flex: 1 1 100%; margin-top: 4px; padding: 3px 6px; font-size: 10px;
+    border: 1px solid ${PANEL_BORDER}; border-radius: 2px; cursor: pointer;
+    background: ${TOGGLE_OFF_BG}; color: ${TEXT_COLOR};
+  `;
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    getCallbacks()?.onResetWorkspace?.();
+  });
+  presetRow.appendChild(resetBtn);
+  div.appendChild(presetRow);
+
   const rowsContainer = document.createElement('div');
   rowsContainer.id = rowsContainerId;
   rowsContainer.setAttribute('role', 'group');
@@ -197,11 +243,7 @@ export function createEditorLayersPanel(
 
   let collapsed = false;
   header.addEventListener('click', () => {
-    collapsed = !collapsed;
-    const presentation = computeCollapseHeaderPresentation(collapsed);
-    rowsContainer.style.display = presentation.rowsDisplay;
-    collapseIndicator.textContent = presentation.indicatorText;
-    header.setAttribute('aria-expanded', presentation.ariaExpanded);
+    setCollapsed(!collapsed);
   });
 
   interface RowRefs {
@@ -345,5 +387,18 @@ export function createEditorLayersPanel(
     }
   }
 
-  return { div, sync };
+  function setCollapsed(value: boolean): void {
+    collapsed = value;
+    const presentation = computeCollapseHeaderPresentation(collapsed);
+    rowsContainer.style.display = presentation.rowsDisplay;
+    presetRow.style.display = presentation.rowsDisplay;
+    collapseIndicator.textContent = presentation.indicatorText;
+    header.setAttribute('aria-expanded', presentation.ariaExpanded);
+  }
+
+  function isCollapsed(): boolean {
+    return collapsed;
+  }
+
+  return { div, sync, setCollapsed, isCollapsed };
 }

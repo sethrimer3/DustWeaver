@@ -47,9 +47,15 @@ export function computeBlockThemeSig(state: EditorState, themePaletteOpenForSlot
 
 /**
  * Custom-block registry signature — definitions, names, properties,
- * ordering, selected block, and usage counts all fold in, so any of those
- * changing while the Custom Blocks category stays open triggers a rebuild
- * (this was previously missed: the palette only rebuilt on category change).
+ * ordering, sprite pixels (via spriteRevision — see CustomBlockDef), and
+ * usage counts all fold in, so any of those changing while the Custom
+ * Blocks category stays open triggers a rebuild (this was previously
+ * missed: the palette only rebuilt on category change).
+ *
+ * Deliberately EXCLUDES the selected custom block: selection is patched via
+ * computePaletteSelectionSig without a structural rebuild (custom-block
+ * cards are keyed by block id and their active/inactive styling is patched
+ * in place, same as ordinary palette items).
  */
 export function computeCustomBlockRegistrySig(state: EditorState): string {
   const parts: string[] = [];
@@ -57,12 +63,11 @@ export function computeCustomBlockRegistrySig(state: EditorState): string {
     const usage = state.customBlockUsage.get(id) ?? 0;
     parts.push(customBlockDefSig(id, def, usage));
   }
-  const selected = state.selectedPaletteItem?.customBlockId ?? '';
-  return `${parts.join(';')}|sel:${selected}`;
+  return parts.join(';');
 }
 
 function customBlockDefSig(id: string, def: CustomBlockDef, usageCount: number): string {
-  return `${id}:${def.name}:${def.tileWidth}x${def.tileHeight}:${JSON.stringify(def.properties)}:u${usageCount}`;
+  return `${id}:${def.name}:${def.tileWidth}x${def.tileHeight}:${JSON.stringify(def.properties)}:rev${def.spriteRevision ?? 0}:u${usageCount}`;
 }
 
 /**

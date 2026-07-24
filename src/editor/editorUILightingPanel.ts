@@ -18,6 +18,35 @@ import type {
 import { LIGHTING_OPTIONS, AMBIENT_LIGHT_DIRECTION_OPTIONS } from './editorState';
 import { PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 
+/**
+ * Deterministic value signature over every field syncInPlace() reads —
+ * cheap to compare with `===`, letting syncInPlace() return immediately
+ * (no DOM writes at all) when nothing relevant changed, instead of
+ * unconditionally rewriting every non-focused control's value every call.
+ */
+export function computeLightingValueSig(state: EditorState, currentLighting: string): string {
+  const room = state.roomData;
+  const s = room?.sunrays;
+  return [
+    currentLighting,
+    room?.ambientLightDirection ?? '',
+    room?.directionalBias ?? 0.65,
+    room?.sideExposureStrength ?? 0.35,
+    room?.minimumWallLight ?? 0.15,
+    room?.falloffPower ?? 1.4,
+    room?.backgroundLightSpill ?? 0.0,
+    room?.solidLightSoftness ?? 0.0,
+    room?.blockSeamBlending ?? 'off',
+    room?.voidEdgeStyle ?? 'off',
+    s?.enabled ?? false,
+    s?.style ?? 'soft',
+    s?.angleDeg ?? 100,
+    s?.intensity ?? 0.5,
+    s?.rayCount ?? 6,
+    s?.animationEnabled ?? true,
+  ].join('|');
+}
+
 export interface EditorLightingPanel {
   /** Top-level container div for all lighting controls. Appended to the
    *  palette area by `syncOnRebuild()` when the lighting category is active. */
@@ -42,6 +71,7 @@ export function createEditorLightingPanel(
   getCallbacks: () => EditorUICallbacks | null,
 ): EditorLightingPanel {
   let _lastRenderedLightingEffect = '';
+  let _lastSyncInPlaceSig = '';
 
   // ── Slider row helper ─────────────────────────────────────────────────────
   function makeSliderRow(
@@ -327,10 +357,18 @@ export function createEditorLightingPanel(
     sunraysRayCountValLabel.textContent = String(sunrays?.rayCount ?? 6);
     sunraysAnimCheckbox.checked = sunrays?.animationEnabled ?? true;
     _lastRenderedLightingEffect = currentLighting;
+    // Force the next syncInPlace() call to actually run — the values were
+    // just set unconditionally above, but _lastSyncInPlaceSig hasn't been
+    // told that yet (a rebuild doesn't otherwise touch it).
+    _lastSyncInPlaceSig = '';
     paletteDiv.appendChild(lightingDiv);
   }
 
   function syncInPlace(state: EditorState, currentLighting: string): void {
+    const sig = computeLightingValueSig(state, currentLighting);
+    if (sig === _lastSyncInPlaceSig) return;
+    _lastSyncInPlaceSig = sig;
+
     if (currentLighting !== _lastRenderedLightingEffect && document.activeElement !== lightingSelect) {
       _lastRenderedLightingEffect = currentLighting;
       lightingSelect.value = currentLighting;
@@ -379,6 +417,7 @@ export function createEditorLightingPanel(
 
   function resetState(): void {
     _lastRenderedLightingEffect = '';
+    _lastSyncInPlaceSig = '';
   }
 
   return { lightingDiv, syncOnRebuild, syncInPlace, resetState };

@@ -48,6 +48,11 @@ import {
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
+export interface EditorWorkspaceUIPrefs {
+  layerPanelCollapsed: boolean;
+  sidebarScrollTop: number;
+}
+
 export interface EditorUI {
   container: HTMLDivElement;
   /** Update UI to reflect current editor state. */
@@ -55,6 +60,10 @@ export interface EditorUI {
   /** Set callbacks. */
   setCallbacks: (cbs: EditorUICallbacks) => void;
   destroy: () => void;
+  /** Applies restored Phase 6 workspace UI preferences (layer-panel collapse, sidebar scroll). */
+  applyWorkspaceUIPrefs: (prefs: EditorWorkspaceUIPrefs) => void;
+  /** Reads the current live collapse/scroll state, for saving workspace preferences. */
+  getWorkspaceUIPrefsSnapshot: () => EditorWorkspaceUIPrefs;
 }
 
 // Re-export shared types so consumers that already import from editorUI.ts
@@ -517,11 +526,15 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   /** Which theme slot (0-3) currently has its replace palette open, or null. */
   let themePaletteOpenForSlot: number | null = null;
   let paletteItems: { btn: HTMLElement; itemId: string }[] = [];
+  /** Custom-block cards, keyed by "custom:<id>" — patched separately since
+   *  their active/inactive colors differ from the ordinary ACTIVE_BG/BTN_BG pair. */
+  let customBlockCards: { btn: HTMLElement; itemId: string }[] = [];
   let lastPaletteSelectionSig = '';
   let lastToolSig = '';
   let lastBrushSig = '';
   let lastCategorySig = '';
   let lastBlockModifierSig = '';
+  let lastModifierEligible: boolean | null = null;
   let lastInspectorIdentitySig: InspectorIdentitySig = { uid: -1, type: '', count: 0, dialogueEntryCount: -1 };
 
   const specialItemPickers = createEditorSpecialItemPickers(() => callbacks);
@@ -797,6 +810,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       const savedPaletteScrollTop = paletteDiv.scrollTop;
       paletteDiv.replaceChildren();
       paletteItems = [];
+      customBlockCards = [];
 
       if (state.activeCategory === 'blocks') {
         // ── Block theme slots ────────────────────────────────────────────────
@@ -1000,13 +1014,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
               blockCard.appendChild(btnRow2);
 
-              // Click card body = select for placement
+              // Click card body = select for placement. Active/inactive
+              // styling is NOT set here — selection is intentionally
+              // excluded from the Custom Blocks structural signature (so
+              // picking a different block doesn't rebuild this whole
+              // section), and is instead patched by the shared palette
+              // selection-highlight loop below via customBlockCards.
               const namespacedId = `custom:${rawId}`;
-              const isActive = state.selectedPaletteItem?.customBlockId === namespacedId;
-              if (isActive) {
-                blockCard.style.borderColor = '#7fda7f';
-                blockCard.style.background = '#1a2a1a';
-              }
+              customBlockCards.push({ btn: blockCard, itemId: namespacedId });
               blockCard.addEventListener('click', () => callbacks?.onSelectCustomBlockForPlacement?.(rawId));
               paletteDiv.appendChild(blockCard);
             }
@@ -1058,6 +1073,15 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
         btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
       }
+      // Custom-block cards use their own active/inactive palette rather than
+      // the generic ACTIVE_BG/BTN_BG pair, but are patched by this same
+      // signature-gated pass — selecting a different custom block never
+      // rebuilds the Custom Blocks section (see computePaletteStructureSig).
+      for (const { btn, itemId } of customBlockCards) {
+        const isSelected = state.selectedPaletteItem?.id === itemId;
+        btn.style.background = isSelected ? '#1a2a1a' : '#151525';
+        btn.style.borderColor = isSelected ? '#7fda7f' : '#444';
+      }
     }
 
     specialItemPickers.update(state);
@@ -1068,7 +1092,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       item.isPlatformItem !== 1 &&
       item.isRampItem !== 1 &&
       item.isBackgroundBlockItem !== 1;
-    blockModifierDiv.style.display = isModifierEligible ? '' : 'none';
+    if (isModifierEligible !== lastModifierEligible) {
+      lastModifierEligible = isModifierEligible;
+      blockModifierDiv.style.display = isModifierEligible ? '' : 'none';
+    }
     if (isModifierEligible) {
       // Only touch modifier checkbox/select DOM when the modifier state
       // signature changed (not on every frame regardless of change).
@@ -1103,14 +1130,24 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     container,
     update,
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
+    applyWorkspaceUIPrefs: (prefs: EditorWorkspaceUIPrefs) => {
+      layersPanel.setCollapsed(prefs.layerPanelCollapsed);
+      container.scrollTop = prefs.sidebarScrollTop;
+    },
+    getWorkspaceUIPrefsSnapshot: () => ({
+      layerPanelCollapsed: layersPanel.isCollapsed(),
+      sidebarScrollTop: container.scrollTop,
+    }),
     destroy: () => {
       lastPaletteStructureSig = '';
       paletteItems = [];
+      customBlockCards = [];
       lastPaletteSelectionSig = '';
       lastToolSig = '';
       lastBrushSig = '';
       lastCategorySig = '';
       lastBlockModifierSig = '';
+      lastModifierEligible = null;
       lastInspectorIdentitySig = { uid: -1, type: '', count: 0, dialogueEntryCount: -1 };
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;

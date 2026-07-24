@@ -63,8 +63,14 @@ test('palette structure signature is the single gate for the palette rebuild (no
 
 test('the layers panel collapse header wires its own click-driven state (Phase 5 accessibility pass), unaffected by update()', () => {
   const source = readFileSync(path.join(__dirname, '../editor/editorUILayersPanel.ts'), 'utf8');
-  // sync() must never touch `collapsed` — collapse state persists across update() calls.
-  const syncBody = source.slice(source.indexOf('function sync('), source.lastIndexOf('return { div, sync };'));
+  // sync() must never touch `collapsed` — collapse state persists across
+  // update() calls. Bounded to just the sync() function body (up to the next
+  // top-level `function` declaration), not the whole rest of the file —
+  // setCollapsed()/isCollapsed() legitimately touch `collapsed` and must not
+  // make this guard vacuously fail.
+  const syncStart = source.indexOf('function sync(');
+  const syncEnd = source.indexOf('\n  function ', syncStart + 1);
+  const syncBody = source.slice(syncStart, syncEnd);
   assert.ok(!/collapsed\s*=/.test(syncBody), 'expected sync() to never reassign the collapsed flag');
 });
 

@@ -379,6 +379,10 @@ export interface EditorUICallbacks {
   onSelectCustomBlockForPlacement?: (blockId: string) => void;
   /** Called when the user toggles a layer's visible/locked/solo/selectOnly state in the Layers panel. */
   onLayerStateChange: (id: import('./editorLayers').LayerId, patch: Partial<import('./editorLayers').EditorLayerState>) => void;
+  /** Called when the user applies a built-in layer visibility preset (Phase 6). */
+  onApplyLayerPreset?: (presetId: import('./editorWorkspacePreferences').LayerPresetId) => void;
+  /** Called when the user clicks "Reset Workspace" (Phase 6). */
+  onResetWorkspace?: () => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

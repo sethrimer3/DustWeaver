@@ -165,6 +165,40 @@ test('custom-block ordering change changes the registry signature', () => {
     'expected insertion-order (Map iteration order) to be reflected in the signature');
 });
 
+test('custom-block spriteRevision change (a pixel edit) changes the registry signature, without hashing the pixel buffer', () => {
+  const state = createEditorState();
+  state.activeCategory = 'customBlocks';
+  state.customBlockRegistry.set('block_a', makeCustomBlockDef({ spriteRevision: 0 }));
+  const before = computePaletteStructureSig(state, null);
+
+  // Same pixelData reference/content — only spriteRevision changed, which is
+  // exactly what a sprite-pixel edit does (see editorController.ts's
+  // bumpSpriteRevision helper). This proves the signature reacts to the
+  // revision counter alone, not to a full pixel-buffer comparison.
+  state.customBlockRegistry.set('block_a', makeCustomBlockDef({ spriteRevision: 1 }));
+  const after = computePaletteStructureSig(state, null);
+
+  assert.notEqual(before, after, 'expected a spriteRevision bump to change the Custom Blocks structural signature');
+});
+
+test('custom-block selection change does NOT change the palette structure signature (patched via selection, not rebuilt)', () => {
+  const state = createEditorState();
+  state.activeCategory = 'customBlocks';
+  state.customBlockRegistry.set('block_a', makeCustomBlockDef());
+  state.customBlockRegistry.set('block_b', makeCustomBlockDef({ id: 'block_b', name: 'Block B' }));
+  const before = computePaletteStructureSig(state, null);
+  const beforeSelectionSig = computePaletteSelectionSig(state);
+
+  state.selectedPaletteItem = {
+    id: 'custom:block_b', category: 'customBlocks', customBlockId: 'block_b',
+  } as unknown as EditorState['selectedPaletteItem'];
+  const after = computePaletteStructureSig(state, null);
+  const afterSelectionSig = computePaletteSelectionSig(state);
+
+  assert.equal(before, after, 'expected selecting a custom block to leave the structural signature unchanged');
+  assert.notEqual(beforeSelectionSig, afterSelectionSig, 'expected the selection signature itself to change so styling can still be patched');
+});
+
 test('unrelated state change while Custom Blocks is open does not change the registry signature', () => {
   const state = createEditorState();
   state.activeCategory = 'customBlocks';

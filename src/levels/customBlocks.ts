@@ -95,6 +95,15 @@ export interface CustomBlockDef {
   readonly pixelData: Uint8ClampedArray;
   /** Fully-resolved, validated property bundle (never undefined at runtime). */
   readonly properties: CustomBlockProperties;
+  /**
+   * In-memory-only counter bumped whenever this def's pixel data changes
+   * (create/edit-with-pixel-change/duplicate/import). Never serialized —
+   * exists purely so the editor UI can cheaply detect a sprite change
+   * without hashing the full pixel buffer every frame (see
+   * editorUISignatures.ts's computeCustomBlockRegistrySig). Absent/undefined
+   * is equivalent to 0.
+   */
+  readonly spriteRevision?: number;
 }
 
 // ── Editor placement (in EditorRoomData) ─────────────────────────────────────
