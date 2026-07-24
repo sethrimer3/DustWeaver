@@ -9,6 +9,7 @@ import {
   hashSurfaceRimStyle,
   encodeSurfaceRimStyle,
   decodeSurfaceRimStyle,
+  surfaceRimSuppressesBakedEdge,
 } from '../render/walls/surfaceRimStyle';
 
 test('normalizeSurfaceRimStyle: undefined/null input returns the default style', () => {
@@ -48,6 +49,14 @@ test('isDefaultSurfaceRimStyle / surfaceRimStylesEqual', () => {
   const none1 = normalizeSurfaceRimStyle({ mode: 'none', color: 'ff0000' });
   const none2 = normalizeSurfaceRimStyle({ mode: 'none', color: '00ff00' });
   assert.ok(surfaceRimStylesEqual(none1, none2));
+});
+
+test('baked edge suppression is enabled for every replacing mode only', () => {
+  assert.equal(surfaceRimSuppressesBakedEdge(undefined), false);
+  assert.equal(surfaceRimSuppressesBakedEdge(normalizeSurfaceRimStyle({ mode: 'default' })), false);
+  for (const mode of ['none', 'solid', 'gradient', 'inverted'] as const) {
+    assert.equal(surfaceRimSuppressesBakedEdge(normalizeSurfaceRimStyle({ mode })), true);
+  }
 });
 
 test('mode-specific canonicalization removes all visually irrelevant fields', () => {

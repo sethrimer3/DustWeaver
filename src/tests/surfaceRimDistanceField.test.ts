@@ -72,8 +72,10 @@ test('adjacent styles keep ownership and the solid seam receives no rim', () => 
   const seamInterior = layout.customSurfaceRimPixels.filter(p =>
     (p.xWorldPx === 31 || p.xWorldPx === 32) && p.yWorldPx === 28);
   assert.equal(seamInterior.length, 0);
-  assert.ok(layout.customSurfaceRimPixels.some(p => p.style.color === 'ff0000'));
-  assert.ok(layout.customSurfaceRimPixels.some(p => p.style.color === '00ff00'));
+  assert.ok(layout.customSurfaceRimPixels.some(p =>
+    layout.customSurfaceRimRenderData[p.renderDataIndex]?.style.color === 'ff0000'));
+  assert.ok(layout.customSurfaceRimPixels.some(p =>
+    layout.customSurfaceRimRenderData[p.renderDataIndex]?.style.color === '00ff00'));
 });
 
 test('inverted distance is world-pixel based and saturates at widthPx', () => {
@@ -133,6 +135,76 @@ test('none mode performs no pixel-distance construction', () => {
   assert.equal(layout.customSurfaceRimByChunkKey.size, 0);
 });
 
+test('render loop inputs are precomputed: compact style indexes and distance fill tables', () => {
+  const style = normalizeSurfaceRimStyle({
+    mode: 'inverted', color: '123456', widthPx: 9, opacity: 0.6, interiorDarkness: 0.7,
+  });
+  const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 24, h: 24, style }]), B, 10, 10);
+  assert.equal(layout.customSurfaceRimRenderData.length, 1);
+  assert.equal(layout.customSurfaceRimRenderData[0].fillStyleByDistance.length, style.widthPx + 1);
+  assert.ok(layout.customSurfaceRimPixels.every(pixel =>
+    Number.isInteger(pixel.renderDataIndex)
+    && pixel.renderDataIndex === 0
+    && !Object.hasOwn(pixel, 'style')));
+});
+
+function colorAt(layout: ReturnType<typeof getWallLayoutCache>, x: number, y: number): string | undefined {
+  const pixel = layout.customSurfaceRimPixels.find(p => p.xWorldPx === x && p.yWorldPx === y);
+  return pixel === undefined
+    ? undefined
+    : layout.customSurfaceRimRenderData[pixel.renderDataIndex]?.style.color;
+}
+
+test('overlap precedence matches base pass order and later placement order', () => {
+  const red = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000', widthPx: 3 });
+  const green = normalizeSurfaceRimStyle({ mode: 'solid', color: '00ff00', widthPx: 3 });
+  const inverted = normalizeSurfaceRimStyle({ mode: 'inverted', color: '0000ff', widthPx: 3 });
+
+  const defaultWins = getWallLayoutCache(snapshot([
+    { x: 16, y: 16, w: 8, h: 8, style: red },
+    { x: 16, y: 16, w: 8, h: 8 },
+  ]), B, 10, 10);
+  assert.equal(colorAt(defaultWins, 16, 16), undefined);
+
+  const laterCustomWins = getWallLayoutCache(snapshot([
+    { x: 16, y: 16, w: 8, h: 8, style: red },
+    { x: 16, y: 16, w: 8, h: 8, style: green },
+  ]), B, 10, 10);
+  assert.equal(colorAt(laterCustomWins, 16, 16), '00ff00');
+
+  const solidOverInverted = getWallLayoutCache(snapshot([
+    { x: 16, y: 16, w: 8, h: 8, style: inverted },
+    { x: 16, y: 16, w: 8, h: 8, style: red },
+  ]), B, 10, 10);
+  assert.equal(colorAt(solidOverInverted, 16, 16), 'ff0000');
+
+  const shapedWinsEvenWhenEarlier = getWallLayoutCache(snapshot([
+    { x: 16, y: 16, w: 8, h: 8, style: green, shape: 4 },
+    { x: 16, y: 16, w: 8, h: 8, style: red },
+  ]), B, 10, 10);
+  assert.equal(colorAt(shapedWinsEvenWhenEarlier, 22, 22), '00ff00');
+});
+
+test('room boundaries do not seed custom exposure, matching SurfaceExposureMap semantics', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 1 });
+  const cases = [
+    { spec: { x: 16, y: 0, w: 16, h: 8, style }, probe: '24,0' },
+    { spec: { x: 16, y: 72, w: 16, h: 8, style }, probe: '24,79' },
+    { spec: { x: 0, y: 16, w: 8, h: 16, style }, probe: '0,24' },
+    { spec: { x: 72, y: 16, w: 8, h: 16, style }, probe: '79,24' },
+  ];
+  for (const { spec, probe } of cases) {
+    const layout = getWallLayoutCache(snapshot([spec]), B, 10, 10);
+    const keys = new Set(layout.customSurfaceRimPixels.map(p => `${p.xWorldPx},${p.yWorldPx}`));
+    assert.equal(keys.has(probe), false, `room-boundary pixel ${probe} must not be exposed`);
+  }
+
+  const interior = getWallLayoutCache(
+    snapshot([{ x: 16, y: 16, w: 16, h: 8, style }]), B, 10, 10,
+  );
+  assert.ok(interior.customSurfaceRimPixels.some(p => p.xWorldPx === 24 && p.yWorldPx === 16));
+});
+
 test('custom buckets contain only their chunk pixels', () => {
   const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 3 });
   const layout = getWallLayoutCache(snapshot([{ x: 8, y: 8, w: 400, h: 8, style }]), B, 60, 10);
@@ -165,8 +237,105 @@ test('rendered custom pixels stay in geometry and are painted exactly once', () 
     filterColMinBlocks: 0, filterColMaxBlocks: 10,
     filterRowMinBlocks: 0, filterRowMaxBlocks: 10,
     customRimPixels: layout.customSurfaceRimPixels,
+    customRimRenderData: layout.customSurfaceRimRenderData,
   });
+  assert.ok(rects.length > 0);
   assert.ok(rects.every(r => r.w === 1 && r.h === 1
     && r.x >= 16 && r.x < 56 && r.y >= 16 && r.y < 56));
   assert.equal(new Set(rects.map(r => `${r.x},${r.y}`)).size, rects.length);
 });
+
+test('custom overlay replaces the legacy white overlay instead of blending over it', () => {
+  const style = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000', widthPx: 3, opacity: 1 });
+  const layout = getWallLayoutCache(snapshot([{ x: 16, y: 16, w: 8, h: 8, style }]), B, 10, 10);
+  const colors: string[] = [];
+  let fillStyle = '';
+  const ctx = {
+    globalCompositeOperation: 'source-over',
+    globalAlpha: 1,
+    save() {}, restore() {},
+    set fillStyle(value: string) { fillStyle = value; },
+    get fillStyle() { return fillStyle; },
+    fillRect() { colors.push(fillStyle); },
+  } as unknown as CanvasRenderingContext2D;
+  renderSurfaceEdgeOverlayPass(ctx, {
+    surfaceExposureMap: layout.surfaceExposureMap,
+    ambientDepths: null,
+    isBlockTintEnabled: false,
+    offsetXPx: 0, offsetYPx: 0, scalePx: 1, blockSizePx: B,
+    filterColMinBlocks: 0, filterColMaxBlocks: 10,
+    filterRowMinBlocks: 0, filterRowMaxBlocks: 10,
+    getStyleForTile: (col, row) => layout.tileSurfaceRim.get(`${col},${row}`),
+    customRimPixels: layout.customSurfaceRimPixels,
+    customRimRenderData: layout.customSurfaceRimRenderData,
+  });
+  assert.ok(colors.length > 0);
+  assert.ok(colors.every(color => color.startsWith('rgba(255,0,0,')));
+});
+
+test('stress: large dense room builds one wide inverted cache within a bounded budget', () => {
+  const style = normalizeSurfaceRimStyle({
+    mode: 'inverted', widthPx: 32, opacity: 0.7, interiorDarkness: 0.8,
+  });
+  const widthBlocks = 64;
+  const heightBlocks = 48;
+  const started = performance.now();
+  const layout = getWallLayoutCache(snapshot([{
+    x: 0, y: 0, w: widthBlocks * B, h: heightBlocks * B, style,
+  }]), B, widthBlocks, heightBlocks);
+  const elapsedMs = performance.now() - started;
+  const expectedPixels = widthBlocks * B * heightBlocks * B;
+  assert.equal(layout.customSurfaceRimPixels.length, expectedPixels);
+  assert.equal(layout.customSurfaceRimRenderData.length, 1);
+  assert.ok(elapsedMs < 5000, `layout build took ${elapsedMs.toFixed(1)}ms`);
+});
+
+for (const scale of [0.1, 0.5, 0.8, 1.25, 1.5625, 2.5, 16]) {
+  test(`fractional zoom ${scale} uses contiguous transformed boundaries`, () => {
+    const style = normalizeSurfaceRimStyle({ mode: 'solid', widthPx: 8, opacity: 1 });
+    const layout = getWallLayoutCache(
+      snapshot([{ x: 16, y: 16, w: 8, h: 8, style }]), B, 10, 10,
+    );
+    const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const ctx = {
+      globalCompositeOperation: 'source-over',
+      globalAlpha: 1,
+      save() {}, restore() {},
+      set fillStyle(_value: string) {},
+      fillRect(x: number, y: number, w: number, h: number) { rects.push({ x, y, w, h }); },
+    } as unknown as CanvasRenderingContext2D;
+    const offsetX = 0.37;
+    const offsetY = -0.41;
+    renderSurfaceEdgeOverlayPass(ctx, {
+      surfaceExposureMap: { masks: new Map(), segments: [], concaveCorners: [] },
+      ambientDepths: null,
+      isBlockTintEnabled: false,
+      offsetXPx: offsetX, offsetYPx: offsetY, scalePx: scale, blockSizePx: B,
+      filterColMinBlocks: 0, filterColMaxBlocks: 10,
+      filterRowMinBlocks: 0, filterRowMaxBlocks: 10,
+      customRimPixels: layout.customSurfaceRimPixels,
+      customRimRenderData: layout.customSurfaceRimRenderData,
+    });
+    assert.ok(rects.length > 0);
+    assert.ok(rects.every(r => r.w > 0 && r.h > 0), 'renderer must never issue zero-sized draws');
+    const cells = new Set<string>();
+    for (const rect of rects) {
+      for (let y = rect.y; y < rect.y + rect.h; y++) {
+        for (let x = rect.x; x < rect.x + rect.w; x++) {
+          const key = `${x},${y}`;
+          assert.equal(cells.has(key), false, `screen pixel ${key} was double-painted`);
+          cells.add(key);
+        }
+      }
+    }
+    const minX = Math.round(16 * scale + offsetX);
+    const maxX = Math.round(24 * scale + offsetX);
+    const minY = Math.round(16 * scale + offsetY);
+    const maxY = Math.round(24 * scale + offsetY);
+    for (let y = minY; y < maxY; y++) {
+      for (let x = minX; x < maxX; x++) {
+        assert.ok(cells.has(`${x},${y}`), `gap at ${x},${y}`);
+      }
+    }
+  });
+}

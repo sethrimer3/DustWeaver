@@ -25,55 +25,22 @@
  */
 
 import type { EditorRoomData, EditorWall } from './editorElementTypes';
-import { BLOCK_SIZE_SMALL, WALL_THEME_DEFAULT_INDEX } from '../levels/roomDef';
-import { wallShapeOrientationIndex } from '../levels/stairsGeometry';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { buildWallLayout, type CachedWallLayout } from '../render/walls/blockWallLayoutCache';
 import type { WallSnapshot } from '../render/snapshotTypes';
-import { hashSurfaceRimStyle, internSurfaceRimStyle, normalizeSurfaceRimStyle, type SurfaceRimStyle, SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
+import { hashSurfaceRimStyle, normalizeSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 import { renderSurfaceEdgeOverlayPass } from '../render/walls/surfaceEdgeOverlay';
+import { editorRoomDataToRoomDef } from './editorRoomBuilder';
+import { buildRoomWallTemplate } from '../screens/gameRoomWalls';
 
 /** Converts live editor wall data into a `WallSnapshot`, mirroring gameRoomWalls.ts's block-unit → world-px conversion. */
-function _editorWallsToSnapshot(walls: readonly EditorWall[]): WallSnapshot {
-  const count = walls.length;
-  const xWorld = new Float32Array(count);
-  const yWorld = new Float32Array(count);
-  const wWorld = new Float32Array(count);
-  const hWorld = new Float32Array(count);
-  const isPlatformFlag = new Uint8Array(count);
-  const platformEdge = new Uint8Array(count);
-  const themeIndex = new Uint8Array(count).fill(WALL_THEME_DEFAULT_INDEX);
-  const isInvisibleFlag = new Uint8Array(count);
-  const rampOrientationIndex = new Uint8Array(count);
-  const isPillarHalfWidthFlag = new Uint8Array(count);
-  const surfaceRimStyleIndex = new Uint16Array(count).fill(SURFACE_RIM_STYLE_INDEX_DEFAULT);
-  const rimStyleTable: SurfaceRimStyle[] = [];
-
-  walls.forEach((w, i) => {
-    xWorld[i] = w.xBlock * BLOCK_SIZE_SMALL;
-    yWorld[i] = w.yBlock * BLOCK_SIZE_SMALL;
-    wWorld[i] = Math.max(BLOCK_SIZE_SMALL, w.wBlock * BLOCK_SIZE_SMALL);
-    hWorld[i] = Math.max(BLOCK_SIZE_SMALL, w.hBlock * BLOCK_SIZE_SMALL);
-    isPlatformFlag[i] = w.isPlatformFlag;
-    platformEdge[i] = w.platformEdge;
-    rampOrientationIndex[i] = wallShapeOrientationIndex(w);
-    isPillarHalfWidthFlag[i] = w.isPillarHalfWidthFlag;
-    surfaceRimStyleIndex[i] = internSurfaceRimStyle(rimStyleTable, w.surfaceRim);
-  });
-
-  return {
-    count, xWorld, yWorld, wWorld, hWorld,
-    isPlatformFlag, platformEdge, themeIndex, isInvisibleFlag,
-    rampOrientationIndex, isPillarHalfWidthFlag,
-    surfaceRimStyleIndex, surfaceRimStyleTable: rimStyleTable,
-  };
-}
-
 /** Cheap per-wall signature — cheaper than a full WallSnapshot content hash, adequate for the small wall counts a single editor room has. */
-function _signatureFor(walls: readonly EditorWall[], widthBlocks: number, heightBlocks: number): string {
-  let s = `${widthBlocks}x${heightBlocks}|${walls.length}`;
+function _signatureFor(walls: readonly EditorWall[], widthBlocks: number, heightBlocks: number, roomTheme: string | null): string {
+  let s = `${widthBlocks}x${heightBlocks}|${roomTheme ?? ''}|${walls.length}`;
   for (const w of walls) {
     s += `|${w.xBlock},${w.yBlock},${w.wBlock},${w.hBlock},${w.isPlatformFlag},${w.platformEdge},` +
       `${w.rampOrientation ?? ''},${w.stairsOrientation ?? ''},${w.isPillarHalfWidthFlag},` +
+      `${w.blockTheme ?? ''},` +
       `${w.surfaceRim ? hashSurfaceRimStyle(normalizeSurfaceRimStyle(w.surfaceRim)) : ''}`;
   }
   return s;
@@ -87,11 +54,26 @@ let _editorLayoutCache: { signature: string; layout: CachedWallLayout } | null =
  * of the gameplay `blockWallLayoutCache.ts` singleton.
  */
 export function getEditorWallLayout(room: EditorRoomData): CachedWallLayout {
-  const signature = _signatureFor(room.interiorWalls, room.widthBlocks, room.heightBlocks);
+  const signature = _signatureFor(room.interiorWalls, room.widthBlocks, room.heightBlocks, room.blockTheme);
   if (_editorLayoutCache !== null && _editorLayoutCache.signature === signature) {
     return _editorLayoutCache.layout;
   }
-  const snapshot = _editorWallsToSnapshot(room.interiorWalls);
+  const template = buildRoomWallTemplate(editorRoomDataToRoomDef(room));
+  const snapshot: WallSnapshot = {
+    count: template.wallCount,
+    xWorld: template.xWorld,
+    yWorld: template.yWorld,
+    wWorld: template.wWorld,
+    hWorld: template.hWorld,
+    isPlatformFlag: template.isPlatformFlag,
+    platformEdge: template.platformEdge,
+    themeIndex: template.themeIndex,
+    isInvisibleFlag: template.isInvisibleFlag,
+    rampOrientationIndex: template.rampOrientationIndex,
+    isPillarHalfWidthFlag: template.isPillarHalfWidthFlag,
+    surfaceRimStyleIndex: template.rimStyleIndex,
+    surfaceRimStyleTable: template.rimStyleTable,
+  };
   const layout = buildWallLayout(snapshot, BLOCK_SIZE_SMALL, room.widthBlocks, room.heightBlocks, signature);
   _editorLayoutCache = { signature, layout };
   return layout;

@@ -372,13 +372,14 @@ export function getBlockSprite1x1(
   blockSizePx: number,
   seed: number,
   openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, false);
   if (pool.length === 0) return null;
   const hash    = hashTilePosition(col, row, seed);
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 block'], blockSizePx, blockSizePx, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 /**
@@ -398,6 +399,7 @@ export function getBlockSprite2x2(
   blockSizePx: number,
   seed: number,
   openAirSidesMask: number = OPEN_AIR_ALL_SIDES,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, true);
   if (pool.length === 0) return null;
@@ -405,7 +407,7 @@ export function getBlockSprite2x2(
   const baseUrl = _pickFromPool(pool, hash);
   if (baseUrl === null) return null;
   const dim = blockSizePx * 2;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 block'], dim, dim, false, false, 0, openAirSidesMask, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 /**
@@ -425,6 +427,7 @@ export function getPlatformSprite1x1(
   blockSizePx: number,
   platformEdge: number,
   seed: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, false);
   if (pool.length === 0) return null;
@@ -433,7 +436,7 @@ export function getPlatformSprite1x1(
   if (baseUrl === null) return null;
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
   // Platforms are always at the boundary of solid regions; use all-sides-open default.
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 platform'], blockSizePx, blockSizePx, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 platform'], blockSizePx, blockSizePx, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 /**
@@ -457,6 +460,7 @@ export function getPlatformSpriteFromBaseUrl(
   blockSizePx: number,
   platformEdge: number,
   seed: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
   return getProceduralSprite(
@@ -466,7 +470,7 @@ export function getPlatformSpriteFromBaseUrl(
     OPEN_AIR_ALL_SIDES,
     col * blockSizePx, row * blockSizePx,
     seed,
-    col, row,
+    col, row, suppressEdgeShading,
   );
 }
 
@@ -488,6 +492,7 @@ export function getPlatformSprite2x2(
   blockSizePx: number,
   platformEdge: number,
   seed: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const pool = getBaseSpriteProbePool(material, true);
   if (pool.length === 0) return null;
@@ -496,7 +501,7 @@ export function getPlatformSprite2x2(
   if (baseUrl === null) return null;
   const [flipX, flipY, rotStep] = _platformEdgeToTransform(platformEdge);
   const dim = blockSizePx * 2;
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 platform'], dim, dim, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['2x2 platform'], dim, dim, flipX, flipY, rotStep, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 /**
@@ -525,6 +530,7 @@ export function getStairsSprite(
   material: string,
   blockSizePx: number,
   seed: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const use2x2Pool = widthBlocks >= 2 || heightBlocks >= 2;
   const pool = getBaseSpriteProbePool(material, use2x2Pool);
@@ -547,7 +553,7 @@ export function getStairsSprite(
   }
 
   const [flipX, flipY] = _rampOriToFlips(orientation);
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 /**
@@ -576,6 +582,7 @@ export function getRampSprite(
   material: string,
   blockSizePx: number,
   seed: number,
+  suppressEdgeShading = false,
 ): HTMLCanvasElement | null {
   const use2x2Pool = widthBlocks >= 2 || heightBlocks >= 2;
   const pool = getBaseSpriteProbePool(material, use2x2Pool);
@@ -598,7 +605,7 @@ export function getRampSprite(
   }
 
   const [flipX, flipY] = _rampOriToFlips(orientation);
-  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS[shapeName], widthPx, heightPx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
 }
 
 // ── Derived-sprite prewarm helper ─────────────────────────────────────────────

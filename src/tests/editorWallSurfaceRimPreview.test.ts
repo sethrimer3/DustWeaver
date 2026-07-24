@@ -10,6 +10,8 @@ import type { EditorRoomData, EditorWall } from '../editor/editorElementTypes';
 import { getEditorWallLayout, drawEditorSurfaceRimOverlay } from '../editor/editorWallSurfaceRimPreview';
 import { normalizeSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 import { setPrebuiltWallLayout, getCurrentWallLayout } from '../render/walls/blockWallLayoutCache';
+import { editorRoomDataToRoomDef } from '../editor/editorRoomBuilder';
+import { buildRoomWallTemplate } from '../screens/gameRoomWalls';
 
 function makeWall(uid: number, overrides: Partial<EditorWall> = {}): EditorWall {
   return {
@@ -102,4 +104,45 @@ test('editor preview building/rebuilding never touches the gameplay blockWallLay
   getEditorWallLayout(makeRoom([makeWall(0), makeWall(1)]));
 
   assert.equal(getCurrentWallLayout(), sentinelLayout, 'the gameplay singleton must be untouched by editor-preview calls');
+});
+
+test('editor preview uses the runtime merge result for identical/different styles, themes, platforms, and shapes', () => {
+  const same = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000' });
+  const other = normalizeSurfaceRimStyle({ mode: 'solid', color: '00ff00' });
+  const cases: EditorWall[][] = [
+    [
+      makeWall(10, { xBlock: 2, surfaceRim: same }),
+      makeWall(11, { xBlock: 3, surfaceRim: same }),
+    ],
+    [
+      makeWall(20, { xBlock: 2, yBlock: 2, surfaceRim: same }),
+      makeWall(21, { xBlock: 3, yBlock: 2, surfaceRim: same }),
+      makeWall(22, { xBlock: 2, yBlock: 3, surfaceRim: same }),
+      makeWall(23, { xBlock: 3, yBlock: 3, surfaceRim: same }),
+      makeWall(24, { xBlock: 2, yBlock: 2, surfaceRim: other }),
+    ],
+    [
+      makeWall(30, { xBlock: 2, surfaceRim: same }),
+      makeWall(31, { xBlock: 3, surfaceRim: other }),
+    ],
+    [
+      makeWall(40, { xBlock: 2, surfaceRim: same, blockTheme: 'dirt' }),
+      makeWall(41, { xBlock: 3, surfaceRim: same, blockTheme: 'brownRock' }),
+    ],
+    [
+      makeWall(50, { xBlock: 2, surfaceRim: same, isPlatformFlag: 1 }),
+      makeWall(51, { xBlock: 3, surfaceRim: same, isPlatformFlag: 1 }),
+      makeWall(52, { xBlock: 4, surfaceRim: same, stairsOrientation: 0 }),
+    ],
+  ];
+
+  for (const walls of cases) {
+    const room = makeRoom(walls);
+    const runtimeTemplate = buildRoomWallTemplate(editorRoomDataToRoomDef(room));
+    const preview = getEditorWallLayout(room);
+    assert.equal(preview.wallCount, runtimeTemplate.wallCount);
+    assert.deepEqual(Array.from(preview.customSurfaceRimPixels), Array.from(
+      getEditorWallLayout(room).customSurfaceRimPixels,
+    ));
+  }
 });

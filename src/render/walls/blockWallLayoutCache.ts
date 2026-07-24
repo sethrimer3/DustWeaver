@@ -87,6 +87,7 @@ export interface CachedTileCoord {
   readonly row: number;
   /** platformEdge for platform tiles: 0=top, 1=bottom, 2=left, 3=right. Only meaningful for platformTiles. */
   readonly platformEdge: number;
+  readonly surfaceRimStyle?: SurfaceRimStyle;
 }
 
 /**
@@ -120,6 +121,7 @@ export interface CachedSurfaceRimRenderData {
 
 export interface CachedWallLayout {
   signature: string;
+  wallCount: number;
   blockSizePx: number;
   occupied: Set<string>;
   platformOccupied: Set<string>;
@@ -521,6 +523,7 @@ export function buildWallLayout(
   const occupied = new Set<string>();
   const platformOccupied = new Set<string>();
   const platformEdgeByKey = new Map<string, number>();
+  const platformStyleByKey = new Map<string, SurfaceRimStyle>();
   const tileTheme = new Map<string, BlockTheme | null>();
   const tileSurfaceRim = new Map<string, SurfaceRimStyle>();
   const shapedWalls: ShapedWallInfo[] = [];
@@ -577,6 +580,12 @@ export function buildWallLayout(
             tileSurfaceRim.set(wallTileKey(colStart + c, rowStart + r), wallRimStyle);
           }
         }
+      } else {
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c < colCount; c++) {
+            tileSurfaceRim.delete(wallTileKey(colStart + c, rowStart + r));
+          }
+        }
       }
       continue;
     }
@@ -589,6 +598,8 @@ export function buildWallLayout(
         if (walls.isPlatformFlag[wi] === 1) {
           platformOccupied.add(key);
           platformEdgeByKey.set(key, walls.platformEdge[wi]);
+          if (wallRimStyle === null) platformStyleByKey.delete(key);
+          else platformStyleByKey.set(key, wallRimStyle);
         } else {
           occupied.add(key);
         }
@@ -597,6 +608,8 @@ export function buildWallLayout(
         }
         if (wallRimStyle !== null) {
           tileSurfaceRim.set(key, wallRimStyle);
+        } else {
+          tileSurfaceRim.delete(key);
         }
       }
     }
@@ -621,6 +634,7 @@ export function buildWallLayout(
       col: parseInt(key.slice(0, commaIdx), 10),
       row: parseInt(key.slice(commaIdx + 1), 10),
       platformEdge: platformEdgeByKey.get(key) ?? 0,
+      surfaceRimStyle: platformStyleByKey.get(key),
     });
   }
 
@@ -646,6 +660,7 @@ export function buildWallLayout(
 
   const layout: CachedWallLayout = {
     signature,
+    wallCount: walls.count,
     blockSizePx,
     occupied,
     platformOccupied,

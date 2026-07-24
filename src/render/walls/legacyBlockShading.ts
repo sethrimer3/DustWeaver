@@ -73,6 +73,21 @@ function _drawUnshaded(img: HTMLImageElement, widthPx: number, heightPx: number)
   return c;
 }
 
+/** Returns the cached base sprite with no legacy organic edge treatment. */
+export function getLegacyUnshadedSprite(
+  img: HTMLImageElement,
+  widthPx: number,
+  heightPx: number,
+): HTMLCanvasElement {
+  const key = `${_identityKey(img)}|${widthPx}|${heightPx}`;
+  let unshaded = _unshadedCache.get(key);
+  if (unshaded === undefined) {
+    unshaded = _drawUnshaded(img, widthPx, heightPx);
+    _unshadedCache.set(key, unshaded);
+  }
+  return unshaded;
+}
+
 /**
  * Returns an edge-shaded canvas for a legacy/world-number block sprite.
  *
@@ -105,12 +120,7 @@ export function getLegacyShadedSprite(
 
   if (FP.isBakeForbiddenInGameplay() || FP.isBakeBudgetExhausted()) {
     if (!FP.isBakeForbiddenInGameplay()) FP.markBudgetExhaustedFallback();
-    const uKey = `${imgKey}|${widthPx}|${heightPx}`;
-    let unshaded = _unshadedCache.get(uKey);
-    if (unshaded === undefined) {
-      unshaded = _drawUnshaded(img, widthPx, heightPx);
-      _unshadedCache.set(uKey, unshaded);
-    }
+    const unshaded = getLegacyUnshadedSprite(img, widthPx, heightPx);
     legacyShadingStats.unshadedFallbacksThisFrame++;
     legacyShadingStats.totalUnshadedFallbacks++;
     FP.recordUnshadedFallback();

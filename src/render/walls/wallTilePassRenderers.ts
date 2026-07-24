@@ -46,7 +46,7 @@ import {
   getTheme2x2SpriteShaded,
   getFolderThemeBaseUrl,
 } from './folderBlockThemes';
-import { getLegacyShadedSprite } from './legacyBlockShading';
+import { getLegacyShadedSprite, getLegacyUnshadedSprite } from './legacyBlockShading';
 import * as FP from '../../debug/perfFreezeProfiler';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
@@ -68,6 +68,7 @@ import {
   applyStairsClipPath,
   applyRampClipPath,
 } from './wallTileDrawHelpers';
+import { surfaceRimSuppressesBakedEdge } from './surfaceRimStyle';
 
 // Dev-mode set of theme keys that have already triggered a missing-sprite warning.
 const _warnedMissingThemes: Set<string> = import.meta.env.DEV ? new Set() : (null as unknown as Set<string>);
@@ -308,6 +309,11 @@ export function render2x2Pass(
       ((topRightMask.right && bottomRightMask.right) ? OPEN_AIR_SIDE_E : 0) |
       ((bottomLeftMask.bottom && bottomRightMask.bottom) ? OPEN_AIR_SIDE_S : 0) |
       ((topLeftMask.left   && bottomLeftMask.left) ? OPEN_AIR_SIDE_W : 0);
+    const suppressBakedEdgeShading =
+      surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(topLeftKey))
+      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col + 1},${row}`))
+      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col},${row + 1}`))
+      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col + 1},${row + 1}`));
 
     if (import.meta.env?.DEV) {
       _recordWallCellDiag(col,     row,     '2x2', openAirSidesMask2x2, true);
@@ -317,7 +323,7 @@ export function render2x2Pass(
     }
 
     if (material !== null) {
-      const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask2x2);
+      const procSprite = getBlockSprite2x2(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask2x2, suppressBakedEdgeShading);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, drawSize, drawSize);
         if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
@@ -330,7 +336,9 @@ export function render2x2Pass(
       if (sprite !== null && isSpriteReady(sprite)) {
         ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
       } else if (isFolderBasedTheme(resolvedTheme)) {
-        const folderSprite = getTheme2x2SpriteShaded(resolvedTheme, col, row, activeWorldNumber, openAirSidesMask2x2, blockSizePx);
+        const folderSprite = suppressBakedEdgeShading
+          ? getTheme2x2Sprite(resolvedTheme, col, row, activeWorldNumber)
+          : getTheme2x2SpriteShaded(resolvedTheme, col, row, activeWorldNumber, openAirSidesMask2x2, blockSizePx);
         if (folderSprite !== null) {
           ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
           if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
@@ -418,13 +426,14 @@ export function render1x1Pass(
     // booleans above, which still drive the TILE_TABLE auto-tiling sprite
     // pick and are unaffected by this.
     const openAirSidesMask = surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(wallLayout.surfaceExposureMap, col, row));
+    const suppressBakedEdgeShading = surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(tileKey));
 
     if (import.meta.env?.DEV) {
       _recordWallCellDiag(col, row, '1x1', openAirSidesMask, false);
     }
 
     if (material !== null) {
-      const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask);
+      const procSprite = getBlockSprite1x1(col, row, material, blockSizePx, activeWorldNumber, openAirSidesMask, suppressBakedEdgeShading);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
         if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
@@ -433,7 +442,9 @@ export function render1x1Pass(
         drawFallbackTile(ctx, tileX, tileY, tileSizeScreen);
       }
     } else if (isFolderBasedTheme(tileTheme)) {
-      const folderSprite = getTheme1x1SpriteShaded(tileTheme, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
+      const folderSprite = suppressBakedEdgeShading
+        ? getTheme1x1Sprite(tileTheme, col, row, activeWorldNumber)
+        : getTheme1x1SpriteShaded(tileTheme, col, row, activeWorldNumber, openAirSidesMask, blockSizePx);
       if (folderSprite !== null) {
         ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
         if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
@@ -455,7 +466,9 @@ export function render1x1Pass(
       }
       const img = getSpriteForLegacyTheme(tileTheme, spec.variant, blockSizePx);
       if (isSpriteReady(img)) {
-        const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
+        const shaded = suppressBakedEdgeShading
+          ? getLegacyUnshadedSprite(img, img.naturalWidth, img.naturalHeight)
+          : getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
         if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
         if (tileTheme === 'brownRock' || spec.rotationRad === 0) {
           ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -476,7 +489,9 @@ export function render1x1Pass(
     } else {
       const img = sprites[spec.variant];
       if (isSpriteReady(img)) {
-        const shaded = getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
+        const shaded = suppressBakedEdgeShading
+          ? getLegacyUnshadedSprite(img, img.naturalWidth, img.naturalHeight)
+          : getLegacyShadedSprite(img, img.naturalWidth, img.naturalHeight, openAirSidesMask, col, row, activeWorldNumber, blockSizePx);
         if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
         if (spec.rotationRad === 0) {
           ctx.drawImage(shaded, tileX, tileY, tileSizeScreen, tileSizeScreen);
@@ -509,7 +524,7 @@ export function render1x1Pass(
     }
 
     // Vertex overlays only in world 1+ legacy mode.
-    if (isWorldMode && spec.variant === 'corner') {
+    if (!suppressBakedEdgeShading && isWorldMode && spec.variant === 'corner') {
       if (!isSpriteReady(sprites.vertex)) {
         hadFallbacks = true;
       } else {
@@ -592,13 +607,14 @@ export function renderPlatformPass(
     const tileY = Math.round(row * blockSizePx * scalePx + offsetYPx);
 
     const platformEdgeForTile = tile.platformEdge;
+    const suppressBakedEdgeShading = surfaceRimSuppressesBakedEdge(tile.surfaceRimStyle);
     const platTheme: BlockTheme | null = wallLayout.tileTheme.get(key) ?? roomTheme;
     const platMaterial = themeToProceduralMaterial(platTheme, activeWorldNumber);
 
     let platformDrawn = false;
 
     if (platMaterial !== null) {
-      const procSprite = getPlatformSprite1x1(col, row, platMaterial, blockSizePx, platformEdgeForTile, activeWorldNumber);
+      const procSprite = getPlatformSprite1x1(col, row, platMaterial, blockSizePx, platformEdgeForTile, activeWorldNumber, suppressBakedEdgeShading);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
         platformDrawn = true;
@@ -609,7 +625,7 @@ export function renderPlatformPass(
       const folderThemeId = platTheme as string;
       const baseUrl = getFolderThemeBaseUrl(folderThemeId, col, row, activeWorldNumber);
       if (baseUrl !== null) {
-        const folderSprite = getPlatformSpriteFromBaseUrl(baseUrl, col, row, blockSizePx, platformEdgeForTile, activeWorldNumber);
+        const folderSprite = getPlatformSpriteFromBaseUrl(baseUrl, col, row, blockSizePx, platformEdgeForTile, activeWorldNumber, suppressBakedEdgeShading);
         if (folderSprite !== null) {
           ctx.drawImage(folderSprite, tileX, tileY, tileSizeScreen, tileSizeScreen);
           platformDrawn = true;
@@ -699,6 +715,9 @@ export function renderShapedWallPass(
       ? indexToBlockTheme(walls.themeIndex[wi])
       : roomTheme;
     const material = themeToProceduralMaterial(theme, activeWorldNumber);
+    const wallStyleIndex = walls.surfaceRimStyleIndex[wi];
+    const wallStyle = wallStyleIndex === 0xFFFF ? undefined : walls.surfaceRimStyleTable[wallStyleIndex];
+    const suppressBakedEdgeShading = surfaceRimSuppressesBakedEdge(wallStyle);
 
     const drawFallbackShape = (fillColor: string, edgeColor: string): void => {
       if (isStairs) {
@@ -714,13 +733,13 @@ export function renderShapedWallPass(
       const widthBlocks  = Math.max(1, Math.round(walls.wWorld[wi] / blockSizePx));
       const heightBlocks = Math.max(1, Math.round(walls.hWorld[wi] / blockSizePx));
       const procSprite = isStairs
-        ? getStairsSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber)
-        : getRampSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber);
+        ? getStairsSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber, suppressBakedEdgeShading)
+        : getRampSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber, suppressBakedEdgeShading);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
       } else {
         hadFallbacks = true;
-        drawFallbackShape('#1a2535', '#5080b0');
+        drawFallbackShape('#1a2535', suppressBakedEdgeShading ? '#1a2535' : '#5080b0');
       }
     } else if (isFolderBasedTheme(theme)) {
       const use2x2 = Math.round(walls.wWorld[wi] / blockSizePx) >= 2 ||
@@ -765,7 +784,7 @@ export function renderShapedWallPass(
       } else {
         edgeColor = '#5080b0';
       }
-      drawFallbackShape(fillColor, edgeColor);
+      drawFallbackShape(fillColor, suppressBakedEdgeShading ? fillColor : edgeColor);
     }
   }
   return hadFallbacks;
@@ -809,6 +828,9 @@ export function renderHalfPillarPass(
     const pillarTheme: BlockTheme | null = walls.themeIndex[wi] !== WALL_THEME_DEFAULT_INDEX
       ? indexToBlockTheme(walls.themeIndex[wi])
       : roomTheme;
+    const styleIndex = walls.surfaceRimStyleIndex[wi];
+    const style = styleIndex === 0xFFFF ? undefined : walls.surfaceRimStyleTable[styleIndex];
+    const suppressBakedEdgeShading = surfaceRimSuppressesBakedEdge(style);
     const isLegacyBR2 = (pillarTheme === null) && (activeWorldNumber === 0);
     let pillarFill: string;
     let pillarEdge: string;
@@ -823,10 +845,12 @@ export function renderHalfPillarPass(
     const pillarWidthPx = wwPx;
     ctx.fillStyle = pillarFill;
     ctx.fillRect(Math.round(wxPx), Math.round(wyPx), Math.round(pillarWidthPx), Math.round(whPx));
-    ctx.strokeStyle = pillarEdge;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(Math.round(wxPx) + 0.5, Math.round(wyPx) + 0.5,
-      Math.round(pillarWidthPx) - 1, Math.round(whPx) - 1);
+    if (!suppressBakedEdgeShading) {
+      ctx.strokeStyle = pillarEdge;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(Math.round(wxPx) + 0.5, Math.round(wyPx) + 0.5,
+        Math.round(pillarWidthPx) - 1, Math.round(whPx) - 1);
+    }
   }
   return false;
 }
