@@ -73,7 +73,8 @@ test('handlePropertyChange: editing one control applies to every selected wall (
   // Before the edit, the two walls have different styles (a "mixed" state the inspector would show).
   assert.ok(!surfaceRimStylesEqual(wallA.surfaceRim!, wallB.surfaceRim!));
 
-  handlePropertyChange(room, [{ type: 'wall', uid: 0 }, { type: 'wall', uid: 1 }], history, 'wall.surfaceRim.color', 'abcdef');
+  const state = { ...createEditorState(), roomData: room, selectedElements: [{ type: 'wall', uid: 0 }, { type: 'wall', uid: 1 }] } as const;
+  handlePropertyChange(state, history, 'wall.surfaceRim.color', 'abcdef');
 
   assert.equal(wallA.surfaceRim?.color, 'abcdef');
   assert.equal(wallB.surfaceRim?.color, 'abcdef');
@@ -88,7 +89,8 @@ test('undo/redo: a Surface Rim edit round-trips cleanly through the editor histo
   const history = createEditorHistory();
 
   const before = structuredClone(wall.surfaceRim);
-  handlePropertyChange(room, [{ type: 'wall', uid: 0 }], history, 'wall.surfaceRim.color', '00ff00');
+  const state = { ...createEditorState(), roomData: room, selectedElements: [{ type: 'wall', uid: 0 }] } as const;
+  handlePropertyChange(state, history, 'wall.surfaceRim.color', '00ff00');
   assert.equal(room.interiorWalls[0].surfaceRim?.color, '00ff00');
 
   const undone = undo(history, room);
