@@ -22,14 +22,9 @@ import { MAX_PARTICLES } from '../../sim/particles/state';
 import { WorldSnapshot } from '../snapshot';
 import { PARTICLE_VERTEX_SHADER_SRC, PARTICLE_FRAGMENT_SHADER_SRC } from './shaders';
 import { ParticleTrailRenderer } from './trailRenderer';
-import { BEHAVIOR_MODE_GRAPPLE_CHAIN } from '../../sim/clusters/grappleShared';
-import { ParticleKind } from '../../sim/particles/kinds';
 import type { EditorRenderMask } from '../../editor/editorRenderMask';
-import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
-import { getLayerForParticleKind } from '../../editor/editorParticleLayers';
+import { FLOATS_PER_VERTEX, packFluidParticleVertices } from './webglVertexPacking';
 
-/** [x, y, kind, normalizedAge, disturbanceFactor, isOffensive, isSpent] per vertex */
-const FLOATS_PER_VERTEX = 7;
 const BYTES_PER_FLOAT   = 4;
 /** Visual diameter for each particle's point sprite, in world units.
  *  3 world units at zoom 1.0 = 3×3 in-game (virtual) pixels per mote. */
@@ -223,12 +218,6 @@ export class WebGLParticleRenderer {
 
     const gl = this.gl;
     const { particles } = snapshot;
-    const {
-      particleCount, isAliveFlag,
-      positionXWorld, positionYWorld,
-      kindBuffer, ageTicks, lifetimeTicks,
-      disturbanceFactor, behaviorMode, particleMoteSlotState,
-    } = particles;
 
     // ---- Update trail ring buffers (distance-gated, no allocations) -----
     if (this.trailRenderer !== null) {
@@ -236,28 +225,12 @@ export class WebGLParticleRenderer {
     }
 
     // ---- Pack alive-particle vertex data (no allocations) ---------------
-    const packed = this.packedVertexData;
-    let vertexCount = 0;
-    for (let i = 0; i < particleCount; i++) {
-      if (isAliveFlag[i] === 0) continue;
-      if (behaviorMode[i] === BEHAVIOR_MODE_GRAPPLE_CHAIN) continue;
-      // Non-Fluid gameplay particles are now rendered by the Pixel-Locked
-      // Prismatic Dust renderer (pixelLockedDustRenderer.ts) on the Canvas 2D
-      // virtual canvas.  Only Fluid background particles remain in WebGL.
-      if (kindBuffer[i] !== ParticleKind.Fluid) continue;
-      if (!isLayerVisibleInMask(mask, getLayerForParticleKind(kindBuffer[i]))) continue;
-      const base = vertexCount * FLOATS_PER_VERTEX;
-      const lt = lifetimeTicks[i];
-      const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
-      packed[base + 0] = positionXWorld[i] * scalePx + offsetXPx;
-      packed[base + 1] = positionYWorld[i] * scalePx + offsetYPx;
-      packed[base + 2] = kindBuffer[i];
-      packed[base + 3] = normAge;
-      packed[base + 4] = disturbanceFactor[i];
-      packed[base + 5] = behaviorMode[i] === 1 ? 1.0 : 0.0;
-      packed[base + 6] = particleMoteSlotState[i] !== 0 ? 1.0 : 0.0;
-      vertexCount++;
-    }
+    // Zero-fills packedVertexData first, then writes filtered vertices from
+    // index 0 — see webglVertexPacking.ts for why this guarantees no stale
+    // prior-frame data survives a layer-visibility toggle.
+    const vertexCount = packFluidParticleVertices(
+      particles, offsetXPx, offsetYPx, scalePx, mask, this.packedVertexData,
+    );
 
     // ---- Clear to transparent so the 2D canvas below shows through ----------
     gl.clearColor(0, 0, 0, 0);
@@ -280,7 +253,7 @@ export class WebGLParticleRenderer {
 
     // ---- Upload only the used slice to the GPU -------------------------
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, packed.subarray(0, vertexCount * FLOATS_PER_VERTEX));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.packedVertexData.subarray(0, vertexCount * FLOATS_PER_VERTEX));
 
     // ---- Single draw call ----------------------------------------------
     gl.useProgram(this.program);

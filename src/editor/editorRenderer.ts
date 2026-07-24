@@ -43,8 +43,9 @@ import {
 } from './editorPlacementPreviewDrawer';
 import type { EdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import { isLayerVisible, getLayerForElementType } from './editorLayers';
+import { getLayerForElementType } from './editorLayers';
 import type { SelectedElementType } from './editorElementTypes';
+import { buildEditorRenderMask } from './editorRenderMask';
 
 /**
  * Renders all editor overlays on the 2D canvas.
@@ -89,12 +90,16 @@ export function renderEditorOverlays(
   const isElementSelected = (type: string, uid: number): boolean =>
     state.selectedElements.some(e => e.type === type && e.uid === uid);
 
+  // Mask derived once from EditorState and passed down — no scattered direct
+  // isLayerVisible(state, ...) calls below (or in editorPlacementPreviewDrawer.ts).
+  const mask = buildEditorRenderMask(state);
+
   // Per-element-type visibility gate driven by the editor layer panel. Most
   // drawEditor* functions below cover a single layer's worth of content and
   // are gated with a single `layerOn(...)` check; a few (spawn/tombs,
   // collectibles, critter areas) mix several layers and are always called,
   // filtering per-item internally via `isTypeVisible`.
-  const layerOn = (type: SelectedElementType): boolean => isLayerVisible(state, getLayerForElementType(type));
+  const layerOn = (type: SelectedElementType): boolean => mask.isLayerVisible(getLayerForElementType(type));
   const isTypeVisible = (type: SelectedElementType): boolean => layerOn(type);
 
   // ── Grid ─────────────────────────────────────────────────────────────────
@@ -127,7 +132,7 @@ export function renderEditorOverlays(
   if (layerOn('guideDustPath')) drawEditorGuideDustPaths(ctx, room, state, offsetXPx, offsetYPx, zoom);
   if (layerOn('customBlock')) drawEditorCustomBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
   drawPlacementPreview(ctx, room, state, offsetXPx, offsetYPx, zoom);
-  drawEditorUIOverlays(ctx, room, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
+  drawEditorUIOverlays(ctx, room, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, mask);
 
   ctx.restore();
 }

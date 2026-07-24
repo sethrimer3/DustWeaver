@@ -28,7 +28,6 @@ import type { HudState } from '../render/hud/overlay';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { resetCanvasPass } from '../render/canvasViewport';
-import { isLayerVisible } from '../editor/editorLayers';
 import { buildEditorRenderMask } from '../editor/editorRenderMask';
 
 /**
@@ -71,13 +70,17 @@ export function renderEditorBackdrop(
     ctx.fillRect(0, 0, virtualWidthPx, virtualHeightPx);
   }
 
-  const backgroundVisible = isLayerVisible(layerState, 'background');
-  const terrainVisible = isLayerVisible(layerState, 'terrain');
-  const hazardsVisible = isLayerVisible(layerState, 'hazards');
-  const enemiesVisible = isLayerVisible(layerState, 'enemies');
-  const powderVisible = isLayerVisible(layerState, 'powder');
-  const objectsVisible = isLayerVisible(layerState, 'objects');
-  const dynamicGeometryVisible = isLayerVisible(layerState, 'dynamicGeometry');
+  const backgroundVisible = mask.isLayerVisible('background');
+  const terrainVisible = mask.isLayerVisible('terrain');
+  const hazardsVisible = mask.isLayerVisible('hazards');
+  const enemiesVisible = mask.isLayerVisible('enemies');
+  const powderVisible = mask.isLayerVisible('powder');
+  const objectsVisible = mask.isLayerVisible('objects');
+  const dynamicGeometryVisible = mask.isLayerVisible('dynamicGeometry');
+  // Editor's hitbox/wall-outline diagnostic overlays (previously hardcoded
+  // `true` below) are diagnostic visualizations, so they follow the Debug
+  // layer rather than the global runtime debug-mode flag.
+  const debugVisible = mask.isLayerVisible('debug');
 
   if (backgroundVisible) {
     renderWorldBackground(
@@ -107,23 +110,26 @@ export function renderEditorBackdrop(
     }
   }
   if (terrainVisible) {
-    renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+    renderWalls(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible);
     renderCustomBlockSprites(ctx, currentRoom, offsetXPx, offsetYPx, zoom);
   }
   if (hazardsVisible) {
     renderHazards(ctx, world, offsetXPx, offsetYPx, zoom, world.tick);
   }
-  // renderClusters draws a mix of content spanning several layers (terrain
-  // hazards, dynamic geometry, cosmetic effects); it isn't gated per-layer
-  // here because splitting it would require deeper changes to the cluster
-  // renderer itself. See follow-up note below.
-  renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+  // renderClusters draws exactly two families: the player (always-visible —
+  // see renderClusters' own doc comment) and enemy AI entities, gated by the
+  // Enemies layer via the mask param. showHitboxes follows the Debug layer.
+  renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible, undefined, undefined, false, undefined, 'med', mask);
   if (enemiesVisible) {
     renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }
   if (dynamicGeometryVisible) {
-    renderRadiantTether(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
-    renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, true);
+    // Pre-existing Phase 1/2 classification: Radiant Tether/Web are boss
+    // enemies but were grouped here under Dynamic Geometry alongside the
+    // grapple mechanic when this block was first authored. Not reclassified
+    // by Phase 4 — out of scope to avoid an unrelated behavior change.
+    renderRadiantTether(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible);
+    renderRadiantWeb(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible);
     renderGrapple(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }
   // Tunnel darkness is gated by the Lighting layer (see drawTunnelDarkness).

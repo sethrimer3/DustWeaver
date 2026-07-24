@@ -19,6 +19,7 @@ import { anchorForMaterial } from './editorPixelMaterialTool';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { getRectBrushPreview, getSquareBrushPreview } from './editorBrush';
 import { getPlacementStatus } from './editorLayers';
+import type { EditorRenderMask } from './editorRenderMask';
 import {
   PREVIEW_COLOR, PREVIEW_RAMP_COLOR, PREVIEW_STAIRS_COLOR, PREVIEW_PLATFORM_COLOR, PREVIEW_PILLAR_HALF_COLOR,
   CURSOR_COLOR, SELECTION_BOX_COLOR, SELECTION_BOX_BORDER,
@@ -691,7 +692,14 @@ export function drawEditorUIOverlays(
   zoom: number,
   canvasWidth: number,
   canvasHeight: number,
+  mask: EditorRenderMask,
 ): void {
+  // ── Always-visible editor infrastructure ──────────────────────────────────
+  // Selection box (marquee), cursor highlight, delete-brush preview, and the
+  // hover tooltip are core editing affordances, not authored content — they
+  // are NEVER gated by any layer (including Metadata/Debug), regardless of
+  // what's hidden. See the Metadata-vs-Debug doc comment on EditorRenderMask.
+
   // Selection box
   if (state.isSelectionBoxActive) {
     const x1 = Math.min(state.selectionBoxStartBlockX, state.cursorBlockX);
@@ -743,8 +751,10 @@ export function drawEditorUIOverlays(
     drawHoverTooltip(ctx, tooltipId, tooltipType, cursorXPx, cursorYPx, canvasWidth, canvasHeight);
   }
 
-  // Ambient light direction indicator (top-left corner arrow)
-  if (room.ambientLightDirection && room.ambientLightDirection !== 'omni') {
+  // Ambient light direction indicator (top-left corner arrow) — this is a
+  // purely informational/structural-guide overlay (not a selection/placement
+  // affordance), so it's the one thing in this function gated by Metadata.
+  if (mask.isLayerVisible('editorMetadata') && room.ambientLightDirection && room.ambientLightDirection !== 'omni') {
     const dir = room.ambientLightDirection;
     const [dx, dy] = getDirectionVector(dir);
     const arrowLen = 16;

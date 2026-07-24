@@ -8,11 +8,42 @@
  * Passing a mask built from the live `EditorState` (via
  * `buildEditorRenderMask`) applies the editor's layer visibility/solo rules.
  *
- * This does not replace `isLayerVisible`/`isAnyLayerSoloed` in editorLayers.ts
- * — editor-only call sites (editorRenderer.ts) may keep calling those
- * directly. The mask exists for call sites that are reached from BOTH
- * runtime and editor code, where threading a full `EditorState` through
- * would leak editor concerns into gameplay render functions.
+ * `editorRenderer.ts` and `gameScreenEditorBackdrop.ts` each derive exactly
+ * one `EditorRenderMask` per frame (via `buildEditorRenderMask`) and pass it
+ * down to every render call that needs it — no other call site should call
+ * `isLayerVisible`/`isAnyLayerSoloed` (editorLayers.ts) directly.
+ *
+ * ── `editorMetadata` vs `debug`: two distinct, non-overlapping layers ──────
+ *
+ * `editorMetadata` ("Editor Metadata" in the layers panel) owns:
+ *   - Room/campaign structural guides and informational indicators that are
+ *     authored-content-adjacent but not themselves placed gameplay elements
+ *     (e.g. the ambient-light-direction indicator in
+ *     editorPlacementPreviewDrawer.ts's drawEditorUIOverlays).
+ *   - NOT guide dust paths / dialogue triggers / spawn markers — those are
+ *     genuine placed elements with their own dedicated, more granular layers
+ *     (`paths`, `triggers`, `roomStructure` respectively, via
+ *     `ELEMENT_TYPE_LAYER` in editorLayers.ts) predating this mask. Routing
+ *     them through `editorMetadata` instead would collapse an existing,
+ *     independently-toggleable distinction into one bucket — not a Phase 4 goal.
+ *
+ * `debug` ("Debug" in the layers panel) owns:
+ *   - Diagnostic/profiler overlays: the high-resolution debug overlay
+ *     (renderHighResolutionDebugOverlay) — hiding this layer suppresses it
+ *     even when the *global* runtime debug-mode flag (isDebugMode) is on;
+ *     both must be true for it to draw.
+ *   - Hitbox/collision visualization: the wall-AABB debug outline
+ *     (renderWalls' isDebugMode param) and cluster hitbox outlines
+ *     (renderClusters' showHitboxes param), as driven from the editor
+ *     backdrop specifically.
+ *
+ * ── Always-visible editor infrastructure (never gated by ANY layer) ────────
+ * Selection outlines, the cursor highlight, the placement preview ghost,
+ * resize/drag handles, the marquee/selection-box, and blocked-placement
+ * feedback are core editing affordances, not authored content — hiding
+ * `editorMetadata` or `debug` (or any other layer) must never hide them. See
+ * drawEditorUIOverlays / drawPlacementPreview in editorPlacementPreviewDrawer.ts,
+ * which are called unconditionally by editorRenderer.ts regardless of mask state.
  */
 
 import type { EditorState } from './editorState';

@@ -49,6 +49,9 @@ import {
   renderWebSpider,
   renderWebSpiderFadingWebs,
 } from './enemyRenderers';
+import type { EditorRenderMask } from '../../editor/editorRenderMask';
+import { isLayerVisibleInMask } from '../../editor/editorRenderMask';
+import { isClusterVisibleInMask } from './clusterVisibility';
 
 /**
  * Renders walls (level geometry) from the snapshot on the 2D canvas using
@@ -110,16 +113,30 @@ export function renderClusters(
   isDebugCloak = false,
   momentumTrail?: MomentumTrail,
   graphicsQuality: GraphicsQuality = 'med',
+  mask?: EditorRenderMask | null,
 ): void {
+  // `clusters` holds exactly two families: the player (always drawn — it is
+  // the live preview subject, not an authored/placeable element) and enemy AI
+  // entities (every isXxxFlag branch below other than isPlayerFlag). So the
+  // only LayerId this function's content maps to is 'enemies'; there is no
+  // terrain/hazard/object content in this array to classify separately.
+  const enemiesVisible = isLayerVisibleInMask(mask, 'enemies');
+
   ctx.save();
-  // Fading webs render below clusters (behind everything else in this pass)
-  renderWebSpiderFadingWebs(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
-  renderCrimsonWizardEffects(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
-  renderPhantasmalGeometry(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
-  renderIceSpikes(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
-  renderSlimeSnailTrails(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
-  renderNeedleProjectiles(ctx,snapshot,scalePx,offsetXPx,offsetYPx);
-  renderVoidSpheres(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  // Fading webs render below clusters (behind everything else in this pass).
+  // These are all enemy-attack effect trails (web spider webs, crimson wizard
+  // meteors, phantasmal geometry, ice spikes, slime snail trails, needle
+  // projectiles, void spheres) — same 'enemies' classification as the bodies
+  // they belong to.
+  if (enemiesVisible) {
+    renderWebSpiderFadingWebs(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
+    renderCrimsonWizardEffects(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+    renderPhantasmalGeometry(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+    renderIceSpikes(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+    renderSlimeSnailTrails(ctx, snapshot, scalePx, offsetXPx, offsetYPx);
+    renderNeedleProjectiles(ctx,snapshot,scalePx,offsetXPx,offsetYPx);
+    renderVoidSpheres(ctx, snapshot, offsetXPx, offsetYPx, scalePx);
+  }
   // Pixel-art safety: simulation/camera may be subpixel, but sprite draws
   // should land on integer screen pixels to avoid texture interpolation blur.
   ctx.imageSmoothingEnabled = false;
@@ -128,10 +145,13 @@ export function renderClusters(
     const cluster = snapshot.clusters[ci];
     if (cluster.isAliveFlag === 0) continue;
 
+    const isPlayer = cluster.isPlayerFlag === 1;
+    // Player is always-visible editor infrastructure (the live preview
+    // subject); only non-player (enemy) clusters are gated by the Enemies layer.
+    if (!isClusterVisibleInMask(cluster.isPlayerFlag, mask)) continue;
+
     const screenX = Math.round(cluster.renderPositionXWorld * scalePx + offsetXPx);
     const screenY = Math.round(cluster.renderPositionYWorld * scalePx + offsetYPx);
-
-    const isPlayer = cluster.isPlayerFlag === 1;
 
     // ── Box dimensions ─────────────────────────────────────────────────────
     const boxHalfW = cluster.halfWidthWorld * scalePx;
