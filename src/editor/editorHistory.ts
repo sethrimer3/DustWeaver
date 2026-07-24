@@ -89,7 +89,12 @@ export interface EditorHistory {
   currentRevision: number;
   savedRevision: number | null;
   nextRevision: number;
+  /** A real mutation occurred but its entry could not be retained. Only a
+   * successful save (or explicit room-session reset) may clear this bit. */
+  untrackedDirty: boolean;
 }
+
+export type HistoryCommitResult = 'committed' | 'noop' | 'rejected-oversized';
 
 export interface PendingSnapshot {
   readonly before: EditorRoomData;
@@ -232,12 +237,18 @@ function campaignState(
   return tracked ? { campaignSpawn: clone(campaignSpawn), initialRoomId } : undefined;
 }
 
-function makeEntry(history: EditorHistory, pending: PendingSnapshot): EditorHistoryEntry | null {
+function makeEntry(
+  history: EditorHistory,
+  pending: PendingSnapshot,
+  campaignSpawnAfter?: CampaignSpawnData,
+  initialRoomIdAfter?: string,
+  revisionBefore = history.currentRevision,
+  revisionAfter = history.nextRevision,
+): EditorHistoryEntry | null {
   const before = pending.before;
   const after = pending.liveData;
-  if (equal(before, after) && !pending.campaignSpawnTracked) return null;
-  const revisionBefore = history.currentRevision;
-  const revisionAfter = history.nextRevision++;
+  const campaignAfter = campaignState(campaignSpawnAfter, initialRoomIdAfter, pending.campaignSpawnTracked);
+  if (equal(before, after) && equal(pending.campaignSpawnBefore, campaignAfter)) return null;
   const base = {
     label: pending.label,
     timestamp: pending.timestamp,
@@ -245,6 +256,7 @@ function makeEntry(history: EditorHistory, pending: PendingSnapshot): EditorHist
     revisionBefore,
     revisionAfter,
     campaignSpawnBefore: pending.campaignSpawnBefore,
+    campaignSpawnAfter: campaignAfter,
   };
   const resized = before.widthBlocks !== after.widthBlocks || before.heightBlocks !== after.heightBlocks;
   if (resized) {
@@ -294,7 +306,10 @@ function enforceBounds(history: EditorHistory): void {
 }
 
 export function createEditorHistory(): EditorHistory {
-  return { undoStack: [], redoStack: [], estimatedBytes: 0, currentRevision: 0, savedRevision: 0, nextRevision: 1 };
+  return {
+    undoStack: [], redoStack: [], estimatedBytes: 0, currentRevision: 0,
+    savedRevision: 0, nextRevision: 1, untrackedDirty: false,
+  };
 }
 
 export function capturePendingSnapshot(
@@ -319,27 +334,43 @@ export function commitPendingSnapshot(
   pending: PendingSnapshot,
   campaignSpawnAfter?: CampaignSpawnData,
   initialRoomIdAfter?: string,
-): boolean {
+): HistoryCommitResult {
   let effectivePending = pending;
   const previous = history.undoStack[history.undoStack.length - 1];
-  if (
+  const coalescing = Boolean(
     previous &&
     pending.label.startsWith('Property:') &&
     previous.label === pending.label &&
     pending.timestamp - previous.timestamp <= 1500
-  ) {
+  );
+  if (coalescing && previous) {
     effectivePending = {
       ...pending,
       before: applyEntry(previous, pending.before, 'before'),
     };
+  }
+  const revisionBefore = coalescing && previous ? previous.revisionBefore : history.currentRevision;
+  const entry = makeEntry(
+    history, effectivePending, campaignSpawnAfter, initialRoomIdAfter,
+    revisionBefore, history.nextRevision,
+  );
+  if (!entry) {
+    if (coalescing && previous) {
+      history.undoStack.pop();
+      history.currentRevision = previous.revisionBefore;
+      if (history.savedRevision === previous.revisionAfter) history.savedRevision = null;
+      history.estimatedBytes = totalBytes(history.undoStack) + totalBytes(history.redoStack);
+    }
+    return 'noop';
+  }
+  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) {
+    history.untrackedDirty = true;
+    return 'rejected-oversized';
+  }
+  // Replacement is fully built and validated before the prior entry moves.
+  if (coalescing && previous) {
     history.undoStack.pop();
     history.currentRevision = previous.revisionBefore;
-  }
-  const entry = makeEntry(history, effectivePending);
-  if (!entry) return false;
-  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) return false;
-  if (pending.campaignSpawnTracked) {
-    entry.campaignSpawnAfter = campaignState(campaignSpawnAfter, initialRoomIdAfter, true);
   }
   // Branching makes a saved point in the discarded future unreachable.
   if (history.redoStack.length > 0 && history.savedRevision !== null && history.currentRevision !== history.savedRevision) {
@@ -351,8 +382,9 @@ export function commitPendingSnapshot(
   history.undoStack.push(entry);
   history.redoStack.length = 0;
   history.currentRevision = entry.revisionAfter;
+  history.nextRevision++;
   enforceBounds(history);
-  return history.undoStack.includes(entry);
+  return 'committed';
 }
 
 export function pushSnapshot(
@@ -361,7 +393,7 @@ export function pushSnapshot(
   campaignSpawn?: CampaignSpawnData,
   initialRoomId?: string,
   campaignSpawnTracked?: boolean,
-): void {
+): HistoryCommitResult {
   const revisionBefore = history.currentRevision;
   const entry: SnapshotHistoryEntry = {
     type: 'snapshot',
@@ -370,18 +402,44 @@ export function pushSnapshot(
     timestamp: Date.now(),
     estimatedBytes: 0,
     revisionBefore,
-    revisionAfter: history.nextRevision++,
+    revisionAfter: history.nextRevision,
     before: clone(data),
     after: clone(data),
     legacyLiveData: data,
     campaignSpawnBefore: campaignState(campaignSpawn, initialRoomId, Boolean(campaignSpawnTracked)),
   };
   entry.estimatedBytes = ENTRY_OVERHEAD_BYTES + byteCost({ ...entry, legacyLiveData: undefined });
-  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) return;
+  if (entry.estimatedBytes > EDITOR_HISTORY_BYTE_BUDGET) {
+    history.untrackedDirty = true;
+    return 'rejected-oversized';
+  }
   history.undoStack.push(entry);
   history.redoStack.length = 0;
   history.currentRevision = entry.revisionAfter;
+  history.nextRevision++;
   enforceBounds(history);
+  return 'committed';
+}
+
+/** Targeted capture for metadata controls: clone only the room fields that
+ * can be mutated while retaining stable references to untouched collections. */
+export function capturePendingRoomFields(
+  data: EditorRoomData,
+  fields: readonly (keyof EditorRoomData)[],
+  label: string,
+): PendingSnapshot {
+  const before = { ...data };
+  for (const field of fields) {
+    (before as unknown as Record<string, unknown>)[field as string] =
+      clone(data[field]);
+  }
+  return {
+    before,
+    liveData: data,
+    label,
+    timestamp: Date.now(),
+    campaignSpawnTracked: false,
+  };
 }
 
 export function runLazyMutation(
@@ -393,20 +451,16 @@ export function runLazyMutation(
   campaignSpawnTracked?: boolean,
 ): boolean {
   const pending = capturePendingSnapshot(data, campaignSpawn, initialRoomId, campaignSpawnTracked);
-  let changed = false;
-  try {
-    changed = mutate();
-    return changed;
-  } finally {
-    if (changed) commitPendingSnapshot(history, pending);
-  }
+  const changed = mutate();
+  if (!changed) return false;
+  return commitPendingSnapshot(history, pending) !== 'noop';
 }
 
 function result(entry: EditorHistoryEntry, roomData: EditorRoomData, direction: Direction): HistorySnapshot {
   const spawn = direction === 'before' ? entry.campaignSpawnBefore : entry.campaignSpawnAfter;
   return {
     roomData,
-    campaignSpawnTracked: spawn !== undefined,
+    ...(spawn !== undefined ? { campaignSpawnTracked: true } : {}),
     campaignSpawn: clone(spawn?.campaignSpawn),
     initialRoomId: spawn?.initialRoomId,
   };
@@ -453,10 +507,11 @@ export function redo(
 
 export function markHistorySaved(history: EditorHistory): void {
   history.savedRevision = history.currentRevision;
+  history.untrackedDirty = false;
 }
 
 export function isHistoryDirty(history: EditorHistory): boolean {
-  return history.savedRevision === null || history.currentRevision !== history.savedRevision;
+  return history.untrackedDirty || history.savedRevision === null || history.currentRevision !== history.savedRevision;
 }
 
 export function getHistoryDiagnostics(history: EditorHistory): {
@@ -481,4 +536,5 @@ export function clearHistory(history: EditorHistory): void {
   history.currentRevision = 0;
   history.savedRevision = 0;
   history.nextRevision = 1;
+  history.untrackedDirty = false;
 }

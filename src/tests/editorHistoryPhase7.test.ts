@@ -35,7 +35,7 @@ test('Phase 7: one drag transaction produces one compact entry', () => {
   const gesture = beginGesture(data, () => wall.xBlock !== 1, () => { wall.xBlock = 1; });
   wall.xBlock = 2;
   wall.xBlock = 3;
-  assert.equal(finishGesture(history, gesture), true);
+  assert.equal(finishGesture(history, gesture), 'committed');
   assert.equal(history.undoStack.length, 1);
   assert.equal(history.undoStack[0].type, 'element-patch');
 });
@@ -61,7 +61,7 @@ test('Phase 7: no-op and cancelled transaction preserve redo and restore live st
   data = undo(history, data)!.roomData;
   const redoCount = history.redoStack.length;
   pending = capturePendingSnapshot(data);
-  assert.equal(commitPendingSnapshot(history, pending), false);
+  assert.equal(commitPendingSnapshot(history, pending), 'noop');
   const wall = data.interiorWalls[0];
   const gesture = beginGesture(data, () => wall.xBlock !== 1, () => { wall.xBlock = 1; });
   wall.xBlock = 9;
@@ -107,7 +107,7 @@ test('Phase 7: Surface Rim property round-trips in an element patch', () => {
 });
 
 test('Phase 7: campaign spawn before/after state is tracked', () => {
-  let data = room();
+  const data = room();
   const history = createEditorHistory();
   const before = { roomId: 'history', xBlock: 1, yBlock: 1 };
   const after = { roomId: 'history', xBlock: 8, yBlock: 9 };
@@ -160,8 +160,9 @@ test('Phase 7: a single oversized entry is rejected without corrupting existing 
   const existing = history.undoStack.length;
   pending = capturePendingSnapshot(data);
   data.name = 'x'.repeat(EDITOR_HISTORY_BYTE_BUDGET + 1);
-  assert.equal(commitPendingSnapshot(history, pending), false);
+  assert.equal(commitPendingSnapshot(history, pending), 'rejected-oversized');
   assert.equal(history.undoStack.length, existing);
+  assert.equal(isHistoryDirty(history), true);
 });
 
 test('Phase 7: saved revision becomes clean on exact undo/redo and branching invalidates discarded save', () => {

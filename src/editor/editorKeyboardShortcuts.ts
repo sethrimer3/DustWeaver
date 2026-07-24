@@ -75,7 +75,8 @@ export function handleEditorKeyboardShortcuts(
         const pending = capturePendingSnapshot(state.roomData);
         const changed = rotateSelectedElement(state);
         if (changed) {
-          commitPendingSnapshot(history, pending);
+          const commitResult = commitPendingSnapshot(history, pending);
+          if (commitResult === 'noop') return;
           applyEdits();
         }
       }
@@ -91,7 +92,8 @@ export function handleEditorKeyboardShortcuts(
       const pending = capturePendingSnapshot(state.roomData);
       const changed = flipSelectedTransition(state);
       if (changed) {
-        commitPendingSnapshot(history, pending);
+        const commitResult = commitPendingSnapshot(history, pending);
+        if (commitResult === 'noop') return;
         applyEdits();
       }
     }
@@ -182,7 +184,8 @@ export function handleEditorKeyboardShortcuts(
     const pending = capturePendingSnapshot(state.roomData);
     const pasted = pasteFromClipboard(state);
     if (pasted) {
-      commitPendingSnapshot(history, pending);
+      const commitResult = commitPendingSnapshot(history, pending);
+      if (commitResult === 'noop') return;
       applyEdits();
     }
   }
