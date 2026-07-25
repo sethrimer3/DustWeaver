@@ -36,7 +36,7 @@ import type { RoomCacheManifest, RoomCacheEntry, AdjacencyEntry } from '../level
 import { computeContentHash, computeCampaignHashForValidation } from '../levels/roomFileLoader';
 import { buildZipBlob } from '../utils/minimalZipWriter';
 import type { ZipEntry } from '../utils/minimalZipWriter';
-import { assertCampaignIntegrity } from './campaignIntegrity';
+import { assertCampaignIntegrity, CampaignIntegrityError } from './campaignIntegrity';
 
 // ── Main campaign constants ───────────────────────────────────────────────────
 const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
@@ -276,6 +276,7 @@ async function runElectronProgressExport(
   buildExport: () => import('../levels/campaignSchema').SavedCampaignV1 | Promise<import('../levels/campaignSchema').SavedCampaignV1>,
   isOfficialCampaign: boolean,
   progressRoot: HTMLElement,
+  removeMissingRooms?: (roomIds: ReadonlySet<string>) => void,
 ): Promise<void> {
   const electronApi = window.dustweaverElectron;
   if (!electronApi) return;
@@ -323,6 +324,22 @@ async function runElectronProgressExport(
     if (!settled) {
       const msg = err instanceof Error ? err.message : String(err);
       modal.update({ step: 'error', message: `Export failed: ${msg}` });
+      if (
+        err instanceof CampaignIntegrityError &&
+        err.missingPayloadIds.length > 0 &&
+        removeMissingRooms !== undefined
+      ) {
+        modal.offerDeleteMissingRooms(err.missingPayloadIds, () => {
+          modal.destroy();
+          removeMissingRooms(new Set(err.missingPayloadIds));
+          void runElectronProgressExport(
+            buildExport,
+            isOfficialCampaign,
+            progressRoot,
+            removeMissingRooms,
+          );
+        });
+      }
     }
   } finally {
     unsubscribe();
@@ -400,7 +417,14 @@ export function exportCampaignJson(
 
   // In Electron, write directly to userData/CUSTOM_CAMPAIGNS/<id>/ with progress.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(buildExport, session.source === 'main', progressRoot).catch((err: unknown) => {
+    runElectronProgressExport(
+      buildExport,
+      session.source === 'main',
+      progressRoot,
+      session.campaignStore === undefined
+        ? undefined
+        : roomIds => session.campaignStore?.removeMissingRoomReferences(roomIds),
+    ).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron custom campaign export error:', msg);
     });

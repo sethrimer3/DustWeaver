@@ -1,5 +1,16 @@
 import type { SavedCampaignV1 } from '../levels/campaignSchema';
 
+export class CampaignIntegrityError extends Error {
+  constructor(
+    message: string,
+    readonly missingPayloadIds: readonly string[] = [],
+    readonly missingMapEntryIds: readonly string[] = [],
+  ) {
+    super(message);
+    this.name = 'CampaignIntegrityError';
+  }
+}
+
 function collectDuplicateIds(ids: readonly string[]): string[] {
   const seen = new Set<string>();
   const duplicates = new Set<string>();
@@ -39,7 +50,11 @@ export function assertCampaignIntegrity(
       missingPayloads.length > 0 ? `world-map IDs without payloads: ${missingPayloads.join(', ')}` : '',
       missingMapEntries.length > 0 ? `payload IDs without world-map entries: ${missingMapEntries.join(', ')}` : '',
     ].filter(Boolean);
-    throw new Error(`Campaign room/world-map integrity mismatch (${details.join('; ')})`);
+    throw new CampaignIntegrityError(
+      `Campaign room/world-map integrity mismatch (${details.join('; ')})`,
+      missingPayloads,
+      missingMapEntries,
+    );
   }
 
   if (expectedRoomIds !== undefined) {

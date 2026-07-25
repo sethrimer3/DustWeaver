@@ -19,6 +19,8 @@ import { PANEL_BG, PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
 export interface ExportProgressModal {
   /** Update the modal to reflect a new progress event. */
   update(event: ExportProgressEvent): void;
+  /** Offer an explicit repair action after an integrity failure. */
+  offerDeleteMissingRooms(roomIds: readonly string[], onConfirm: () => void): void;
   /** Remove the modal from the DOM. Safe to call multiple times. */
   destroy(): void;
 }
@@ -230,6 +232,29 @@ export function createExportProgressModal(
   }
 
   let dismissAdded = false;
+  let repairAdded = false;
+  function offerDeleteMissingRooms(roomIds: readonly string[], onConfirm: () => void): void {
+    if (repairAdded || roomIds.length === 0) return;
+    repairAdded = true;
+    const btn = document.createElement('button');
+    const roomLabel = roomIds.length === 1 ? 'Room' : 'Rooms';
+    btn.textContent = `Delete ${roomIds.length} Missing ${roomLabel} and Export`;
+    btn.title = `Remove ${roomIds.join(', ')} and any transitions pointing to them, then retry the export`;
+    btn.style.cssText = [
+      'margin-top:8px', 'padding:8px 24px', 'align-self:center',
+      'font-size:12px', `font-family:'Cinzel',monospace`,
+      'cursor:pointer', 'border-radius:4px',
+      'background:rgba(150,70,10,0.65)', 'color:#ffcc66',
+      'border:1.5px solid #ff9944',
+    ].join(';');
+    btn.addEventListener('click', () => {
+      btn.disabled = true;
+      btn.textContent = 'Removing rooms and retrying…';
+      onConfirm();
+    });
+    panel.insertBefore(btn, panel.lastElementChild);
+  }
+
   function addDismissButton(): void {
     if (dismissAdded) return;
     dismissAdded = true;
@@ -257,5 +282,5 @@ export function createExportProgressModal(
     }
   }
 
-  return { update, destroy };
+  return { update, offerDeleteMissingRooms, destroy };
 }

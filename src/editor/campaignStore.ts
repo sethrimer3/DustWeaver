@@ -18,6 +18,7 @@ export interface CampaignStore {
   readonly activeRoomId: string | null;
   setActiveRoomId: (roomId: string | null) => void;
   updateWorldMap: (worldMap: WorldMapJsonDef) => void;
+  removeMissingRoomReferences: (roomIds: ReadonlySet<string>) => void;
   getRoom: (roomId: string, startUid: number) => { roomData: EditorRoomData; nextUid: number };
   markRoomDirty: (roomId: string, roomData: EditorRoomData) => void;
   discardRoomChanges: (roomId: string) => void;
@@ -159,6 +160,38 @@ export function createCampaignStore(
     }
   }
 
+  function removeMissingRoomReferences(roomIds: ReadonlySet<string>): void {
+    if (roomIds.size === 0) return;
+    updateWorldMap({
+      worlds: worldMap.worlds,
+      rooms: worldMap.rooms.filter(room => !roomIds.has(room.id)),
+    });
+
+    // A deleted room cannot remain as a transition target. Clean both the
+    // authoritative compact rooms and any hydrated dirty copies so a later
+    // commit cannot restore a dangling connection.
+    for (const [roomId, room] of rawRoomsById) {
+      const transitions = room.transitions?.filter(transition => !roomIds.has(transition.to));
+      if (transitions !== undefined && transitions.length !== room.transitions?.length) {
+        rawRoomsById.set(roomId, { ...room, transitions });
+      }
+    }
+    for (const room of hydratedRoomsById.values()) {
+      room.transitions = room.transitions.filter(transition => !roomIds.has(transition.targetRoomId));
+    }
+
+    const fallbackRoomId = rawRoomsById.keys().next().value as string | undefined;
+    if (roomIds.has(campaign.campaign.initialRoomId) && fallbackRoomId !== undefined) {
+      campaign.campaign.initialRoomId = fallbackRoomId;
+    }
+    if (
+      campaign.campaign.campaignSpawn !== undefined &&
+      roomIds.has(campaign.campaign.campaignSpawn.roomId)
+    ) {
+      delete campaign.campaign.campaignSpawn;
+    }
+  }
+
   function getRoom(roomId: string, startUid: number): { roomData: EditorRoomData; nextUid: number } {
     const cached = hydratedRoomsById.get(roomId);
     if (cached !== undefined) {
@@ -281,6 +314,7 @@ export function createCampaignStore(
     },
     setActiveRoomId,
     updateWorldMap,
+    removeMissingRoomReferences,
     getRoom,
     markRoomDirty,
     discardRoomChanges,

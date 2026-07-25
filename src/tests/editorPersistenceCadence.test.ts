@@ -146,6 +146,30 @@ test('an unedited room is never serialized just by being opened', () => {
   assert.equal(store.dirtyRoomIds.has('roomA'), false);
 });
 
+test('missing-room recovery removes orphan map entries and dangling transitions', () => {
+  const campaign = makeCampaign(['roomA']);
+  campaign.worldMap = {
+    worlds: [{ id: 1, name: 'Test Zone' }],
+    rooms: [
+      { id: 'roomA', name: 'roomA', worldId: 1, mapX: 0, mapY: 0 },
+      { id: 'missingRoom', name: 'Missing', worldId: 1, mapX: 10, mapY: 0 },
+    ],
+  };
+  campaign.rooms[0].transitions = [
+    { dir: 'right', to: 'missingRoom', pos: 2, size: 2, spawn: [1, 1] },
+  ];
+
+  const store = createCampaignStore(campaign, { allowMissingRoomReferences: true });
+  const hydrated = store.getRoom('roomA', 1).roomData;
+  store.markRoomDirty('roomA', hydrated);
+
+  store.removeMissingRoomReferences(new Set(['missingRoom']));
+
+  assert.deepEqual(store.worldMap.rooms.map(room => room.id), ['roomA']);
+  assert.equal(store.rawRoomsById.get('roomA')?.transitions?.length, 0);
+  assert.equal(hydrated.transitions.length, 0);
+});
+
 // ── 2. Source guards: the controller's commit topology ────────────────────
 
 test('applyEdits() marks the room dirty but never commits it', () => {
