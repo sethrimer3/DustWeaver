@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "0a1a72d5cb72f2bf",
+  "campaignHash": "f696c150ba4cd8b8",
   "campaignVersion": 9,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-25T16:35:20.688Z",
+  "exportedAt": "2026-07-25T16:41:54.286Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -130,8 +130,8 @@
     "ice_hall": {
       "roomId": "ice_hall",
       "file": "ice_hall_room.json",
-      "hash": "f02a61126be16ce5",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "hash": "68b7887109642a87",
+      "updatedAt": "2026-07-25T16:41:54.286Z"
     },
     "the_icicle": {
       "roomId": "the_icicle",
@@ -142,8 +142,8 @@
     "skating": {
       "roomId": "skating",
       "file": "skating_room.json",
-      "hash": "4b67f6e0c38bfc46",
-      "updatedAt": "2026-07-25T16:34:59.965Z"
+      "hash": "216c0915dc71be35",
+      "updatedAt": "2026-07-25T16:41:54.286Z"
     }
   },
   "adjacency": {
