@@ -38,6 +38,11 @@ export interface EditorInputState {
   rightClickScreenYPx: number;
   /** Right mouse button currently held down (persistent, not one-shot). */
   isRightMouseDown: boolean;
+  /** Middle mouse button currently held down for camera panning. */
+  isMiddleMouseDown: boolean;
+  /** Accumulated middle-drag movement in CSS screen pixels. */
+  middleDragDeltaXPx: number;
+  middleDragDeltaYPx: number;
   /** Ctrl+Z pressed (one-shot). */
   isUndoPressed: boolean;
   /** Ctrl+Y pressed (one-shot). */
@@ -83,6 +88,9 @@ export function createEditorInputState(): EditorInputState {
     rightClickScreenXPx: 0,
     rightClickScreenYPx: 0,
     isRightMouseDown: false,
+    isMiddleMouseDown: false,
+    middleDragDeltaXPx: 0,
+    middleDragDeltaYPx: 0,
     isUndoPressed: false,
     isRedoPressed: false,
     isCopyPressed: false,
@@ -160,6 +168,10 @@ export function attachEditorInputListeners(
   function onMouseMove(e: MouseEvent): void {
     state.mouseScreenXPx = e.clientX;
     state.mouseScreenYPx = e.clientY;
+    if (state.isMiddleMouseDown) {
+      state.middleDragDeltaXPx += e.movementX;
+      state.middleDragDeltaYPx += e.movementY;
+    }
   }
 
   function onMouseDown(e: MouseEvent): void {
@@ -174,6 +186,9 @@ export function attachEditorInputListeners(
       state.isRightMouseDown = true;
       state.rightClickScreenXPx = e.clientX;
       state.rightClickScreenYPx = e.clientY;
+    } else if (e.button === 1) {
+      state.isMiddleMouseDown = true;
+      e.preventDefault();
     }
   }
 
@@ -182,6 +197,8 @@ export function attachEditorInputListeners(
       state.isMouseDown = false;
     } else if (e.button === 2) {
       state.isRightMouseDown = false;
+    } else if (e.button === 1) {
+      state.isMiddleMouseDown = false;
     }
   }
 
@@ -236,4 +253,6 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isRotateRightPressed = false;
   state.isZoomInPressed = false;
   state.isZoomOutPressed = false;
+  state.middleDragDeltaXPx = 0;
+  state.middleDragDeltaYPx = 0;
 }

@@ -31,7 +31,7 @@ import { EditorState, createEditorState, EditorTool,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
 import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
-import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput } from './editorCamera';
+import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput, panEditorCameraByScreenDelta } from './editorCamera';
 import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
@@ -1475,6 +1475,11 @@ export function createEditorController(
     // the CSS display dimensions (not the canvas buffer dimensions).
     const virtualMouseX = (inputState.mouseScreenXPx / cssWidthPx) * virtualWidthPx;
     const virtualMouseY = (inputState.mouseScreenYPx / cssHeightPx) * virtualHeightPx;
+    panEditorCameraByScreenDelta(
+      camera,
+      (inputState.middleDragDeltaXPx / cssWidthPx) * virtualWidthPx,
+      (inputState.middleDragDeltaYPx / cssHeightPx) * virtualHeightPx,
+    );
 
     // Zoom (mouse wheel restricted to the Select tool; +/- keys work in any tool).
     // Cursor-anchored for wheel zoom, viewport-centered for keyboard zoom.

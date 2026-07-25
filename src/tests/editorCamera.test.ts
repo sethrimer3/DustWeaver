@@ -9,6 +9,7 @@ import {
   clampEditorZoom,
   setEditorZoom,
   applyEditorZoomInput,
+  panEditorCameraByScreenDelta,
 } from '../editor/editorCamera';
 
 const VIEWPORT_W = 800;
@@ -108,6 +109,18 @@ test('applyEditorZoomInput: isZoomInPressed / isZoomOutPressed work regardless o
   const offOut = getCameraOffset(cameraOut, VIEWPORT_W, VIEWPORT_H);
   applyEditorZoomInput(cameraOut, 0, false, false, true, 400, 300, 400, 300, offOut.offsetXPx, offOut.offsetYPx);
   assert.equal(cameraOut.zoom, 1 / EDITOR_ZOOM_STEP);
+});
+
+test('panEditorCameraByScreenDelta keeps middle-drag movement 1:1 at the current zoom', () => {
+  const camera = createCameraState();
+  camera.centerXWorld = 100;
+  camera.centerYWorld = 200;
+  camera.zoom = 2;
+
+  panEditorCameraByScreenDelta(camera, 40, -20);
+
+  assert.equal(camera.centerXWorld, 80);
+  assert.equal(camera.centerYWorld, 210);
 });
 
 test('repeated zoom steps clamp cleanly at the limits without drifting past them', () => {

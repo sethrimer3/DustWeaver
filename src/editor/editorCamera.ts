@@ -116,6 +116,19 @@ export interface EditorCameraInput {
 }
 
 /**
+ * Pans the camera from a middle-button drag. The supplied deltas are in
+ * virtual-canvas pixels; moving the pointer right/down moves the world with it.
+ */
+export function panEditorCameraByScreenDelta(
+  camera: CameraState,
+  deltaXPx: number,
+  deltaYPx: number,
+): void {
+  camera.centerXWorld -= deltaXPx / camera.zoom;
+  camera.centerYWorld -= deltaYPx / camera.zoom;
+}
+
+/**
  * Updates the camera position based on WASD input.
  * Called each frame while editor mode is active.
  */
