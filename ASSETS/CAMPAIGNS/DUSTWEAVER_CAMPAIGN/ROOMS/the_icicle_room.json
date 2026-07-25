@@ -33,6 +33,17 @@
       ],
       "depth": 100,
       "gw": 0
+    },
+    {
+      "dir": "left",
+      "to": "",
+      "pos": 22,
+      "size": 6,
+      "spawn": [
+        3,
+        3
+      ],
+      "gw": 0
     }
   ],
   "bakedWallTemplate": {
