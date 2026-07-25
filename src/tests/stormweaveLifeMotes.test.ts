@@ -196,14 +196,22 @@ describe('Stormweave high-quality persistent trails', () => {
     assert.equal(cloud.getTrailPointCount(0), 0, 'teleport destination should remain in its rebase window');
   });
 
-  test('a discontinuous mote sample rebases instead of drawing a long ribbon', () => {
+  test('a discontinuous mote sample breaks the ribbon without erasing prior history', () => {
     const cloud = new StormweaveLifeMotes();
     cloud.reset(0, 0, 1);
     for (let i = 0; i < 50; i++) cloud.update(DT_SEC, 0, 0, 0, 0, true);
-    assert.ok(cloud.getTrailPointCount(0) > 0);
+    const countBeforeJump = cloud.getTrailPointCount(0);
+    assert.ok(countBeforeJump > 0);
     cloud.setMoteState(0, 200, 200);
     cloud.update(DT_SEC, 0, 0, 0, 0, true);
-    assert.equal(cloud.getTrailPointCount(0), 1);
+    // Older, still-fresh samples must remain instead of the whole trail
+    // being wiped down to a single point.
+    assert.ok(cloud.getTrailPointCount(0) > countBeforeJump - 2,
+      `expected prior trail history to survive a local mote discontinuity, got count ${cloud.getTrailPointCount(0)}`);
+    // But the newest point must be flagged as a break so the renderer never
+    // draws a ribbon segment bridging the jump.
+    const newestIndex = cloud.getTrailPointCount(0) - 1;
+    assert.equal(cloud.isTrailPointBreak(0, newestIndex), true);
   });
 });
 

@@ -24,6 +24,14 @@ function renderRibbonPass(
     const previous = Math.max(0, i - 1);
     const next = Math.min(count - 1, i + 1);
     const afterNext = Math.min(count - 1, i + 2);
+    // Never bridge a continuity break: if any sample this segment's
+    // midpoint-smoothing touches started a new epoch, skip drawing rather
+    // than connecting across a discontinuity.
+    let hasBreak = false;
+    for (let p = previous + 1; p <= afterNext; p++) {
+      if (motes.isTrailPointBreak(moteIndex, p)) { hasBreak = true; break; }
+    }
+    if (hasBreak) continue;
     // Midpoints of adjacent history edges form a quadratic-smoothed centerline.
     const x0 = (motes.getTrailPointXWorld(moteIndex, previous) + motes.getTrailPointXWorld(moteIndex, next)) * 0.5;
     const y0 = (motes.getTrailPointYWorld(moteIndex, previous) + motes.getTrailPointYWorld(moteIndex, next)) * 0.5;

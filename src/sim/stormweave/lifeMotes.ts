@@ -53,6 +53,13 @@ const IDLE_WANDER_CONTAINMENT_RADIUS_WORLD = 6.5;
 const IDLE_WANDER_CONTAINMENT_PER_SEC2 = 9;
 const IDLE_WANDER_PERIOD_BASE_SEC = 1.1;
 const IDLE_WANDER_PERIOD_VARIATION_SEC = 0.9;
+// Rate at which the idle/follow blend weight chases its instantaneous target.
+// Without this, a single-tick player velocity change (e.g. a collision
+// snapping velocity toward zero) swung the blend from mostly path-follow to
+// mostly idle-wander in one frame - a real, uncorrelated position jump for
+// every mote, which is what kept causing the stationary trail pop even after
+// the perpendicular-direction fix.
+const FOLLOW_BLEND_RATE_PER_SEC = 3.5;
 
 export function getStormweaveMoteCount(currentMoteCount: number): number {
   return Math.min(MAX_LIFE_MOTES, normalizeMoteCount(currentMoteCount));
@@ -145,8 +152,17 @@ export class StormweaveLifeMotes {
   private readonly trailWriteByMote = new Uint8Array(MAX_LIFE_MOTES);
   private readonly lastTrailSampleTimeSec = new Float32Array(MAX_LIFE_MOTES);
   private readonly trailReadyTimeSec = new Float32Array(MAX_LIFE_MOTES);
+  // Per-sample "epoch" id. A local discontinuity (mote itself jumped further
+  // than TRAIL_SAMPLE_DISCONTINUITY_WORLD in one tick) bumps the mote's
+  // current epoch instead of wiping its trail history - old samples keep
+  // aging out normally on their own, and the renderer simply refuses to draw
+  // a ribbon segment that would bridge two different epochs. This is what
+  // "break the trail" means as distinct from "erase the trail".
+  private readonly trailEpochByMote = new Uint16Array(MAX_LIFE_MOTES);
+  private readonly trailEpoch = new Uint16Array(MAX_LIFE_MOTES * STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
   private trailsHighQuality = false;
   private visualIntensity = 0;
+  private followWeightSmoothed = 0;
   private previousPlayerXWorld = 0;
   private previousPlayerYWorld = 0;
   private hasPreviousPlayerPosition = false;
@@ -206,11 +222,20 @@ export class StormweaveLifeMotes {
     return Math.max(0, this.elapsedSec - this.trailTimeSec[this.getTrailStorageIndex(moteIndex, pointIndex)]);
   }
 
+  /** True when this point begins a new continuity epoch - the renderer must not draw a segment connecting it to pointIndex - 1. */
+  isTrailPointBreak(moteIndex: number, pointIndex: number): boolean {
+    if (pointIndex <= 0) return true;
+    const storage = this.getTrailStorageIndex(moteIndex, pointIndex);
+    const previousStorage = this.getTrailStorageIndex(moteIndex, pointIndex - 1);
+    return this.trailEpoch[storage] !== this.trailEpoch[previousStorage];
+  }
+
   reset(playerXWorld = 0, playerYWorld = 0, fullContainerCount = 0): void {
     this.count = 0;
     this.elapsedSec = 0;
     this.clearTrails();
     this.visualIntensity = 0;
+    this.followWeightSmoothed = 0;
     this.previousPlayerXWorld = playerXWorld;
     this.previousPlayerYWorld = playerYWorld;
     this.hasPreviousPlayerPosition = true;
@@ -337,9 +362,17 @@ export class StormweaveLifeMotes {
 
     const damping = Math.exp(-VELOCITY_DAMPING_PER_SEC * dt);
     // Blend factor between idle wander and path-follow motion, reusing the
-    // canonical speed-ratio smoothstep so the transition is continuous and
-    // shares its threshold with the trail-intensity/glow logic.
-    const followWeight = getStormweaveTrailTargetIntensity(playerVelocityXWorld, playerVelocityYWorld);
+    // canonical speed-ratio smoothstep so the transition shares its
+    // threshold with the trail-intensity/glow logic. The raw ratio can jump
+    // in a single tick (e.g. player velocity snapping to zero on impact);
+    // since wanderOffset and the path-follow target are otherwise
+    // uncorrelated, blending on the raw value caused an instant mote
+    // position jump. Chase it exponentially instead so the blend - and
+    // therefore the mote's target position - is always continuous.
+    const targetFollowWeight = getStormweaveTrailTargetIntensity(playerVelocityXWorld, playerVelocityYWorld);
+    this.followWeightSmoothed += (targetFollowWeight - this.followWeightSmoothed)
+      * (1 - Math.exp(-FOLLOW_BLEND_RATE_PER_SEC * dt));
+    const followWeight = this.followWeightSmoothed;
     const idleWeight = 1 - followWeight;
     const playerSpeedWorldPerSec = Math.hypot(playerVelocityXWorld, playerVelocityYWorld);
     for (let i = 0; i < this.count; i++) {
@@ -457,10 +490,12 @@ export class StormweaveLifeMotes {
       const newest = this.getTrailStorageIndex(moteIndex, count - 1);
       const distance = Math.hypot(this.xWorld[moteIndex] - this.trailXWorld[newest], this.yWorld[moteIndex] - this.trailYWorld[newest]);
       if (distance > TRAIL_SAMPLE_DISCONTINUITY_WORLD) {
-        this.trailCountByMote[moteIndex] = 0;
-        this.trailWriteByMote[moteIndex] = 0;
-        this.lastTrailSampleTimeSec[moteIndex] = this.elapsedSec;
-        this.writeMoteTrailSample(moteIndex, 0);
+        // Break, don't erase: bump this mote's epoch so the renderer won't
+        // bridge across the jump, but keep the ring intact so older,
+        // still-valid samples keep aging out on their own instead of the
+        // whole trail vanishing and rebuilding from scratch.
+        this.trailEpochByMote[moteIndex] = (this.trailEpochByMote[moteIndex] + 1) & 0xffff;
+        this.writeMoteTrailSample(moteIndex, count);
         return;
       }
       shouldSample = distance >= STORMWEAVE_TRAIL_SAMPLE_SPACING_WORLD
@@ -476,6 +511,7 @@ export class StormweaveLifeMotes {
     this.trailXWorld[storage] = this.xWorld[moteIndex];
     this.trailYWorld[storage] = this.yWorld[moteIndex];
     this.trailTimeSec[storage] = this.elapsedSec;
+    this.trailEpoch[storage] = this.trailEpochByMote[moteIndex];
     this.trailWriteByMote[moteIndex] = (local + 1) % STORMWEAVE_TRAIL_SAMPLES_PER_MOTE;
     this.trailCountByMote[moteIndex] = Math.min(count + 1, STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
     this.lastTrailSampleTimeSec[moteIndex] = this.elapsedSec;
