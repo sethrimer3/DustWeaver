@@ -274,7 +274,6 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
     registerRoom(roomDef);
     setRoomNameOverride(id, name);
     setRoomWorldOverride(id, worldId);
-    ctx.callbacks.onWorldMapDataChanged?.();
 
     const panXPx = ctx.getPanX();
     const panYPx = ctx.getPanY();
@@ -290,6 +289,9 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
     const mapY = placed.mapY;
     ctx.placements.set(id, { room: roomDef, mapXWorld: mapX, mapYWorld: mapY });
     setRoomMapPosition(id, mapX, mapY);
+
+    ctx.callbacks.onRoomCreated?.(roomDef);
+    ctx.callbacks.onWorldMapDataChanged?.();
 
     ctx.setSelectedRoomId(id);
     modal.destroy();
@@ -686,6 +688,13 @@ export function showCreateLinkedRoomDialog(
     setRoomTransitionLink(sourceRoomId, sourceTransIndex, id, targetSpawn);
     setRoomTransitionLink(id, 0, sourceRoomId, sourceSpawn);
 
+    // newRoomDef already reflects the reciprocal link above (setRoomTransitionLink
+    // mutates the RoomDef instance stored in ROOM_REGISTRY in place), so persisting
+    // it now captures the fully-linked room in one shot.
+    ctx.callbacks.onRoomCreated?.(newRoomDef);
+    // The source room already existed and must be synchronized separately —
+    // it is not covered by onRoomCreated.
+    ctx.callbacks.onRoomTransitionLinked?.(sourceRoomId, sourceTransIndex, id, targetSpawn);
     ctx.callbacks.onWorldMapDataChanged?.();
     ctx.setSelectedRoomId(id);
     modal.destroy();

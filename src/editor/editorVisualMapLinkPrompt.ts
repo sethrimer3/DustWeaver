@@ -58,6 +58,10 @@ export interface VisualMapLinkContext {
   readonly render: () => void;
   /** Called when a successful link mutates room data. */
   readonly onWorldMapDataChanged: (() => void) | undefined;
+  /** Called once per side of a successful link so each existing room can be persisted. */
+  readonly onRoomTransitionLinked:
+    | ((roomId: string, transitionIndex: number, targetRoomId: string, targetSpawnBlock: readonly [number, number]) => void)
+    | undefined;
   getPendingLink(): PendingDoorLink | null;
   setPendingLink(link: PendingDoorLink | null): void;
   getLinkSourceRoomId(): string;
@@ -124,6 +128,8 @@ export function applyPendingDoorLink(link: PendingDoorLink, ctx: VisualMapLinkCo
   );
 
   if (didLinkSource && didLinkTarget) {
+    ctx.onRoomTransitionLinked?.(link.sourceRoomId, link.sourceTransIndex, link.targetRoomId, targetSpawn);
+    ctx.onRoomTransitionLinked?.(link.targetRoomId, link.targetTransIndex, link.sourceRoomId, sourceSpawn);
     ctx.onWorldMapDataChanged?.();
     ctx.statusBar.textContent =
       `Linked: ${effectiveRoomName(link.sourceRoomId)} door #${link.sourceTransIndex + 1}` +

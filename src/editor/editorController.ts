@@ -591,6 +591,80 @@ export function createEditorController(
     campaignSession.campaignStore.discardRoomChanges(roomData.id);
   }
 
+  /**
+   * Persists a brand-new room registered by the visual map (header "+ Add
+   * Room", or double-click-unlinked-door "Create Linked Room"). Mirrors the
+   * in-room connected-room-creation flow: converts the RoomDef to
+   * EditorRoomData, advances `state.nextUid`, and commits it immediately via
+   * the store-aware `persistCreatedCampaignRoom` path so the room is loadable
+   * right away (double-click, Save & Test, export) without requiring a
+   * separate save action.
+   */
+  function handleRoomCreatedFromVisualMap(roomDef: RoomDef): void {
+    const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(roomDef, state.nextUid);
+    state.nextUid = newNextUid;
+    persistCreatedCampaignRoom(campaignSession, pendingRoomEdits, newRoomData);
+    isWorldMapDirty = true;
+  }
+
+  /**
+   * Synchronizes an existing room's transition target/spawn (mutated by the
+   * visual map — either the reciprocal side of a newly-created linked room,
+   * or one side of linking two existing doors) into persisted storage.
+   *
+   * If the affected room is the one currently open in the editor, the
+   * mutation is applied directly to `state.roomData` and the room is merely
+   * marked dirty — respecting the persistence-cadence rule that the active
+   * room is only flushed at an explicit save boundary
+   * (`commitActiveRoomToCampaign`), so unsaved current-room edits are never
+   * silently discarded or bypassed.
+   *
+   * Otherwise the room is not currently open, so there is no in-progress
+   * edit session to preserve: it is loaded, patched, and written straight
+   * back via `persistSavedCampaignRoom`, mirroring how newly created rooms
+   * are committed immediately.
+   */
+  function handleRoomTransitionLinkedFromVisualMap(
+    roomId: string,
+    transitionIndex: number,
+    targetRoomId: string,
+    targetSpawnBlock: readonly [number, number],
+  ): void {
+    if (state.roomData && state.roomData.id === roomId) {
+      const trans = state.roomData.transitions[transitionIndex];
+      if (trans) {
+        trans.targetRoomId = targetRoomId;
+        trans.targetSpawnBlock = [targetSpawnBlock[0], targetSpawnBlock[1]];
+        // Deliberately not routed through applyEdits('metadata'): that helper
+        // recomputes isCurrentRoomDirty from the undo-history transaction
+        // state (isHistoryDirty(history)), which this out-of-band visual-map
+        // mutation never touches — it would silently clobber the dirty flag
+        // back to false and the change would be lost on the next room
+        // switch. Keep the current-room sync minimal and explicit instead.
+        if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
+          campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
+          campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
+        }
+        const roomDef = rebuildLiveEditorRoomDef();
+        if (roomDef) registerRoom(roomDef); // keep registry metadata in sync for map tooling
+        isCurrentRoomDirty = true;
+      }
+      isWorldMapDirty = true;
+      return;
+    }
+
+    const loaded = loadPersistedCampaignRoom(campaignSession, pendingRoomEdits, roomId, state.nextUid);
+    if (!loaded) return;
+    state.nextUid = Math.max(state.nextUid, loaded.nextUid);
+    const trans = loaded.roomData.transitions[transitionIndex];
+    if (trans) {
+      trans.targetRoomId = targetRoomId;
+      trans.targetSpawnBlock = [targetSpawnBlock[0], targetSpawnBlock[1]];
+    }
+    persistSavedCampaignRoom(campaignSession, pendingRoomEdits, loaded.roomData);
+    isWorldMapDirty = true;
+  }
+
   function rebuildLiveEditorRoomDef(): RoomDef | null {
     if (state.roomData === null) {
       liveEditorRoomDef = null;
@@ -1547,6 +1621,8 @@ export function createEditorController(
       },
       onSaveAndExportCampaign: () => saveAndExportCampaign(),
       onWorldMapDataChanged: () => { isWorldMapDirty = true; },
+      onRoomCreated: handleRoomCreatedFromVisualMap,
+      onRoomTransitionLinked: handleRoomTransitionLinkedFromVisualMap,
     });
   }
 

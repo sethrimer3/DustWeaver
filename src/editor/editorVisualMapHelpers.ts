@@ -29,6 +29,27 @@ export interface VisualMapCallbacks {
   onSaveAndExportCampaign?: () => void;
   /** Called whenever world-map metadata is mutated (rename, move, add room/world, door link). */
   onWorldMapDataChanged?: () => void;
+  /**
+   * Called when a brand-new room was registered and placed by the visual map
+   * (header "+ Add Room", or double-click-unlinked-door "Create Linked Room").
+   * The RoomDef reflects final state (including any reciprocal transition
+   * link already applied) and must be persisted as a newly created room.
+   */
+  onRoomCreated?: (roomDef: RoomDef) => void;
+  /**
+   * Called when an existing (already-persisted) room's transition target was
+   * mutated by the visual map — either as the reciprocal side of a newly
+   * created linked room, or as one side of linking two existing doors.
+   * Must be synchronized into persisted storage (or into the currently open
+   * room's state if that room is the one affected) without discarding any
+   * other unsaved content.
+   */
+  onRoomTransitionLinked?: (
+    roomId: string,
+    transitionIndex: number,
+    targetRoomId: string,
+    targetSpawnBlock: readonly [number, number],
+  ) => void;
 }
 
 // ── Room name / world lookup helpers ─────────────────────────────────────────

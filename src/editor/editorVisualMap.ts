@@ -223,6 +223,7 @@ export function showVisualWorldMap(
     statusBar,
     render: () => render(),
     onWorldMapDataChanged: callbacks.onWorldMapDataChanged,
+    onRoomTransitionLinked: callbacks.onRoomTransitionLinked,
     getPendingLink:          () => pendingDoorLink,
     setPendingLink:          (link) => { pendingDoorLink = link; },
     getLinkSourceRoomId:     () => linkSourceRoomId,

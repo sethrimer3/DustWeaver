@@ -197,8 +197,19 @@ test('controller persistence is routed through the store-aware production bounda
   const source = readControllerSource();
   const directCommits = source.match(/campaignStore\.commitRoom\(/g) ?? [];
   assert.equal(directCommits.length, 0, 'controller must not bypass the persistence boundary');
-  assert.equal((source.match(/persistSavedCampaignRoom\(/g) ?? []).length, 1);
-  assert.equal((source.match(/persistCreatedCampaignRoom\(/g) ?? []).length, 1);
+  // Two call sites each, as of the visual-map room-persistence fix:
+  //   - commitActiveRoomToCampaign(): the currently-open room's save boundary.
+  //   - handleRoomTransitionLinkedFromVisualMap(): syncing an existing,
+  //     not-currently-open room whose transition was relinked via the visual
+  //     map (door-link, or the source side of "Create Linked Room").
+  // and:
+  //   - the in-room connected-room-creation flow (unchanged).
+  //   - handleRoomCreatedFromVisualMap(): the visual map's "+ Add Room" and
+  //     "Create Linked Room" new-room paths.
+  // Both still route exclusively through the store-aware persistence
+  // boundary functions, never campaignStore.commitRoom() directly.
+  assert.equal((source.match(/persistSavedCampaignRoom\(/g) ?? []).length, 2);
+  assert.equal((source.match(/persistCreatedCampaignRoom\(/g) ?? []).length, 2);
 });
 
 test('commitActiveRoomToCampaign is a no-op unless the room is actually dirty', () => {
