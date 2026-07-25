@@ -298,6 +298,186 @@ test('visual-map room creation and door-linking persist through the store-aware 
   assert.ok(packed.worldMap.rooms.some(r => r.id === 'vm_linked'));
 });
 
+test('regression: linking an unlinked transition on the CURRENTLY OPEN room stays dirty-in-memory until an explicit save boundary, then persists both reciprocal links through Save / room-switch-with-save / Save & Test / export, and Discard rolls back only the source-room half', async () => {
+  // Reproduces the exact reported bug path: the room whose transition is
+  // being linked from the visual map is the SAME room currently open for
+  // editing in the room editor (state.roomData), not some other room.
+  //
+  // This mirrors handleRoomTransitionLinkedFromVisualMap's current-room
+  // branch in editorController.ts: the mutation is applied directly to the
+  // live EditorRoomData object and the store is told markRoomDirty (never
+  // commitRoom) — respecting the persistence-cadence rule that ordinary
+  // active-room mutations stay in memory until Save / Save & Test / export /
+  // room-switch-with-save explicitly flushes them (see
+  // editorPersistenceCadence.test.ts).
+  const src = editorRoom('src_room');
+  src.transitions.push({
+    uid: 50, direction: 'right', xBlock: 27, yBlock: 8, openingSizeBlocks: 3,
+    targetRoomId: '', targetSpawnBlock: [0, 0], positionBlock: 8,
+  } as never);
+  const campaign = {
+    v: 1, kind: 'DustWeaverCampaign',
+    campaign: { id: 'CURRENT_ROOM_LINK_TEST', title: 'Current Room Link Test', initialRoomId: 'src_room' },
+    metadata: { version: 1 },
+    worldMap: {
+      worlds: [{ id: 1, name: 'World 1', order: 0 }],
+      rooms: [{ id: 'src_room', name: 'src_room', worldId: 1, mapX: 0, mapY: 0 }],
+    },
+    rooms: [dehydrateRoom(editorRoomDataToJson(src))],
+  } as SavedCampaignV1;
+  const session = createOfficialCampaignSession(campaign);
+  const pendingRoomEdits = new Map<string, EditorRoomData>();
+  const store = session.campaignStore!;
+  assert.ok(store, 'official session is store-backed');
+
+  // "Open" src_room in the editor — this is state.roomData from here on.
+  const { roomData: openRoomData } = store.getRoom('src_room', 1);
+  const rawSrcBeforeLink = store.rawRoomsById.get('src_room');
+
+  // The visual map creates the linked target room (already-persisted new
+  // room, mirrors handleRoomCreatedFromVisualMap -> persistCreatedCampaignRoom).
+  const targetRoomDef = roomJsonDefToRoomDef({
+    id: 'target_room', name: 'Target Room', worldNumber: 1, widthBlocks: 40, heightBlocks: 30,
+    playerSpawnBlock: [20, 15], interiorWalls: [], enemies: [], skillTombs: [],
+    transitions: [{
+      direction: 'left', positionBlock: 8, openingSizeBlocks: 3,
+      targetRoomId: 'src_room', targetSpawnBlock: [28, 8], xBlock: 0, yBlock: 8, gradientWidthBlocks: 3,
+    }],
+  });
+  {
+    const { data } = roomDefToEditorRoomData(targetRoomDef, 100);
+    assert.equal(persistCreatedCampaignRoom(session, pendingRoomEdits, data), 'campaign-store');
+  }
+  assert.ok(store.rawRoomsById.has('target_room'), 'target room is immediately persisted (new-room path)');
+
+  // ── handleRoomTransitionLinkedFromVisualMap's CURRENT-ROOM branch ────────
+  // Patch state.roomData directly (same object identity as `openRoomData`)
+  // and markRoomDirty — never commitRoom.
+  const trans = openRoomData.transitions[0];
+  assert.ok(trans);
+  trans!.targetRoomId = 'target_room';
+  trans!.targetSpawnBlock = [3, 8];
+  store.setActiveRoomId('src_room');
+  store.markRoomDirty('src_room', openRoomData);
+
+  // Dirty-without-serialize: the cadence rule must hold for this out-of-band
+  // visual-map mutation exactly as it holds for ordinary placement edits.
+  assert.equal(
+    store.rawRoomsById.get('src_room'), rawSrcBeforeLink,
+    'no premature persistSavedCampaignRoom/commitRoom for the current room — raw data must be untouched',
+  );
+  assert.ok(store.dirtyRoomIds.has('src_room'), 'the room is marked dirty in memory');
+  assert.equal(
+    store.rawRoomsById.get('src_room')?.transitions?.some(t => t.to === 'target_room'),
+    false,
+    'the reciprocal link must not appear in persisted storage yet',
+  );
+
+  // ── Save / room-switch-with-save / Save & Test all route through the same
+  // commitActiveRoomToCampaign -> persistSavedCampaignRoom boundary. ────────
+  assert.equal(persistSavedCampaignRoom(session, pendingRoomEdits, openRoomData), 'campaign-store');
+  assert.ok(store.rawRoomsById.get('src_room')?.transitions?.some(t => t.to === 'target_room'),
+    'after the save boundary, the link is persisted');
+  assert.equal(store.dirtyRoomIds.has('src_room'), false, 'commit clears the dirty flag');
+
+  const reloadedSrc = loadPersistedCampaignRoom(session, pendingRoomEdits, 'src_room', 1);
+  assert.equal(reloadedSrc?.roomData.transitions[0]?.targetRoomId, 'target_room');
+  const reloadedTarget = loadPersistedCampaignRoom(session, pendingRoomEdits, 'target_room', 1);
+  assert.equal(reloadedTarget?.roomData.transitions[0]?.targetRoomId, 'src_room');
+
+  // Export must see both reciprocal links with no world-map/payload mismatch.
+  const registry = new Map([
+    ['src_room', { id: 'src_room', name: 'src_room', worldNumber: 1, mapX: 0, mapY: 0 }],
+    ['target_room', { id: 'target_room', name: 'Target Room', worldNumber: 1, mapX: 40, mapY: 0 }],
+  ]);
+  const exported = buildAuthoritativeCampaignExport(
+    session, registry, new Map([[1, 'World 1']]), new Map([[1, 0]]),
+  );
+  assert.ok(exported.rooms.find(r => r.id === 'src_room')?.transitions?.some(t => t.to === 'target_room'));
+  assert.ok(exported.rooms.find(r => r.id === 'target_room')?.transitions?.some(t => t.to === 'src_room'));
+  const exportedIds = new Set(exported.rooms.map(r => r.id));
+  const mapIds = new Set(exported.worldMap.rooms.map(r => r.id));
+  assert.deepEqual(exportedIds, mapIds, 'no world-map/payload mismatch');
+
+  const campaignDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dw-current-room-link-'));
+  const roomIdFirstIndex = new Map(exported.rooms.map((room, index) => [room.id, index]));
+  const result = await campaignExport.exportCampaignToDisk({
+    campaign: exported, campaignMeta: exported.campaign, campaignId: exported.campaign.id,
+    rooms: exported.rooms, roomIdFirstIndex, isOfficialCampaign: false, campaignDir,
+  });
+  assert.equal(result.ok, true, 'Save & Test / export path writes to disk without integrity errors');
+
+  // ── Discard atomicity ─────────────────────────────────────────────────────
+  // Redo the same scenario in a fresh session, then Cancel/Discard the
+  // current room instead of saving.
+  const discardCampaign = {
+    v: 1, kind: 'DustWeaverCampaign',
+    campaign: { id: 'DISCARD_TEST', title: 'Discard Test', initialRoomId: 'src_room' },
+    metadata: { version: 1 },
+    worldMap: {
+      worlds: [{ id: 1, name: 'World 1', order: 0 }],
+      rooms: [{ id: 'src_room', name: 'src_room', worldId: 1, mapX: 0, mapY: 0 }],
+    },
+    rooms: [dehydrateRoom(editorRoomDataToJson(src))],
+  } as SavedCampaignV1;
+  const discardSession = createOfficialCampaignSession(discardCampaign);
+  const discardPendingRoomEdits = new Map<string, EditorRoomData>();
+  const discardStore = discardSession.campaignStore!;
+  const { roomData: discardOpenRoomData } = discardStore.getRoom('src_room', 1);
+  const rawSrcBeforeDiscard = discardStore.rawRoomsById.get('src_room');
+
+  const { data: discardTargetData } = roomDefToEditorRoomData(targetRoomDef, 200);
+  assert.equal(persistCreatedCampaignRoom(discardSession, discardPendingRoomEdits, discardTargetData), 'campaign-store');
+  assert.ok(discardStore.rawRoomsById.has('target_room'), 'the already-created target room is persisted (store-aware immediate path)');
+
+  const discardTrans = discardOpenRoomData.transitions[0];
+  discardTrans!.targetRoomId = 'target_room';
+  discardTrans!.targetSpawnBlock = [3, 8];
+  discardStore.setActiveRoomId('src_room');
+  discardStore.markRoomDirty('src_room', discardOpenRoomData);
+
+  // Cancel: discardCurrentRoomSessionChanges(state.roomData) -> store.discardRoomChanges(roomId).
+  discardStore.discardRoomChanges('src_room');
+
+  // The source room's persisted (raw) state is untouched — no half-persisted
+  // link ever reaches storage for the room whose edit session was cancelled.
+  assert.equal(
+    discardStore.rawRoomsById.get('src_room'), rawSrcBeforeDiscard,
+    'discard must not leave any trace of the cancelled link in persisted storage',
+  );
+  assert.equal(
+    discardStore.rawRoomsById.get('src_room')?.transitions?.some(t => t.to === 'target_room'),
+    false,
+  );
+  assert.equal(discardStore.dirtyRoomIds.has('src_room'), false);
+
+  // DECISION (documented in editorController.ts on
+  // handleRoomTransitionLinkedFromVisualMap): the already-persisted target
+  // room is NOT rolled back. It remains a fully valid, registered room with
+  // a payload — its own transition still points back at src_room (a
+  // one-way link, since src_room's link was discarded) — never a dangling
+  // world-map reference or a half-written file. Export must still succeed
+  // with no world-map/payload mismatch.
+  assert.ok(discardStore.rawRoomsById.get('target_room')?.transitions?.some(t => t.to === 'src_room'),
+    'the target room keeps its one-way link back to src_room — orphaned, not rolled back');
+
+  const discardRegistry = new Map([
+    ['src_room', { id: 'src_room', name: 'src_room', worldNumber: 1, mapX: 0, mapY: 0 }],
+    ['target_room', { id: 'target_room', name: 'Target Room', worldNumber: 1, mapX: 40, mapY: 0 }],
+  ]);
+  const discardExported = buildAuthoritativeCampaignExport(
+    discardSession, discardRegistry, new Map([[1, 'World 1']]), new Map([[1, 0]]),
+  );
+  const discardExportedIds = new Set(discardExported.rooms.map(r => r.id));
+  const discardMapIds = new Set(discardExported.worldMap.rooms.map(r => r.id));
+  assert.deepEqual(discardExportedIds, discardMapIds, 'no world-map/payload mismatch after discard');
+  assert.equal(
+    discardExported.rooms.find(r => r.id === 'src_room')?.transitions?.some(t => t.to === 'target_room'),
+    false,
+    'src_room has no reciprocal link after discard',
+  );
+});
+
 test('official game owns and forwards one persistent campaign session', () => {
   const gameSource = fs.readFileSync(path.join(__dirname, '..', 'game.ts'), 'utf8');
   const screenSource = fs.readFileSync(path.join(__dirname, '..', 'screens', 'gameScreen.ts'), 'utf8');
