@@ -2,8 +2,8 @@
   "v": 1,
   "kind": "DustWeaverCampaign",
   "metadata": {
-    "version": 9,
-    "lastEditedAt": "2026-07-25T16:35:20.658Z"
+    "version": 8,
+    "lastEditedAt": "2026-07-25T02:23:01.849Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -207,6 +207,48 @@
         "worldId": 2,
         "mapX": -629,
         "mapY": 78
+      },
+      {
+        "id": "slippery_turn",
+        "name": "Slippery Turn",
+        "worldId": 2,
+        "mapX": -679,
+        "mapY": 80
+      },
+      {
+        "id": "victory_alcove",
+        "name": "Victory Alcove",
+        "worldId": 1,
+        "mapX": -71,
+        "mapY": -33
+      },
+      {
+        "id": "teleporter_room",
+        "name": "Teleporter Room",
+        "worldId": 1,
+        "mapX": -313,
+        "mapY": 710
+      },
+      {
+        "id": "the_squeeze",
+        "name": "The Squeeze",
+        "worldId": 1,
+        "mapX": -150,
+        "mapY": -306
+      },
+      {
+        "id": "first_light",
+        "name": "First Light",
+        "worldId": 1,
+        "mapX": -170,
+        "mapY": -336
+      },
+      {
+        "id": "outside_beach",
+        "name": "Outside Beach",
+        "worldId": 1,
+        "mapX": -290,
+        "mapY": -386
       }
     ]
   },
@@ -891,9 +933,20 @@
           47
         ]
       ],
+      "lights": [
+        [
+          20,
+          10,
+          8,
+          255,
+          220,
+          160,
+          80
+        ]
+      ],
       "bakedWallTemplate": {
-        "schemaVersion": 2,
-        "sourceHash": "414495de",
+        "schemaVersion": 1,
+        "sourceHash": "79879a87",
         "wallCount": 42,
         "xWorld": [
           0,
@@ -937,7 +990,7 @@
           312,
           288,
           256,
-          0
+          48
         ],
         "yWorld": [
           0,
@@ -1025,7 +1078,7 @@
           152,
           176,
           208,
-          464
+          416
         ],
         "hWorld": [
           8,
@@ -1036,7 +1089,7 @@
           40,
           56,
           88,
-          328,
+          392,
           8,
           16,
           8,
@@ -1466,52 +1519,7 @@
           0,
           0,
           0
-        ],
-        "rimStyleIndex": [
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535,
-          65535
-        ],
-        "rimStyles": []
+        ]
       }
     },
     {
@@ -44653,7 +44661,7 @@
         "byTheme": {}
       },
       "map": [
-        -629,
+        -630,
         78
       ],
       "theme": "bk",
@@ -44766,7 +44774,7 @@
     }
   ],
   "editor": {
-    "createdWithBuild": "512",
-    "lastEditedIso": "2026-07-25T16:35:20.658Z"
+    "createdWithBuild": "500",
+    "lastEditedIso": "2026-07-25T02:23:01.849Z"
   }
 }
