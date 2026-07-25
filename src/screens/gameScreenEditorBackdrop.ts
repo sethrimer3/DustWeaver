@@ -29,6 +29,7 @@ import type { RenderProfiler } from '../render/hud/renderProfiler';
 import { renderHighResolutionDebugOverlay } from './gameRenderDeviceOverlay';
 import { resetCanvasPass } from '../render/canvasViewport';
 import { buildEditorRenderMask } from '../editor/editorRenderMask';
+import { renderEditorDragDimensionsHighResolution } from '../editor/editorDragDimensionOverlay';
 
 /**
  * Renders gameplay scene as a static backdrop while world editor consumes input.
@@ -156,6 +157,16 @@ export function renderEditorBackdrop(
     deviceCtx.drawImage(webglRenderer.canvas, 0, 0, canvas.width, canvas.height);
   }
   bloomSystem.compositeToDevice(deviceCtx, canvas.width, canvas.height);
+  renderEditorDragDimensionsHighResolution(
+    deviceCtx,
+    canvas,
+    virtualWidthPx,
+    virtualHeightPx,
+    editorController.state,
+    offsetXPx,
+    offsetYPx,
+    zoom,
+  );
   // Gated by the Debug layer (see renderHighResolutionDebugOverlay).
   renderHighResolutionDebugOverlay({
     deviceCtx,

@@ -26,6 +26,33 @@ const VELOCITY_DAMPING_PER_SEC = 4.8;
 const MAX_CATCH_UP_SPEED_WORLD_PER_SEC = 155;
 const SEPARATION_RADIUS_WORLD = 7;
 const SEPARATION_ACCEL_PER_SEC2 = 72;
+// World-space distance the recent player-path vector must span before the
+// perpendicular wobble direction is treated as reliable. Below this the
+// direction is numerically unstable (near-zero-length vector), so its
+// contribution is faded to zero instead of snapping to a fallback axis -
+// that snap was the root cause of the stationary trail "pop": the moment a
+// moving player stopped, pathDx/pathDy collapsed toward zero and the old
+// code hard-switched perpendicular from a computed direction to a fixed
+// (0, 1) axis, discontinuously relocating the mote's target position (and
+// therefore the mote itself) by up to one wave amplitude in a single tick.
+const PERPENDICULAR_FADE_DISTANCE_WORLD = 0.6;
+// Feed-forward lookahead applied to the lagged path-follow target using the
+// player's recorded velocity at that point in history, so motes inherit
+// momentum instead of only chasing a stale position.
+const FEED_FORWARD_TIME_SEC = 0.12;
+// Scales how much the replay delay shrinks as player speed increases, so
+// lag doesn't grow unboundedly at high speed.
+const HIGH_SPEED_DELAY_SHRINK_FACTOR = 0.35;
+// Idle/low-speed organic wander (requirement 3): smoothed per-mote random
+// walk, not a periodic sine. Each mote steers toward a new deterministic
+// target direction every noisePeriodSec (itself per-mote randomized), with
+// the steering rate below smoothing out sharp direction changes.
+const IDLE_WANDER_SPEED_WORLD_PER_SEC = 3.2;
+const IDLE_WANDER_STEER_PER_SEC2 = 5.5;
+const IDLE_WANDER_CONTAINMENT_RADIUS_WORLD = 6.5;
+const IDLE_WANDER_CONTAINMENT_PER_SEC2 = 9;
+const IDLE_WANDER_PERIOD_BASE_SEC = 1.1;
+const IDLE_WANDER_PERIOD_VARIATION_SEC = 0.9;
 
 export function getStormweaveMoteCount(currentMoteCount: number): number {
   return Math.min(MAX_LIFE_MOTES, normalizeMoteCount(currentMoteCount));
@@ -95,8 +122,19 @@ export class StormweaveLifeMotes {
   private readonly baseDelaySamples = new Float32Array(MAX_LIFE_MOTES);
   private readonly delayVariationSamples = new Float32Array(MAX_LIFE_MOTES);
   private readonly followResponseScale = new Float32Array(MAX_LIFE_MOTES);
+  // Idle-wander noise-walk state (requirement 3): current wander velocity
+  // and integrated offset from the path-follow anchor, plus per-mote
+  // randomized retarget period/phase so motes decorrelate from each other.
+  private readonly noiseVelX = new Float32Array(MAX_LIFE_MOTES);
+  private readonly noiseVelY = new Float32Array(MAX_LIFE_MOTES);
+  private readonly wanderOffsetX = new Float32Array(MAX_LIFE_MOTES);
+  private readonly wanderOffsetY = new Float32Array(MAX_LIFE_MOTES);
+  private readonly noisePeriodSec = new Float32Array(MAX_LIFE_MOTES);
+  private readonly noisePhaseOffset = new Float32Array(MAX_LIFE_MOTES);
   private readonly pathXWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
   private readonly pathYWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
+  private readonly pathVelXWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
+  private readonly pathVelYWorld = new Float32Array(MAX_PLAYER_PATH_SAMPLES);
   private pathCount = 0;
   private pathWriteIndex = 0;
 
@@ -178,7 +216,7 @@ export class StormweaveLifeMotes {
     this.hasPreviousPlayerPosition = true;
     this.pathCount = 0;
     this.pathWriteIndex = 0;
-    this.recordPlayerPath(playerXWorld, playerYWorld);
+    this.recordPlayerPath(playerXWorld, playerYWorld, 0, 0);
     this.reconcile(fullContainerCount, playerXWorld, playerYWorld);
   }
 
@@ -190,6 +228,13 @@ export class StormweaveLifeMotes {
       this.trailWriteByMote[i] = 0;
       this.lastTrailSampleTimeSec[i] = this.elapsedSec;
       this.trailReadyTimeSec[i] = this.elapsedSec + TRAIL_REBASE_DURATION_SEC;
+      // Defense-in-depth: fully clear this slot's trail storage before reuse
+      // so a previous logical mote's samples can never be read even if a
+      // future change loosens the count-based gating below.
+      const trailBase = i * STORMWEAVE_TRAIL_SAMPLES_PER_MOTE;
+      this.trailXWorld.fill(0, trailBase, trailBase + STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
+      this.trailYWorld.fill(0, trailBase, trailBase + STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
+      this.trailTimeSec.fill(0, trailBase, trailBase + STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
       const serial = this.spawnSerial++;
       const [ux, uy] = deterministicUnit(i, serial);
       const spawnRadius = 22 + ((serial * 11 + i * 7) % 13);
@@ -209,6 +254,14 @@ export class StormweaveLifeMotes {
       this.baseDelaySamples[i] = 4 + ((i * 19 + serial * 23) % 32);
       this.delayVariationSamples[i] = 2 + ((i * 7 + serial * 5) % 8) * 0.6;
       this.followResponseScale[i] = 0.72 + ((i * 13 + serial * 3) % 15) * 0.04;
+      this.noiseVelX[i] = 0;
+      this.noiseVelY[i] = 0;
+      this.wanderOffsetX[i] = 0;
+      this.wanderOffsetY[i] = 0;
+      this.noisePeriodSec[i] = IDLE_WANDER_PERIOD_BASE_SEC
+        + ((i * 23 + serial * 29) % 17) / 17 * IDLE_WANDER_PERIOD_VARIATION_SEC;
+      this.noisePhaseOffset[i] = ((i * 31 + serial * 41) % 113) / 113
+        * (IDLE_WANDER_PERIOD_BASE_SEC + IDLE_WANDER_PERIOD_VARIATION_SEC);
     }
     while (this.count > targetCount) {
       this.count--;
@@ -234,6 +287,12 @@ export class StormweaveLifeMotes {
       playerYWorld - this.previousPlayerYWorld,
     ) > PLAYER_DISCONTINUITY_DISTANCE_WORLD) {
       this.clearTrails();
+      // A mid-session teleport (room transition, respawn, etc.) must also
+      // reset the player-path history ring - otherwise lagged mote targets
+      // keep sampling positions from before the jump and motes visibly
+      // streak through/across the teleport point.
+      this.pathCount = 0;
+      this.pathWriteIndex = 0;
     }
     this.previousPlayerXWorld = playerXWorld;
     this.previousPlayerYWorld = playerYWorld;
@@ -248,7 +307,7 @@ export class StormweaveLifeMotes {
     } else {
       this.visualIntensity += (targetIntensity - this.visualIntensity) * (1 - Math.exp(-7 * dt));
     }
-    this.recordPlayerPath(playerXWorld, playerYWorld);
+    this.recordPlayerPath(playerXWorld, playerYWorld, playerVelocityXWorld, playerVelocityYWorld);
     this.separationX.fill(0, 0, this.count);
     this.separationY.fill(0, 0, this.count);
 
@@ -277,28 +336,72 @@ export class StormweaveLifeMotes {
     }
 
     const damping = Math.exp(-VELOCITY_DAMPING_PER_SEC * dt);
+    // Blend factor between idle wander and path-follow motion, reusing the
+    // canonical speed-ratio smoothstep so the transition is continuous and
+    // shares its threshold with the trail-intensity/glow logic.
+    const followWeight = getStormweaveTrailTargetIntensity(playerVelocityXWorld, playerVelocityYWorld);
+    const idleWeight = 1 - followWeight;
     for (let i = 0; i < this.count; i++) {
       const phase = this.phase[i] + this.elapsedSec * this.waveAngularSpeed[i];
       const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
       const livingOffset = isShieldActive ? Math.sin(phase) * 0.22 : 0;
-      const delaySamples = this.baseDelaySamples[i]
-        + Math.sin(phase * 0.31 + this.secondaryWavePhase[i]) * this.delayVariationSamples[i];
+      // Shrink the replay delay as player speed rises so lag converges
+      // instead of growing unboundedly at high speed.
+      const delaySamples = (this.baseDelaySamples[i]
+        + Math.sin(phase * 0.31 + this.secondaryWavePhase[i]) * this.delayVariationSamples[i])
+        * (1 - followWeight * HIGH_SPEED_DELAY_SHRINK_FACTOR);
       const pathTarget = this.samplePlayerPath(delaySamples);
       const olderPathTarget = this.samplePlayerPath(delaySamples + 2);
       const pathDx = pathTarget[0] - olderPathTarget[0];
       const pathDy = pathTarget[1] - olderPathTarget[1];
       const pathLength = Math.hypot(pathDx, pathDy);
-      const perpendicularX = pathLength > 0.0001 ? -pathDy / pathLength : 0;
-      const perpendicularY = pathLength > 0.0001 ? pathDx / pathLength : 1;
+      // Fade the wobble direction to zero as the recent path vector shrinks
+      // instead of snapping to a fallback axis - see
+      // PERPENDICULAR_FADE_DISTANCE_WORLD for why this matters.
+      const perpFadeT = Math.min(1, pathLength / PERPENDICULAR_FADE_DISTANCE_WORLD);
+      const invPathLength = pathLength > 0.0001 ? 1 / pathLength : 0;
+      const perpendicularX = -pathDy * invPathLength * perpFadeT;
+      const perpendicularY = pathDx * invPathLength * perpFadeT;
       const waveOffset = this.waveAmplitudeWorld[i] * (
         Math.sin(phase) + Math.sin(phase * 0.43 + this.secondaryWavePhase[i]) * 0.38
       );
+      // Feed-forward: nudge the lagged path target by the player's recorded
+      // velocity at that point in history, so motes inherit momentum
+      // instead of purely chasing a stale position (requirement 4).
+      const feedForwardX = pathTarget[0] + pathTarget[2] * FEED_FORWARD_TIME_SEC;
+      const feedForwardY = pathTarget[1] + pathTarget[3] * FEED_FORWARD_TIME_SEC;
+
+      // Idle-wander noise-walk (requirement 3): smoothed random-walk
+      // acceleration toward a per-mote deterministic retarget direction
+      // that changes every noisePeriodSec, contained near the anchor by a
+      // soft spring so motes drift instead of wandering away indefinitely.
+      const wanderBucket = Math.floor((this.elapsedSec + this.noisePhaseOffset[i]) / this.noisePeriodSec[i]);
+      const [wanderDirX, wanderDirY] = deterministicUnit(i * 131 + 7, wanderBucket);
+      const wanderTargetVelX = wanderDirX * IDLE_WANDER_SPEED_WORLD_PER_SEC;
+      const wanderTargetVelY = wanderDirY * IDLE_WANDER_SPEED_WORLD_PER_SEC;
+      const wanderSteerT = Math.min(1, IDLE_WANDER_STEER_PER_SEC2 * dt);
+      this.noiseVelX[i] += (wanderTargetVelX - this.noiseVelX[i]) * wanderSteerT;
+      this.noiseVelY[i] += (wanderTargetVelY - this.noiseVelY[i]) * wanderSteerT;
+      this.wanderOffsetX[i] += this.noiseVelX[i] * dt;
+      this.wanderOffsetY[i] += this.noiseVelY[i] * dt;
+      const wanderDistance = Math.hypot(this.wanderOffsetX[i], this.wanderOffsetY[i]);
+      if (wanderDistance > IDLE_WANDER_CONTAINMENT_RADIUS_WORLD) {
+        const pullT = Math.min(1,
+          (wanderDistance - IDLE_WANDER_CONTAINMENT_RADIUS_WORLD) * IDLE_WANDER_CONTAINMENT_PER_SEC2 * dt / wanderDistance);
+        this.wanderOffsetX[i] -= this.wanderOffsetX[i] * pullT;
+        this.wanderOffsetY[i] -= this.wanderOffsetY[i] * pullT;
+      }
+
       const targetX = isShieldActive
         ? shieldGeometry.centerXWorld + Math.cos(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
-        : pathTarget[0] + this.preferredOffsetX[i] * 0.22 + perpendicularX * waveOffset;
+        : feedForwardX + this.preferredOffsetX[i] * 0.22
+          + perpendicularX * waveOffset * followWeight
+          + this.wanderOffsetX[i] * idleWeight;
       const targetY = isShieldActive
         ? shieldGeometry.centerYWorld + Math.sin(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
-        : pathTarget[1] + this.preferredOffsetY[i] * 0.22 + perpendicularY * waveOffset;
+        : feedForwardY + this.preferredOffsetY[i] * 0.22
+          + perpendicularY * waveOffset * followWeight
+          + this.wanderOffsetY[i] * idleWeight;
       const dx = targetX - this.xWorld[i];
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
@@ -387,14 +490,17 @@ export class StormweaveLifeMotes {
     return moteIndex * STORMWEAVE_TRAIL_SAMPLES_PER_MOTE + local;
   }
 
-  private recordPlayerPath(xWorld: number, yWorld: number): void {
+  private recordPlayerPath(xWorld: number, yWorld: number, velocityXWorld: number, velocityYWorld: number): void {
     this.pathXWorld[this.pathWriteIndex] = xWorld;
     this.pathYWorld[this.pathWriteIndex] = yWorld;
+    this.pathVelXWorld[this.pathWriteIndex] = velocityXWorld;
+    this.pathVelYWorld[this.pathWriteIndex] = velocityYWorld;
     this.pathWriteIndex = (this.pathWriteIndex + 1) % MAX_PLAYER_PATH_SAMPLES;
     this.pathCount = Math.min(this.pathCount + 1, MAX_PLAYER_PATH_SAMPLES);
   }
 
-  private samplePlayerPath(samplesAgo: number): [number, number] {
+  /** Returns [xWorld, yWorld, velocityXWorld, velocityYWorld] interpolated from recorded history. */
+  private samplePlayerPath(samplesAgo: number): [number, number, number, number] {
     const clamped = Math.max(0, Math.min(samplesAgo, this.pathCount - 1));
     const whole = Math.floor(clamped);
     const fraction = clamped - whole;
@@ -403,6 +509,8 @@ export class StormweaveLifeMotes {
     return [
       this.pathXWorld[newerIndex] + (this.pathXWorld[olderIndex] - this.pathXWorld[newerIndex]) * fraction,
       this.pathYWorld[newerIndex] + (this.pathYWorld[olderIndex] - this.pathYWorld[newerIndex]) * fraction,
+      this.pathVelXWorld[newerIndex] + (this.pathVelXWorld[olderIndex] - this.pathVelXWorld[newerIndex]) * fraction,
+      this.pathVelYWorld[newerIndex] + (this.pathVelYWorld[olderIndex] - this.pathVelYWorld[newerIndex]) * fraction,
     ];
   }
 }
