@@ -55,7 +55,7 @@ export interface PauseMenuCallbacks {
   onResume: () => void;
   onExitToMainMenu: () => void;
   onToggleDebug: () => void;
-  /** Called when the player clicks "World Editor" — should enable debug mode (if needed) and enter the editor directly. */
+  /** Called when the player clicks "World Editor" to enter the editor directly without changing debug mode. */
   onOpenWorldEditor: () => void;
   /** Called after a World View preset change so the caller can resize the virtual canvas. */
   onWorldViewChanged?: () => void;

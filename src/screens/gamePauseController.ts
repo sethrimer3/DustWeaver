@@ -91,11 +91,6 @@ export function createGamePauseController(
         state.isPaused = false;
         pauseMenuCleanup = null;
         onResetFrameClock();
-        if (!state.isDebugMode) {
-          state.isDebugMode = true;
-          state.pauseMenuState.isDebugOn = true;
-          onDebugModeChanged(true);
-        }
         onEnterWorldEditor();
       },
       onWorldViewChanged: onResizeCanvas,
