@@ -17,7 +17,7 @@ import type { EditableCampaignSession } from '../editor/editableCampaignSession'
 import { buildCustomCampaignsUI } from './mainMenuCustomCampaigns';
 import { buildSaveSlotUI } from './mainMenuSaveSlots';
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
-import { getPreloadedMenuAnimationFrames, MENU_ANIMATION_FPS } from './menuAnimationFrames';
+import { getPreloadedMenuAnimationSource, MENU_ANIMATION_FPS } from './menuAnimationFrames';
 import { createMusicManager } from '../audio/musicManager';
 import { getMusicVolume } from './renderSettings';
 
@@ -46,12 +46,11 @@ export interface MainMenuCallbacks {
 export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): () => void {
   // ── State ────────────────────────────────────────────────────────────────
   let isDestroyed = false;
-  const menuFrames = getPreloadedMenuAnimationFrames();
+  const menuAnimationSource = getPreloadedMenuAnimationSource();
 
   // ── Preload frames ───────────────────────────────────────────────────────
   const animatedBackground = createMenuAnimatedBackground({
-    normalFrames: menuFrames.normal,
-    blurredFrames: menuFrames.blurred,
+    source: menuAnimationSource,
     fps: MENU_ANIMATION_FPS,
     zIndex: 0,
   });

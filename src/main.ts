@@ -206,12 +206,11 @@ async function boot(): Promise<void> {
   const loadingScreen = createStartupLoadingScreen();
   try {
     await preloadMenuAnimationFrames(progress => loadingScreen.update(progress));
-    await initAndStart();
-    loadingScreen.destroy();
   } catch (error) {
-    console.error('[main] Failed to prepare menu animation:', error);
-    loadingScreen.showError(error);
+    console.error('[main] Unexpected menu-animation preparation failure; continuing startup:', error);
   }
+  await initAndStart();
+  loadingScreen.destroy();
 }
 
 void boot();

@@ -13,7 +13,7 @@
  */
 
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
-import { getPreloadedMenuAnimationFrames, MENU_ANIMATION_FPS } from './menuAnimationFrames';
+import { getPreloadedMenuAnimationSource, MENU_ANIMATION_FPS } from './menuAnimationFrames';
 
 export interface DeathScreenCallbacks {
   onReturnToLastSave: () => void;
@@ -24,10 +24,9 @@ export function showDeathScreen(
   root: HTMLElement,
   callbacks: DeathScreenCallbacks,
 ): () => void {
-  const menuFrames = getPreloadedMenuAnimationFrames();
+  const menuAnimationSource = getPreloadedMenuAnimationSource();
   const animatedBackground = createMenuAnimatedBackground({
-    normalFrames: menuFrames.blurred,
-    blurredFrames: menuFrames.blurred,
+    source: menuAnimationSource,
     fps: MENU_ANIMATION_FPS,
     opacity: 0.5,
     zIndex: 1,
