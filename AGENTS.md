@@ -7,7 +7,7 @@ This file is the short entry point for coding agents. Keep it compact and update
 1. `AGENTS.md`
 2. `docs/AI_REPO_MAP.md`
 3. `docs/CURRENT_STATUS.md`
-4. `docs/TODO.md`
+4. `docs/Todo.md`
 5. Existing detailed docs as needed: `README.md`, `nextSteps.md`, `performanceOptimizationDecisions.md`, `REFACTORING_PLAN.md`, `docs/render-chunk-prewarming.md`, and any feature-specific notes.
 
 ## Working rule for token-efficient agents
@@ -46,7 +46,7 @@ npm run desktop
 - Room transitions use complete boundary walls plus independent trigger strips. Do not reintroduce boundary holes.
 - For documentation-only changes, do not modify source code, saved room data, version numbers, or build numbers unless an existing repo rule explicitly requires it.
 - Every coherent set of codebase changes made by an AI agent must increment the patch component of `BUILD_NUMBER` in `src/build-info.ts` exactly once (for example, `1.0.0` becomes `1.0.1`). The main menu displays this value. Documentation-only changes do not require a bump unless they accompany code changes.
-- If a task discovers deferred work, add a concise item to `docs/TODO.md`. If a TODO is completed, check it off with the validating command or reason.
+- Follow the operational workflow in `docs/Todo.md` when selecting or completing Todo tasks. Record useful unfinished implementation context in `nextSteps.md`; check off a Todo only when its core acceptance criteria are complete.
 
 ## How to make changes
 
