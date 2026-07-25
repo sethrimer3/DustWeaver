@@ -36,6 +36,7 @@ import type { RoomCacheManifest, RoomCacheEntry, AdjacencyEntry } from '../level
 import { computeContentHash, computeCampaignHashForValidation } from '../levels/roomFileLoader';
 import { buildZipBlob } from '../utils/minimalZipWriter';
 import type { ZipEntry } from '../utils/minimalZipWriter';
+import { assertCampaignIntegrity } from './campaignIntegrity';
 
 // ── Main campaign constants ───────────────────────────────────────────────────
 const MAIN_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN';
@@ -386,6 +387,7 @@ export function exportCampaignJson(
       const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
       exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
     }
+    assertCampaignIntegrity(exported, new Set(ROOM_REGISTRY.keys()), 'live room registry');
     return exported;
   };
 

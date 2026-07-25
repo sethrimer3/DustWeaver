@@ -1,0 +1,48 @@
+{
+  "id": "boss_radiant_tether",
+  "name": "Luminous Chamber",
+  "worldNumber": 1,
+  "widthBlocks": 60,
+  "heightBlocks": 60,
+  "playerSpawnBlock": [3, 42],
+  "interiorWalls": [
+    { "xBlock": 1, "yBlock": 1, "wBlock": 2, "hBlock": 20 },
+    { "xBlock": 1, "yBlock": 22, "wBlock": 1, "hBlock": 16 },
+    { "xBlock": 1, "yBlock": 46, "wBlock": 2, "hBlock": 13 },
+    { "xBlock": 57, "yBlock": 1, "wBlock": 2, "hBlock": 20 },
+    { "xBlock": 58, "yBlock": 22, "wBlock": 1, "hBlock": 16 },
+    { "xBlock": 57, "yBlock": 46, "wBlock": 2, "hBlock": 13 },
+    { "xBlock": 3, "yBlock": 1, "wBlock": 54, "hBlock": 2 },
+    { "xBlock": 3, "yBlock": 57, "wBlock": 54, "hBlock": 2 },
+    { "xBlock": 10, "yBlock": 48, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 45, "yBlock": 48, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 25, "yBlock": 45, "wBlock": 10, "hBlock": 1 },
+    { "xBlock": 8, "yBlock": 35, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 48, "yBlock": 35, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 15, "yBlock": 25, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 41, "yBlock": 25, "wBlock": 4, "hBlock": 1 }
+  ],
+  "enemies": [
+    {
+      "xBlock": 30,
+      "yBlock": 20,
+      "kinds": ["Holy", "Lightning"],
+      "particleCount": 50,
+      "isBoss": true,
+      "isFlyingEye": false,
+      "isRollingEnemy": false,
+      "isRockElemental": false,
+      "isRadiantTether": true
+    }
+  ],
+  "transitions": [
+    {
+      "direction": "left",
+      "targetRoomId": "w1_room1",
+      "positionBlock": 40,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [36, 18]
+    }
+  ],
+  "skillTombs": []
+}

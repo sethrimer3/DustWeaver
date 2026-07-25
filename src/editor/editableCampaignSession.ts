@@ -22,6 +22,7 @@ import { dehydrateRoom } from '../levels/roomSchemaV2';
 import { BUILD_NUMBER } from '../build-info';
 import type { CampaignStore } from './campaignStore';
 import { createCampaignStore } from './campaignStore';
+import { assertCampaignIntegrity } from './campaignIntegrity';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -191,10 +192,11 @@ export function assembleExportCampaign(
       const original = originalRoomById.get(id);
       if (original !== undefined) {
         outputRooms.push(original);
+      } else {
+        throw new Error(
+          `Cannot export registry-only room "${id}": no authoritative campaign payload or live pending room data exists.`,
+        );
       }
-      // else: room exists in registry but not in original save and not in pending edits —
-      //       this means it was created from scratch without being explicitly saved.
-      //       The caller should always save current room before exporting.
     }
     handledIds.add(id);
   }
@@ -222,7 +224,7 @@ export function assembleExportCampaign(
     };
   });
 
-  return {
+  const exported: SavedCampaignV1 = {
     v: 1,
     kind: 'DustWeaverCampaign',
     metadata: {
@@ -242,6 +244,8 @@ export function assembleExportCampaign(
       lastEditedIso: new Date().toISOString(),
     },
   };
+  assertCampaignIntegrity(exported, new Set(allRegistryRooms.keys()), 'registry');
+  return exported;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

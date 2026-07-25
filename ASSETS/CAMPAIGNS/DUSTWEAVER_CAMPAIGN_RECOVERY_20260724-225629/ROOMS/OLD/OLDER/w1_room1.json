@@ -1,0 +1,98 @@
+{
+  "id": "w1_room1",
+  "name": "Stone Crossing",
+  "worldNumber": 1,
+  "widthBlocks": 40,
+  "heightBlocks": 24,
+  "playerSpawnBlock": [3, 19],
+  "interiorWalls": [
+    { "xBlock": 8, "yBlock": 19, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 18, "yBlock": 17, "wBlock": 4, "hBlock": 1 },
+    { "xBlock": 26, "yBlock": 15, "wBlock": 5, "hBlock": 1 },
+    { "xBlock": 14, "yBlock": 13, "wBlock": 6, "hBlock": 1 },
+    { "xBlock": 32, "yBlock": 19, "wBlock": 4, "hBlock": 1 }
+  ],
+  "enemies": [
+    {
+      "xBlock": 20,
+      "yBlock": 15,
+      "kinds": ["Physical"],
+      "particleCount": 18,
+      "isBoss": false,
+      "isFlyingEye": false,
+      "isRollingEnemy": true,
+      "rollingEnemySpriteIndex": 1,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    },
+    {
+      "xBlock": 32,
+      "yBlock": 17,
+      "kinds": ["Metal"],
+      "particleCount": 14,
+      "isBoss": false,
+      "isFlyingEye": false,
+      "isRollingEnemy": true,
+      "rollingEnemySpriteIndex": 2,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    },
+    {
+      "xBlock": 12,
+      "yBlock": 9,
+      "kinds": ["Fire"],
+      "particleCount": 16,
+      "isBoss": false,
+      "isFlyingEye": true,
+      "isRollingEnemy": false,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    },
+    {
+      "xBlock": 30,
+      "yBlock": 7,
+      "kinds": ["Wind"],
+      "particleCount": 16,
+      "isBoss": false,
+      "isFlyingEye": true,
+      "isRollingEnemy": false,
+      "isRockElemental": false,
+      "isRadiantTether": false
+    }
+  ],
+  "transitions": [
+    {
+      "direction": "left",
+      "targetRoomId": "lobby",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [140, 18]
+    },
+    {
+      "direction": "right",
+      "targetRoomId": "boss_radiant_tether",
+      "positionBlock": 16,
+      "openingSizeBlocks": 5,
+      "targetSpawnBlock": [3, 42]
+    }
+  ],
+  "skillTombs": [],
+  "spikes": [
+    { "xBlock": 8, "yBlock": 22, "direction": "up" },
+    { "xBlock": 9, "yBlock": 22, "direction": "up" },
+    { "xBlock": 10, "yBlock": 22, "direction": "up" }
+  ],
+  "springboards": [
+    { "xBlock": 14, "yBlock": 22 }
+  ],
+  "breakableBlocks": [
+    { "xBlock": 25, "yBlock": 16 },
+    { "xBlock": 25, "yBlock": 17 }
+  ],
+  "dustBoostJars": [
+    { "xBlock": 30, "yBlock": 18, "dustKind": "Fire", "dustCount": 12 }
+  ],
+  "fireflyJars": [
+    { "xBlock": 10, "yBlock": 18 }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "v": 3,
+  "id": "a_big_ask",
+  "name": "A Big Ask",
+  "world": 1,
+  "size": [
+    80,
+    80
+  ],
+  "spawn": [
+    40,
+    40
+  ],
+  "solids": {
+    "byTheme": {}
+  },
+  "map": [
+    347,
+    -284
+  ],
+  "theme": "bk",
+  "bg": "brownRock",
+  "light": "Ambient",
+  "transitions": [
+    {
+      "dir": "left",
+      "to": "magma_corridor",
+      "pos": 68,
+      "size": 8,
+      "spawn": [
+        156,
+        24
+      ],
+      "gw": 2
+    }
+  ],
+  "bakedWallTemplate": {
+    "schemaVersion": 1,
+    "sourceHash": "273828c7",
+    "wallCount": 4,
+    "xWorld": [
+      0,
+      0,
+      0,
+      632
+    ],
+    "yWorld": [
+      0,
+      632,
+      8,
+      8
+    ],
+    "wWorld": [
+      640,
+      640,
+      8,
+      8
+    ],
+    "hWorld": [
+      8,
+      8,
+      624,
+      624
+    ],
+    "isPlatformFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "platformEdge": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "themeIndex": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "soundHardnessIndex": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "isInvisibleFlag": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "rampOrientationIndex": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "isPillarHalfWidthFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "isIceFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "isUltraIceFlag": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+}

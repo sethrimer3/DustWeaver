@@ -6,6 +6,7 @@ import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson, jsonToEditorRoomData } from './roomJson';
 import type { WorldMapJsonDef, WorldMapRoomEntry } from './worldMapData';
 import { BUILD_NUMBER } from '../build-info';
+import { assertCampaignIntegrity } from './campaignIntegrity';
 
 export interface CampaignStore {
   campaignMeta: SavedCampaignMetadata;
@@ -244,6 +245,7 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
     if (customBlockDefs && customBlockDefs.length > 0) {
       exported.customBlockDefs = customBlockDefs;
     }
+    assertCampaignIntegrity(exported, new Set(rawRoomsById.keys()), 'campaign store');
     return exported;
   }
 
