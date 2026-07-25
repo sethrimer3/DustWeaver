@@ -9,7 +9,7 @@ import { EditorState, allocateUid } from './editorState';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
 import { findTopEligibleHitCandidate, type EditorHitCandidate } from './editorTools';
-import { canMutateElement, getLayerForElementType, isLayerLocked, isLayerVisible } from './editorLayers';
+import { canMutateElement, canMutateSelection, getLayerForElementType, isLayerLocked, isLayerVisible } from './editorLayers';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
 
@@ -155,7 +155,13 @@ function deleteAt(state: EditorState, bx: number, by: number): boolean {
  * point index) — so the deleted element is guaranteed to be the one that was
  * permission-checked.
  */
-function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandidate, cellX: number, cellY: number): boolean {
+function deleteResolvedCandidate(
+  state: EditorState,
+  candidate: EditorHitCandidate,
+  cellX: number,
+  cellY: number,
+  deleteWholeElement = false,
+): boolean {
   const room = state.roomData;
   if (room === null) return false;
   const { element } = candidate;
@@ -270,8 +276,10 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       const zone = zones.find(z => z.uid === uid);
       if (!zone) return false;
       removeByUid(zones, uid);
-      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
-        zones.push({ uid: allocateUid(state), ...piece });
+      if (!deleteWholeElement) {
+        for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+          zones.push({ uid: allocateUid(state), ...piece });
+        }
       }
       markLiquidBodiesDirty();
       break;
@@ -281,8 +289,10 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       const zone = zones.find(z => z.uid === uid);
       if (!zone) return false;
       removeByUid(zones, uid);
-      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
-        zones.push({ uid: allocateUid(state), ...piece });
+      if (!deleteWholeElement) {
+        for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+          zones.push({ uid: allocateUid(state), ...piece });
+        }
       }
       markLiquidBodiesDirty();
       break;
@@ -292,8 +302,10 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       const zone = zones.find(z => z.uid === uid);
       if (!zone) return false;
       removeByUid(zones, uid);
-      for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
-        zones.push({ uid: allocateUid(state), ...piece });
+      if (!deleteWholeElement) {
+        for (const piece of splitZoneAroundCell(zone, cellX, cellY)) {
+          zones.push({ uid: allocateUid(state), ...piece });
+        }
       }
       break;
     }
@@ -315,6 +327,12 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
     case 'kineticBlock':
       removed = removeByUid(room.kineticBlocks, uid);
       break;
+    case 'pixelMaterial':
+      removed = removeByUid(room.pixelMaterials, uid);
+      break;
+    case 'rope':
+      removed = removeByUid(room.ropes, uid);
+      break;
     case 'grappleCarryBlock':
       removed = removeByUid(room.grappleCarryBlocks, uid);
       break;
@@ -328,10 +346,11 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
       const paths = room.guideDustPaths ?? [];
       const path = paths.find(p => p.uid === uid);
       const pointIndex = candidate.guideDustPathPointIndex;
-      if (!path || pointIndex === undefined) return false;
-      if (path.points.length <= 2) {
+      if (!path) return false;
+      if (deleteWholeElement || path.points.length <= 2) {
         removeByUid(paths, uid);
       } else {
+        if (pointIndex === undefined) return false;
         path.points.splice(pointIndex, 1);
       }
       state.guideDustPathSelectedPointIndex = null;
@@ -350,4 +369,27 @@ function deleteResolvedCandidate(state: EditorState, candidate: EditorHitCandida
   if (!removed) return false;
   state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
   return true;
+}
+
+/**
+ * Deletes every currently selected, mutable element as a whole object.
+ * Returns false without changing anything when any selected layer is not
+ * editable. The player spawn remains protected by the editor's established
+ * non-deletable singleton policy.
+ */
+export function deleteSelectedElements(state: EditorState): boolean {
+  if (state.roomData === null || state.selectedElements.length === 0 || !canMutateSelection(state)) {
+    return false;
+  }
+
+  const selection = [...state.selectedElements];
+  let changed = false;
+  for (const element of selection) {
+    if (element.type === 'playerSpawn') continue;
+    if (deleteResolvedCandidate(state, { element, priority: 0 }, 0, 0, true)) {
+      changed = true;
+    }
+  }
+  if (changed) state.selectedElements = [];
+  return changed;
 }

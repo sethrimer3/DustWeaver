@@ -51,6 +51,8 @@ export interface EditorInputState {
   isCopyPressed: boolean;
   /** Ctrl+V pressed (one-shot). */
   isPastePressed: boolean;
+  /** Delete or Backspace pressed (one-shot). */
+  isDeleteSelectionPressed: boolean;
   /** F key pressed (one-shot) — flips the current placement horizontally. */
   isFlipPressed: boolean;
   /** Q key pressed (one-shot) — rotates placement counter-clockwise. */
@@ -95,6 +97,7 @@ export function createEditorInputState(): EditorInputState {
     isRedoPressed: false,
     isCopyPressed: false,
     isPastePressed: false,
+    isDeleteSelectionPressed: false,
     isFlipPressed: false,
     isRotateLeftPressed: false,
     isRotateRightPressed: false,
@@ -143,6 +146,10 @@ export function attachEditorInputListeners(
     // Ctrl+C → copy, Ctrl+V → paste
     if ((e.ctrlKey || e.metaKey) && key === 'c') { state.isCopyPressed = true; e.preventDefault(); }
     if ((e.ctrlKey || e.metaKey) && key === 'v') { state.isPastePressed = true; e.preventDefault(); }
+    if ((key === 'delete' || key === 'backspace') && !e.repeat) {
+      state.isDeleteSelectionPressed = true;
+      e.preventDefault();
+    }
     if (key === 'f' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isFlipPressed = true; e.preventDefault(); }
     if (key === 'q' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateLeftPressed = true; e.preventDefault(); }
     if (key === 'e' && !e.ctrlKey && !e.metaKey && !e.repeat) { state.isRotateRightPressed = true; e.preventDefault(); }
@@ -248,6 +255,7 @@ export function clearEditorOneShots(state: EditorInputState): void {
   state.isRedoPressed = false;
   state.isCopyPressed = false;
   state.isPastePressed = false;
+  state.isDeleteSelectionPressed = false;
   state.isFlipPressed = false;
   state.isRotateLeftPressed = false;
   state.isRotateRightPressed = false;

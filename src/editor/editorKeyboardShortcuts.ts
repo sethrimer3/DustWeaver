@@ -19,6 +19,8 @@ import { rotateSelectedElement, flipSelectedTransition } from './editorTools';
 import { serializeSelectedElements, pasteFromClipboard } from './editorDragCopyPaste';
 import type { CampaignSpawnContext } from './editorCampaignSpawn';
 import { syncCampaignSpawnBlockFromSession } from './editorCampaignSpawn';
+import { syncCampaignSpawnToSessionAfterDelete } from './editorCampaignSpawn';
+import { deleteSelectedElements } from './editorDeleteTool';
 
 /**
  * Process all keyboard shortcut inputs for one editor frame.
@@ -187,6 +189,27 @@ export function handleEditorKeyboardShortcuts(
       const commitResult = commitPendingSnapshot(history, pending);
       if (commitResult === 'noop') return;
       applyEdits();
+    }
+  }
+
+  // Delete / Backspace -> remove the complete selection as one undoable edit.
+  if (inputState.isDeleteSelectionPressed && state.roomData && state.selectedElements.length > 0) {
+    const campaignSession = campaignSpawnCtx?.campaignSession;
+    const currentSpawn = campaignSession?.campaign.campaign.campaignSpawn;
+    const currentInitialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+    const pending = capturePendingSnapshot(
+      state.roomData,
+      currentSpawn,
+      currentInitialRoomId,
+      true,
+      'Delete selection',
+    );
+    if (deleteSelectedElements(state)) {
+      if (campaignSpawnCtx) syncCampaignSpawnToSessionAfterDelete(campaignSpawnCtx);
+      const updatedSpawn = campaignSession?.campaign.campaign.campaignSpawn;
+      const updatedInitialRoomId = campaignSession?.campaign.campaign.initialRoomId;
+      const commitResult = commitPendingSnapshot(history, pending, updatedSpawn, updatedInitialRoomId);
+      if (commitResult !== 'noop') applyEdits();
     }
   }
 }

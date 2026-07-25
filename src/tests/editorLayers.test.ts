@@ -14,7 +14,7 @@ import {
   selectAtCursor, getHitCandidatesAnyLayer, findTopEligibleHitCandidate,
   rotateSelectedElement, flipSelectedTransition,
 } from '../editor/editorTools';
-import { deleteAtCursor, deleteAtCursorBrushed } from '../editor/editorDeleteTool';
+import { deleteAtCursor, deleteAtCursorBrushed, deleteSelectedElements } from '../editor/editorDeleteTool';
 import { moveSelectedElements, storeDragStartPositions, serializeSelectedElements, pasteFromClipboard } from '../editor/editorDragCopyPaste';
 import { canMutateElement, canMutateSelection } from '../editor/editorLayers';
 import { placeAtCursor } from '../editor/editorPlaceTool';
@@ -80,6 +80,47 @@ test('isLayerVisible reflects the plain visible flag with no solo active', () =>
   assert.equal(isLayerVisible(state, 'terrain'), true);
   state.layers.terrain.visible = false;
   assert.equal(isLayerVisible(state, 'terrain'), false);
+});
+
+test('deleteSelectedElements removes every selected object as whole elements', () => {
+  const room = makeRoom({
+    enemies: [
+      { uid: 1, xBlock: 2, yBlock: 2, type: 'basic' } as never,
+      { uid: 2, xBlock: 3, yBlock: 3, type: 'basic' } as never,
+    ],
+    interiorWalls: [
+      { uid: 3, xBlock: 4, yBlock: 4, wBlock: 2, hBlock: 2 } as never,
+    ],
+    waterZones: [
+      { uid: 4, xBlock: 6, yBlock: 6, wBlock: 3, hBlock: 2 } as never,
+    ],
+  });
+  const state = stateAt(room, 0, 0);
+  state.selectedElements = [
+    { type: 'enemy', uid: 1 },
+    { type: 'wall', uid: 3 },
+    { type: 'waterZone', uid: 4 },
+  ];
+
+  assert.equal(deleteSelectedElements(state), true);
+  assert.deepEqual(room.enemies.map(enemy => enemy.uid), [2]);
+  assert.equal(room.interiorWalls.length, 0);
+  assert.equal(room.waterZones?.length, 0);
+  assert.equal(state.selectedElements.length, 0);
+});
+
+test('deleteSelectedElements is all-or-nothing when a selected layer is locked', () => {
+  const room = makeRoom({
+    enemies: [{ uid: 1, xBlock: 2, yBlock: 2, type: 'basic' } as never],
+    interiorWalls: [{ uid: 2, xBlock: 3, yBlock: 3, wBlock: 1, hBlock: 1 } as never],
+  });
+  const state = stateAt(room, 0, 0);
+  state.selectedElements = [{ type: 'enemy', uid: 1 }, { type: 'wall', uid: 2 }];
+  state.layers.terrain.locked = true;
+
+  assert.equal(deleteSelectedElements(state), false);
+  assert.equal(room.enemies.length, 1);
+  assert.equal(room.interiorWalls.length, 1);
 });
 
 test('soloing a layer hides all non-soloed layers regardless of their own visible flag', () => {
