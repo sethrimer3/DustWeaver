@@ -143,6 +143,51 @@ function writeJsonAtomic(filePath, value) {
   writeTextAtomic(filePath, JSON.stringify(value, null, 2));
 }
 
+function validateCampaignIntegrity(campaign, rooms, roomIdFirstIndex) {
+  if (!campaign || !campaign.worldMap || !Array.isArray(campaign.worldMap.rooms)) {
+    return { ok: false, error: "campaign.worldMap.rooms must be an array" };
+  }
+  const seenRooms = new Map();
+  for (let i = 0; i < rooms.length; i++) {
+    const id = rooms[i] && rooms[i].id;
+    if (typeof id !== "string" || !SAFE_ROOM_ID_RE.test(id)) {
+      return { ok: false, error: `rooms[${i}].id "${id}" is invalid` };
+    }
+    if (seenRooms.has(id)) {
+      return { ok: false, error: `Duplicate room id "${id}": first at index ${seenRooms.get(id)}, duplicate at index ${i}` };
+    }
+    seenRooms.set(id, i);
+  }
+  const seenMap = new Map();
+  for (let i = 0; i < campaign.worldMap.rooms.length; i++) {
+    const id = campaign.worldMap.rooms[i] && campaign.worldMap.rooms[i].id;
+    if (typeof id !== "string" || !SAFE_ROOM_ID_RE.test(id)) {
+      return { ok: false, error: `worldMap.rooms[${i}].id "${id}" is invalid` };
+    }
+    if (seenMap.has(id)) {
+      return { ok: false, error: `Duplicate world-map room id "${id}": first at index ${seenMap.get(id)}, duplicate at index ${i}` };
+    }
+    seenMap.set(id, i);
+  }
+  const roomSet = new Set(seenRooms.keys());
+  const mapSet = new Set(seenMap.keys());
+  const missingPayloads = [...mapSet].filter(id => !roomSet.has(id));
+  const missingMapEntries = [...roomSet].filter(id => !mapSet.has(id));
+  if (missingPayloads.length > 0 || missingMapEntries.length > 0) {
+    const details = [];
+    if (missingPayloads.length > 0) details.push(`world-map IDs without payloads: ${missingPayloads.join(", ")}`);
+    if (missingMapEntries.length > 0) details.push(`payload IDs without world-map entries: ${missingMapEntries.join(", ")}`);
+    return { ok: false, error: `Campaign room/world-map integrity mismatch (${details.join("; ")})` };
+  }
+  const suppliedIds = roomIdFirstIndex instanceof Map ? new Set(roomIdFirstIndex.keys()) : new Set();
+  const missingFromIndex = [...roomSet].filter(id => !suppliedIds.has(id));
+  const extraInIndex = [...suppliedIds].filter(id => !roomSet.has(id));
+  if (missingFromIndex.length > 0 || extraInIndex.length > 0) {
+    return { ok: false, error: `Campaign room/index integrity mismatch (missing: ${missingFromIndex.join(", ") || "none"}; extra: ${extraInIndex.join(", ") || "none"})` };
+  }
+  return { ok: true };
+}
+
 // ── Rolling backup helpers ────────────────────────────────────────────────────
 
 /**
@@ -418,6 +463,12 @@ async function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms,
   const roomsDir = path.join(campaignDir, "ROOMS");
   const backupsDir = path.join(campaignDir, "BACKUPS");
 
+  const integrity = validateCampaignIntegrity(campaign, rooms, roomIdFirstIndex);
+  if (!integrity.ok) {
+    notify({ step: "error", message: integrity.error });
+    return { ok: false, error: integrity.error };
+  }
+
   try {
     fs.mkdirSync(roomsDir, { recursive: true });
   } catch (dirErr) {
@@ -566,10 +617,26 @@ async function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms,
     return { ok: false, error };
   }
 
+  const preCleanupValidation = validateRoomCacheOnDisk(
+    roomsDir,
+    manifest,
+    Array.from(roomIdFirstIndex.keys()),
+  );
+  if (!preCleanupValidation.ok) {
+    const error = `Post-export cache validation failed: ${preCleanupValidation.error}`;
+    notify({ step: "error", message: error });
+    return { ok: false, error };
+  }
+
   // ── Remove stale room files ────────────────────────────────────────────────
   notify({ step: "cleaning-stale", message: "Cleaning up stale files…" });
 
   let removedCount = 0;
+  const quarantineDir = path.join(
+    campaignDir,
+    "RECOVERY",
+    `stale-rooms-${safeTimestampForFilename(new Date())}`,
+  );
   try {
     const existing = fs.readdirSync(roomsDir);
     for (const filename of existing) {
@@ -585,9 +652,10 @@ async function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms,
           console.warn(`[campaignExport] Skipping stale cleanup: ${staleCheck.error}`);
           continue;
         }
-        fs.unlinkSync(stalePath);
+        fs.mkdirSync(quarantineDir, { recursive: true });
+        fs.renameSync(stalePath, path.join(quarantineDir, filename));
         removedCount += 1;
-        console.log(`[campaignExport] Removed stale room file: ${filename}`);
+        console.log(`[campaignExport] Quarantined stale room file: ${filename}`);
       } catch (unlinkErr) {
         console.warn(`[campaignExport] Could not remove stale file "${filename}":`, unlinkErr);
       }
@@ -619,6 +687,7 @@ module.exports = {
   safeTimestampForFilename,
   writeTextAtomic,
   writeJsonAtomic,
+  validateCampaignIntegrity,
   ensureRollingBackup,
   pruneBackups,
   deterministicStringify,

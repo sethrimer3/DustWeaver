@@ -33,7 +33,7 @@ type TestCampaign = {
   kind: string;
   campaign: { id: string; title: string };
   metadata: { version: number };
-  worldMap: Record<string, unknown>;
+  worldMap: { rooms: Array<{ id: string }> };
   rooms: TestRoom[];
 };
 
@@ -87,7 +87,7 @@ function makeCampaign(roomIds: string[]): TestCampaign {
     kind: 'DustWeaverCampaign',
     campaign: { id: 'TEST_CAMPAIGN', title: 'Test Campaign' },
     metadata: { version: 1 },
-    worldMap: {},
+    worldMap: { rooms: roomIds.map((id) => ({ id })) },
     rooms: roomIds.map((id) => ({ id, name: id, transitions: [] })),
   };
 }
@@ -235,7 +235,7 @@ test('Crimson Throne room (boss enemy + dialogue triggers) writes and hashes nor
     kind: 'DustWeaverCampaign',
     campaign: { id: 'TEST_CAMPAIGN', title: 'Test Campaign' },
     metadata: { version: 1 },
-    worldMap: {},
+    worldMap: { rooms: rooms.map((room) => ({ id: room.id })) },
     rooms,
   };
 
@@ -285,4 +285,36 @@ test('rolling backups are pruned to MAX_BACKUPS after repeated exports', async (
   const backupsDir = path.join(campaignDir, 'BACKUPS');
   const backups = fs.readdirSync(backupsDir).filter((f) => f.endsWith('.dwcampaign.json'));
   assert.equal(backups.length, MAX_BACKUPS);
+});
+
+test('export refuses a world-map room without a payload before writing anything', async () => {
+  const campaignDir = makeTmpDir();
+  const roomsDir = path.join(campaignDir, 'ROOMS');
+  fs.mkdirSync(roomsDir, { recursive: true });
+  const protectedPath = path.join(roomsDir, 'unrecovered_room.json');
+  fs.writeFileSync(protectedPath, '{"id":"unrecovered","body":"recover me"}');
+
+  const args = baseArgs(campaignDir, ['roomA']);
+  args.campaign.worldMap.rooms.push({ id: 'unrecovered' });
+  const result = await exportCampaignToDisk(args);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /world-map IDs without payloads: unrecovered/);
+  assert.equal(fs.readFileSync(protectedPath, 'utf8'), '{"id":"unrecovered","body":"recover me"}');
+  assert.equal(fs.existsSync(path.join(campaignDir, 'TEST_CAMPAIGN.dwcampaign.json')), false);
+  assert.equal(fs.existsSync(path.join(roomsDir, 'manifest.json')), false);
+});
+
+test('export refuses duplicate room IDs before writing anything', async () => {
+  const campaignDir = makeTmpDir();
+  const campaign = makeCampaign(['roomA', 'roomA']);
+  const result = await exportCampaignToDisk({
+    ...baseArgs(campaignDir, ['roomA']),
+    campaign,
+    rooms: campaign.rooms,
+    roomIdFirstIndex: new Map([['roomA', 0]]),
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Duplicate room id "roomA"/);
+  assert.equal(fs.readdirSync(campaignDir).length, 0);
 });
