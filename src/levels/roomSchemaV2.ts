@@ -126,11 +126,19 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isRockElemental)  return 'rockElemental';
   if (e.isRadiantTether)  return 'radiantTether';
   if (e.isRadiantWeb)     return 'radiantWeb';
+  if (e.isCrimsonWizard)  return 'crimsonWizard';
+  if (e.isHerald)         return 'herald';
+  if (e.isIceWizard)      return 'iceWizard';
   if (e.isGrappleHunter)  return 'grappleHunter';
   if (e.isSlime)          return 'slime';
   if (e.isLargeSlime)     return 'largeSlime';
   if (e.isWheelEnemy)     return 'wheel';
   if (e.isBeetle)         return 'beetle';
+  if (e.isBubbleEnemy && e.isIceBubble) return 'iceBubble';
+  if (e.isBubbleEnemy) return 'bubble';
+  if (e.isSquareStampede) return 'squareStampede';
+  if (e.isGoldenMimic) return 'goldenMimic';
+  if (e.isBeeSwarm) return 'beeSwarm';
   if (e.isWebSpider)      return 'webSpider';
   if (e.isDustConstellation && e.isDustConstellationLarge) return 'dustConstellationLarge';
   if (e.isDustConstellation) return 'dustConstellation';
@@ -138,6 +146,8 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
   if (e.isOrbitalDustCore) return 'orbitalDustCore';
   if (e.isDustBlockMimic && e.isDustBlockMimicLarge) return 'dustBlockMimicLarge';
   if (e.isDustBlockMimic) return 'dustBlockMimic';
+  if (e.isDustWeaverArchitect && e.isDustWeaverArchitectLarge) return 'dustWeaverArchitectLarge';
+  if (e.isDustWeaverArchitect) return 'dustWeaverArchitect';
   if (e.isVoidSingularity && e.isVoidSingularityPair) return 'voidSingularityPair';
   if (e.isVoidSingularity) return 'voidSingularity';
   if (e.isDustLeech) return 'dustLeech';
@@ -165,6 +175,7 @@ export function enemyFlagsToType(e: RoomJsonEnemy): SavedEnemyType {
  * pillar) — i.e. iff its solid area really is its full bounding rectangle.
  */
 export function isUniformSolidWall(w: RoomJsonWall): boolean {
+  if (w.r !== undefined)                   return false;
   if (w.isPlatform === true)             return false;
   if (w.rampOrientation !== undefined)   return false;
   if (w.stairsOrientation !== undefined) return false;
@@ -394,6 +405,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     if (w.rampOrientation !== undefined) sw.ramp = w.rampOrientation;
     if (w.stairsOrientation !== undefined) sw.stairs = w.stairsOrientation;
     if (w.isPillarHalfWidth) sw.half = 1;
+    if (w.r !== undefined) sw.rim = w.r;
     return sw;
   });
 
@@ -416,6 +428,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.lightingEffect) out.light = json.lightingEffect;
   if (json.songId && json.songId !== '_continue') out.song = json.songId;
   if (specialWalls.length > 0) out.specialWalls = specialWalls;
+  if (json.rimStyles?.length) out.rimStyles = json.rimStyles.map(style => [...style]);
 
   if (json.enemies.length > 0) {
     out.enemies = json.enemies.map(e => dehydrateEnemy(e));
@@ -477,7 +490,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     if (layer) out.timeStopFieldLayer = layer;
   }
   if (json.breakableBlocks && json.breakableBlocks.length > 0) {
-    out.breakableBlocks = json.breakableBlocks.map(b => [b.xBlock, b.yBlock] as SavedPoint);
+    out.breakableBlocks = json.breakableBlocks.map(b =>
+      b.groupId === undefined ? [b.xBlock, b.yBlock] : [b.xBlock, b.yBlock, b.groupId],
+    );
   }
   if (json.dustBoostJars && json.dustBoostJars.length > 0) {
     out.dustBoostJars = json.dustBoostJars.map(j => [j.xBlock, j.yBlock, j.dustKind, j.dustCount]);
@@ -492,7 +507,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.fireflyJars = json.fireflyJars.map(j => [j.xBlock, j.yBlock] as SavedPoint);
   }
   if (json.dustPiles && json.dustPiles.length > 0) {
-    out.dustPiles = json.dustPiles.map(p => [p.xBlock, p.yBlock, p.dustCount]);
+    out.dustPiles = json.dustPiles.map(p => [p.xBlock, p.yBlock, p.dustCount, p.spreadBlocks]);
+  }
+  if (json.fireflyAreas?.length) {
+    out.fireflyAreas = json.fireflyAreas.map(a => [a.xBlock, a.yBlock, a.wBlock, a.hBlock, a.count]);
   }
   if (json.grasshopperAreas && json.grasshopperAreas.length > 0) {
     out.grasshopperAreas = json.grasshopperAreas.map(a => [a.xBlock, a.yBlock, a.wBlock, a.hBlock, a.count]);
@@ -561,6 +579,12 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.zipMoveBlocks = json.zipMoveBlocks.map(b => [
       b.uid, b.xBlock, b.yBlock, Math.max(3, b.wBlock), Math.max(3, b.hBlock), b.variant === 'away' ? 'a' : 't',
     ]);
+  }
+  if (json.grappleCarryBlocks?.length) {
+    out.grappleCarryBlocks = json.grappleCarryBlocks.map(b => [b.xBlock, b.yBlock]);
+  }
+  if (json.phantasmalTiles?.length) {
+    out.phantasmalTiles = json.phantasmalTiles.map(b => [b.xBlock, b.yBlock]);
   }
   if (json.crumbleBlocks && json.crumbleBlocks.length > 0) {
     out.crumbles = json.crumbleBlocks.map(c => {
@@ -676,6 +700,8 @@ function dehydrateEnemy(e: RoomJsonEnemy): SavedEnemy {
   if (e.kinds.length > 0) out.kinds = [...e.kinds];
   if (e.particleCount !== 0) out.particleCount = e.particleCount;
   if (e.isBoss) out.boss = true;
+  if (e.countsTowardRoomCompletion === false) out.countsTowardRoomCompletion = 0;
+  if (type === 'goldenMimic' && e.isGoldenMimicYFlipped) out.goldenMimicYFlipped = 1;
   if (type === 'rolling' && e.rollingEnemySpriteIndex !== undefined && e.rollingEnemySpriteIndex !== 1) {
     out.spriteIndex = e.rollingEnemySpriteIndex;
   }
@@ -703,6 +729,7 @@ function dehydrateTransition(t: RoomJsonTransition): SavedTransition {
   if (t.fadeColor) out.fade = t.fadeColor;
   if (t.depthBlock !== undefined) out.depth = t.depthBlock;
   if (t.longTransition) out.lt = true;
+  if (t.isSecretDoor) out.secret = true;
   // Save gradientWidthBlocks whenever it differs from the legacy default of 3,
   // so zero-gradient transitions survive a dehydrate→hydrate round-trip.
   const gw = t.gradientWidthBlocks;
@@ -818,6 +845,30 @@ export function validateRoomRoundtrip(json: RoomJsonDef): string[] {
   }
   if (rebuilt.transitions.length !== json.transitions.length) {
     errors.push(`Transition count mismatch: ${json.transitions.length} → ${rebuilt.transitions.length}`);
+  }
+  const semanticCollections = [
+    'enemies', 'transitions', 'skillTombs', 'dustSkillTombs',
+    'challengeFields', 'challengeGates', 'challengeTotems', 'gates',
+    'dustContainers', 'dustContainerPieces', 'dustBoostJars', 'dustSwarms',
+    'lambdaAnchors', 'fireflyJars', 'springboards', 'breakableBlocks',
+    'dustPiles', 'grasshopperAreas', 'fireflyAreas', 'decorations',
+    'lightSources', 'sunbeams', 'sceneLights', 'fallingBlocks', 'crumbleBlocks',
+    'spikes', 'bouncePads', 'kineticBlocks', 'grappleCarryBlocks',
+    'zipMoveBlocks', 'phantasmalTiles', 'pixelMaterials', 'ropes',
+    'dialogueTriggers', 'guideDustPaths', 'customBlockPlacements',
+  ] as const satisfies readonly (keyof RoomJsonDef)[];
+  const normalize = (value: unknown): string =>
+    JSON.stringify(value ?? [], (_key, item: unknown) => item === undefined ? null : item);
+  for (const key of semanticCollections) {
+    if (normalize(json[key]) !== normalize(rebuilt[key])) errors.push(`Persistence mismatch in ${key}`);
+  }
+  const semanticSettings = [
+    'backgroundLightSpill', 'solidLightSoftness', 'sunrays', 'rimStyles',
+    'ambientLightDirection', 'directionalBias', 'sideExposureStrength',
+    'minimumWallLight', 'falloffPower', 'blockSeamBlending', 'voidEdgeStyle',
+  ] as const satisfies readonly (keyof RoomJsonDef)[];
+  for (const key of semanticSettings) {
+    if (normalize(json[key]) !== normalize(rebuilt[key])) errors.push(`Persistence mismatch in room setting ${key}`);
   }
   return errors;
 }

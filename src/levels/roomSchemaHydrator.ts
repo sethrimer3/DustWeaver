@@ -51,7 +51,7 @@ import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompres
 /** Expand a SavedEnemyType into the legacy boolean-flag shape (as RoomJsonEnemy). */
 export function enemyTypeToFlags(
   type: SavedEnemyType,
-  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; spriteIndex?: number; snakeLength?: number; momentumTurretFacingIndex?: 0 | 1 | 2 | 3; slimeSnailSideIndex?: 0 | 1 | 2 | 3; slimeSnailCw?: 0 | 1 },
+  base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; countsTowardRoomCompletion?: 0; goldenMimicYFlipped?: 1; spriteIndex?: number; snakeLength?: number; momentumTurretFacingIndex?: 0 | 1 | 2 | 3; slimeSnailSideIndex?: 0 | 1 | 2 | 3; slimeSnailCw?: 0 | 1 },
 ): RoomJsonEnemy {
   return {
     xBlock: base.xBlock,
@@ -59,17 +59,27 @@ export function enemyTypeToFlags(
     kinds: base.kinds,
     particleCount: base.particleCount,
     isBoss: base.isBoss,
+    countsTowardRoomCompletion: base.countsTowardRoomCompletion === 0 ? false : undefined,
     isFlyingEye:     type === 'flyingEye',
     isRollingEnemy:  type === 'rolling',
     rollingEnemySpriteIndex: type === 'rolling' ? (base.spriteIndex ?? 1) : undefined,
     isRockElemental: type === 'rockElemental',
     isRadiantTether: type === 'radiantTether',
     isRadiantWeb:    type === 'radiantWeb',
+    isCrimsonWizard: type === 'crimsonWizard',
+    isHerald:         type === 'herald',
+    isIceWizard:      type === 'iceWizard',
     isGrappleHunter: type === 'grappleHunter',
     isSlime:         type === 'slime',
     isLargeSlime:    type === 'largeSlime',
     isWheelEnemy:    type === 'wheel',
     isBeetle:        type === 'beetle',
+    isBubbleEnemy:   type === 'bubble' || type === 'iceBubble',
+    isIceBubble:     type === 'iceBubble',
+    isSquareStampede: type === 'squareStampede',
+    isGoldenMimic: type === 'goldenMimic',
+    isGoldenMimicYFlipped: type === 'goldenMimic' && base.goldenMimicYFlipped === 1,
+    isBeeSwarm: type === 'beeSwarm',
     isWebSpider:     type === 'webSpider',
     isDustConstellation:      type === 'dustConstellation' || type === 'dustConstellationLarge',
     isDustConstellationLarge: type === 'dustConstellationLarge',
@@ -77,6 +87,8 @@ export function enemyTypeToFlags(
     isOrbitalDustCoreLarge:   type === 'orbitalDustCoreLarge',
     isDustBlockMimic:         type === 'dustBlockMimic' || type === 'dustBlockMimicLarge',
     isDustBlockMimicLarge:    type === 'dustBlockMimicLarge',
+    isDustWeaverArchitect: type === 'dustWeaverArchitect' || type === 'dustWeaverArchitectLarge',
+    isDustWeaverArchitectLarge: type === 'dustWeaverArchitectLarge',
     isVoidSingularity:        type === 'voidSingularity' || type === 'voidSingularityPair',
     isVoidSingularityPair:    type === 'voidSingularityPair',
     isDustLeech:              type === 'dustLeech',
@@ -228,6 +240,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     if (sw.ramp !== undefined) wall.rampOrientation = sw.ramp;
     if (sw.stairs !== undefined) wall.stairsOrientation = sw.stairs;
     if (sw.half === 1) wall.isPillarHalfWidth = true;
+    if (sw.rim !== undefined) wall.r = sw.rim;
     return wall;
   });
 
@@ -242,6 +255,8 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     momentumTurretFacingIndex: e.momentumTurretFacingIndex,
     slimeSnailSideIndex: e.slimeSnailSideIndex,
     slimeSnailCw: e.slimeSnailCw,
+    countsTowardRoomCompletion: e.countsTowardRoomCompletion,
+    goldenMimicYFlipped: e.goldenMimicYFlipped,
   }));
 
   const transitions: RoomJsonTransition[] = (saved.transitions ?? []).map(t => {
@@ -256,6 +271,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     if (t.depth !== undefined) jt.depthBlock = t.depth;
     if (t.lt) jt.longTransition = true;
     if (t.gw !== undefined) jt.gradientWidthBlocks = t.gw;
+    if (t.secret) jt.isSecretDoor = true;
     return jt;
   });
 
@@ -278,6 +294,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     transitions,
     skillTombs,
   };
+  if (saved.rimStyles?.length) json.rimStyles = saved.rimStyles.map(style => [...style]);
   if (saved.challengeFields) json.challengeFields = saved.challengeFields.map(([uid, xBlock, yBlock, wBlock, hBlock]) => ({ uid, xBlock, yBlock, wBlock, hBlock }));
   if (saved.challengeGates) json.challengeGates = saved.challengeGates.map(([uid, xBlock, yBlock, wBlock, hBlock]) => ({ uid, xBlock, yBlock, wBlock, hBlock }));
   if (saved.challengeTotems) json.challengeTotems = saved.challengeTotems.map(([uid, xBlock, yBlock]) => ({ uid, xBlock, yBlock }));
@@ -321,12 +338,13 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     const rects = expandLayerToRects(saved.timeStopFieldLayer);
     if (rects.length > 0) json.timeStopFields = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
   }
-  if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonBreakableBlock);
+  if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y, groupId]) => ({ xBlock: x, yBlock: y, groupId }) as RoomJsonBreakableBlock);
   if (saved.dustBoostJars)  json.dustBoostJars   = saved.dustBoostJars.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustBoostJar);
   if (saved.dustSwarms)     json.dustSwarms      = saved.dustSwarms.map(([x, y, kind, count]) => ({ xBlock: x, yBlock: y, dustKind: kind, dustCount: count }) as RoomJsonDustSwarm);
   if (saved.lambdaAnchors) json.lambdaAnchors   = saved.lambdaAnchors.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonLambdaAnchor);
   if (saved.fireflyJars)    json.fireflyJars     = saved.fireflyJars.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonFireflyJar);
-  if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count]) => ({ xBlock: x, yBlock: y, dustCount: count }) as RoomJsonDustPile);
+  if (saved.dustPiles)      json.dustPiles       = saved.dustPiles.map(([x, y, count, spreadBlocks]) => ({ xBlock: x, yBlock: y, dustCount: count, spreadBlocks }) as RoomJsonDustPile);
+  if (saved.fireflyAreas) json.fireflyAreas = saved.fireflyAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }));
   if (saved.grasshopperAreas) json.grasshopperAreas = saved.grasshopperAreas.map(([x, y, w, h, count]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h, count }) as RoomJsonGrasshopperArea);
   if (saved.decorations)    json.decorations     = saved.decorations.map(([x, y, kind]) => ({ xBlock: x, yBlock: y, kind }) as RoomJsonDecoration);
   if (saved.pixelMaterials) json.pixelMaterials  = saved.pixelMaterials.map(([x, y, material]) => ({ xPixel: x, yPixel: y, material }) as RoomJsonPixelMaterial);
@@ -395,6 +413,12 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       hBlock: Number.isFinite(h) ? Math.max(3, Math.floor(h)) : 3,
       variant: variant === 'a' ? 'away' as const : 'toward' as const,
     }));
+  }
+  if (saved.grappleCarryBlocks?.length) {
+    json.grappleCarryBlocks = saved.grappleCarryBlocks.map(([xBlock, yBlock]) => ({ xBlock, yBlock }));
+  }
+  if (saved.phantasmalTiles?.length) {
+    json.phantasmalTiles = saved.phantasmalTiles.map(([xBlock, yBlock]) => ({ xBlock, yBlock }));
   }
   if (saved.crumbles && saved.crumbles.length > 0) {
     json.crumbleBlocks = saved.crumbles.map(c => {

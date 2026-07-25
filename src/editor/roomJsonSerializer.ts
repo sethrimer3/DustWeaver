@@ -107,6 +107,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isRadiantWeb: e.isRadiantWebFlag === 1,
       isCrimsonWizard: e.isCrimsonWizardFlag === 1,
       isHerald: e.isHeraldFlag === 1,
+      isIceWizard: e.isIceWizardFlag === 1,
       isGrappleHunter: e.isGrappleHunterFlag === 1,
       isSlime: e.isSlimeFlag === 1,
       isLargeSlime: e.isLargeSlimeFlag === 1,
@@ -128,6 +129,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isDustConstellationLarge: e.isDustConstellationLargeFlag === 1,
       isOrbitalDustCore: e.isOrbitalDustCoreFlag === 1,
       isOrbitalDustCoreLarge: e.isOrbitalDustCoreLargeFlag === 1,
+      isDustBlockMimic: e.isDustBlockMimicFlag === 1,
+      isDustBlockMimicLarge: e.isDustBlockMimicLargeFlag === 1,
+      isDustWeaverArchitect: e.isDustWeaverArchitectFlag === 1,
+      isDustWeaverArchitectLarge: e.isDustWeaverArchitectLargeFlag === 1,
       isVoidSingularity: e.isVoidSingularityFlag === 1,
       isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
       isDustLeech:        e.isDustLeechFlag === 1,
@@ -420,6 +425,16 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     json.grappleCarryBlocks = (data.grappleCarryBlocks ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,
+    }));
+  }
+  if ((data.zipMoveBlocks ?? []).length > 0) {
+    json.zipMoveBlocks = data.zipMoveBlocks!.map(b => ({
+      uid: b.uid,
+      xBlock: b.xBlock,
+      yBlock: b.yBlock,
+      wBlock: b.wBlock,
+      hBlock: b.hBlock,
+      variant: b.variant ?? 'toward',
     }));
   }
   if ((data.phantasmalTiles ?? []).length > 0) {

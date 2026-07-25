@@ -107,6 +107,8 @@ export interface SavedSpecialWall {
   stairs?: 0 | 1 | 2 | 3;
   /** 1 if half-width pillar. */
   half?: 1;
+  /** Index into the room-level rimStyles table. */
+  rim?: number;
 }
 
 /**
@@ -120,11 +122,19 @@ export type SavedEnemyType =
   | 'rockElemental'
   | 'radiantTether'
   | 'radiantWeb'
+  | 'crimsonWizard'
+  | 'herald'
+  | 'iceWizard'
   | 'grappleHunter'
   | 'slime'
   | 'largeSlime'
   | 'wheel'
   | 'beetle'
+  | 'bubble'
+  | 'iceBubble'
+  | 'squareStampede'
+  | 'goldenMimic'
+  | 'beeSwarm'
   | 'webSpider'
   | 'dustConstellation'
   | 'dustConstellationLarge'
@@ -132,6 +142,8 @@ export type SavedEnemyType =
   | 'orbitalDustCoreLarge'
   | 'dustBlockMimic'
   | 'dustBlockMimicLarge'
+  | 'dustWeaverArchitect'
+  | 'dustWeaverArchitectLarge'
   | 'voidSingularity'
   | 'voidSingularityPair'
   | 'dustLeech'
@@ -162,6 +174,10 @@ export interface SavedEnemy {
   slimeSnailSideIndex?: 0 | 1 | 2 | 3;
   /** 1=clockwise, 0=counterclockwise — only meaningful for `slimeSnail`. */
   slimeSnailCw?: 0 | 1;
+  /** False only; omission preserves the historical true default. */
+  countsTowardRoomCompletion?: 0;
+  /** Golden Mimic vertical flip. */
+  goldenMimicYFlipped?: 1;
 }
 
 export interface SavedTransition {
@@ -177,6 +193,7 @@ export interface SavedTransition {
   lt?: boolean;
   /** gradientWidthBlocks — omitted when equal to the legacy default of 3. */
   gw?: number;
+  secret?: true;
 }
 
 /** Compact crumble block entry. */
@@ -266,6 +283,8 @@ export interface SavedRoomV2 {
   spawn: [number, number];
   solids: SavedSolids;
   specialWalls?: SavedSpecialWall[];
+  /** Surface Rim style table referenced by specialWalls[].rim. */
+  rimStyles?: import('../render/walls/surfaceRimStyle').CompactSurfaceRimStyle[];
   enemies?: SavedEnemy[];
   transitions?: SavedTransition[];
   /** Save tombs as [x, y]. Kept as "saveTombs" for clarity. */
@@ -316,7 +335,7 @@ export interface SavedRoomV2 {
    * to an empty list on hydrate, so old rooms keep loading unaffected.
    */
   timeStopFieldLayer?: SavedSolidLayer;
-  breakableBlocks?: SavedPoint[];
+  breakableBlocks?: ([number, number] | [number, number, number])[];
   dustBoostJars?: [number, number, string, number][];
   /** [x, y, kind, count] */
   dustSwarms?: [number, number, string, number][];
@@ -324,7 +343,9 @@ export interface SavedRoomV2 {
   lambdaAnchors?: [number, number][];
   fireflyJars?: SavedPoint[];
   /** [x, y, count] */
-  dustPiles?: [number, number, number][];
+  dustPiles?: [number, number, number, number?][];
+  /** [x, y, w, h, count] */
+  fireflyAreas?: [number, number, number, number, number][];
   /** [x, y, w, h, count] */
   grasshopperAreas?: [number, number, number, number, number][];
   /** [x, y, kind] */
@@ -394,6 +415,8 @@ export interface SavedRoomV2 {
   kineticBlocks?: SavedKineticBlock[];
   /** Zip moving blocks: [uid, x, y, width, height, variant char]. */
   zipMoveBlocks?: [number, number, number, number, number, 't' | 'a'][];
+  grappleCarryBlocks?: [number, number][];
+  phantasmalTiles?: [number, number][];
   /** Ropes. */
   ropes?: SavedRoomRope[];
   /** Dialogue triggers. */

@@ -70,6 +70,7 @@ export interface RoomJsonEnemy {
   isRadiantWeb?: boolean;
   isCrimsonWizard?: boolean;
   isHerald?: boolean;
+  isIceWizard?: boolean;
   isGrappleHunter: boolean;
   isSlime?: boolean;
   isLargeSlime?: boolean;
@@ -93,6 +94,8 @@ export interface RoomJsonEnemy {
   isOrbitalDustCoreLarge?: boolean;
   isDustBlockMimic?: boolean;
   isDustBlockMimicLarge?: boolean;
+  isDustWeaverArchitect?: boolean;
+  isDustWeaverArchitectLarge?: boolean;
   isVoidSingularity?: boolean;
   isVoidSingularityPair?: boolean;
   isDustLeech?: boolean;

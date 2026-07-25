@@ -242,6 +242,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isRadiantWebFlag: e.isRadiantWeb ? 1 : 0,
     isCrimsonWizardFlag: e.isCrimsonWizard ? 1 : 0,
     isHeraldFlag: e.isHerald ? 1 : 0,
+    isIceWizardFlag: e.isIceWizard ? 1 : 0,
     isGrappleHunterFlag: e.isGrappleHunter ? 1 : 0,
     isSlimeFlag: (e.isSlime ?? false) ? 1 : 0,
     isLargeSlimeFlag: (e.isLargeSlime ?? false) ? 1 : 0,
@@ -263,6 +264,10 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     isDustConstellationLargeFlag: (e.isDustConstellationLarge ?? false) ? 1 : 0,
     isOrbitalDustCoreFlag: (e.isOrbitalDustCore ?? false) ? 1 : 0,
     isOrbitalDustCoreLargeFlag: (e.isOrbitalDustCoreLarge ?? false) ? 1 : 0,
+    isDustBlockMimicFlag: (e.isDustBlockMimic ?? false) ? 1 : 0,
+    isDustBlockMimicLargeFlag: (e.isDustBlockMimicLarge ?? false) ? 1 : 0,
+    isDustWeaverArchitectFlag: (e.isDustWeaverArchitect ?? false) ? 1 : 0,
+    isDustWeaverArchitectLargeFlag: (e.isDustWeaverArchitectLarge ?? false) ? 1 : 0,
     isVoidSingularityFlag: (e.isVoidSingularity ?? false) ? 1 : 0,
     isVoidSingularityPairFlag: (e.isVoidSingularityPair ?? false) ? 1 : 0,
     isDustLeechFlag:       (e.isDustLeech ?? false) ? 1 : 0,
@@ -550,6 +555,14 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     xBlock: b.xBlock,
     yBlock: b.yBlock,
   }));
+  const zipMoveBlocks = (json.zipMoveBlocks ?? []).map(b => ({
+    uid: Number.isFinite(b.uid) ? b.uid : uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    wBlock: b.wBlock,
+    hBlock: b.hBlock,
+    variant: b.variant ?? 'toward',
+  }));
 
   const phantasmalTiles = (json.phantasmalTiles ?? []).map((b: RoomJsonPhantasmalTile) => ({
     uid: uid++,
@@ -614,13 +627,13 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
   }));
 
   const customBlockPlacements: import('../levels/customBlocks').EditorCustomBlockPlacement[] =
-    (json.customBlockPlacements ?? []).map(([x, y, blockId]) => ({
+    (json.customBlockPlacements ?? []).map(tuple => ({
       uid: uid++,
-      xBlock: x,
-      yBlock: y,
-      blockId,
-      tileWidth:  1 as 1 | 2,
-      tileHeight: 1 as 1 | 2,
+      xBlock: tuple[0],
+      yBlock: tuple[1],
+      blockId: tuple[2],
+      tileWidth:  (tuple[3] ?? 1) as 1 | 2,
+      tileHeight: (tuple[4] ?? 1) as 1 | 2,
     }));
 
   return {
@@ -675,6 +688,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       bouncePads,
       kineticBlocks,
       grappleCarryBlocks,
+      zipMoveBlocks,
       phantasmalTiles,
       pixelMaterials,
       ropes,
