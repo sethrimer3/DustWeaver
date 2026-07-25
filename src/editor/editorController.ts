@@ -58,7 +58,8 @@ import { placeAtCursor, evaluateBrushOperation } from './editorPlaceTool';
 import { pixelFromCursor, placePixelMaterialAt, erasePixelMaterialAt, paintPixelMaterialLine } from './editorPixelMaterialTool';
 import { getPlacementStatus, describePlacementBlockReason, canMutateElement, canMutateSelection } from './editorLayers';
 import { createEditorUI, EditorUI } from './editorUI';
-import type { RoomEdge } from './editorUI';
+import type { RoomEdge, EditorSessionUIState } from './editorUI';
+import { isPointOverEditorCanvas, type EditorUIHitRegionParams } from './editorUIHitRegions';
 import { renderEditorOverlays, renderEditorIndicator } from './editorRenderer';
 import { showEditorWorldMap } from './editorWorldMap';
 import { showVisualWorldMap } from './editorVisualMap';
@@ -148,8 +149,6 @@ import { printRoundTripReport, validateRoundTrip } from '../levels/roomRoundTrip
 
 const BS = BLOCK_SIZE_MEDIUM;
 
-/** Width of the editor UI panel in CSS pixels. */
-const EDITOR_PANEL_WIDTH_CSS_PX = 260;
 export interface EditorController {
   state: EditorState;
   /** Toggle editor on/off. */
@@ -232,6 +231,12 @@ export function createEditorController(
   }
   let inputCleanup: (() => void) | null = null;
   let ui: EditorUI | null = null;
+  // In-memory, controller-owned snapshot of session-lived UI state (collapsed
+  // sections + sidebar visibility). Survives editor close/reopen within this
+  // running app session only — never persisted to disk/room JSON. Null until
+  // the first editor close, so the first-ever open still gets the UI's own
+  // all-collapsed/both-visible defaults.
+  let sessionUIState: EditorSessionUIState | null = null;
   let worldMapCleanup: (() => void) | null = null;
   let visualMapCleanup: (() => void) | null = null;
   // Reference to the shared gameplay CameraState most recently passed to
@@ -661,6 +666,11 @@ export function createEditorController(
         layerPanelCollapsed: workspacePrefs.layerPanelCollapsed,
         sidebarScrollTop: workspacePrefs.sidebarScrollTop,
       });
+      // Restore this session's collapsed-section / sidebar-visibility state,
+      // if the editor has been closed at least once already this session.
+      // First-ever open leaves the UI's own all-collapsed/both-visible
+      // defaults untouched.
+      if (sessionUIState) ui.applySessionUIState(sessionUIState);
       ui.setCallbacks({
         onToolChange: (tool) => {
           cancelActiveGesture();
@@ -1099,6 +1109,10 @@ export function createEditorController(
     // gameplay rendering after the editor closes.
     if (activeCameraRef) { activeCameraRef.zoom = CAMERA_DEFAULT_ZOOM; activeCameraRef = null; }
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
+    // Snapshot session-lived UI state (collapsed sections + sidebar
+    // visibility) BEFORE ui.destroy() so the next editor open in this same
+    // app session can restore it.
+    if (ui) sessionUIState = ui.getSessionUIStateSnapshot();
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
@@ -1572,11 +1586,26 @@ export function createEditorController(
       (inputState.middleDragDeltaYPx / cssHeightPx) * virtualHeightPx,
     );
 
-    // Zoom (mouse wheel restricted to the Select tool; +/- keys work in any tool).
-    // Cursor-anchored for wheel zoom, viewport-centered for keyboard zoom.
+    // Shared left/right-sidebar (+ reveal-tab) hit-region params for this
+    // frame, replacing the old hardcoded left-260px-only pointer-exclusion
+    // check — see editorUIHitRegions.ts. Dynamically reflects current
+    // sidebar visibility, so a hidden sidebar's old screen region becomes
+    // fully interactive again (minus only its small reveal tab).
+    const sidebarVisibility = ui?.getSidebarVisibility() ?? { left: true, right: true };
+    const uiHitRegionParams: EditorUIHitRegionParams = {
+      viewportWidthPx: cssWidthPx,
+      isLeftSidebarVisible: sidebarVisibility.left,
+      isRightSidebarVisible: sidebarVisibility.right,
+    };
+    const isOverEditorCanvas = (xPx: number): boolean => isPointOverEditorCanvas(xPx, uiHitRegionParams);
+
+    // Zoom (mouse wheel restricted to the Select tool AND to the canvas area;
+    // +/- keys work in any tool regardless of cursor position). Cursor-
+    // anchored for wheel zoom, viewport-centered for keyboard zoom. Wheel
+    // rotation over a sidebar (or a reveal tab) must not zoom the canvas.
     applyEditorZoomInput(
       camera,
-      inputState.wheelDelta,
+      isOverEditorCanvas(inputState.mouseScreenXPx) ? inputState.wheelDelta : 0,
       state.activeTool === EditorTool.Select,
       inputState.isZoomInPressed,
       inputState.isZoomOutPressed,
@@ -1606,7 +1635,7 @@ export function createEditorController(
     // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
       // Ignore clicks on the UI panel area (CSS pixel comparison)
-      if (inputState.clickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
+      if (isOverEditorCanvas(inputState.clickScreenXPx)) {
         if (
           activePaintPending === null &&
           (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete) &&
@@ -1924,7 +1953,7 @@ export function createEditorController(
     // respects the active brush mode (single/3x3/5x5/rect/fill) the same way
     // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
-      if (inputState.rightClickScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX) {
+      if (isOverEditorCanvas(inputState.rightClickScreenXPx)) {
         if (activePaintPending === null) {
           const campaign = activeCampaignSession.campaign.campaign;
           activePaintPending = beginPaintTransaction(
@@ -2145,7 +2174,7 @@ export function createEditorController(
       !state.isDragging &&
       !state.isSelectionBoxActive &&
       state.brushMode !== 'rect' &&
-      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX &&
+      isOverEditorCanvas(inputState.mouseScreenXPx) &&
       (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
 
     if (canDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
@@ -2195,7 +2224,7 @@ export function createEditorController(
       !state.isDragging &&
       !state.isSelectionBoxActive &&
       state.brushMode !== 'rect' &&
-      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX;
+      isOverEditorCanvas(inputState.mouseScreenXPx);
 
     if (canRightDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
       const px = pixelFromCursor(state);
@@ -2242,7 +2271,7 @@ export function createEditorController(
       if (shouldScanHover({
         ...ownership,
         isSelectTool: state.activeTool === EditorTool.Select,
-        isOverCanvas: inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX,
+        isOverCanvas: isOverEditorCanvas(inputState.mouseScreenXPx),
       })) {
         state.hoverElement = selectAtCursor(state);
       } else {

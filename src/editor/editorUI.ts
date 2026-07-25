@@ -20,6 +20,7 @@ import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './
 import {
   makeBtn, makeEdgeBtn, makeThemeChip, makeThemeSlot,
   makeBlockPreviewCard, createCollapsibleSection,
+  type CollapsibleSection,
 } from './editorUIHelpers';
 import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePreview';
 import { updateInspector } from './editorInspector';
@@ -54,6 +55,22 @@ export interface EditorWorkspaceUIPrefs {
   sidebarScrollTop: number;
 }
 
+/**
+ * In-memory, controller-owned snapshot of purely session-lived UI state:
+ * every collapsible section's expanded/collapsed state (keyed by the stable
+ * `key` passed to createCollapsibleSection) plus each sidebar's
+ * visible/hidden state. Survives editor close/reopen within the same
+ * running app session, but is never written to disk/localStorage/room JSON
+ * — that's the separate, per-campaign-persisted `EditorWorkspaceUIPrefs`
+ * above (layers panel only). Kept as a distinct type/concept deliberately;
+ * do not merge the two.
+ */
+export interface EditorSessionUIState {
+  sectionExpanded: Record<string, boolean>;
+  leftSidebarVisible: boolean;
+  rightSidebarVisible: boolean;
+}
+
 export interface EditorUI {
   container: HTMLDivElement;
   /** Update UI to reflect current editor state. */
@@ -65,6 +82,12 @@ export interface EditorUI {
   applyWorkspaceUIPrefs: (prefs: EditorWorkspaceUIPrefs) => void;
   /** Reads the current live collapse/scroll state, for saving workspace preferences. */
   getWorkspaceUIPrefsSnapshot: () => EditorWorkspaceUIPrefs;
+  /** Current sidebar visibility, read once per frame by the controller to build hit-region params. */
+  getSidebarVisibility: () => { left: boolean; right: boolean };
+  /** Reads the current live section-collapse + sidebar-visibility state, for the controller's in-memory session snapshot. */
+  getSessionUIStateSnapshot: () => EditorSessionUIState;
+  /** Applies a restored in-memory session snapshot (no-op for keys not present, e.g. first-ever open). */
+  applySessionUIState: (snapshot: EditorSessionUIState) => void;
 }
 
 // Re-export shared types so consumers that already import from editorUI.ts
@@ -100,6 +123,64 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     overflow-y: auto; z-index: 900; padding: 10px; box-sizing: border-box;
     pointer-events: auto;
   `;
+
+  // ── Sidebar hide/reveal — each sidebar operates fully independently ────────
+  // Hiding a sidebar leaves a small reveal tab at that screen edge (its arrow
+  // pointing inward, toward the canvas) which re-shows it when clicked.
+  // Visibility itself is read by the controller once per frame
+  // (getSidebarVisibility) to build the shared editorUIHitRegions params, so
+  // a hidden sidebar's old screen region becomes fully interactive again.
+  let leftSidebarVisible = true;
+  let rightSidebarVisible = true;
+
+  function makeRevealTab(side: 'left' | 'right', arrow: string, onClick: () => void): HTMLButtonElement {
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.textContent = arrow;
+    tab.title = `Show ${side} panel`;
+    tab.setAttribute('aria-label', `Show ${side} panel`);
+    tab.style.cssText = `
+      position: absolute; top: 10px; ${side}: 0; ${side === 'left' ? 'border-left: none;' : 'border-right: none;'}
+      width: 22px; height: 34px; display: none; z-index: 900;
+      background: ${PANEL_BG}; border: 1px solid ${PANEL_BORDER}; border-radius: ${side === 'left' ? '0 4px 4px 0' : '4px 0 0 4px'};
+      color: ${TEXT_COLOR}; font-size: 12px; cursor: pointer; padding: 0;
+      pointer-events: auto;
+    `;
+    tab.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return tab;
+  }
+  const leftRevealTab = makeRevealTab('left', '▸', () => setLeftSidebarVisible(true));
+  const rightRevealTab = makeRevealTab('right', '◂', () => setRightSidebarVisible(true));
+
+  function makeHideArrow(arrow: string, title: string, onClick: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = arrow;
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.style.cssText = `
+      width: 22px; height: 20px; padding: 0; margin-bottom: 4px;
+      background: ${BTN_BG}; border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+      color: ${TEXT_COLOR}; font-size: 11px; cursor: pointer; float: right;
+    `;
+    btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return btn;
+  }
+  const leftHideArrow = makeHideArrow('◂', 'Hide left panel', () => setLeftSidebarVisible(false));
+  const rightHideArrow = makeHideArrow('▸', 'Hide right panel', () => setRightSidebarVisible(false));
+  container.appendChild(leftHideArrow);
+  rightSidebar.appendChild(rightHideArrow);
+
+  function setLeftSidebarVisible(visible: boolean): void {
+    leftSidebarVisible = visible;
+    container.style.display = visible ? '' : 'none';
+    leftRevealTab.style.display = visible ? 'none' : 'block';
+  }
+  function setRightSidebarVisible(visible: boolean): void {
+    rightSidebarVisible = visible;
+    rightSidebar.style.display = visible ? '' : 'none';
+    rightRevealTab.style.display = visible ? 'none' : 'block';
+  }
 
   // ── Title ────────────────────────────────────────────────────────────────
   // Built from DOM nodes (not innerHTML) so an authored campaign title can
@@ -271,7 +352,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     toolBtns.push(btn);
     toolBar.appendChild(btn);
   }
-  const toolsSection = createCollapsibleSection('Tools');
+  const toolsSection = createCollapsibleSection('Tools', { key: 'tools' });
   toolsSection.body.appendChild(toolBar);
   rightSidebar.appendChild(toolsSection.wrapper);
 
@@ -300,7 +381,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     brushBtns.push(btn);
     brushRow.appendChild(btn);
   }
-  const brushSection = createCollapsibleSection('Brush');
+  const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
   brushSection.body.appendChild(brushRow);
   rightSidebar.appendChild(brushSection.wrapper);
   const roomDimDiv = document.createElement('div');
@@ -341,7 +422,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   roomDimDiv.appendChild(edgeResizeDiv);
 
-  const roomDimSection = createCollapsibleSection('Room Dimensions');
+  const roomDimSection = createCollapsibleSection('Room Dimensions', { key: 'roomDimensions' });
   roomDimSection.body.appendChild(roomDimDiv);
   container.appendChild(roomDimSection.wrapper);
 
@@ -508,7 +589,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   bgBlurLabel.appendChild(document.createTextNode('Use blurred version'));
   bgDiv.appendChild(bgBlurLabel);
 
-  const bgSection = createCollapsibleSection('Background');
+  const bgSection = createCollapsibleSection('Background', { key: 'background' });
   bgSection.body.appendChild(bgDiv);
   container.appendChild(bgSection.wrapper);
 
@@ -531,7 +612,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   });
   songSelect.addEventListener('click', (e) => e.stopPropagation());
   songDiv.appendChild(songSelect);
-  const songSection = createCollapsibleSection('Room Song');
+  const songSection = createCollapsibleSection('Room Song', { key: 'roomSong' });
   songSection.body.appendChild(songDiv);
   container.appendChild(songSection.wrapper);
 
@@ -557,14 +638,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     catBtns.push(btn);
     catBar.appendChild(btn);
   }
-  const categoriesSection = createCollapsibleSection('Categories');
+  const categoriesSection = createCollapsibleSection('Categories', { key: 'categories' });
   categoriesSection.body.appendChild(catBar);
   rightSidebar.appendChild(categoriesSection.wrapper);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
-  const paletteSection = createCollapsibleSection('Palette');
+  const paletteSection = createCollapsibleSection('Palette', { key: 'palette' });
   paletteSection.body.appendChild(paletteDiv);
   rightSidebar.appendChild(paletteSection.wrapper);
 
@@ -719,7 +800,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   paletteSection.body.appendChild(specialItemPickers.crumblePickerDiv);
   paletteSection.body.appendChild(specialItemPickers.dustJarPickerDiv);
 
-  const inspectorSection = createCollapsibleSection('Inspector');
+  const inspectorSection = createCollapsibleSection('Inspector', { key: 'inspector' });
   inspectorSection.body.appendChild(inspectorDiv);
   container.appendChild(inspectorSection.wrapper);
 
@@ -729,12 +810,24 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     width: 100%; padding: 10px; font-size: 13px;
     background: rgba(0,100,50,0.4); border-color: ${GREEN};
   `;
-  const exportSection = createCollapsibleSection('Export');
+  const exportSection = createCollapsibleSection('Export', { key: 'export' });
   exportSection.body.appendChild(exportBtn);
   container.appendChild(exportSection.wrapper);
 
   root.appendChild(container);
   root.appendChild(rightSidebar);
+  root.appendChild(leftRevealTab);
+  root.appendChild(rightRevealTab);
+
+  // ── Session UI state registry ───────────────────────────────────────────
+  // Every top-level collapsible section built above, keyed by its stable
+  // `key`, plus the layers panel (which owns its own collapse state via
+  // setCollapsed/isCollapsed rather than exposing a CollapsibleSection).
+  const collapsibleSections: CollapsibleSection[] = [
+    toolsSection, brushSection, roomDimSection, bgSection, songSection,
+    categoriesSection, paletteSection, inspectorSection, exportSection,
+  ];
+  const LAYERS_SESSION_KEY = 'layers';
 
   function update(state: EditorState): void {
     editorPerfCounters.uiUpdates++;
@@ -1193,6 +1286,27 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       layerPanelCollapsed: layersPanel.isCollapsed(),
       sidebarScrollTop: container.scrollTop,
     }),
+    getSidebarVisibility: () => ({ left: leftSidebarVisible, right: rightSidebarVisible }),
+    getSessionUIStateSnapshot: (): EditorSessionUIState => {
+      const sectionExpanded: Record<string, boolean> = {};
+      for (const section of collapsibleSections) {
+        if (section.key !== null) sectionExpanded[section.key] = section.isExpanded();
+      }
+      sectionExpanded[LAYERS_SESSION_KEY] = !layersPanel.isCollapsed();
+      return { sectionExpanded, leftSidebarVisible, rightSidebarVisible };
+    },
+    applySessionUIState: (snapshot: EditorSessionUIState): void => {
+      for (const section of collapsibleSections) {
+        if (section.key !== null && section.key in snapshot.sectionExpanded) {
+          section.setExpanded(snapshot.sectionExpanded[section.key]);
+        }
+      }
+      if (LAYERS_SESSION_KEY in snapshot.sectionExpanded) {
+        layersPanel.setCollapsed(!snapshot.sectionExpanded[LAYERS_SESSION_KEY]);
+      }
+      setLeftSidebarVisible(snapshot.leftSidebarVisible);
+      setRightSidebarVisible(snapshot.rightSidebarVisible);
+    },
     destroy: () => {
       lastPaletteStructureSig = '';
       paletteItems = [];
@@ -1219,6 +1333,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       animatedBackgroundPreviewCanvases = [];
       if (container.parentElement) container.parentElement.removeChild(container);
       if (rightSidebar.parentElement) rightSidebar.parentElement.removeChild(rightSidebar);
+      if (leftRevealTab.parentElement) leftRevealTab.parentElement.removeChild(leftRevealTab);
+      if (rightRevealTab.parentElement) rightRevealTab.parentElement.removeChild(rightRevealTab);
     },
   };
 }

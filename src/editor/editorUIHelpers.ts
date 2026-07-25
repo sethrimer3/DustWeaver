@@ -68,6 +68,10 @@ export interface CollapsibleSection {
   readonly chevron: HTMLSpanElement;
   /** Append panel content here. */
   readonly body: HTMLDivElement;
+  /** Stable identifying key, when passed to createCollapsibleSection — used
+   *  to match this section's expanded state back up across a session-state
+   *  snapshot/restore (see EditorUI.getSessionUIStateSnapshot). */
+  readonly key: string | null;
   setExpanded: (expanded: boolean) => void;
   isExpanded: () => boolean;
 }
@@ -94,7 +98,7 @@ function ensureCollapsibleFocusStyleInjected(): void {
 
 export function createCollapsibleSection(
   titleText: string,
-  opts?: { defaultExpanded?: boolean; wrapperCss?: string },
+  opts?: { defaultExpanded?: boolean; wrapperCss?: string; key?: string },
 ): CollapsibleSection {
   ensureCollapsibleFocusStyleInjected();
 
@@ -153,7 +157,7 @@ export function createCollapsibleSection(
 
   setExpanded(expanded);
 
-  return { wrapper, header, chevron, body, setExpanded, isExpanded };
+  return { wrapper, header, chevron, body, key: opts?.key ?? null, setExpanded, isExpanded };
 }
 
 // ── Button helpers ────────────────────────────────────────────────────────────

@@ -89,15 +89,15 @@ test('right sidebar holds tools/brush/categories/palette; left sidebar holds roo
 test('every top-level panel is built with createCollapsibleSection (no ad-hoc duplicated collapse logic)', () => {
   const source = readEditorUISource();
   const expectedSections = [
-    "createCollapsibleSection('Tools')",
-    "createCollapsibleSection('Brush')",
-    "createCollapsibleSection('Room Dimensions')",
-    "createCollapsibleSection('Background')",
-    "createCollapsibleSection('Room Song')",
-    "createCollapsibleSection('Categories')",
-    "createCollapsibleSection('Palette')",
-    "createCollapsibleSection('Inspector')",
-    "createCollapsibleSection('Export')",
+    "createCollapsibleSection('Tools'",
+    "createCollapsibleSection('Brush'",
+    "createCollapsibleSection('Room Dimensions'",
+    "createCollapsibleSection('Background'",
+    "createCollapsibleSection('Room Song'",
+    "createCollapsibleSection('Categories'",
+    "createCollapsibleSection('Palette'",
+    "createCollapsibleSection('Inspector'",
+    "createCollapsibleSection('Export'",
   ];
   for (const s of expectedSections) {
     assert.ok(source.includes(s), `expected editorUI.ts to build a section via: ${s}`);
