@@ -3,7 +3,7 @@
   "kind": "DustWeaverCampaign",
   "metadata": {
     "version": 8,
-    "lastEditedAt": "2026-07-25T02:04:50.854Z"
+    "lastEditedAt": "2026-07-25T01:59:10.817Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -214,13 +214,6 @@
         "worldId": 2,
         "mapX": -679,
         "mapY": 80
-      },
-      {
-        "id": "victory_alcove",
-        "name": "Victory Alcove",
-        "worldId": 1,
-        "mapX": -73,
-        "mapY": -32
       }
     ]
   },
@@ -43771,6 +43764,6 @@
   ],
   "editor": {
     "createdWithBuild": "500",
-    "lastEditedIso": "2026-07-25T02:04:50.854Z"
+    "lastEditedIso": "2026-07-25T01:59:10.817Z"
   }
 }

@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "00cd8afcad826b02",
+  "campaignHash": "2cfa3fb85029f72f",
   "campaignVersion": 8,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-25T01:59:10.842Z",
+  "exportedAt": "2026-07-25T02:04:50.879Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -29,7 +29,7 @@
       "roomId": "boss_radiant_tether",
       "file": "boss_radiant_tether_room.json",
       "hash": "a9d671b14b5fe14e",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
+      "updatedAt": "2026-07-25T02:04:50.879Z"
     },
     "underwater_lake": {
       "roomId": "underwater_lake",
@@ -119,7 +119,7 @@
       "roomId": "crimson_throne",
       "file": "crimson_throne_room.json",
       "hash": "64e0cb124d0e20ea",
-      "updatedAt": "2026-07-19T07:18:03.884Z"
+      "updatedAt": "2026-07-25T02:04:50.879Z"
     },
     "pipe": {
       "roomId": "pipe",
