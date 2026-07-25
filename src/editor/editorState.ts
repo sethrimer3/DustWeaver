@@ -215,6 +215,16 @@ export interface EditorState {
    */
   lastWarnedComplexitySeverity: RoomComplexitySeverity;
   /**
+   * Monotonically incremented by applyEdits() and loadRoomForEditing()
+   * whenever room content structurally changes (placement, metadata edit,
+   * undo/redo, paste, load). Consumers that derive expensive per-frame
+   * summaries (e.g. room-complexity analysis for the sidebar) can cache
+   * their result keyed on this value instead of recomputing every frame.
+   * Not incremented mid-drag — only once per completed operation, same
+   * cadence as pendingComplexityCheck.
+   */
+  roomContentRevision: number;
+  /**
    * Campaign-local custom block registry (raw id → def).
    * Populated when a custom campaign is loaded or when blocks are created.
    * Empty for the main campaign (no custom blocks).
@@ -287,6 +297,7 @@ export function createEditorState(): EditorState {
     guideDustPathSelectedPointIndex: null,
     pendingComplexityCheck: false,
     lastWarnedComplexitySeverity: 'normal',
+    roomContentRevision: 0,
     customBlockRegistry: new Map(),
     customBlockUsage: new Map(),
     layers: createDefaultEditorLayers(),

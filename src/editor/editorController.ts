@@ -30,6 +30,7 @@ import { EditorState, createEditorState, EditorTool,
   assignBlockThemeSlot,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
+import { editorPerfCounters } from './editorPerfCounters';
 import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
 import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput, panEditorCameraByScreenDelta } from './editorCamera';
 import {
@@ -525,6 +526,7 @@ export function createEditorController(
       return null;
     }
     liveEditorRoomDef = editorRoomDataToRoomDef(state.roomData);
+    editorPerfCounters.roomDefConversions++;
     return liveEditorRoomDef;
   }
 
@@ -1113,6 +1115,7 @@ export function createEditorController(
     if (!state.roomData) return;
     isCurrentRoomDirty = isHistoryDirty(history) || activePaintPending !== null;
     state.pendingComplexityCheck = true;
+    state.roomContentRevision++;
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
       campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
@@ -1170,6 +1173,7 @@ export function createEditorController(
     // warning here, and so this room doesn't inherit a stale check flag.
     state.pendingComplexityCheck = false;
     state.lastWarnedComplexitySeverity = 'normal';
+    state.roomContentRevision++;
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       const loaded = campaignSession.campaignStore.getRoom(room.id, state.nextUid);
       state.roomData = loaded.roomData;

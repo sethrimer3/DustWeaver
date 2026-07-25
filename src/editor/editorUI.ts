@@ -26,6 +26,7 @@ import { updateInspector } from './editorInspector';
 import { createEditorSpecialItemPickers } from './editorSpecialItemPickers';
 import { createEditorLightingPanel } from './editorUILightingPanel';
 import { createEditorLayersPanel } from './editorUILayersPanel';
+import { editorPerfCounters } from './editorPerfCounters';
 import type { TheroBackgroundEffect } from '../render/effects/theroBackgroundEffect';
 import { createPrologueShapeEffect } from '../render/effects/prologueShapeEffect';
 import { createVermiculateEffect } from '../render/effects/vermiculateEffect';
@@ -180,6 +181,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   densityIndicator.appendChild(densitySuffixLine);
   container.appendChild(densityIndicator);
   let lastDensitySig = '';
+  // Cache the last room-complexity analysis, keyed on room identity + the
+  // controller's roomContentRevision counter, so an idle editor (no
+  // structural change since the last completed edit) doesn't re-run
+  // analyzeEditorRoomComplexity every single frame.
+  let lastComplexityRoomId = '';
+  let lastComplexityRevision = -1;
+  let lastComplexityReport: ReturnType<typeof analyzeEditorRoomComplexity> | null = null;
 
   if (import.meta.env.DEV) {
     const devToolsDiv = document.createElement('div');
@@ -692,14 +700,23 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   root.appendChild(topRightBar);
 
   function update(state: EditorState): void {
+    editorPerfCounters.uiUpdates++;
     layersPanel.sync(state);
 
     // Update room density indicator — only touch the DOM when the displayed
-    // values actually change (analyzeEditorRoomComplexity itself still runs
-    // every frame; it's cheap. What Phase 5 targets is the unconditional
-    // innerHTML rewrite this replaces).
+    // values actually change. analyzeEditorRoomComplexity() itself is now
+    // also revision-gated: it only re-runs when state.roomContentRevision
+    // (bumped once per completed edit/undo/redo/load, never mid-drag) has
+    // advanced since the last analysis, instead of every frame.
     if (state.roomData) {
-      const report = analyzeEditorRoomComplexity(state.roomData);
+      let report = lastComplexityReport;
+      if (report === null || state.roomData.id !== lastComplexityRoomId || state.roomContentRevision !== lastComplexityRevision) {
+        report = analyzeEditorRoomComplexity(state.roomData);
+        editorPerfCounters.complexityAnalyses++;
+        lastComplexityReport = report;
+        lastComplexityRoomId = state.roomData.id;
+        lastComplexityRevision = state.roomContentRevision;
+      }
       const topCategory = ROOM_COMPLEXITY_CATEGORY_LABELS[dominantCategory(report.categoryCounts)];
       const sig = computeDensityDisplaySignature(true, report.totalPlacedCount, report.severity, topCategory);
       if (sig !== lastDensitySig) {
