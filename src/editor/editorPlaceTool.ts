@@ -43,6 +43,7 @@ import {
   type PlacementBlockReason,
 } from './editorLayers';
 import { anchorForMaterial } from './editorPixelMaterialTool';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 // ── Placement dimension helpers ───────────────────────────────────────────────
 
@@ -1250,6 +1251,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       };
       room.guideDustPaths.push(newPath);
       state.selectedElements = [{ type: 'guideDustPath', uid: newPath.uid }];
+      bumpSelectionRevision(state);
     }
   } else if (item.isCustomBlockItem === 1 && item.customBlockId !== undefined) {
     // ── Custom block placement ────────────────────────────────────────────────
@@ -1279,5 +1281,6 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     if (!room.customBlockPlacements) room.customBlockPlacements = [];
     room.customBlockPlacements.push(newPlacement);
     state.selectedElements = [{ type: 'customBlock', uid: newPlacement.uid }];
+    bumpSelectionRevision(state);
   }
 }

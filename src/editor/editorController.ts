@@ -31,6 +31,7 @@ import { EditorState, createEditorState, EditorTool,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
 import { editorPerfCounters } from './editorPerfCounters';
+import { bumpSelectionRevision } from './editorSelectionCache';
 import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
 import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput, panEditorCameraByScreenDelta } from './editorCamera';
 import {
@@ -600,6 +601,7 @@ export function createEditorController(
           cancelActiveGesture();
           state.activeTool = tool;
           state.selectedElements = [];
+          bumpSelectionRevision(state);
         },
         onCategoryChange: (cat) => { state.activeCategory = cat; scheduleWorkspaceSave(); },
         onPaletteItemSelect: (item) => {
@@ -991,6 +993,7 @@ export function createEditorController(
           // them. This is independent of (and happens after) the drag-cancel
           // decision above, which used the pre-prune selection.
           state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
+          bumpSelectionRevision(state);
           if (challengeResize !== null && !canMutateElement(state, { type: challengeResize.type })) {
             cancelActiveGesture();
           }
@@ -1006,6 +1009,7 @@ export function createEditorController(
           // room data to begin with).
           state.layers = applyLayerPreset(state.layers, presetId);
           state.selectedElements = state.selectedElements.filter(el => canMutateElement(state, el));
+          bumpSelectionRevision(state);
           ui?.update(state);
           scheduleWorkspaceSave();
         },
@@ -1044,6 +1048,7 @@ export function createEditorController(
     state.isActive = false;
     state.roomData = null;
     state.selectedElements = [];
+    bumpSelectionRevision(state);
     state.isDragging = false;
     state.isSelectionBoxActive = false;
     originalRoomDef = null;
@@ -1188,6 +1193,7 @@ export function createEditorController(
         }
       }
       state.selectedElements = [];
+      bumpSelectionRevision(state);
       state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
       isCurrentRoomDirty = false;
       syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
@@ -1221,6 +1227,7 @@ export function createEditorController(
       state.nextUid = result.nextUid;
     }
     state.selectedElements = [];
+    bumpSelectionRevision(state);
     // Set the active theme to match the room's default without affecting the
     // recent-theme list — recent themes reflect only explicit user selections.
     state.selectedBlockTheme = state.roomData?.blockTheme ?? 'blackRock';
@@ -1649,8 +1656,10 @@ export function createEditorController(
               const idx = state.selectedElements.findIndex(e => e.type === clicked.type && e.uid === clicked.uid);
               if (idx >= 0) {
                 state.selectedElements.splice(idx, 1);
+                bumpSelectionRevision(state);
               } else {
                 state.selectedElements.push(clicked);
+                bumpSelectionRevision(state);
               }
             } else {
               // Normal click: if the element is already in the selection keep
@@ -1661,11 +1670,13 @@ export function createEditorController(
               );
               if (!isAlreadySelected) {
                 state.selectedElements = [clicked];
+                bumpSelectionRevision(state);
               }
             }
           } else if (!inputState.isShiftHeld) {
             // Click on empty space without shift: begin selection box
             state.selectedElements = [];
+            bumpSelectionRevision(state);
             state.isSelectionBoxActive = true;
             state.selectionBoxStartBlockX = state.cursorBlockX;
             state.selectionBoxStartBlockY = state.cursorBlockY;
@@ -1718,6 +1729,7 @@ export function createEditorController(
               if (commitResult !== 'noop') applyEdits('metadata');
               // Auto-select the marker so the inspector shows it immediately.
               state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
+              bumpSelectionRevision(state);
             }
         } else if (state.activeTool === EditorTool.Place) {
           if (state.brushMode === 'rect' && state.brushRectStartBlockX === null) {
@@ -2020,10 +2032,12 @@ export function createEditorController(
             for (const el of boxElements) {
               if (!state.selectedElements.some(e => e.type === el.type && e.uid === el.uid)) {
                 state.selectedElements.push(el);
+                bumpSelectionRevision(state);
               }
             }
           } else {
             state.selectedElements = boxElements;
+            bumpSelectionRevision(state);
           }
         }
       }

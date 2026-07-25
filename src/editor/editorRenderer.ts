@@ -46,6 +46,7 @@ import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { getLayerForElementType } from './editorLayers';
 import type { SelectedElementType } from './editorElementTypes';
 import { buildEditorRenderMask } from './editorRenderMask';
+import { makeIsElementSelected } from './editorSelectionCache';
 
 /**
  * Renders all editor overlays on the 2D canvas.
@@ -87,8 +88,10 @@ export function renderEditorOverlays(
     }
   }
 
-  const isElementSelected = (type: string, uid: number): boolean =>
-    state.selectedElements.some(e => e.type === type && e.uid === uid);
+  // O(1) membership: cached Set of `${type}:${uid}` keys, rebuilt only when
+  // the selection actually changes (see editorSelectionCache.ts). Previously
+  // this was an Array.some() scan run once per drawn element per frame.
+  const isElementSelected = makeIsElementSelected(state);
 
   // Mask derived once from EditorState and passed down — no scattered direct
   // isLayerVisible(state, ...) calls below (or in editorPlacementPreviewDrawer.ts).

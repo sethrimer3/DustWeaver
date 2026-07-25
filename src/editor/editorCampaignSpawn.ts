@@ -12,6 +12,7 @@ import type { EditorState } from './editorState';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import type { EditorHistory, HistoryCommitResult, PendingSnapshot } from './editorHistory';
 import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 /** Shared dependencies injected into all campaign-spawn helpers. */
 export interface CampaignSpawnContext {
@@ -206,6 +207,7 @@ export function showCampaignSpawnReplaceModal(
     commitCampaignSpawnSnapshot(ctx, history, pending);
     // Auto-select the marker so the inspector shows it immediately.
     state.selectedElements = [{ type: 'campaignSpawn', uid: 0 }];
+    bumpSelectionRevision(state);
   });
   noBtn.addEventListener('click', () => { dismiss(); });
 

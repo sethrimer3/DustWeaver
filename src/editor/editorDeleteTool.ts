@@ -10,6 +10,7 @@ import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { getBrushCells, getFillBrushCells, FillKind } from './editorBrush';
 import { findTopEligibleHitCandidate, type EditorHitCandidate } from './editorTools';
 import { canMutateElement, canMutateSelection, getLayerForElementType, isLayerLocked, isLayerVisible } from './editorLayers';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 interface BlockRect { xBlock: number; yBlock: number; wBlock: number; hBlock: number; }
 
@@ -242,6 +243,7 @@ function deleteResolvedCandidate(
         removeByUid(breakableBlocks, uid);
       }
       state.selectedElements = state.selectedElements.filter(e => !removedUids.has(e.uid));
+      bumpSelectionRevision(state);
       return true;
     }
     case 'dustPile':
@@ -355,6 +357,7 @@ function deleteResolvedCandidate(
       }
       state.guideDustPathSelectedPointIndex = null;
       state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
+      bumpSelectionRevision(state);
       return true;
     }
     case 'customBlock':
@@ -368,6 +371,7 @@ function deleteResolvedCandidate(
 
   if (!removed) return false;
   state.selectedElements = state.selectedElements.filter(e => e.uid !== uid);
+  bumpSelectionRevision(state);
   return true;
 }
 
@@ -390,6 +394,6 @@ export function deleteSelectedElements(state: EditorState): boolean {
       changed = true;
     }
   }
-  if (changed) state.selectedElements = [];
+  if (changed) { state.selectedElements = []; bumpSelectionRevision(state); }
   return changed;
 }

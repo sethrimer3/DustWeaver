@@ -225,6 +225,14 @@ export interface EditorState {
    */
   roomContentRevision: number;
   /**
+   * Monotonically incremented by every mutation of `selectedElements`
+   * (assign / push / splice / filter / clear / paste / marquee / shift-select /
+   * auto-select / prune) via `bumpSelectionRevision()`. Lets the renderer keep
+   * an O(1) `Set` of selected `${type}:${uid}` keys and rebuild it only when
+   * the selection actually changed. See editorSelectionCache.ts.
+   */
+  selectionRevision: number;
+  /**
    * Campaign-local custom block registry (raw id → def).
    * Populated when a custom campaign is loaded or when blocks are created.
    * Empty for the main campaign (no custom blocks).
@@ -298,6 +306,7 @@ export function createEditorState(): EditorState {
     pendingComplexityCheck: false,
     lastWarnedComplexitySeverity: 'normal',
     roomContentRevision: 0,
+    selectionRevision: 0,
     customBlockRegistry: new Map(),
     customBlockUsage: new Map(),
     layers: createDefaultEditorLayers(),

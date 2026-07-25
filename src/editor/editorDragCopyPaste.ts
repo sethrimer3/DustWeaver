@@ -20,6 +20,7 @@ import {
 import { canAddLimitedEnemy } from './editorEnemyCapacity';
 import { canMutateElement, canPlaceOnLayer, getLayerForElementType, type LayerId } from './editorLayers';
 import type { SelectedElementType } from './editorElementTypes';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 // ── Drag-to-move helpers ──────────────────────────────────────────────────────
 
@@ -885,6 +886,7 @@ export function pasteFromClipboard(s: EditorState): boolean {
     newElements.push({ type: 'fallingBlock', uid: newUid });
   }
   s.selectedElements = newElements;
+  bumpSelectionRevision(s);
   // Append guide dust paths with new UIDs and offset all control points
   for (const p of (data.guideDustPaths ?? [])) {
     const newUid = allocateUid(s);
@@ -901,5 +903,6 @@ export function pasteFromClipboard(s: EditorState): boolean {
     newElements.push({ type: 'guideDustPath', uid: newUid });
   }
   s.selectedElements = newElements;
+  bumpSelectionRevision(s);
   return true;
 }

@@ -18,6 +18,7 @@ import type { EditorState, EditorPixelMaterial } from './editorState';
 import { canPlacePixelMaterialAt } from './editorHitTest';
 import { MATERIAL_SAND, getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { canPlaceOnLayer } from './editorLayers';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 /** Converts the editor's world-space cursor position (already in native
  *  pixels — 1 world unit = 1 native px) to an integer pixel cell. */
@@ -81,6 +82,7 @@ export function erasePixelMaterialAt(state: EditorState, xPixel: number, yPixel:
   const removedUid = room.pixelMaterials[i].uid;
   room.pixelMaterials.splice(i, 1);
   state.selectedElements = state.selectedElements.filter(e => e.uid !== removedUid);
+  bumpSelectionRevision(state);
   return true;
 }
 

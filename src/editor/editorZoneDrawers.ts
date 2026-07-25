@@ -14,6 +14,7 @@ import { BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { EditorState, EditorRoomData } from './editorState';
 import { EditorTool } from './editorState';
 import { ropeLineCrossesWall } from './editorHitTest';
+import { getSelectedKeySet, selectionKey } from './editorSelectionCache';
 import { getMaterialFootprintSize, MATERIAL_VISUALS } from '../sim/pixelMaterials/pixelMaterialTypes';
 import { isFolderBasedTheme, getTheme1x1SpriteDarkened } from '../render/walls/folderBlockThemes';
 import { OPEN_AIR_ALL_SIDES } from '../render/walls/blockEdgeShading';
@@ -723,13 +724,17 @@ export function drawEditorGuideDustPaths(
   const paths = room.guideDustPaths ?? [];
   if (paths.length === 0) return;
 
+  // O(1) selection membership (shared cache with the main renderer pass).
+  const selKeys = getSelectedKeySet(state);
+  const isPathSelected = (uid: number): boolean => selKeys.has(selectionKey('guideDustPath', uid));
+
   for (const path of paths) {
     const pts = path.points;
     const bs = BLOCK_SIZE_SMALL;
     if (pts.length < 2) {
       if (pts.length === 0) continue;  // completely empty path — skip
       // Draw a lonely point
-      const sel = state.selectedElements.some(e => e.type === 'guideDustPath' && e.uid === path.uid);
+      const sel = isPathSelected(path.uid);
       ctx.save();
       ctx.fillStyle = sel ? GUIDE_DUST_PATH_SELECTED : GUIDE_DUST_POINT_COLOR;
       const r = Math.max(3, 4 * zoom);
@@ -742,7 +747,7 @@ export function drawEditorGuideDustPaths(
       continue;
     }
 
-    const isSel = state.selectedElements.some(e => e.type === 'guideDustPath' && e.uid === path.uid);
+    const isSel = isPathSelected(path.uid);
     const color = isSel ? GUIDE_DUST_PATH_SELECTED : GUIDE_DUST_PATH_COLOR;
 
     // Draw Catmull-Rom spline (sampled)

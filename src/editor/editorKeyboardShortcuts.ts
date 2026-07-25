@@ -21,6 +21,7 @@ import type { CampaignSpawnContext } from './editorCampaignSpawn';
 import { syncCampaignSpawnBlockFromSession } from './editorCampaignSpawn';
 import { syncCampaignSpawnToSessionAfterDelete } from './editorCampaignSpawn';
 import { deleteSelectedElements } from './editorDeleteTool';
+import { bumpSelectionRevision } from './editorSelectionCache';
 
 /**
  * Process all keyboard shortcut inputs for one editor frame.
@@ -119,6 +120,7 @@ export function handleEditorKeyboardShortcuts(
       cancelTransitionLink(state);
     } else {
       state.selectedElements = [];
+      bumpSelectionRevision(state);
       state.brushRectStartBlockX = null;
       state.brushRectStartBlockY = null;
     }
@@ -133,6 +135,7 @@ export function handleEditorKeyboardShortcuts(
     if (restored) {
       state.roomData = restored.roomData;
       state.selectedElements = [];
+      bumpSelectionRevision(state);
       if (restored.campaignSpawnTracked && campaignSession) {
         if (restored.campaignSpawn !== undefined) {
           campaignSession.campaign.campaign.campaignSpawn = restored.campaignSpawn;
@@ -156,6 +159,7 @@ export function handleEditorKeyboardShortcuts(
     if (restored) {
       state.roomData = restored.roomData;
       state.selectedElements = [];
+      bumpSelectionRevision(state);
       if (restored.campaignSpawnTracked && campaignSession) {
         if (restored.campaignSpawn !== undefined) {
           campaignSession.campaign.campaign.campaignSpawn = restored.campaignSpawn;
