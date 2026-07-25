@@ -159,6 +159,21 @@ export type SavedEnemyType =
   | 'shadow'
   | 'needleUrchin';
 
+export const SAVED_ENEMY_TYPES = [
+  'basic', 'flyingEye', 'rolling', 'rockElemental', 'radiantTether', 'radiantWeb',
+  'crimsonWizard', 'herald', 'iceWizard', 'grappleHunter', 'slime', 'largeSlime',
+  'wheel', 'beetle', 'bubble', 'iceBubble', 'squareStampede', 'goldenMimic',
+  'beeSwarm', 'webSpider', 'dustConstellation', 'dustConstellationLarge',
+  'orbitalDustCore', 'orbitalDustCoreLarge', 'dustBlockMimic', 'dustBlockMimicLarge',
+  'dustWeaverArchitect', 'dustWeaverArchitectLarge', 'voidSingularity',
+  'voidSingularityPair', 'dustLeech', 'gridBlock1x1Slow', 'gridBlock1x1Medium',
+  'gridBlock1x1Fast', 'gridBlock2x2Slow', 'gridBlock2x2Medium', 'gridBlock2x2Fast',
+  'gridSnake', 'momentumTurret', 'slimeSnail', 'shadow', 'needleUrchin',
+] as const satisfies readonly SavedEnemyType[];
+const SAVED_ENEMY_TYPES_ARE_COMPLETE:
+  Exclude<SavedEnemyType, typeof SAVED_ENEMY_TYPES[number]> extends never ? true : never = true;
+void SAVED_ENEMY_TYPES_ARE_COMPLETE;
+
 export interface SavedEnemy {
   type: SavedEnemyType;
   /** [xBlock, yBlock] */

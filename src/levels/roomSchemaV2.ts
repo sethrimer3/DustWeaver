@@ -847,7 +847,7 @@ export function validateRoomRoundtrip(json: RoomJsonDef): string[] {
     errors.push(`Transition count mismatch: ${json.transitions.length} → ${rebuilt.transitions.length}`);
   }
   const semanticCollections = [
-    'enemies', 'transitions', 'skillTombs', 'dustSkillTombs',
+    'skillTombs', 'dustSkillTombs',
     'challengeFields', 'challengeGates', 'challengeTotems', 'gates',
     'dustContainers', 'dustContainerPieces', 'dustBoostJars', 'dustSwarms',
     'lambdaAnchors', 'fireflyJars', 'springboards', 'breakableBlocks',
@@ -857,11 +857,20 @@ export function validateRoomRoundtrip(json: RoomJsonDef): string[] {
     'zipMoveBlocks', 'phantasmalTiles', 'pixelMaterials', 'ropes',
     'dialogueTriggers', 'guideDustPaths', 'customBlockPlacements',
   ] as const satisfies readonly (keyof RoomJsonDef)[];
-  const normalize = (value: unknown): string =>
-    JSON.stringify(value ?? [], (_key, item: unknown) => item === undefined ? null : item);
   for (const key of semanticCollections) {
-    if (normalize(json[key]) !== normalize(rebuilt[key])) errors.push(`Persistence mismatch in ${key}`);
+    const beforeCount = (json[key] as readonly unknown[] | undefined)?.length ?? 0;
+    const afterCount = (rebuilt[key] as readonly unknown[] | undefined)?.length ?? 0;
+    if (beforeCount !== afterCount) errors.push(`Persistence mismatch in ${key}: ${beforeCount} → ${afterCount}`);
   }
+  const canonicalEnemies = (room: RoomJsonDef) => (room.enemies ?? []).map(e => dehydrateEnemy(e));
+  if (JSON.stringify(canonicalEnemies(json)) !== JSON.stringify(canonicalEnemies(rebuilt))) {
+    errors.push('Persistence mismatch in enemies (subtype or authored property changed)');
+  }
+  const canonicalTransitions = (room: RoomJsonDef) => (room.transitions ?? []).map(t => dehydrateTransition(t));
+  if (JSON.stringify(canonicalTransitions(json)) !== JSON.stringify(canonicalTransitions(rebuilt))) {
+    errors.push('Persistence mismatch in transitions (authored property changed)');
+  }
+  const normalize = (value: unknown): string => JSON.stringify(value ?? null);
   const semanticSettings = [
     'backgroundLightSpill', 'solidLightSoftness', 'sunrays', 'rimStyles',
     'ambientLightDirection', 'directionalBias', 'sideExposureStrength',

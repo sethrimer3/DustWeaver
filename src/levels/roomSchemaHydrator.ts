@@ -43,7 +43,7 @@ import type {
   SavedEnemyType,
   SavedRoomV2,
 } from './roomSavedTypes';
-import { DEFAULT_THEME_KEY } from './roomSavedTypes';
+import { DEFAULT_THEME_KEY, SAVED_ENEMY_TYPES } from './roomSavedTypes';
 import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompressor';
 
 // ── Enemy type mapping (expand direction) ────────────────────────────────────
@@ -53,6 +53,9 @@ export function enemyTypeToFlags(
   type: SavedEnemyType,
   base: { xBlock: number; yBlock: number; kinds: string[]; particleCount: number; isBoss: boolean; countsTowardRoomCompletion?: 0; goldenMimicYFlipped?: 1; spriteIndex?: number; snakeLength?: number; momentumTurretFacingIndex?: 0 | 1 | 2 | 3; slimeSnailSideIndex?: 0 | 1 | 2 | 3; slimeSnailCw?: 0 | 1 },
 ): RoomJsonEnemy {
+  if (!SAVED_ENEMY_TYPES.includes(type)) {
+    throw new Error(`Unsupported saved enemy type "${String(type)}"; refusing to downgrade it to basic.`);
+  }
   return {
     xBlock: base.xBlock,
     yBlock: base.yBlock,

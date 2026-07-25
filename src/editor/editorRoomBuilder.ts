@@ -270,6 +270,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       yBlock: e.yBlock,
       kinds,
       particleCount: e.particleCount,
+      countsTowardRoomCompletionFlag: e.countsTowardRoomCompletionFlag ?? 1,
       isBossFlag: e.isBossFlag,
       isFlyingEyeFlag: e.isFlyingEyeFlag,
       isRollingEnemyFlag: e.isRollingEnemyFlag,
