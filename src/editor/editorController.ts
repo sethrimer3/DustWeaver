@@ -32,6 +32,10 @@ import { EditorState, createEditorState, EditorTool,
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
 import { editorPerfCounters } from './editorPerfCounters';
 import { bumpSelectionRevision } from './editorSelectionCache';
+import {
+  isPointerOwnedByGesture, shouldScanHover,
+  type PointerOwnershipInput,
+} from './editorPointerOwnership';
 import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
 import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput, panEditorCameraByScreenDelta } from './editorCamera';
 import {
@@ -251,6 +255,14 @@ export function createEditorController(
   // single slot backs all three so cancellation/commit logic doesn't need to
   // be duplicated per gesture kind — see editorGesture.ts.
   let activeGesture: EditorGestureTransaction | null = null;
+
+  /**
+   * Last value written to `canvas.style.cursor`. Assigning the same string
+   * every frame is a needless style write (and, in some browsers, a style
+   * recalc), so we only touch it when the resolved cursor actually changes.
+   * Reset on editor close so a re-open re-applies the cursor from scratch.
+   */
+  let lastAppliedCanvasCursor = '';
 
   /**
    * Cancels whatever continuous gesture (drag / rect-resize / transition-
@@ -1051,6 +1063,7 @@ export function createEditorController(
     bumpSelectionRevision(state);
     state.isDragging = false;
     state.isSelectionBoxActive = false;
+    lastAppliedCanvasCursor = '';
     originalRoomDef = null;
     pendingRoomEdits.clear();
     initialRoomIds = new Set();
@@ -2127,27 +2140,57 @@ export function createEditorController(
       }
     }
 
-    // Compute hover element for tooltip (Select tool only, outside the editor panel)
-    if (
-      state.activeTool === EditorTool.Select &&
-      inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX
-    ) {
-      state.hoverElement = selectAtCursor(state);
-    } else {
-      state.hoverElement = null;
+    // ── Hover resolution ─────────────────────────────────────────────────
+    // Item B: while a continuous gesture owns the pointer (drag-to-move,
+    // rect/transition resize, marquee, link-drag) we skip the whole-room
+    // hover hit-test entirely — the pointer is already committed to the
+    // element being manipulated, so scanning is pure waste (and makes the
+    // tooltip flicker onto swept-over elements). hoverElement is left as-is
+    // rather than nulled so the tooltip stays stable for the gesture's
+    // duration. Every ownership flag is cleared in the same update pass as
+    // the mouse release, so hover resumes on the very next frame.
+    const ownership: PointerOwnershipInput = {
+      hasActiveGesture: activeGesture !== null,
+      isDragging: state.isDragging,
+      isSelectionBoxActive: state.isSelectionBoxActive,
+      isResizingTransition: state.isResizingTransition,
+      isResizingRect: challengeResize !== null,
+      isLinkingTransition: state.isLinkingTransition,
+    };
+    const pointerOwned = isPointerOwnedByGesture(ownership);
+    if (!pointerOwned) {
+      if (shouldScanHover({
+        ...ownership,
+        isSelectTool: state.activeTool === EditorTool.Select,
+        isOverCanvas: inputState.mouseScreenXPx > EDITOR_PANEL_WIDTH_CSS_PX,
+      })) {
+        state.hoverElement = selectAtCursor(state);
+      } else {
+        state.hoverElement = null;
+      }
     }
-    let resizeCursor = 'default';
-    const selectedForCursor = state.selectedElements.length === 1 ? state.selectedElements[0] : null;
-    if (selectedForCursor?.type === 'challengeField' || selectedForCursor?.type === 'challengeGate' || selectedForCursor?.type === 'gate') {
-      const elements = selectedForCursor.type === 'challengeField' ? state.roomData?.challengeFields : selectedForCursor.type === 'gate' ? state.roomData?.gates : state.roomData?.challengeGates;
-      const rect = (elements ?? []).find(element => element.uid === selectedForCursor.uid);
-      const edge = rect ? hitTestRectResizeEdge(rect, state.cursorWorldX, state.cursorWorldY) : null;
-      if (edge === 'left' || edge === 'right') resizeCursor = 'ew-resize';
-      if (edge === 'top' || edge === 'bottom') resizeCursor = 'ns-resize';
-      if (edge === 'topLeft' || edge === 'bottomRight') resizeCursor = 'nwse-resize';
-      if (edge === 'topRight' || edge === 'bottomLeft') resizeCursor = 'nesw-resize';
+
+    // Cursor: frozen for the duration of an owned gesture (the pointer can
+    // wander off the grabbed edge mid-resize; the cursor must not change to
+    // reflect that). Only re-assigned when the resolved value differs, so an
+    // idle editor never touches canvas.style.
+    if (!pointerOwned) {
+      let resizeCursor = 'default';
+      const selectedForCursor = state.selectedElements.length === 1 ? state.selectedElements[0] : null;
+      if (selectedForCursor?.type === 'challengeField' || selectedForCursor?.type === 'challengeGate' || selectedForCursor?.type === 'gate') {
+        const elements = selectedForCursor.type === 'challengeField' ? state.roomData?.challengeFields : selectedForCursor.type === 'gate' ? state.roomData?.gates : state.roomData?.challengeGates;
+        const rect = (elements ?? []).find(element => element.uid === selectedForCursor.uid);
+        const edge = rect ? hitTestRectResizeEdge(rect, state.cursorWorldX, state.cursorWorldY) : null;
+        if (edge === 'left' || edge === 'right') resizeCursor = 'ew-resize';
+        if (edge === 'top' || edge === 'bottom') resizeCursor = 'ns-resize';
+        if (edge === 'topLeft' || edge === 'bottomRight') resizeCursor = 'nwse-resize';
+        if (edge === 'topRight' || edge === 'bottomLeft') resizeCursor = 'nesw-resize';
+      }
+      if (resizeCursor !== lastAppliedCanvasCursor) {
+        canvas.style.cursor = resizeCursor;
+        lastAppliedCanvasCursor = resizeCursor;
+      }
     }
-    canvas.style.cursor = resizeCursor;
 
     // Room-complexity warning: check at most once per completed operation
     // (drag/paint/paste/fill/undo/redo), never mid-drag.
