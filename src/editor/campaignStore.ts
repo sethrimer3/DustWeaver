@@ -27,7 +27,9 @@ export interface CampaignStore {
 }
 
 function isDev(): boolean {
-  return import.meta.env.DEV;
+  // Optional-chained so this module can also be imported under plain Node
+  // (the test runner), where Vite's import.meta.env shim does not exist.
+  return import.meta.env?.DEV === true;
 }
 
 function logTiming(label: string, startMs: number, details?: string): void {
