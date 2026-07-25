@@ -487,6 +487,17 @@ export function startGameScreen(
   const cachedDecorationCenterY = new Float32Array(DecorationWaveState.MAX_DECORATIONS);
   const reusableSnapshot = createReusableSnapshot(world);
 
+  // ── Editor backdrop snapshot freeze ─────────────────────────────────────
+  // While the editor is open, gameplay simulation is not ticked (the editor
+  // branch returns early each frame), so the gameplay world underlying the
+  // backdrop is invariant. Recomputing `updateSnapshotInPlace()` every editor
+  // frame is pure waste at scale. We capture it once per editor session
+  // (and again if the underlying `world` reference is swapped, e.g. a
+  // resident hot-swap) and reuse it thereafter until the editor closes.
+  let editorBackdropSnapshotFresh = false;
+  let editorBackdropSnapshotWorld: typeof world | null = null;
+  let wasEditorActiveLastFrame = false;
+
   // ── Crumble block prev-state tracking ───────────────────────────────────
   // Snapshot of per-block hit state from the previous tick so we can detect
   // damage and destruction transitions and fire visual events + lighting rebuild.
@@ -1125,6 +1136,11 @@ export function startGameScreen(
     // ── Editor mode gate ──────────────────────────────────────────────────
     // When the editor is active, it takes over camera and input; skip gameplay.
     if (editorController.state.isActive) {
+      if (!wasEditorActiveLastFrame) {
+        // Editor just opened this frame — force a fresh backdrop snapshot.
+        editorBackdropSnapshotFresh = false;
+      }
+      wasEditorActiveLastFrame = true;
       // Use CSS display dimensions for mouse coordinate mapping (not buffer dimensions)
       const canvasRect = canvas.getBoundingClientRect();
       const isEditorConsuming = editorController.update(
@@ -1141,13 +1157,17 @@ export function startGameScreen(
         const eox = camOff.offsetXPx;
         const eoy = camOff.offsetYPx;
         const editorZoom = camera.zoom;
-        updateSnapshotInPlace(
-          reusableSnapshot,
-          world,
-          1.0,
-          interpolationBuffers.prevClusterPosX,
-          interpolationBuffers.prevClusterPosY,
-        );
+        if (!editorBackdropSnapshotFresh || editorBackdropSnapshotWorld !== world) {
+          updateSnapshotInPlace(
+            reusableSnapshot,
+            world,
+            1.0,
+            interpolationBuffers.prevClusterPosX,
+            interpolationBuffers.prevClusterPosY,
+          );
+          editorBackdropSnapshotFresh = true;
+          editorBackdropSnapshotWorld = world;
+        }
         const editorBackdropRoom = editorController.getRoomDef() ?? currentRoom;
         renderEditorBackdrop(
           ctx,
@@ -1181,6 +1201,8 @@ export function startGameScreen(
         FP.endFrame();
         return;
       }
+    } else {
+      wasEditorActiveLastFrame = false;
     }
 
     // ── Initial zone-load phase (BUILD 430) ─────────────────────────────────
