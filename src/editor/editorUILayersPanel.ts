@@ -14,8 +14,9 @@ import {
   getPlacementStatus, describePlacementBlockReason, getLayerForElementType,
   type LayerId, type EditorLayerState, type PlacementStatus,
 } from './editorLayers';
-import { PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
+import { PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import { LAYER_PRESETS } from './editorWorkspacePreferences';
+import { createCollapsibleSection } from './editorUIHelpers';
 
 /**
  * Pure computation of one layer row's combined presentation state — split out
@@ -162,36 +163,18 @@ export function createEditorLayersPanel(
 ): EditorLayersPanel {
   ensureFocusStyleInjected();
 
-  const div = document.createElement('div');
-  div.style.cssText = `
-    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
-    padding: 6px 8px; margin-bottom: 8px; background: rgba(0,0,0,0.2);
-  `;
-
-  const rowsContainerId = nextUniqueId('dw-layers-panel-rows');
-
-  // Real <button> (not a div with a click handler) so it's natively keyboard-
-  // activatable (Enter/Space) and focusable without extra tabindex wiring.
-  const header = document.createElement('button');
-  header.type = 'button';
-  header.className = 'dw-layer-header-btn';
-  header.setAttribute('aria-expanded', 'true');
-  header.setAttribute('aria-controls', rowsContainerId);
-  header.style.cssText = `
-    display: flex; align-items: center; justify-content: space-between; width: 100%;
-    cursor: pointer; user-select: none; background: none; border: none; padding: 0;
-    color: inherit; font: inherit;
-  `;
-  const title = document.createElement('div');
-  title.textContent = 'Layers';
-  title.style.cssText = `font-size: 11px; color: ${GREEN}; font-weight: bold;`;
-  const collapseIndicator = document.createElement('div');
-  collapseIndicator.textContent = '▾';
-  collapseIndicator.setAttribute('aria-hidden', 'true');
-  collapseIndicator.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.6);';
-  header.appendChild(title);
-  header.appendChild(collapseIndicator);
-  div.appendChild(header);
+  // Uses the shared, accessible collapsible-section component (real <button>
+  // header, chevron, aria-expanded/aria-controls) instead of duplicating that
+  // wiring here. `div` (this panel's public root) is the section's wrapper;
+  // presets + layer rows go into the section's body.
+  const section = createCollapsibleSection('Layers', {
+    defaultExpanded: false,
+    wrapperCss: `
+      border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+      padding: 6px 8px; margin-bottom: 8px; background: rgba(0,0,0,0.2);
+    `,
+  });
+  const div = section.wrapper;
 
   // ── Built-in visibility presets + Reset Workspace (Phase 6) ───────────────
   const presetRow = document.createElement('div');
@@ -232,19 +215,14 @@ export function createEditorLayersPanel(
     getCallbacks()?.onResetWorkspace?.();
   });
   presetRow.appendChild(resetBtn);
-  div.appendChild(presetRow);
+  section.body.appendChild(presetRow);
 
   const rowsContainer = document.createElement('div');
-  rowsContainer.id = rowsContainerId;
+  rowsContainer.id = nextUniqueId('dw-layers-panel-rows');
   rowsContainer.setAttribute('role', 'group');
   rowsContainer.setAttribute('aria-label', 'Layers');
   rowsContainer.style.cssText = 'margin-top: 6px;';
-  div.appendChild(rowsContainer);
-
-  let collapsed = false;
-  header.addEventListener('click', () => {
-    setCollapsed(!collapsed);
-  });
+  section.body.appendChild(rowsContainer);
 
   interface RowRefs {
     row: HTMLDivElement;
@@ -388,16 +366,16 @@ export function createEditorLayersPanel(
   }
 
   function setCollapsed(value: boolean): void {
-    collapsed = value;
-    const presentation = computeCollapseHeaderPresentation(collapsed);
-    rowsContainer.style.display = presentation.rowsDisplay;
-    presetRow.style.display = presentation.rowsDisplay;
-    collapseIndicator.textContent = presentation.indicatorText;
-    header.setAttribute('aria-expanded', presentation.ariaExpanded);
+    // Delegates to the shared collapsible section (aria-expanded/chevron/body
+    // display). rowsContainer and presetRow live inside section.body, so
+    // toggling the body's display already hides/shows both — this presentation
+    // matches computeCollapseHeaderPresentation's semantics exactly (kept
+    // exported for its existing unit tests).
+    section.setExpanded(!value);
   }
 
   function isCollapsed(): boolean {
-    return collapsed;
+    return !section.isExpanded();
   }
 
   return { div, sync, setCollapsed, isCollapsed };

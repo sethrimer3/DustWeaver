@@ -49,6 +49,113 @@ function cssUrl(url: string): string {
   return url.length > 0 ? `url("${url.replace(/"/g, '\\"')}")` : 'none';
 }
 
+// ── Collapsible section helper ──────────────────────────────────────────────
+//
+// Shared, accessible collapsible-section component used by every top-level
+// panel in the editor sidebars (room settings, layers, inspector, export,
+// tools, brush, category tabs, palette, etc). A real <button> header (native
+// keyboard activation, no extra tabindex wiring) with a chevron reflecting
+// state, `aria-expanded` on the header, and `aria-controls` pointing at the
+// body element's id. Sections default to collapsed — this is a purely
+// presentational default (not session-persisted); callers that restore
+// session state (e.g. the layers panel's workspace prefs) call
+// `setExpanded()` right after construction.
+
+export interface CollapsibleSection {
+  /** Outer wrapper — append this (not `header`/`body` individually) to a parent. */
+  readonly wrapper: HTMLDivElement;
+  readonly header: HTMLButtonElement;
+  readonly chevron: HTMLSpanElement;
+  /** Append panel content here. */
+  readonly body: HTMLDivElement;
+  setExpanded: (expanded: boolean) => void;
+  isExpanded: () => boolean;
+}
+
+let collapsibleSectionIdCounter = 0;
+function nextCollapsibleBodyId(): string {
+  collapsibleSectionIdCounter += 1;
+  return `dw-collapsible-body-${collapsibleSectionIdCounter}`;
+}
+
+const COLLAPSIBLE_FOCUS_STYLE_ID = 'dw-editor-collapsible-focus-style';
+function ensureCollapsibleFocusStyleInjected(): void {
+  if (document.getElementById(COLLAPSIBLE_FOCUS_STYLE_ID) !== null) return;
+  const style = document.createElement('style');
+  style.id = COLLAPSIBLE_FOCUS_STYLE_ID;
+  style.textContent = `
+    .dw-collapsible-header-btn:focus-visible {
+      outline: 2px solid #ffffff;
+      outline-offset: 1px;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+export function createCollapsibleSection(
+  titleText: string,
+  opts?: { defaultExpanded?: boolean; wrapperCss?: string },
+): CollapsibleSection {
+  ensureCollapsibleFocusStyleInjected();
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = opts?.wrapperCss ?? `
+    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
+  `;
+
+  const bodyId = nextCollapsibleBodyId();
+
+  const header = document.createElement('button');
+  header.type = 'button';
+  header.className = 'dw-collapsible-header-btn';
+  header.setAttribute('aria-controls', bodyId);
+  header.style.cssText = `
+    display: flex; align-items: center; justify-content: space-between; width: 100%;
+    cursor: pointer; user-select: none; background: none; border: none; padding: 0;
+    color: inherit; font: inherit;
+  `;
+
+  const titleEl = document.createElement('div');
+  titleEl.textContent = titleText;
+  titleEl.style.cssText = `font-size: 11px; color: ${GREEN}; font-weight: bold;`;
+  header.appendChild(titleEl);
+
+  const chevron = document.createElement('span');
+  chevron.setAttribute('aria-hidden', 'true');
+  chevron.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.6);';
+  header.appendChild(chevron);
+
+  wrapper.appendChild(header);
+
+  const body = document.createElement('div');
+  body.id = bodyId;
+  body.style.cssText = 'margin-top: 6px;';
+  wrapper.appendChild(body);
+
+  let expanded = opts?.defaultExpanded ?? false;
+
+  function setExpanded(value: boolean): void {
+    expanded = value;
+    header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    chevron.textContent = expanded ? '▾' : '▸';
+    body.style.display = expanded ? 'block' : 'none';
+  }
+
+  function isExpanded(): boolean {
+    return expanded;
+  }
+
+  header.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setExpanded(!expanded);
+  });
+
+  setExpanded(expanded);
+
+  return { wrapper, header, chevron, body, setExpanded, isExpanded };
+}
+
 // ── Button helpers ────────────────────────────────────────────────────────────
 
 export function makeBtn(label: string, onClick: () => void): HTMLButtonElement {

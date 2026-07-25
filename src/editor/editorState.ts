@@ -364,8 +364,10 @@ export interface EditorUICallbacks {
   onConfirm: () => void;
   onCancel: () => void;
   onExportAllChanges: () => void;
-  /** Open the visual world map overlay. */
+  /** Open the visual world map overlay ("Zone Map"). */
   onOpenVisualMap: () => void;
+  /** Open the text/itemized world map overlay ("Itemized Map"). */
+  onOpenWorldMap: () => void;
   /** Called when the user picks a different skill in the skill tomb dropdown. */
   onSkillTombWeaveChange: (weaveId: string) => void;
   /** Called when the user picks a different crumble variant in the crumble variant dropdown. */

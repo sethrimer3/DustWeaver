@@ -19,7 +19,7 @@ import {
 import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
 import {
   makeBtn, makeEdgeBtn, makeThemeChip, makeThemeSlot,
-  makeBlockPreviewCard,
+  makeBlockPreviewCard, createCollapsibleSection,
 } from './editorUIHelpers';
 import { makePalettePreviewCard, auditPalettePreviews } from './editorPalettePreview';
 import { updateInspector } from './editorInspector';
@@ -77,11 +77,25 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const animatedBackgroundPreviewEffects = new WeakMap<HTMLCanvasElement, TheroBackgroundEffect>();
   let animatedBackgroundPreviewFrame: number | null = null;
 
+  // Two independent 260px sidebars. `container` (left) carries title/save
+  // controls, the Zone Map / Itemized Map row, room/global settings, layers,
+  // inspector, and export. `rightSidebar` carries tools, brush controls,
+  // category tabs, the active palette, and placement-specific pickers/modifiers.
   const container = document.createElement('div');
   container.id = 'editor-ui';
   container.style.cssText = `
     position: absolute; top: 0; left: 0; width: 260px; height: 100%;
     background: ${PANEL_BG}; border-right: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; font-family: 'Cinzel', monospace; font-size: 12px;
+    overflow-y: auto; z-index: 900; padding: 10px; box-sizing: border-box;
+    pointer-events: auto;
+  `;
+
+  const rightSidebar = document.createElement('div');
+  rightSidebar.id = 'editor-ui-right';
+  rightSidebar.style.cssText = `
+    position: absolute; top: 0; right: 0; width: 260px; height: 100%;
+    background: ${PANEL_BG}; border-left: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; font-family: 'Cinzel', monospace; font-size: 12px;
     overflow-y: auto; z-index: 900; padding: 10px; box-sizing: border-box;
     pointer-events: auto;
@@ -151,6 +165,26 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
   `;
   container.appendChild(exportAllBtn);
+
+  // ── Zone Map / Itemized Map row ──────────────────────────────────────────
+  // Replaces the old detached top-right "Zone Map" bar — reuses the same
+  // existing callbacks (onOpenVisualMap / onOpenWorldMap), which are also
+  // bound to the M / N keyboard shortcuts (see editorKeyboardShortcuts.ts).
+  const mapButtonRow = document.createElement('div');
+  mapButtonRow.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
+  const zoneMapBtn = makeBtn('🗺 Zone Map (M)', () => callbacks?.onOpenVisualMap());
+  zoneMapBtn.style.cssText += `
+    flex: 1; padding: 7px 4px; font-size: 11px;
+    background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};
+  `;
+  mapButtonRow.appendChild(zoneMapBtn);
+  const itemizedMapBtn = makeBtn('📋 Itemized Map (N)', () => callbacks?.onOpenWorldMap());
+  itemizedMapBtn.style.cssText += `
+    flex: 1; padding: 7px 4px; font-size: 11px;
+    background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};
+  `;
+  mapButtonRow.appendChild(itemizedMapBtn);
+  container.appendChild(mapButtonRow);
 
   // ── Room density indicator ───────────────────────────────────────────────
   // Lightweight, non-modal readout of the current room's estimated
@@ -237,7 +271,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     toolBtns.push(btn);
     toolBar.appendChild(btn);
   }
-  container.appendChild(toolBar);
+  const toolsSection = createCollapsibleSection('Tools');
+  toolsSection.body.appendChild(toolBar);
+  rightSidebar.appendChild(toolsSection.wrapper);
 
   // ── Brush mode selector ──────────────────────────────────────────────────
   const brushRow = document.createElement('div');
@@ -264,16 +300,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     brushBtns.push(btn);
     brushRow.appendChild(btn);
   }
-  container.appendChild(brushRow);
+  const brushSection = createCollapsibleSection('Brush');
+  brushSection.body.appendChild(brushRow);
+  rightSidebar.appendChild(brushSection.wrapper);
   const roomDimDiv = document.createElement('div');
-  roomDimDiv.style.cssText = `
-    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
-    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
-  `;
-  const roomDimTitle = document.createElement('div');
-  roomDimTitle.textContent = 'Room Dimensions';
-  roomDimTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
-  roomDimDiv.appendChild(roomDimTitle);
 
   // Edge resize buttons (add/remove row/column from each edge)
   const edgeResizeDiv = document.createElement('div');
@@ -311,18 +341,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   roomDimDiv.appendChild(edgeResizeDiv);
 
-  container.appendChild(roomDimDiv);
+  const roomDimSection = createCollapsibleSection('Room Dimensions');
+  roomDimSection.body.appendChild(roomDimDiv);
+  container.appendChild(roomDimSection.wrapper);
 
   // ── Background picker ────────────────────────────────────────────────────
   const bgDiv = document.createElement('div');
-  bgDiv.style.cssText = `
-    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
-    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
-  `;
-  const bgTitle = document.createElement('div');
-  bgTitle.textContent = 'Background';
-  bgTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
-  bgDiv.appendChild(bgTitle);
   const bgCurrentBtn = document.createElement('button');
   bgCurrentBtn.type = 'button';
   bgCurrentBtn.style.cssText = `
@@ -484,18 +508,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   bgBlurLabel.appendChild(document.createTextNode('Use blurred version'));
   bgDiv.appendChild(bgBlurLabel);
 
-  container.appendChild(bgDiv);
+  const bgSection = createCollapsibleSection('Background');
+  bgSection.body.appendChild(bgDiv);
+  container.appendChild(bgSection.wrapper);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
   const songDiv = document.createElement('div');
-  songDiv.style.cssText = `
-    border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
-    padding: 6px 8px; margin-bottom: 10px; background: rgba(0,0,0,0.2);
-  `;
-  const songTitle = document.createElement('div');
-  songTitle.textContent = 'Room Song';
-  songTitle.style.cssText = `font-size: 11px; color: ${GREEN}; margin-bottom: 6px; font-weight: bold;`;
-  songDiv.appendChild(songTitle);
   const songSelect = document.createElement('select');
   songSelect.style.cssText = `
     width: 100%; background: rgba(0,0,0,0.6); border: 1px solid ${PANEL_BORDER};
@@ -513,7 +531,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   });
   songSelect.addEventListener('click', (e) => e.stopPropagation());
   songDiv.appendChild(songSelect);
-  container.appendChild(songDiv);
+  const songSection = createCollapsibleSection('Room Song');
+  songSection.body.appendChild(songDiv);
+  container.appendChild(songSection.wrapper);
 
   // ── Layers panel (always visible — editor-only visibility/lock/solo/target) ──
   const layersPanel = createEditorLayersPanel(() => callbacks);
@@ -537,12 +557,16 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     catBtns.push(btn);
     catBar.appendChild(btn);
   }
-  container.appendChild(catBar);
+  const categoriesSection = createCollapsibleSection('Categories');
+  categoriesSection.body.appendChild(catBar);
+  rightSidebar.appendChild(categoriesSection.wrapper);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
-  container.appendChild(paletteDiv);
+  const paletteSection = createCollapsibleSection('Palette');
+  paletteSection.body.appendChild(paletteDiv);
+  rightSidebar.appendChild(paletteSection.wrapper);
 
   // Track rendered palette state to avoid recreating buttons every frame.
   // Single structural signature (computePaletteStructureSig) replaces the old
@@ -688,35 +712,29 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   inspectorDiv.style.cssText = `
     border-top: 1px solid ${PANEL_BORDER}; padding-top: 10px; margin-top: 8px;
   `;
-  container.appendChild(specialItemPickers.skillTombPickerDiv);
-  container.appendChild(blockModifierDiv);
-  container.appendChild(specialItemPickers.crumblePickerDiv);
-  container.appendChild(specialItemPickers.dustJarPickerDiv);
-  container.appendChild(inspectorDiv);
+  // Placement-specific pickers/modifiers live in the right sidebar, alongside
+  // the palette they modify.
+  paletteSection.body.appendChild(specialItemPickers.skillTombPickerDiv);
+  paletteSection.body.appendChild(blockModifierDiv);
+  paletteSection.body.appendChild(specialItemPickers.crumblePickerDiv);
+  paletteSection.body.appendChild(specialItemPickers.dustJarPickerDiv);
+
+  const inspectorSection = createCollapsibleSection('Inspector');
+  inspectorSection.body.appendChild(inspectorDiv);
+  container.appendChild(inspectorSection.wrapper);
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
   exportBtn.style.cssText += `
-    width: 100%; margin-top: 12px; padding: 10px; font-size: 13px;
+    width: 100%; padding: 10px; font-size: 13px;
     background: rgba(0,100,50,0.4); border-color: ${GREEN};
   `;
-  container.appendChild(exportBtn);
+  const exportSection = createCollapsibleSection('Export');
+  exportSection.body.appendChild(exportBtn);
+  container.appendChild(exportSection.wrapper);
 
   root.appendChild(container);
-
-  // ── Top-right "World Map" button bar ─────────────────────────────────────
-  const topRightBar = document.createElement('div');
-  topRightBar.style.cssText = `
-    position: absolute; top: 10px; right: 10px; z-index: 920;
-    display: flex; gap: 6px; pointer-events: auto;
-  `;
-  const worldMapBtn = makeBtn('🗺 Zone Map', () => callbacks?.onOpenVisualMap());
-  worldMapBtn.style.cssText += `
-    padding: 8px 14px; font-size: 12px;
-    background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};
-  `;
-  topRightBar.appendChild(worldMapBtn);
-  root.appendChild(topRightBar);
+  root.appendChild(rightSidebar);
 
   function update(state: EditorState): void {
     editorPerfCounters.uiUpdates++;
@@ -1200,7 +1218,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       }
       animatedBackgroundPreviewCanvases = [];
       if (container.parentElement) container.parentElement.removeChild(container);
-      if (topRightBar.parentElement) topRightBar.parentElement.removeChild(topRightBar);
+      if (rightSidebar.parentElement) rightSidebar.parentElement.removeChild(rightSidebar);
     },
   };
 }

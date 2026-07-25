@@ -873,6 +873,7 @@ export function createEditorController(
         onRunRoomAudit: () => runDevRoomAudit(),
         onRunRoomRoundTripValidation: () => runDevRoomRoundTripValidation(),
         onOpenVisualMap: () => openVisualMap(),
+        onOpenWorldMap: () => { void openWorldMap(); },
         onSkillTombWeaveChange: (weaveId: string) => {
           state.pendingSkillTombWeaveId = weaveId;
         },
