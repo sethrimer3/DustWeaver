@@ -148,7 +148,13 @@ export function createSessionFromPackedCampaign(
   campaign: SavedCampaignV1,
   source: CampaignSessionSource,
 ): EditableCampaignSession {
-  return { source, campaign, campaignStore: createCampaignStore(campaign) };
+  return {
+    source,
+    campaign,
+    campaignStore: createCampaignStore(campaign, {
+      allowMissingRoomReferences: source === 'main',
+    }),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -283,4 +289,43 @@ export function buildWorldMapFromRegistry(
 
   const worlds = [...worldsMap.values()].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id) || a.id - b.id);
   return { worlds, rooms };
+}
+
+/**
+ * Overlays the currently loaded registry entries onto a session's complete
+ * canonical map. This is essential for lazy official gameplay, where the
+ * registry is intentionally only a subset of the authoritative store.
+ */
+export function mergeWorldMapWithRegistry(
+  session: EditableCampaignSession,
+  worldNames: ReadonlyMap<number, string>,
+  registryRooms: ReadonlyMap<string, { id: string; name: string; worldNumber: number; mapX: number; mapY: number }>,
+  worldOrder?: ReadonlyMap<number, number>,
+): WorldMapJsonDef {
+  const registryMap = buildWorldMapFromRegistry(worldNames, registryRooms, worldOrder);
+  const worldsById = new Map(session.campaignStore?.worldMap.worlds.map(world => [world.id, world])
+    ?? session.campaign.worldMap.worlds.map(world => [world.id, world]));
+  for (const world of registryMap.worlds) worldsById.set(world.id, world);
+  const roomsById = new Map(session.campaignStore?.worldMap.rooms.map(room => [room.id, room])
+    ?? session.campaign.worldMap.rooms.map(room => [room.id, room]));
+  for (const room of registryMap.rooms) roomsById.set(room.id, room);
+  return {
+    worlds: [...worldsById.values()].sort((a, b) => (a.order ?? a.id) - (b.order ?? b.id) || a.id - b.id),
+    rooms: [...roomsById.values()],
+  };
+}
+
+export function buildAuthoritativeCampaignExport(
+  session: EditableCampaignSession,
+  registryRooms: ReadonlyMap<string, { id: string; name: string; worldNumber: number; mapX: number; mapY: number }>,
+  worldNames: ReadonlyMap<number, string>,
+  worldOrder?: ReadonlyMap<number, number>,
+  customBlockDefs?: SavedCampaignV1['customBlockDefs'],
+): SavedCampaignV1 {
+  const store = session.campaignStore;
+  if (store === undefined) {
+    throw new Error('Authoritative campaign export requires a CampaignStore.');
+  }
+  store.updateWorldMap(mergeWorldMapWithRegistry(session, worldNames, registryRooms, worldOrder));
+  return store.buildExportCampaign(session.campaign, customBlockDefs);
 }

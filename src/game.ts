@@ -6,7 +6,8 @@ import { createDefaultProgress, PlayerProgress } from './progression/playerProgr
 import { SaveSlotData, saveSaveSlot } from './progression/saveSlots';
 import type { CampaignSource } from './levels/campaignSource';
 import type { EditableCampaignSession } from './editor/editableCampaignSession';
-import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, clearRegistryAndApplyCampaignMetadata, ROOM_REGISTRY } from './levels/rooms';
+import { registerRoomsFromPackedCampaign, restoreMainCampaignSnapshot, initRoomRegistry, getLoadedOfficialCampaignSpawn, getLoadedOfficialPackedCampaign, clearRegistryAndApplyCampaignMetadata, ROOM_REGISTRY } from './levels/rooms';
+import { createOfficialCampaignSession } from './editor/officialCampaignSession';
 import { setActiveCampaignId } from './levels/campaigns';
 import { applyCampaignStartingOptions } from './progression/campaignStartingOptions';
 import {
@@ -30,6 +31,11 @@ import { showPerformanceWarningDialog } from './ui/performanceWarningDialog';
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
   let cleanup: (() => void) | null = null;
+  // Owned for the lifetime of this startGame invocation. Every official
+  // GameScreen/editor instance receives this same compact authoritative store.
+  const officialCampaignSession = createOfficialCampaignSession(
+    getLoadedOfficialPackedCampaign(),
+  );
 
   let progress: PlayerProgress = createDefaultProgress();
 
@@ -220,7 +226,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
             // persistSaveSlot() will be called separately by the onSave callback
             // which fires in the same save-point interaction.
           },
-        }, progress, undefined, undefined, campaignSpawnOverride, _gameRunOptions);
+        }, progress, officialCampaignSession, undefined, campaignSpawnOverride, _gameRunOptions);
       };
       void doPlayGameplay();
     } else if (to === 'customCampaignPlay') {

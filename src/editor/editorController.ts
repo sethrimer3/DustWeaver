@@ -112,6 +112,11 @@ import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
 import { handlePropertyChange } from './editorPropertyChange';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import {
+  loadPersistedCampaignRoom,
+  persistCreatedCampaignRoom,
+  persistSavedCampaignRoom,
+} from './campaignRoomPersistence';
+import {
   isTransitionAtRoomEdge,
   showTransitionConnectPopup,
   showConnectedRoomCreationDialog,
@@ -439,12 +444,7 @@ export function createEditorController(
   ): boolean {
     if (!state.roomData || !isCurrentRoomDirty) return false;
     const roomId = state.roomData.id;
-    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
-      campaignSession.campaignStore.setActiveRoomId(roomId);
-      campaignSession.campaignStore.commitRoom(roomId, state.roomData);
-    } else {
-      pendingRoomEdits.set(roomId, deepCloneRoomData(state.roomData));
-    }
+    persistSavedCampaignRoom(campaignSession, pendingRoomEdits, state.roomData);
     isCurrentRoomDirty = false;
     markHistorySaved(history);
     if (import.meta.env.DEV) {
@@ -1241,10 +1241,15 @@ export function createEditorController(
     // (discards) any deferred stroke bump from the outgoing room.
     noteContentMutation(state, strokeRevision);
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
-      const loaded = campaignSession.campaignStore.getRoom(room.id, state.nextUid);
+      const loaded = loadPersistedCampaignRoom(
+        campaignSession,
+        pendingRoomEdits,
+        room.id,
+        state.nextUid,
+      );
+      if (loaded === null) throw new Error(`Campaign store room "${room.id}" was not found.`);
       state.roomData = loaded.roomData;
       state.nextUid = loaded.nextUid;
-      campaignSession.campaignStore.setActiveRoomId(room.id);
       // Patch tileWidth/tileHeight on custom block placements from the registry.
       if (state.roomData.customBlockPlacements) {
         for (const p of state.roomData.customBlockPlacements) {
@@ -1871,12 +1876,7 @@ export function createEditorController(
                     // Save new room to pendingRoomEdits so it can be exported later.
                     const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(newRoomDef, state.nextUid);
                     state.nextUid = newNextUid;
-                    if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
-                      campaignSession.campaignStore.markRoomDirty(newRoomDef.id, newRoomData);
-                      campaignSession.campaignStore.commitRoom(newRoomDef.id, newRoomData);
-                    } else {
-                      pendingRoomEdits.set(newRoomDef.id, newRoomData);
-                    }
+                    persistCreatedCampaignRoom(campaignSession, pendingRoomEdits, newRoomData);
                     isWorldMapDirty = true;
                     isCurrentRoomDirty = true;
                     // Rebuild the current room to reflect the updated source transition.

@@ -169,14 +169,12 @@ test('applyEdits() marks the room dirty but never commits it', () => {
   );
 });
 
-test('commitRoom is only ever reached through commitActiveRoomToCampaign (plus the new-room bootstrap)', () => {
+test('controller persistence is routed through the store-aware production boundaries', () => {
   const source = readControllerSource();
   const directCommits = source.match(/campaignStore\.commitRoom\(/g) ?? [];
-  assert.equal(
-    directCommits.length, 2,
-    'expected exactly two direct commitRoom call sites: commitActiveRoomToCampaign, ' +
-    'and the freshly-created-room bootstrap. A new one means a new serialization path.',
-  );
+  assert.equal(directCommits.length, 0, 'controller must not bypass the persistence boundary');
+  assert.equal((source.match(/persistSavedCampaignRoom\(/g) ?? []).length, 1);
+  assert.equal((source.match(/persistCreatedCampaignRoom\(/g) ?? []).length, 1);
 });
 
 test('commitActiveRoomToCampaign is a no-op unless the room is actually dirty', () => {

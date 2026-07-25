@@ -10,7 +10,7 @@ import { assertCampaignIntegrity } from './campaignIntegrity';
 
 export interface CampaignStore {
   campaignMeta: SavedCampaignMetadata;
-  worldMap: WorldMapJsonDef;
+  readonly worldMap: WorldMapJsonDef;
   rawRoomsById: Map<string, SavedRoomV2>;
   worldMapRoomById: Map<string, WorldMapRoomEntry>;
   dirtyRoomIds: Set<string>;
@@ -25,6 +25,15 @@ export interface CampaignStore {
   commitActiveRoom: (activeRoomData: EditorRoomData | null) => void;
   commitAllDirtyRooms: () => void;
   buildExportCampaign: (baseCampaign: SavedCampaignV1, customBlockDefs?: SavedCampaignV1['customBlockDefs']) => SavedCampaignV1;
+}
+
+export interface CampaignStoreOptions {
+  /**
+   * Recovery mode for the built-in campaign: retain map/transition metadata
+   * that references a payload which has not yet been recovered. Export remains
+   * strict and will refuse this mismatch.
+   */
+  allowMissingRoomReferences?: boolean;
 }
 
 function isDev(): boolean {
@@ -104,11 +113,19 @@ function applyWorldMapRoomMetadata(room: SavedRoomV2, mapRoom: WorldMapRoomEntry
   };
 }
 
-export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
+export function createCampaignStore(
+  campaign: SavedCampaignV1,
+  options: CampaignStoreOptions = {},
+): CampaignStore {
   const validateStartMs = isDev() ? performance.now() : 0;
   const topLevelErrors = validateSavedCampaignTopLevel(campaign);
-  if (topLevelErrors.length > 0) {
-    throw new Error(`Invalid campaign payload: ${topLevelErrors.join('; ')}`);
+  const blockingErrors = options.allowMissingRoomReferences
+    ? topLevelErrors.filter(error =>
+        !/transition\[\d+\] targets unknown room/.test(error) &&
+        !/^worldMap\.rooms\[\d+\] references unknown room/.test(error))
+    : topLevelErrors;
+  if (blockingErrors.length > 0) {
+    throw new Error(`Invalid campaign payload: ${blockingErrors.join('; ')}`);
   }
   if (isDev()) {
     logTiming('campaign top-level validation (session init)', validateStartMs);
@@ -242,8 +259,9 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
         lastEditedIso: new Date().toISOString(),
       },
     };
-    if (customBlockDefs && customBlockDefs.length > 0) {
-      exported.customBlockDefs = customBlockDefs;
+    const exportedCustomBlocks = customBlockDefs ?? baseCampaign.customBlockDefs;
+    if (exportedCustomBlocks !== undefined) {
+      exported.customBlockDefs = exportedCustomBlocks;
     }
     assertCampaignIntegrity(exported, new Set(rawRoomsById.keys()), 'campaign store');
     return exported;
@@ -251,7 +269,9 @@ export function createCampaignStore(campaign: SavedCampaignV1): CampaignStore {
 
   return {
     campaignMeta: campaign.campaign,
-    worldMap,
+    get worldMap(): WorldMapJsonDef {
+      return worldMap;
+    },
     rawRoomsById,
     worldMapRoomById,
     dirtyRoomIds,

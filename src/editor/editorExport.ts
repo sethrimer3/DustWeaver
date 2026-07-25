@@ -23,7 +23,7 @@ import {
 } from '../levels/rooms';
 import { getLoadedOfficialCampaignRevisionMetadata, getLoadedOfficialPackedCampaign } from '../levels/rooms';
 import type { EditableCampaignSession } from './editableCampaignSession';
-import { assembleExportCampaign, buildWorldMapFromRegistry } from './editableCampaignSession';
+import { assembleExportCampaign, buildAuthoritativeCampaignExport, buildWorldMapFromRegistry } from './editableCampaignSession';
 import { WORLD_NAMES, WORLD_ORDER } from '../levels/rooms';
 import { BUILD_NUMBER } from '../build-info';
 import { createExportProgressModal } from './editorExportProgressModal';
@@ -355,8 +355,6 @@ export function exportCampaignJson(
   const buildExport = (): ReturnType<typeof assembleExportCampaign> => {
     let exported: ReturnType<typeof assembleExportCampaign>;
     if (session.campaignStore !== undefined) {
-      const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
-      session.campaignStore.updateWorldMap(worldMap);
       if (
         activeRoomData !== undefined &&
         activeRoomData !== null &&
@@ -372,7 +370,13 @@ export function exportCampaignJson(
           }
         }
       }
-      exported = session.campaignStore.buildExportCampaign(session.campaign, customBlockDefs);
+      exported = buildAuthoritativeCampaignExport(
+        session,
+        ROOM_REGISTRY,
+        WORLD_NAMES,
+        WORLD_ORDER,
+        customBlockDefs,
+      );
     } else {
       if (import.meta.env.DEV) {
         // Validate round-trip for each pending room.
@@ -387,13 +391,16 @@ export function exportCampaignJson(
       const worldMap = buildWorldMapFromRegistry(WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER);
       exported = assembleExportCampaign(session, pendingRoomEdits, ROOM_REGISTRY, worldMap);
     }
-    assertCampaignIntegrity(exported, new Set(ROOM_REGISTRY.keys()), 'live room registry');
+    const expectedIds = session.campaignStore !== undefined
+      ? new Set(session.campaignStore.rawRoomsById.keys())
+      : new Set(ROOM_REGISTRY.keys());
+    assertCampaignIntegrity(exported, expectedIds, session.campaignStore !== undefined ? 'campaign store' : 'live room registry');
     return exported;
   };
 
   // In Electron, write directly to userData/CUSTOM_CAMPAIGNS/<id>/ with progress.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(buildExport, false, progressRoot).catch((err: unknown) => {
+    runElectronProgressExport(buildExport, session.source === 'main', progressRoot).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron custom campaign export error:', msg);
     });
