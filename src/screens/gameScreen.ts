@@ -1168,7 +1168,10 @@ export function startGameScreen(
           editorBackdropSnapshotFresh = true;
           editorBackdropSnapshotWorld = world;
         }
-        const editorBackdropRoom = editorController.getRoomDef() ?? currentRoom;
+        // Item E: the lightweight backdrop view, NOT getRoomDef() — the
+        // latter forces a full whole-room RoomDef reconversion after every
+        // ordinary edit. See editor/editorBackdropRoom.ts.
+        const editorBackdropRoom = editorController.getBackdropRoom() ?? currentRoom;
         renderEditorBackdrop(
           ctx,
           deviceCtx,

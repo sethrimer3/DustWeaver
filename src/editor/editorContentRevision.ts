@@ -38,10 +38,17 @@ export interface ContentRevisionHolder {
 export interface StrokeRevisionState {
   /** A continuous stroke mutated content but has not bumped the revision yet. */
   pendingStrokeBump: boolean;
+  /**
+   * Bumped by EVERY mutation, continuous ones included — the cheap "content
+   * changed at all" signal. Consumers whose derived value is cheap to rebuild
+   * and must stay visually live mid-stroke (the editor backdrop room view)
+   * key on this instead of `roomContentRevision`.
+   */
+  mutationSerial: number;
 }
 
 export function createStrokeRevisionState(): StrokeRevisionState {
-  return { pendingStrokeBump: false };
+  return { pendingStrokeBump: false, mutationSerial: 0 };
 }
 
 /**
@@ -57,6 +64,7 @@ export function noteContentMutation(
   stroke: StrokeRevisionState,
   continuous = false,
 ): void {
+  stroke.mutationSerial++;
   if (continuous) {
     stroke.pendingStrokeBump = true;
     return;

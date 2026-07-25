@@ -61,7 +61,9 @@ function isFragilePlacementBroken(
  */
 export function renderCustomBlockSprites(
   ctx: CanvasRenderingContext2D,
-  room: RoomDef,
+  // Narrowed to the only field read, so the editor backdrop can pass its
+  // lightweight room view (see editor/editorBackdropRoom.ts).
+  room: Pick<RoomDef, 'customBlockPlacements'>,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,

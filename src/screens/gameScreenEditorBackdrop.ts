@@ -1,6 +1,6 @@
 import type { WorldState } from '../sim/world';
 import type { WorldSnapshot } from '../render/snapshot';
-import type { RoomDef } from '../levels/roomDef';
+import type { EditorBackdropRoom } from '../editor/editorBackdropRoom';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { renderWorldBackground } from '../render/backgroundRenderer';
 import { renderWalls, renderClusters } from '../render/clusters/renderer';
@@ -43,7 +43,8 @@ export function renderEditorBackdrop(
   bloomSystem: BloomSystem,
   world: WorldState,
   snapshot: WorldSnapshot,
-  currentRoom: RoomDef,
+  // Only the backdrop-relevant slice — a full RoomDef satisfies this too.
+  currentRoom: EditorBackdropRoom,
   backgroundColor: string,
   offsetXPx: number,
   offsetYPx: number,

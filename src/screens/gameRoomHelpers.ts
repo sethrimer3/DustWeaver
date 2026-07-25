@@ -32,7 +32,10 @@ export function worldBgColor(worldNumber: number): string {
  */
 export function drawTunnelDarkness(
   ctx: CanvasRenderingContext2D,
-  room: RoomDef,
+  // Narrowed to the fields actually read, so the editor backdrop can pass its
+  // lightweight room view (see editor/editorBackdropRoom.ts). A full RoomDef
+  // structurally satisfies this.
+  room: Pick<RoomDef, 'widthBlocks' | 'transitions'>,
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,

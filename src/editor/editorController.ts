@@ -33,6 +33,10 @@ import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBu
 import { editorPerfCounters } from './editorPerfCounters';
 import { bumpSelectionRevision } from './editorSelectionCache';
 import {
+  createEditorBackdropRoomCache, resolveEditorBackdropRoom, resetEditorBackdropRoomCache,
+  type EditorBackdropRoom,
+} from './editorBackdropRoom';
+import {
   isPointerOwnedByGesture, shouldScanHover,
   type PointerOwnershipInput,
 } from './editorPointerOwnership';
@@ -169,8 +173,12 @@ export interface EditorController {
   ) => void;
   /** Load a room for editing (called when jumping to a room from the world map). */
   loadRoomForEditing: (room: RoomDef) => void;
-  /** Get a RoomDef rebuilt from the current editor data. */
+  /** Get a RoomDef rebuilt from the current editor data. Full conversion —
+   *  for Save / Save & Test / export / room activation. */
   getRoomDef: () => RoomDef | null;
+  /** Lightweight per-frame backdrop view (Item E). Never triggers a full
+   *  RoomDef conversion; rebuilt only when room content revision advances. */
+  getBackdropRoom: () => EditorBackdropRoom | null;
   /** Cleanup. */
   destroy: () => void;
 }
@@ -348,6 +356,8 @@ export function createEditorController(
   // tiles (30 % opacity) outside the room boundary.
   let editorEdgeExtensionCache: EdgeExtensionCache | null = null;
   let liveEditorRoomDef: RoomDef | null = null;
+  /** Item E: cached lightweight backdrop view (see editorBackdropRoom.ts). */
+  const backdropRoomCache = createEditorBackdropRoomCache();
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
@@ -1090,6 +1100,7 @@ export function createEditorController(
     lastAppliedCanvasCursor = '';
     discardPendingStrokeRevision(strokeRevision);
     resetDragTargetCache(dragTargets);
+    resetEditorBackdropRoomCache(backdropRoomCache);
     originalRoomDef = null;
     pendingRoomEdits.clear();
     initialRoomIds = new Set();
@@ -2288,6 +2299,19 @@ export function createEditorController(
     return liveEditorRoomDef ?? rebuildLiveEditorRoomDef();
   }
 
+  /**
+   * Per-frame backdrop room view. Deliberately NOT getRoomDef(): ordinary
+   * placement nulls liveEditorRoomDef, so calling getRoomDef() every editor
+   * frame reconverted the whole room after every single edit (once per
+   * painted block during a drag-paint stroke).
+   */
+  function getBackdropRoom(): EditorBackdropRoom | null {
+    if (!state.roomData) return null;
+    // Keyed on the cheap per-mutation serial, not roomContentRevision, so
+    // custom-block sprites and transition gradients stay live mid-stroke.
+    return resolveEditorBackdropRoom(backdropRoomCache, state.roomData, strokeRevision.mutationSerial);
+  }
+
   function destroy(): void {
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
@@ -2304,6 +2328,7 @@ export function createEditorController(
     render,
     loadRoomForEditing,
     getRoomDef,
+    getBackdropRoom,
     destroy,
   };
 }
