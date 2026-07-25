@@ -3,7 +3,7 @@
   "kind": "DustWeaverCampaign",
   "metadata": {
     "version": 8,
-    "lastEditedAt": "2026-07-25T01:59:10.817Z"
+    "lastEditedAt": "2026-07-25T01:53:37.800Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -205,15 +205,8 @@
         "id": "skating",
         "name": "Skating",
         "worldId": 2,
-        "mapX": -629,
+        "mapX": -630,
         "mapY": 78
-      },
-      {
-        "id": "slippery_turn",
-        "name": "Slippery Turn",
-        "worldId": 2,
-        "mapX": -679,
-        "mapY": 80
       }
     ]
   },
@@ -43760,10 +43753,138 @@
           0
         ]
       }
+    },
+    {
+      "v": 3,
+      "id": "skating",
+      "name": "Skating",
+      "world": 2,
+      "size": [
+        59,
+        20
+      ],
+      "spawn": [
+        39,
+        10
+      ],
+      "solids": {
+        "byTheme": {}
+      },
+      "map": [
+        -630,
+        78
+      ],
+      "theme": "bk",
+      "bg": "brownRock",
+      "light": "Ambient",
+      "transitions": [
+        {
+          "dir": "right",
+          "to": "the_icicle",
+          "pos": 6,
+          "size": 6,
+          "spawn": [
+            3,
+            10
+          ],
+          "depth": 59,
+          "gw": 0
+        }
+      ],
+      "bakedWallTemplate": {
+        "schemaVersion": 2,
+        "sourceHash": "75c77eec",
+        "wallCount": 4,
+        "xWorld": [
+          0,
+          0,
+          0,
+          464
+        ],
+        "yWorld": [
+          0,
+          152,
+          8,
+          8
+        ],
+        "wWorld": [
+          472,
+          472,
+          8,
+          8
+        ],
+        "hWorld": [
+          8,
+          8,
+          144,
+          144
+        ],
+        "isPlatformFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "platformEdge": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "themeIndex": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "soundHardnessIndex": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "isInvisibleFlag": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "rampOrientationIndex": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "isPillarHalfWidthFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "isIceFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "isUltraIceFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "rimStyleIndex": [
+          65535,
+          65535,
+          65535,
+          65535
+        ],
+        "rimStyles": []
+      }
     }
   ],
   "editor": {
     "createdWithBuild": "500",
-    "lastEditedIso": "2026-07-25T01:59:10.817Z"
+    "lastEditedIso": "2026-07-25T01:53:37.800Z"
   }
 }
