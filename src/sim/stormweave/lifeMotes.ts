@@ -341,6 +341,7 @@ export class StormweaveLifeMotes {
     // shares its threshold with the trail-intensity/glow logic.
     const followWeight = getStormweaveTrailTargetIntensity(playerVelocityXWorld, playerVelocityYWorld);
     const idleWeight = 1 - followWeight;
+    const playerSpeedWorldPerSec = Math.hypot(playerVelocityXWorld, playerVelocityYWorld);
     for (let i = 0; i < this.count; i++) {
       const phase = this.phase[i] + this.elapsedSec * this.waveAngularSpeed[i];
       const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
@@ -418,7 +419,12 @@ export class StormweaveLifeMotes {
       this.velocityXWorld[i] *= damping;
       this.velocityYWorld[i] *= damping;
       const speed = Math.hypot(this.velocityXWorld[i], this.velocityYWorld[i]);
-      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * (isShieldActive ? 1 : this.followResponseScale[i]);
+      // Scale the catch-up cap with the player's current speed (on top of
+      // the per-mote personality base) so lag converges instead of growing
+      // unboundedly when sustained player speed would otherwise exceed a
+      // mote's fixed cap (requirement 4).
+      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * (isShieldActive ? 1 : this.followResponseScale[i])
+        + (isShieldActive ? 0 : playerSpeedWorldPerSec * 1.2);
       if (speed > maxCatchUpSpeed) {
         const scale = maxCatchUpSpeed / speed;
         this.velocityXWorld[i] *= scale;

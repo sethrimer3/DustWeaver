@@ -207,6 +207,145 @@ describe('Stormweave high-quality persistent trails', () => {
   });
 });
 
+describe('Stormweave trail continuity and idle wander regressions', () => {
+  test('no glitchy long segment appears while the player is stationary after moving', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    // Move for a while so the mote and its trail pick up real velocity and
+    // wave-driven perpendicular offset.
+    for (let x = 1; x <= 60; x++) cloud.update(DT_SEC, x * 0.5, 0, 90, 0, true);
+    // Now stop dead and sit still for several seconds - long enough to
+    // fully cycle the trail lifetime multiple times.
+    let previousX: number | undefined;
+    let previousY: number | undefined;
+    let maxStepDistance = 0;
+    for (let i = 0; i < 300; i++) {
+      cloud.update(DT_SEC, 30, 0, 0, 0, true);
+      const mote = cloud.getMote(0);
+      assert.ok(mote !== undefined);
+      if (previousX !== undefined && previousY !== undefined) {
+        const stepDistance = Math.hypot(mote.xWorld - previousX, mote.yWorld - previousY);
+        maxStepDistance = Math.max(maxStepDistance, stepDistance);
+      }
+      previousX = mote.xWorld;
+      previousY = mote.yWorld;
+    }
+    // A per-tick position jump of more than a couple world units while both
+    // the player and its own recent history are stationary indicates a
+    // discontinuity (the bug this test guards against), not organic drift.
+    assert.ok(maxStepDistance < 2, `expected no per-tick teleport while stationary, got ${maxStepDistance}`);
+
+    // The rendered trail itself must never contain a segment far longer
+    // than the normal sample spacing while stationary.
+    const count = cloud.getTrailPointCount(0);
+    for (let p = 1; p < count; p++) {
+      const dx = cloud.getTrailPointXWorld(0, p) - cloud.getTrailPointXWorld(0, p - 1);
+      const dy = cloud.getTrailPointYWorld(0, p) - cloud.getTrailPointYWorld(0, p - 1);
+      const segmentLength = Math.hypot(dx, dy);
+      assert.ok(
+        segmentLength < STORMWEAVE_TRAIL_SAMPLES_PER_MOTE,
+        `unexpectedly long stationary trail segment: ${segmentLength}`,
+      );
+    }
+  });
+
+  test('trail sample timestamps are strictly increasing and never predate the current epoch', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 40; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
+    const epochStartSec = 0; // reset() zeroed elapsedSec
+    const count = cloud.getTrailPointCount(0);
+    let previousTimeSec = -Infinity;
+    for (let p = 0; p < count; p++) {
+      const timeSec = -cloud.getTrailPointAgeSec(0, p);
+      assert.ok(timeSec >= previousTimeSec, 'trail samples must be chronologically ordered');
+      previousTimeSec = timeSec;
+    }
+    assert.ok(epochStartSec >= 0);
+  });
+
+  test('ring buffer wraps past capacity without resetting - oldest samples overwritten in place', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    // Sustained fast movement guarantees a new sample almost every tick,
+    // easily exceeding STORMWEAVE_TRAIL_SAMPLES_PER_MOTE within the
+    // lifetime window, forcing wraparound rather than a capacity reset.
+    // (First run past the rebase window with no sampling, then move fast.)
+    for (let i = 0; i < 45; i++) cloud.update(DT_SEC, 0, 0, 0, 0, true);
+    for (let i = 0; i < 60; i++) cloud.update(DT_SEC, i * 3, 0, 400, 0, true);
+    const count = cloud.getTrailPointCount(0);
+    assert.ok(count > 1, 'trail should still be populated after wraparound');
+    assert.ok(count <= STORMWEAVE_TRAIL_SAMPLES_PER_MOTE);
+  });
+
+  test('a stale sample from before reset() is never readable afterward', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 90; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
+    assert.ok(cloud.trailSampleCount > 0);
+    cloud.reset(0, 0, 1);
+    assert.equal(cloud.trailSampleCount, 0, 'reset must not leak samples from the previous epoch');
+    cloud.update(DT_SEC, 0, 0, 0, 0, true);
+    assert.equal(cloud.getTrailPointCount(0), 0, 'rebase window suppresses sampling right after reset');
+  });
+
+  test('room-transition-style discontinuity mid-session cleanly re-seeds path history', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    for (let i = 0; i < 40; i++) cloud.update(DT_SEC, i, 0, 60, 0, true);
+    // Simulate a room transition: a large instantaneous jump in player
+    // position mid-session (not via reset()).
+    cloud.update(DT_SEC, 1000, 1000, 0, 0, true);
+    assert.equal(cloud.getTrailPointCount(0), 0, 'discontinuity should clear the trail');
+    // Follow the new position for a while; the mote must converge near the
+    // new player location rather than streaking back toward the old path.
+    for (let i = 0; i < 1200; i++) cloud.update(DT_SEC, 1000, 1000, 0, 0, true);
+    const mote = cloud.getMote(0);
+    assert.ok(mote !== undefined);
+    assert.ok(
+      Math.hypot(mote.xWorld - 1000, mote.yWorld - 1000) < 30,
+      'mote should have converged near the post-teleport player position',
+    );
+  });
+
+  test('idle wander keeps motes near the player without a fixed-period loop', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    const positions: Array<[number, number]> = [];
+    for (let i = 0; i < 600; i++) {
+      cloud.update(DT_SEC, 0, 0, 0, 0, false);
+      const mote = cloud.getMote(0);
+      assert.ok(mote !== undefined);
+      positions.push([mote.xWorld, mote.yWorld]);
+      assert.ok(Math.hypot(mote.xWorld, mote.yWorld) < 40, 'idle wander must stay contained near the player');
+    }
+    // Not a fixed sine loop: the mote should visit a spread of distinct
+    // positions rather than repeatedly retracing one small periodic orbit.
+    const uniqueRounded = new Set(positions.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`));
+    assert.ok(uniqueRounded.size > 100, 'expected a wide spread of idle positions, not a tight repeating loop');
+  });
+
+  test('sustained high-speed movement produces bounded, converging lag rather than unbounded drift', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    cloud.setMoteState(0, 0, 0);
+    const lagDistances: number[] = [];
+    let playerX = 0;
+    for (let i = 0; i < 400; i++) {
+      playerX += 200 * DT_SEC;
+      cloud.update(DT_SEC, playerX, 0, 200, 0, false);
+      const mote = cloud.getMote(0);
+      assert.ok(mote !== undefined);
+      assert.ok(Number.isFinite(mote.xWorld) && Number.isFinite(mote.yWorld));
+      lagDistances.push(Math.hypot(playerX - mote.xWorld, -mote.yWorld));
+    }
+    const earlyMaxLag = Math.max(...lagDistances.slice(150, 250));
+    const lateMaxLag = Math.max(...lagDistances.slice(300, 400));
+    assert.ok(lateMaxLag < earlyMaxLag * 1.5, `expected lag to converge, early=${earlyMaxLag} late=${lateMaxLag}`);
+    assert.ok(lateMaxLag < 200, `expected bounded lag, got ${lateMaxLag}`);
+  });
+});
+
 describe('canonical zero-mote damage rule', () => {
   test('reaching zero motes does not kill; the next valid hit does', () => {
     const player = makeDamageTarget(1);
