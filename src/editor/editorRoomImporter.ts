@@ -35,6 +35,14 @@ import type {
   EditorLavaZone,
   EditorTimeStopField,
   EditorCrumbleBlock,
+  EditorSpike,
+  EditorBouncePad,
+  EditorKineticBlock,
+  EditorZipMoveBlock,
+  EditorBackgroundBlock,
+  EditorChallengeRect,
+  EditorChallengeTotem,
+  EditorGate,
   EditorRope,
   EditorFallingBlock,
   EditorDialogueTrigger,
@@ -383,6 +391,81 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     blockTheme: b.blockTheme,
   }));
 
+  const spikes: EditorSpike[] = (room.spikes ?? []).map(sp => ({
+    uid: uid++,
+    xBlock: sp.xBlock,
+    yBlock: sp.yBlock,
+    direction: sp.direction,
+    size: sp.size ?? '1x1',
+    blockTheme: sp.blockTheme,
+  }));
+
+  const bouncePads: EditorBouncePad[] = (room.bouncePads ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    wBlock: b.wBlock ?? 1,
+    hBlock: b.hBlock ?? 1,
+    rampOrientation: b.rampOrientation,
+    speedFactorIndex: (b.speedFactorIndex ?? 0) as 0 | 1,
+  }));
+
+  const kineticBlocks: EditorKineticBlock[] = (room.kineticBlocks ?? []).map(kb => ({
+    uid: uid++,
+    xBlock: kb.xBlock,
+    yBlock: kb.yBlock,
+    wBlock: kb.wBlock ?? 1,
+    hBlock: kb.hBlock ?? 1,
+  }));
+
+  const zipMoveBlocks: EditorZipMoveBlock[] = (room.zipMoveBlocks ?? []).map(b => ({
+    ...b,
+  }));
+
+  const backgroundBlocks: EditorBackgroundBlock[] = (room.backgroundBlocks ?? []).map(b => ({
+    uid: uid++,
+    xBlock: b.xBlock,
+    yBlock: b.yBlock,
+    wBlock: b.wBlock,
+    hBlock: b.hBlock,
+    blockTheme: b.blockTheme,
+    isLightBlockingFlag: b.isLightBlockingFlag,
+  }));
+
+  const challengeFields: EditorChallengeRect[] = (room.challengeFields ?? []).map(f => ({
+    uid: uid++,
+    xBlock: f.xBlock,
+    yBlock: f.yBlock,
+    wBlock: f.wBlock,
+    hBlock: f.hBlock,
+  }));
+
+  const challengeGates: EditorChallengeRect[] = (room.challengeGates ?? []).map(g => ({
+    uid: uid++,
+    xBlock: g.xBlock,
+    yBlock: g.yBlock,
+    wBlock: g.wBlock,
+    hBlock: g.hBlock,
+  }));
+
+  const challengeTotems: EditorChallengeTotem[] = (room.challengeTotems ?? []).map(t => ({
+    uid: uid++,
+    xBlock: t.xBlock,
+    yBlock: t.yBlock,
+  }));
+
+  const gates: EditorGate[] = (room.gates ?? []).map(g => ({ ...g }));
+
+  const customBlockPlacements: import('../levels/customBlocks').EditorCustomBlockPlacement[] =
+    (room.customBlockPlacements ?? []).map(tuple => ({
+      uid: uid++,
+      xBlock: tuple[0],
+      yBlock: tuple[1],
+      blockId: tuple[2],
+      tileWidth:  (tuple[3] ?? 1) as 1 | 2,
+      tileHeight: (tuple[4] ?? 1) as 1 | 2,
+    }));
+
   const ropes: EditorRope[] = (room.ropes ?? []).map(r => ({
     uid: uid++,
     anchorAXBlock: r.anchorAXBlock,
@@ -475,6 +558,10 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       transitions,
       saveTombs,
       skillTombs,
+      challengeFields,
+      challengeGates,
+      challengeTotems,
+      gates,
       dustContainers,
       dustContainerPieces,
       dustBoostJars,
@@ -493,8 +580,14 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       lavaZones,
       timeStopFields,
       crumbleBlocks,
+      spikes,
+      bouncePads,
+      kineticBlocks,
+      zipMoveBlocks,
+      backgroundBlocks,
       ropes,
       sunbeams,
+      sunrays: room.sunrays,
       sceneLights,
       fallingBlocks,
       grappleCarryBlocks,
@@ -502,6 +595,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       pixelMaterials,
       dialogueTriggers,
       guideDustPaths,
+      customBlockPlacements,
     },
     nextUid: uid,
   };
