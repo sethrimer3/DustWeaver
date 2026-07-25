@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "2cfa3fb85029f72f",
+  "campaignHash": "02f5501222b59154",
   "campaignVersion": 8,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-25T02:04:50.879Z",
+  "exportedAt": "2026-07-25T02:23:01.878Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -34,8 +34,8 @@
     "underwater_lake": {
       "roomId": "underwater_lake",
       "file": "underwater_lake_room.json",
-      "hash": "e89a68377cb7cea4",
-      "updatedAt": "2026-07-25T01:53:37.825Z"
+      "hash": "82794351bfdd09af",
+      "updatedAt": "2026-07-25T02:23:01.878Z"
     },
     "seal_chamber": {
       "roomId": "seal_chamber",
