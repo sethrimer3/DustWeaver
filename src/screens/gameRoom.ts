@@ -52,7 +52,7 @@ export { loadRoomPixelMaterials, rebuildPixelMaterialSolidMask } from './gameRoo
 // ── Rendering/utility helpers re-exported from gameRoomHelpers.ts ─────────────
 // These were previously defined in this file but have been moved to keep
 // data-loading code separate from rendering and coordinate utilities.
-export { worldBgColor, drawTunnelDarkness, renderTransitionPassageGradients, screenToWorld } from './gameRoomHelpers';
+export { worldBgColor, drawTunnelDarkness, screenToWorld } from './gameRoomHelpers';
 
 
 // ── Spawn-block safety helpers ────────────────────────────────────────────────
