@@ -73,6 +73,9 @@ import { beginGesture, finishGesture, rollbackGesture, type EditorGestureTransac
 import {
   storeDragStartPositions, moveSelectedElements,
 } from './editorDragCopyPaste';
+import {
+  createDragTargetCache, buildDragTargetCache, applyDragDelta, resetDragTargetCache,
+} from './editorDragTargetCache';
 /** Snapshots the CURRENT block positions of the selected elements (reusing
  *  `storeDragStartPositions`'s live-lookup logic) so an in-progress drag's
  *  `hasChanged` check can compare "now" against the captured pre-drag
@@ -275,6 +278,14 @@ export function createEditorController(
   const strokeRevision = createStrokeRevisionState();
 
   /**
+   * Item D: gesture-local drag target cache. Resolved once at drag start to
+   * direct mutable element references, so the per-frame move performs no
+   * per-element collection scans. Reset on release, rollback, layer-
+   * permission cancellation, room change, and editor close.
+   */
+  const dragTargets = createDragTargetCache();
+
+  /**
    * Cancels whatever continuous gesture (drag / rect-resize / transition-
    * resize) is currently active: restores the live room data it touched back
    * to its pre-gesture geometry, discards the pending snapshot, and clears
@@ -308,6 +319,9 @@ export function createEditorController(
       state.isDragging = false;
       dragOriginalPositions.clear();
     }
+    // Always reset: covers rollback, layer-permission cancellation, tool/room
+    // switch, editor close, and Escape.
+    resetDragTargetCache(dragTargets);
     if (challengeResize) {
       challengeResize = null;
     }
@@ -1075,6 +1089,7 @@ export function createEditorController(
     state.isSelectionBoxActive = false;
     lastAppliedCanvasCursor = '';
     discardPendingStrokeRevision(strokeRevision);
+    resetDragTargetCache(dragTargets);
     originalRoomDef = null;
     pendingRoomEdits.clear();
     initialRoomIds = new Set();
@@ -1993,17 +2008,34 @@ export function createEditorController(
           state.dragStartBlockX = state.cursorBlockX;
           state.dragStartBlockY = state.cursorBlockY;
           storeDragStartPositions(state, dragOriginalPositions);
+          buildDragTargetCache(state, dragTargets);
           activeGesture = beginGesture(
             state.roomData!,
             () => !arePositionMapsEqual(currentSelectedElementPositions(state), dragOriginalPositions),
-            () => { moveSelectedElements(state, dragOriginalPositions, 0, 0); },
+            () => {
+              // Rollback restores through the cache while it is still live for
+              // this room; moveSelectedElements() is the fallback for a
+              // rollback after the cache was reset (e.g. room change) and
+              // remains the reference implementation.
+              if (dragTargets.room === state.roomData && dragTargets.entries.length > 0) {
+                applyDragDelta(state, dragTargets, 0, 0);
+              } else {
+                moveSelectedElements(state, dragOriginalPositions, 0, 0);
+              }
+            },
           );
         }
       }
       if (state.isDragging && state.roomData) {
         const deltaX = state.cursorBlockX - state.dragStartBlockX;
         const deltaY = state.cursorBlockY - state.dragStartBlockY;
-        moveSelectedElements(state, dragOriginalPositions, deltaX, deltaY);
+        // Cache-backed per-frame move: zero collection scans, plus an early
+        // return when the snapped delta is unchanged since the last frame.
+        if (dragTargets.room === state.roomData) {
+          applyDragDelta(state, dragTargets, deltaX, deltaY);
+        } else {
+          moveSelectedElements(state, dragOriginalPositions, deltaX, deltaY);
+        }
       }
     }
 
@@ -2029,6 +2061,7 @@ export function createEditorController(
       if (state.isDragging) {
         state.isDragging = false;
         dragOriginalPositions.clear();
+        resetDragTargetCache(dragTargets);
         const committed = activeGesture ? finishGesture(history, activeGesture) : 'noop';
         activeGesture = null;
         // Only rebuild/dirty the room when the drag actually moved something —

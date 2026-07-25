@@ -131,6 +131,11 @@ export function storeDragStartPositions(
       // Store each control point individually; key uses string template `${uid}:${i}`
       const p = (s.roomData.guideDustPaths ?? []).find(p2 => p2.uid === el.uid);
       if (p) {
+        // Base entry: `moveSelectedElements` bails out early on any element
+        // with no `positions` entry under its own key, so a path needs one
+        // even though its geometry lives entirely in the point entries below.
+        // (Without it, selected guide paths silently never moved.)
+        positions.set(key, { xBlock: 0, yBlock: 0 });
         for (let i = 0; i < p.points.length; i++) {
           positions.set(`${el.uid}:${i}`, { xBlock: p.points[i].xBlock, yBlock: p.points[i].yBlock });
         }
