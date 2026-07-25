@@ -453,6 +453,24 @@ export function createEditorController(
     return true;
   }
 
+  function saveAndExportCampaign(): void {
+    commitActiveRoomToCampaign('export');
+    if (campaignSession) {
+      const customBlockDefs = state.customBlockRegistry.size > 0
+        ? [...state.customBlockRegistry.values()].map(def =>
+            serializeCustomBlock(def.id, def.name, def.tileWidth, def.tileHeight, def.pixelData))
+        : undefined;
+      exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot, customBlockDefs);
+      return;
+    }
+
+    exportMainCampaignJson(
+      new Map(pendingRoomEdits),
+      uiRoot,
+      activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
+    );
+  }
+
   function collectActiveSavedRoomsForDevChecks(): SavedRoomV2[] {
     const roomById = new Map<string, SavedRoomV2>();
     if (campaignSession?.campaignStore !== undefined) {
@@ -839,25 +857,7 @@ export function createEditorController(
             window.alert('No changed rooms or world-map edits to export yet.');
           }
         },
-        onExportCampaignJson: () => {
-          if (campaignSession) {
-            const customBlockDefs = state.customBlockRegistry.size > 0
-              ? [...state.customBlockRegistry.values()].map(def =>
-                  serializeCustomBlock(def.id, def.name, def.tileWidth, def.tileHeight, def.pixelData))
-              : undefined;
-            exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot, customBlockDefs);
-          } else {
-            const exportRoomEdits = new Map(pendingRoomEdits);
-            if (isCurrentRoomDirty && state.roomData !== null) {
-              exportRoomEdits.set(state.roomData.id, state.roomData);
-            }
-            exportMainCampaignJson(
-              exportRoomEdits,
-              uiRoot,
-              activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
-            );
-          }
-        },
+        onExportCampaignJson: () => saveAndExportCampaign(),
         onRunRoomAudit: () => runDevRoomAudit(),
         onRunRoomRoundTripValidation: () => runDevRoomRoundTripValidation(),
         onOpenVisualMap: () => openVisualMap(),
@@ -1518,6 +1518,7 @@ export function createEditorController(
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
       },
+      onSaveAndExportCampaign: () => saveAndExportCampaign(),
       onWorldMapDataChanged: () => { isWorldMapDirty = true; },
     });
   }

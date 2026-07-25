@@ -15,7 +15,6 @@
  */
 
 import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride } from '../levels/rooms';
-import { exportWorldMapJson } from './editorExport';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import { GREEN } from './editorStyles';
 import {
@@ -126,16 +125,18 @@ export function showVisualWorldMap(
   addWorldBtn.addEventListener('click', () => showAddWorldDialog(dialogCtx));
   header.appendChild(addWorldBtn);
 
-  const exportBtn = makeHeaderBtn('\u2b07 Export Rooms', '#cccc44');
-  exportBtn.title = 'Download all room JSON files with updated map metadata';
+  const exportBtn = makeHeaderBtn('\ud83d\udce6 Save and Export Campaign', '#55aaff');
+  exportBtn.title = 'Save all room and visual map changes, then export the complete campaign';
   exportBtn.addEventListener('click', () => {
-    // Flush current placement positions before export
+    // Flush every displayed placement so the campaign export sees the exact
+    // visual-map state, including the most recent drag.
     for (const [roomId, placement] of placements) {
       setRoomMapPosition(roomId, placement.mapXWorld, placement.mapYWorld);
     }
-    exportWorldMapJson();
-    statusBar.textContent = 'Room JSON files downloaded with updated map metadata.';
-    statusBar.style.color = '#cccc44';
+    callbacks.onWorldMapDataChanged?.();
+    callbacks.onSaveAndExportCampaign?.();
+    statusBar.textContent = 'Saving changes and exporting the complete campaign\u2026';
+    statusBar.style.color = '#55aaff';
   });
   header.appendChild(exportBtn);
 

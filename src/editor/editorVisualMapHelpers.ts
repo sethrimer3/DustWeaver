@@ -25,6 +25,8 @@ export interface VisualMapCallbacks {
   onJumpToRoom: (room: RoomDef) => void;
   /** Called when the visual map closes. */
   onClose: () => void;
+  /** Saves all editor/map changes and exports the complete active campaign. */
+  onSaveAndExportCampaign?: () => void;
   /** Called whenever world-map metadata is mutated (rename, move, add room/world, door link). */
   onWorldMapDataChanged?: () => void;
 }
