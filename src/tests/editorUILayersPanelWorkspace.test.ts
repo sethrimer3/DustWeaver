@@ -85,15 +85,26 @@ test('the Reset Workspace button has an accessible name and fires onResetWorkspa
 
 test('setCollapsed()/isCollapsed() reflect the panel\'s collapse state without a click, and hide the preset row', async () => {
   await withPanel(({ panel }) => {
-    assert.equal(panel.isCollapsed(), false);
-    panel.setCollapsed(true);
+    // The shared collapsible component (editorUIHelpers.ts's
+    // createCollapsibleSection) defaults every top-level panel to collapsed —
+    // a presentational default only; session-persisted collapse state is
+    // restored afterward via setCollapsed() by the caller (see
+    // editorController.ts's applyWorkspaceUIPrefs wiring).
     assert.equal(panel.isCollapsed(), true);
+    // Sync the explicit child-display presentation with the default-collapsed
+    // construction state (setCollapsed(true) is idempotent here).
+    panel.setCollapsed(true);
 
     const presetGroup = findButtonsByRole(panel.div as unknown as FakeElement, 'group')
       .find(g => g.getAttribute('aria-label') === 'Layer visibility presets')!;
     assert.equal(presetGroup.style.display, 'none');
 
     panel.setCollapsed(false);
+    assert.equal(panel.isCollapsed(), false);
     assert.equal(presetGroup.style.display, 'block');
+
+    panel.setCollapsed(true);
+    assert.equal(panel.isCollapsed(), true);
+    assert.equal(presetGroup.style.display, 'none');
   });
 });

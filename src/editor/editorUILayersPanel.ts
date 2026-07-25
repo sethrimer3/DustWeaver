@@ -366,17 +366,26 @@ export function createEditorLayersPanel(
   }
 
   function setCollapsed(value: boolean): void {
-    // Delegates to the shared collapsible section (aria-expanded/chevron/body
-    // display). rowsContainer and presetRow live inside section.body, so
-    // toggling the body's display already hides/shows both — this presentation
-    // matches computeCollapseHeaderPresentation's semantics exactly (kept
-    // exported for its existing unit tests).
+    // Delegates to the shared collapsible section for aria-expanded/chevron/
+    // body display. Also explicitly (re)applies display on the two direct
+    // body children — preserved from the pre-extraction implementation so a
+    // collapsed panel hides them even in a fake/partial DOM shim that doesn't
+    // cascade `display: none` from an ancestor onto children's own inline
+    // styles (see editorUILayersPanelWorkspace.test.ts).
     section.setExpanded(!value);
+    const presentation = computeCollapseHeaderPresentation(value);
+    presetRow.style.display = presentation.rowsDisplay;
+    rowsContainer.style.display = presentation.rowsDisplay;
   }
 
   function isCollapsed(): boolean {
     return !section.isExpanded();
   }
+
+  // Sync the explicit preset/rows display with the section's default-collapsed
+  // construction state (see createCollapsibleSection's "defaults to collapsed"
+  // contract).
+  setCollapsed(true);
 
   return { div, sync, setCollapsed, isCollapsed };
 }
