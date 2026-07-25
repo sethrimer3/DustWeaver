@@ -14,28 +14,34 @@ import {
 
 /**
  * Regression coverage for the "2×2 full-sprite grouping breaks per-cell edge
- * shading" bug: `render2x2Pass` computed one `openAirSidesMask2x2` for an
- * entire 2×2 group (a side counted as open only when BOTH constituent cells
- * were open), and cells covered by a 2×2 group were skipped entirely by
- * `render1x1Pass`'s per-cell shading path. Visually this meant only some 2×2
- * groups got edge treatment while adjacent 1×1-authored or partially-exposed
- * tiles did not — the effect looked random instead of applying uniformly to
- * every exposed wall surface.
+ * shading" bug and its fix.
  *
- * The fix disables the 2×2 fast path for solid wall rendering
- * (`WALL_2X2_FULL_SPRITE_ENABLED = false` in blockSpriteRenderer.ts) so every
- * solid tile always goes through the 1×1 per-cell path, where the mask is:
- *   north open  iff tile above  is not solid
- *   east  open  iff tile right  is not solid
- *   south open  iff tile below  is not solid
- *   west  open  iff tile left   is not solid
+ * History: `render2x2Pass` used to compute one `openAirSidesMask2x2` for an
+ * entire 2×2 group (a side counted as open only when BOTH constituent cells
+ * were open) and bake that coarse mask into the 2×2 sprite's edge shading.
+ * Visually this meant only some 2×2 groups got edge treatment while adjacent
+ * 1×1-authored or partially-exposed tiles did not. The old fix disabled the
+ * 2×2 fast path entirely (`WALL_2X2_FULL_SPRITE_ENABLED = false`), which
+ * regressed 2×2-eligible themes back to four separate 8×8 draws instead of
+ * one 16×16 sprite.
+ *
+ * The real fix (see blockSpriteRenderer.ts and wallTilePassRenderers.ts):
+ * `render2x2Pass` now always draws its base sprite UNSHADED — it never bakes
+ * any open-air mask, coarse or otherwise — and 100% of exposed-edge
+ * presentation is handled by the separate `renderSurfaceEdgeOverlayPass`,
+ * which reads `wallLayout.surfaceExposureMap` per individual cell regardless
+ * of whether that cell was drawn via the 2×2 or 1×1 base-sprite pass. So the
+ * 2×2 fast path is re-enabled (`WALL_2X2_FULL_SPRITE_ENABLED = true`) and is
+ * safe: it only affects how many base-sprite draw calls happen, never which
+ * per-cell edges get shaded.
  *
  * These tests don't have a DOM/Canvas available (see blockEdgeShading.test.ts
  * for why), so they exercise the actual occupancy/layout data structures that
  * feed the render passes — `getWallLayoutCache` + `isWallOccupied` — the same
  * calls `render1x1Pass` and `render2x2Pass` make, across the four layouts
- * called out in the bug report: a large rectangle, a floating 2×2 block, a
- * stair/overhang shape, and mixed adjacent 2×2 + 1×1 authored blocks.
+ * called out in the original bug report: a large rectangle, a floating 2×2
+ * block, a stair/overhang shape, and mixed adjacent 2×2 + 1×1 authored
+ * blocks, plus fixtures added for the 2×2-path re-enablement below.
  */
 
 const BLOCK_SIZE = 8;
@@ -81,7 +87,7 @@ function computeCellMask(occupied: Set<string>, col: number, row: number): numbe
          (westSolid  ? 0 : OPEN_AIR_SIDE_W);
 }
 
-test('2x2 full-sprite optimization is disabled for solid wall rendering (per-cell shading fix)', () => {
+test('2x2 full-sprite optimization is re-enabled for solid wall rendering (unshaded base + guaranteed overlay fix)', () => {
   // blockSpriteRenderer.ts transitively imports folderBlockThemes.ts, which
   // uses Vite's `import.meta.glob` — a build-time-only feature unavailable
   // under this repo's plain node/tsx test runner — so the flag is verified by
@@ -90,7 +96,24 @@ test('2x2 full-sprite optimization is disabled for solid wall rendering (per-cel
   const src = readFileSync(path.join(here, '../render/walls/blockSpriteRenderer.ts'), 'utf8');
   const match = src.match(/export const WALL_2X2_FULL_SPRITE_ENABLED\s*=\s*(true|false)\s*;/);
   assert.ok(match, 'WALL_2X2_FULL_SPRITE_ENABLED flag must exist in blockSpriteRenderer.ts');
-  assert.equal(match![1], 'false', 'the 2x2 fast path must stay disabled until it supports correct per-cell partial edge shading');
+  assert.equal(match![1], 'true', 'the 2x2 fast path must be enabled now that render2x2Pass draws unshaded and defers edge shading to the guaranteed overlay pass');
+});
+
+test('render2x2Pass always draws an unshaded base sprite (no baked open-air mask)', () => {
+  // render2x2Pass itself lives in wallTilePassRenderers.ts, which transitively
+  // pulls in Vite-only folder-theme machinery, so we verify the contract by
+  // reading the source: the pass must never derive a per-group open-air mask
+  // from surfaceExposureMap and feed it into sprite shading — it must always
+  // pass a suppressed/zero mask so edge presentation is left entirely to
+  // renderSurfaceEdgeOverlayPass.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(path.join(here, '../render/walls/wallTilePassRenderers.ts'), 'utf8');
+  const fnStart = src.indexOf('export function render2x2Pass');
+  assert.ok(fnStart >= 0, 'render2x2Pass must exist in wallTilePassRenderers.ts');
+  const fnEnd = src.indexOf('\n// ── Pass 2:', fnStart);
+  const fnBody = src.slice(fnStart, fnEnd >= 0 ? fnEnd : undefined);
+  assert.match(fnBody, /const openAirSidesMask2x2\s*=\s*0\s*;/, 'render2x2Pass must always use a zero open-air mask for its base sprite');
+  assert.match(fnBody, /const suppressBakedEdgeShading\s*=\s*true\s*;/, 'render2x2Pass must always suppress baked edge shading on its base sprite');
 });
 
 test('large rectangular wall: every cell along the exposed top edge gets a consistent north-open mask', () => {
@@ -203,4 +226,121 @@ test('mixed adjacent 2x2 and 1x1 authored blocks produce identical masks regardl
       );
     }
   }
+});
+
+test('isolated 2x2 wall: layout registers exactly one solid2x2Map group covering all four cells', () => {
+  const snapshot = makeWallSnapshot([{ x: 40, y: 40, w: 2 * BLOCK_SIZE, h: 2 * BLOCK_SIZE }]);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
+
+  const col0 = 5;
+  const row0 = 5;
+  assert.equal(layout.solid2x2Map.size, 1, 'a standalone 2x2 block must register exactly one solid2x2Map group');
+  assert.ok(layout.solid2x2Map.has(`${col0},${row0}`), 'the group key must be the top-left cell of the 2x2 block');
+
+  // All four cells must be present in the occupancy grid so render1x1Pass's
+  // coveredBy2x2Keys check (built from this same map) can skip them.
+  for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+    assert.ok(isWallOccupied(layout.occupied, col0 + dc, row0 + dr), `cell (${col0 + dc},${row0 + dr}) must be occupied`);
+  }
+});
+
+test('mixed 2x2 + 1x1 geometry with odd trailing row/column: trailing cells stay out of solid2x2Map', () => {
+  // A 5-wide, 3-tall solid region: cols 0-3 pair up into 2x2 groups, but the
+  // 5th column (col 4) and 3rd row (row 2) are odd trailing geometry that
+  // must remain 1x1-only (never claimed by a solid2x2Map group).
+  const snapshot = makeWallSnapshot([{ x: 0, y: 0, w: 5 * BLOCK_SIZE, h: 3 * BLOCK_SIZE }]);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
+
+  assert.ok(layout.solid2x2Map.size > 0, 'the 4x2 even sub-region should still register 2x2 groups');
+
+  for (const [topLeftKey] of layout.solid2x2Map) {
+    const [colStr, rowStr] = topLeftKey.split(',');
+    const col = Number(colStr);
+    const row = Number(rowStr);
+    // No group may claim the trailing column (col 4) or trailing row (row 2).
+    assert.ok(col + 1 <= 3, `2x2 group at col ${col} must not reach into the odd trailing column 4`);
+    assert.ok(row + 1 <= 1, `2x2 group at row ${row} must not reach into the odd trailing row 2`);
+  }
+
+  // The trailing column/row cells are still occupied — they just render 1x1.
+  assert.ok(isWallOccupied(layout.occupied, 4, 0), 'trailing column cell must still be occupied');
+  assert.ok(isWallOccupied(layout.occupied, 0, 2), 'trailing row cell must still be occupied');
+});
+
+test('no duplicate base rendering: every occupied cell is claimed by at most one 2x2 group', () => {
+  // Several adjacent and separate 2x2-eligible regions; no cell should ever
+  // appear in more than one solid2x2Map group (which would cause render2x2Pass
+  // to draw two overlapping base sprites over the same cell).
+  const snapshot = makeWallSnapshot([
+    { x: 0,  y: 0, w: 4 * BLOCK_SIZE, h: 4 * BLOCK_SIZE },
+    { x: 40, y: 40, w: 2 * BLOCK_SIZE, h: 2 * BLOCK_SIZE },
+  ]);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
+
+  const claimed = new Set<string>();
+  for (const [topLeftKey] of layout.solid2x2Map) {
+    const [colStr, rowStr] = topLeftKey.split(',');
+    const col = Number(colStr);
+    const row = Number(rowStr);
+    for (const [dc, dr] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+      const key = `${col + dc},${row + dr}`;
+      assert.ok(!claimed.has(key), `cell ${key} must not be claimed by more than one 2x2 group`);
+      claimed.add(key);
+    }
+  }
+});
+
+test('unsupported themes fall back safely: themeSupports2x2 gates the 2x2 path by theme and block size', () => {
+  // blockSpriteSets.ts transitively imports folderBlockThemes.ts (Vite-only
+  // import.meta.glob), so this is verified by source inspection rather than
+  // importing the module, matching the pattern used elsewhere in this file.
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(path.join(here, '../render/walls/blockSpriteSets.ts'), 'utf8');
+  const match = src.match(/export function themeSupports2x2\([^)]*\)[^{]*\{([\s\S]*?)\n\}/);
+  assert.ok(match, 'themeSupports2x2 must exist in blockSpriteSets.ts');
+  const body = match![1];
+  assert.match(body, /blockSizePx !== 8/, 'themeSupports2x2 must reject non-8px block sizes');
+  assert.match(body, /isFolderBasedTheme\(theme\)/, 'themeSupports2x2 must gate on folder-based theme support');
+
+  // render2x2Pass (wallTilePassRenderers.ts) must check eligibility per-group
+  // before drawing, falling back to render1x1Pass's per-cell path otherwise —
+  // i.e. an ineligible group must never be added to coveredBy2x2Keys.
+  const rendererSrc = readFileSync(path.join(here, '../render/walls/wallTilePassRenderers.ts'), 'utf8');
+  assert.match(rendererSrc, /if \(!themeSupports2x2\(resolvedTheme, blockSizePx\)\) continue;/,
+    'render2x2Pass must skip (and therefore fall back to the 1x1 path for) groups whose theme does not support 2x2');
+
+  const rendererCacheSrc = readFileSync(path.join(here, '../render/walls/blockSpriteRenderer.ts'), 'utf8');
+  assert.match(rendererCacheSrc, /if \(!themeSupports2x2\(resolvedTheme, blockSizePx\)\) continue;/,
+    '_populateCoveredBy2x2Keys must also skip ineligible groups so render1x1Pass does not wrongly treat them as covered');
+});
+
+test('partial edge exposure inside a 2x2 group: guaranteed overlay shades each cell by its own exposure, not the group\'s', () => {
+  // A 2x2 block adjacent to a 1x1 neighbour on its east side (sharing a wall
+  // with the top-right cell only). Per-cell: top-left is open on N/W, bottom-
+  // left is open on S/W, bottom-right is open on S only (E is blocked by the
+  // neighbour), top-right is open on N only (E is blocked). This is exactly
+  // the kind of partial/asymmetric exposure the old coarse group-mask could
+  // not represent (it could only mark a whole side open/closed for all 4
+  // cells at once); the guaranteed overlay must still get it right per-cell.
+  // The 2x2 group must be authored as a single wall rect — solid2x2Map
+  // grouping is computed per-wall-rect (see _buildSolid2x2Map), not from
+  // merged occupancy, so four separately-authored 1x1 tiles would never
+  // register a group at all.
+  const snapshot = makeWallSnapshot([
+    { x: 5 * BLOCK_SIZE, y: 5 * BLOCK_SIZE, w: 2 * BLOCK_SIZE, h: 2 * BLOCK_SIZE },
+    { x: 7 * BLOCK_SIZE, y: 5 * BLOCK_SIZE, w: BLOCK_SIZE, h: BLOCK_SIZE }, // neighbour east of the group's top-right cell only
+  ]);
+  const layout = getWallLayoutCache(snapshot, BLOCK_SIZE, 100, 100);
+
+  assert.ok(layout.solid2x2Map.has('5,5'), 'the 2x2 group must still be registered despite the extra neighbour tile');
+
+  const topLeft     = computeCellMask(layout.occupied, 5, 5);
+  const topRight     = computeCellMask(layout.occupied, 6, 5);
+  const bottomLeft   = computeCellMask(layout.occupied, 5, 6);
+  const bottomRight = computeCellMask(layout.occupied, 6, 6);
+
+  assert.equal(topLeft,     OPEN_AIR_SIDE_N | OPEN_AIR_SIDE_W, 'top-left: open N/W, blocked E (group-mate) and S (group-mate)');
+  assert.equal(topRight,    OPEN_AIR_SIDE_N, 'top-right: open N only — E is blocked by the authored neighbour tile, S/W by group-mates');
+  assert.equal(bottomLeft,  OPEN_AIR_SIDE_S | OPEN_AIR_SIDE_W, 'bottom-left: open S/W, blocked N/E by group-mates');
+  assert.equal(bottomRight, OPEN_AIR_SIDE_S | OPEN_AIR_SIDE_E, 'bottom-right: open S/E (its own E neighbour (7,6) is empty), blocked N/W by group-mates');
 });

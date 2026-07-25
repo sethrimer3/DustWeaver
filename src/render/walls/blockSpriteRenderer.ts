@@ -324,34 +324,34 @@ function _getAmbientDepths(layout: CachedWallLayout): Map<string, number> {
 /**
  * Feature flag for the 2×2 full-sprite wall rendering optimization.
  *
- * ⚠️ TEMPORARILY DISABLED — see the open-air edge-shading bug report.
- * `render2x2Pass` computes a single `openAirSidesMask2x2` for the whole 2×2
- * group (a side only counts as open when BOTH constituent cells are open),
- * so cells inside a 2×2 group receive coarser, inconsistent edge shading
- * than the same cells would get from the per-cell 1×1 path — visually this
- * shows up as edge shading on only *some* 2×2 groups while adjacent 1×1-
- * authored or partially-exposed tiles are untouched. The 2×2 path is a
- * pure draw-call optimization (fewer drawImage calls for large uniform
- * regions); it has no effect on gameplay, only on how many sprite blits
- * happen per frame. Until it is made per-cell-aware (each of the 4
- * constituent cells computing its own openAirSidesMask and shading only
- * its own exposed pixel bands), every solid wall cell must go through the
- * 1×1 path instead so the edge filter is evaluated in tile/cell terms, not
- * per-2×2-group terms. Flip back to `true` once render2x2Pass supports
- * correct partial per-cell shading.
+ * `render2x2Pass` draws one 16×16 sprite per eligible 2×2 group (fewer
+ * drawImage calls than four separate 8×8 base sprites) instead of leaving
+ * the group to `render1x1Pass`. It previously stayed disabled because it
+ * baked a single coarse `openAirSidesMask2x2` for the whole group (a side
+ * only counted as open when BOTH constituent cells were open), which gave
+ * cells inside a 2×2 group inconsistent edge shading compared to the
+ * per-cell 1×1 path.
+ *
+ * That is no longer how correctness works here: `renderSurfaceEdgeOverlayPass`
+ * (see surfaceEdgeOverlay.ts) draws the actual exposed-edge visual for every
+ * tile — 2×2-covered or not — straight from the authoritative per-cell
+ * `surfaceExposureMap`, as a guaranteed overlay pass run after all base
+ * sprites. `render2x2Pass` therefore renders its base sprite **unshaded**
+ * (no baked edge highlight) and leaves 100% of edge/rim presentation to that
+ * overlay, which is inherently per-cell and unaffected by 2×2/1×1 grouping.
  */
-export const WALL_2X2_FULL_SPRITE_ENABLED = false;
+export const WALL_2X2_FULL_SPRITE_ENABLED = true;
 
 /**
  * Reusable Set identifying tiles covered by a 2×2 full-sprite block.
  * Cleared and repopulated each frame from `wallLayout.solid2x2Map` —
  * avoids creating a new Set<string> every render call.
  *
- * When `WALL_2X2_FULL_SPRITE_ENABLED` is false this stays permanently empty,
- * which is sufficient to fully disable the 2×2 path: `render2x2Pass` early-
- * returns when this set is empty, and `render1x1Pass` treats every cell as
- * NOT covered, so all solid cells render through the per-cell 1×1 shaded
- * path with a correctly-computed per-tile `openAirSidesMask`.
+ * `render1x1Pass` skips any cell present in this set (its 2×2 sprite already
+ * covers that pixel area); `render2x2Pass` only adds a group's four cells
+ * when the resolved theme actually supports a 2×2 sprite for the current
+ * block size, so themes without one still render entirely through the 1×1
+ * path.
  */
 const _coveredBy2x2Keys = new Set<string>();
 

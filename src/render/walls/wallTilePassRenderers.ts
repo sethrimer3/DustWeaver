@@ -43,7 +43,6 @@ import {
   getTheme1x1Sprite,
   getTheme2x2Sprite,
   getTheme1x1SpriteShaded,
-  getTheme2x2SpriteShaded,
   getFolderThemeBaseUrl,
 } from './folderBlockThemes';
 import { getLegacyShadedSprite, getLegacyUnshadedSprite } from './legacyBlockShading';
@@ -295,31 +294,22 @@ export function render2x2Pass(
 
     const material = themeToProceduralMaterial(resolvedTheme, activeWorldNumber);
 
-    // Compute open-air sides for the 2×2 group from the authoritative
-    // per-tile exposure map (same source `render1x1Pass` reads below) —
-    // a side is open only when BOTH constituent cells expose that side,
-    // which also makes this correctly room-bounds aware at the room edge.
-    const { surfaceExposureMap } = wallLayout;
-    const topLeftMask     = getSurfaceMaskAtTile(surfaceExposureMap, col,     row    );
-    const topRightMask    = getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row    );
-    const bottomLeftMask  = getSurfaceMaskAtTile(surfaceExposureMap, col,     row + 1);
-    const bottomRightMask = getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row + 1);
-    const openAirSidesMask2x2 =
-      ((topLeftMask.top    && topRightMask.top)    ? OPEN_AIR_SIDE_N : 0) |
-      ((topRightMask.right && bottomRightMask.right) ? OPEN_AIR_SIDE_E : 0) |
-      ((bottomLeftMask.bottom && bottomRightMask.bottom) ? OPEN_AIR_SIDE_S : 0) |
-      ((topLeftMask.left   && bottomLeftMask.left) ? OPEN_AIR_SIDE_W : 0);
-    const suppressBakedEdgeShading =
-      surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(topLeftKey))
-      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col + 1},${row}`))
-      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col},${row + 1}`))
-      || surfaceRimSuppressesBakedEdge(wallLayout.tileSurfaceRim.get(`${col + 1},${row + 1}`));
+    // Edge/rim presentation for every tile — 2×2-covered or not — is drawn
+    // by the guaranteed `renderSurfaceEdgeOverlayPass` straight from the
+    // authoritative per-cell `surfaceExposureMap`, run after all base wall
+    // sprites. So the 2×2 base sprite here is always drawn UNSHADED: no
+    // baked edge highlight, no coarse whole-group open-air mask. This is
+    // what makes the 2×2 fast path safe — it is a pure draw-call reduction
+    // that never participates in edge-shading correctness.
+    const openAirSidesMask2x2 = 0;
+    const suppressBakedEdgeShading = true;
 
     if (import.meta.env?.DEV) {
-      _recordWallCellDiag(col,     row,     '2x2', openAirSidesMask2x2, true);
-      _recordWallCellDiag(col + 1, row,     '2x2', openAirSidesMask2x2, true);
-      _recordWallCellDiag(col,     row + 1, '2x2', openAirSidesMask2x2, true);
-      _recordWallCellDiag(col + 1, row + 1, '2x2', openAirSidesMask2x2, true);
+      const { surfaceExposureMap } = wallLayout;
+      _recordWallCellDiag(col,     row,     '2x2', surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(surfaceExposureMap, col,     row    )), true);
+      _recordWallCellDiag(col + 1, row,     '2x2', surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row    )), true);
+      _recordWallCellDiag(col,     row + 1, '2x2', surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(surfaceExposureMap, col,     row + 1)), true);
+      _recordWallCellDiag(col + 1, row + 1, '2x2', surfaceMaskToOpenAirBits(getSurfaceMaskAtTile(surfaceExposureMap, col + 1, row + 1)), true);
     }
 
     if (material !== null) {
@@ -336,9 +326,7 @@ export function render2x2Pass(
       if (sprite !== null && isSpriteReady(sprite)) {
         ctx.drawImage(sprite, tileX, tileY, drawSize, drawSize);
       } else if (isFolderBasedTheme(resolvedTheme)) {
-        const folderSprite = suppressBakedEdgeShading
-          ? getTheme2x2Sprite(resolvedTheme, col, row, activeWorldNumber)
-          : getTheme2x2SpriteShaded(resolvedTheme, col, row, activeWorldNumber, openAirSidesMask2x2, blockSizePx);
+        const folderSprite = getTheme2x2Sprite(resolvedTheme, col, row, activeWorldNumber);
         if (folderSprite !== null) {
           ctx.drawImage(folderSprite, tileX, tileY, drawSize, drawSize);
           if (FP.consumeBudgetExhaustedFallbackFlag()) hadFallbacks = true;
