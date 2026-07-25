@@ -23,6 +23,16 @@ export interface CampaignStore {
   markRoomDirty: (roomId: string, roomData: EditorRoomData) => void;
   discardRoomChanges: (roomId: string) => void;
   commitRoom: (roomId: string, roomData: EditorRoomData) => void;
+  /**
+   * Fully removes a room from the store: raw payload, hydrated cache, dirty
+   * tracking, world-map room index, and — if present — its worldMap.rooms
+   * entry. Unlike `discardRoomChanges` (which only reverts to the last
+   * committed payload), this erases the payload itself, so it must only be
+   * used to roll back a room that was created and committed within the same
+   * still-in-progress transaction (never to remove a room a user believes is
+   * saved).
+   */
+  deleteRoom: (roomId: string) => void;
   commitActiveRoom: (activeRoomData: EditorRoomData | null) => void;
   commitAllDirtyRooms: () => void;
   buildExportCampaign: (baseCampaign: SavedCampaignV1, customBlockDefs?: SavedCampaignV1['customBlockDefs']) => SavedCampaignV1;
@@ -252,6 +262,18 @@ export function createCampaignStore(
     }
   }
 
+  function deleteRoom(roomId: string): void {
+    rawRoomsById.delete(roomId);
+    hydratedRoomsById.delete(roomId);
+    hydratedNextUidById.delete(roomId);
+    dirtyRoomIds.delete(roomId);
+    worldMapRoomById.delete(roomId);
+    if (activeRoomId === roomId) activeRoomId = null;
+    if (worldMap.rooms.some(room => room.id === roomId)) {
+      worldMap = { worlds: worldMap.worlds, rooms: worldMap.rooms.filter(room => room.id !== roomId) };
+    }
+  }
+
   function commitActiveRoom(activeRoomData: EditorRoomData | null): void {
     if (activeRoomData === null) return;
     commitRoom(activeRoomData.id, activeRoomData);
@@ -319,6 +341,7 @@ export function createCampaignStore(
     markRoomDirty,
     discardRoomChanges,
     commitRoom,
+    deleteRoom,
     commitActiveRoom,
     commitAllDirtyRooms,
     buildExportCampaign,

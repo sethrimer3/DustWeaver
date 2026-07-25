@@ -174,6 +174,22 @@ export function registerRoom(room: RoomDef): void {
 }
 
 /**
+ * Removes a room previously added via `registerRoom` from the registry and
+ * every world-map metadata store keyed by room id. Used to roll back a
+ * partially-created room when a subsequent step of an atomic visual-map
+ * transaction (persistence, reciprocal linking, etc.) fails — leaves no
+ * trace of the room behind so a retry starts from a clean slate. Does not
+ * touch worldNamesMap/worldOrderMap: a world id introduced solely by the
+ * rolled-back room causes no inconsistency if left registered.
+ */
+export function unregisterRoom(roomId: string): void {
+  registryMap.delete(roomId);
+  worldMapPositions.delete(roomId);
+  roomNameOverridesMap.delete(roomId);
+  roomWorldOverridesMap.delete(roomId);
+}
+
+/**
  * Loads the official campaign and populates ROOM_REGISTRY.
  *
  * Primary path: loads from the canonical packed campaign file

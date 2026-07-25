@@ -66,7 +66,11 @@ import { showVisualWorldMap } from './editorVisualMap';
 import { beginTransitionLink, completeTransitionLink, cancelTransitionLink } from './transitionLinker';
 import { transitionLinkWarningMessage } from './transitionValidation';
 import { exportRoomAsJson, exportAllChanges, exportCampaignJson, exportMainCampaignJson } from './editorExport';
-import { ROOM_REGISTRY, registerRoom, getLoadedOfficialCampaignSpawn, WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS } from '../levels/rooms';
+import {
+  ROOM_REGISTRY, registerRoom, unregisterRoom, getLoadedOfficialCampaignSpawn,
+  WORLD_NAMES, WORLD_ORDER, WORLD_MAP_POSITIONS,
+  setRoomNameOverride, setRoomWorldOverride, setRoomMapPosition, setRoomTransitionLink,
+} from '../levels/rooms';
 import { loadRoomForGameplayAsync } from '../levels/roomFileLoader';
 import {
   createEditorHistory, clearHistory, capturePendingSnapshot, commitPendingSnapshot,
@@ -118,6 +122,32 @@ import {
   persistCreatedCampaignRoom,
   persistSavedCampaignRoom,
 } from './campaignRoomPersistence';
+import {
+  createLinkedRoomTransaction,
+  linkTransitionTransaction,
+  clearTargetRoomTransitionOnDiscard,
+  type CreateLinkedRoomInput,
+  type LinkTransitionInput,
+  type RoomRegistryOps,
+} from './visualMapRoomPersistenceCoordinator';
+
+/**
+ * Production ROOM_REGISTRY-backed implementation of `RoomRegistryOps` for
+ * visualMapRoomPersistenceCoordinator.ts transactions. That module cannot
+ * import `../levels/rooms` directly (see its file header), so this thin
+ * adapter — the only piece of editorController.ts's registry-mutation
+ * surface the coordinator ever touches — is passed in explicitly.
+ */
+const productionRoomRegistryOps: RoomRegistryOps = {
+  get: (roomId) => ROOM_REGISTRY.get(roomId),
+  has: (roomId) => ROOM_REGISTRY.has(roomId),
+  register: registerRoom,
+  unregister: unregisterRoom,
+  setNameOverride: setRoomNameOverride,
+  setWorldOverride: setRoomWorldOverride,
+  setMapPosition: setRoomMapPosition,
+  setTransitionLink: setRoomTransitionLink,
+};
 import {
   isTransitionAtRoomEdge,
   showTransitionConnectPopup,
@@ -263,6 +293,18 @@ export function createEditorController(
   // Saved source room data for transition linking across rooms
   let linkSourceRoomData: typeof state.roomData = null;
   let linkTargetRoomId = '';
+
+  // Rooms created (via the visual map's "Create Linked Room" flow) as the
+  // reciprocal target of an unlinked transition on the CURRENTLY OPEN room,
+  // during the room's current in-progress edit session. Each target room is
+  // already committed (immediate-persist, per the new-room architecture —
+  // see visualMapRoomPersistenceCoordinator.ts), but the source-room half of
+  // the link only lives in memory until an explicit save boundary. If the
+  // user discards instead of saving, the target room must not be left with
+  // a dangling one-way transition back to a source that no longer links to
+  // it — see discardLinkedRoomTargetsForCurrentSession(). Cleared whenever
+  // the current room's edit session ends (load, save, or discard).
+  let linkedRoomsCreatedFromCurrentRoom: Array<{ targetRoomId: string; targetTransIndex: number }> = [];
 
   // Original room snapshot for cancel/revert
   let originalRoomDef: RoomDef | null = null;
@@ -453,6 +495,10 @@ export function createEditorController(
     persistSavedCampaignRoom(campaignSession, pendingRoomEdits, state.roomData);
     isCurrentRoomDirty = false;
     markHistorySaved(history);
+    // The source-room half of any linked-room-creation link just became
+    // persisted/authoritative — it is no longer part of an in-progress edit
+    // session that a later Discard could roll back.
+    linkedRoomsCreatedFromCurrentRoom = [];
     if (import.meta.env.DEV) {
       console.log(`[editor-perf] commitActiveRoomToCampaign reason=${reason} room=${roomId}`);
     }
@@ -587,6 +633,10 @@ export function createEditorController(
   }
 
   function discardCurrentRoomSessionChanges(roomData: EditorRoomData | null): void {
+    // Must run BEFORE the source room's own edits are discarded below: it
+    // reads `linkedRoomsCreatedFromCurrentRoom`, which was recorded relative
+    // to this room's in-progress session.
+    discardLinkedRoomTargetsForCurrentSession();
     if (!usesCampaignStore || campaignSession?.campaignStore === undefined || roomData === null) return;
     campaignSession.campaignStore.discardRoomChanges(roomData.id);
   }
@@ -608,126 +658,136 @@ export function createEditorController(
   }
 
   /**
-   * Synchronizes an existing room's transition target/spawn (mutated by the
-   * visual map — either the reciprocal side of a newly-created linked room,
-   * or one side of linking two existing doors) into persisted storage.
-   *
-   * If the affected room is the one currently open in the editor, the
-   * mutation is applied directly to `state.roomData` and the room is merely
-   * marked dirty — respecting the persistence-cadence rule that the active
-   * room is only flushed at an explicit save boundary
-   * (`commitActiveRoomToCampaign`), so unsaved current-room edits are never
-   * silently discarded or bypassed.
-   *
-   * Otherwise the room is not currently open, so there is no in-progress
-   * edit session to preserve: it is loaded, patched, and written straight
-   * back via `persistSavedCampaignRoom`, mirroring how newly created rooms
-   * are committed immediately. If the room is not present in
-   * `pendingRoomEdits` (and there is no store-backed campaign to fall back
-   * to via `loadPersistedCampaignRoom`), the mutation MUST NOT be silently
-   * dropped: the authoritative `ROOM_REGISTRY` RoomDef is used instead, so
-   * the target-room half of the link is never lost.
-   *
-   * Discard-atomicity note: when the currently-open room's in-memory link is
-   * later discarded (Cancel), only ITS reciprocal edit is rolled back — a
-   * room on the other end of the link that was already persisted via
-   * `handleRoomCreatedFromVisualMap` (which uses the store-aware immediate
-   * `persistCreatedCampaignRoom` path, per the existing architecture) is
-   * deliberately NOT rolled back. That room remains a valid, registered room
-   * with a one-way transition pointing back at the source room; the source
-   * room itself is simply missing the reciprocal link (exactly as if the
-   * user had never confirmed the visual-map link). This is safe: no
-   * world-map/payload mismatch is produced (the target room is still a
-   * fully valid registered room with a payload) and no half-written file is
-   * ever produced (each persisted room is always a complete, self-consistent
-   * snapshot at the moment it was written). Rolling back the target room's
-   * persisted state on a discard of an unrelated, already-closed edit
-   * session would violate the cadence rule in the other direction (retro-
-   * actively un-persisting something already committed) and was rejected.
+   * Controller-owned implementation of `VisualMapCallbacks.requestCreateLinkedRoom`.
+   * Thin wrapper around `createLinkedRoomTransaction` (see
+   * visualMapRoomPersistenceCoordinator.ts): supplies the campaign session,
+   * pending edits, currently-open room, and `nextUid` counter as transaction
+   * inputs, then — only once the coordinator reports success (registry
+   * mutation AND persistence both succeeded) — performs UI/state sync: bumps
+   * `state.nextUid`, keeps the registry-derived `liveEditorRoomDef` in sync
+   * when the source room is the one currently open, marks the world map (and,
+   * if applicable, the current room) dirty, and records the new room so a
+   * later Discard of this room's in-progress edit session can clean up its
+   * reciprocal transition (see discardLinkedRoomTargetsForCurrentSession).
+   * On failure, nothing was mutated (the coordinator already rolled back any
+   * partial registry mutation before returning) — just surface a toast.
    */
-  function handleRoomTransitionLinkedFromVisualMap(
-    roomId: string,
-    transitionIndex: number,
-    targetRoomId: string,
-    targetSpawnBlock: readonly [number, number],
-  ): void {
-    if (state.roomData && state.roomData.id === roomId) {
-      const trans = state.roomData.transitions[transitionIndex];
-      if (!trans) {
-        reportVisualMapLinkFailure(
-          `handleRoomTransitionLinkedFromVisualMap: room "${roomId}" (currently open) has no transition at index ${transitionIndex}`,
-          `Could not link door — room "${effectiveRoomNameForToast(roomId)}" has no transition #${transitionIndex + 1}.`,
-        );
-        return;
-      }
-      trans.targetRoomId = targetRoomId;
-      trans.targetSpawnBlock = [targetSpawnBlock[0], targetSpawnBlock[1]];
+  function requestCreateLinkedRoomFromVisualMap(
+    input: Omit<CreateLinkedRoomInput, 'registry' | 'session' | 'pendingRoomEdits' | 'currentRoomData' | 'nextUid'>,
+  ): ReturnType<typeof createLinkedRoomTransaction> {
+    const result = createLinkedRoomTransaction({
+      ...input,
+      registry: productionRoomRegistryOps,
+      session: campaignSession,
+      pendingRoomEdits,
+      currentRoomData: state.roomData,
+      nextUid: state.nextUid,
+    });
+
+    if (!result.ok) {
+      reportVisualMapLinkFailure(
+        `requestCreateLinkedRoomFromVisualMap: ${result.reason}`,
+        `Could not create linked room: ${result.reason}`,
+      );
+      return result;
+    }
+
+    state.nextUid = Math.max(state.nextUid, result.newNextUid);
+    isWorldMapDirty = true;
+    if (result.sourcePatchedCurrentRoom && state.roomData) {
       // Deliberately not routed through applyEdits('metadata'): that helper
       // recomputes isCurrentRoomDirty from the undo-history transaction
       // state (isHistoryDirty(history)), which this out-of-band visual-map
       // mutation never touches — it would silently clobber the dirty flag
-      // back to false and the change would be lost on the next room
-      // switch. Keep the current-room sync minimal and explicit instead.
-      if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
-        campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
-        campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
-      }
+      // back to false and the change would be lost on the next room switch.
       const roomDef = rebuildLiveEditorRoomDef();
       if (roomDef) registerRoom(roomDef); // keep registry metadata in sync for map tooling
       isCurrentRoomDirty = true;
-      isWorldMapDirty = true;
-      return;
+      linkedRoomsCreatedFromCurrentRoom.push({ targetRoomId: result.newRoomDef.id, targetTransIndex: 0 });
+    }
+    return result;
+  }
+
+  /**
+   * Controller-owned implementation of `VisualMapCallbacks.requestLinkTransition`.
+   * Thin wrapper around `linkTransitionTransaction`: supplies the same
+   * transaction inputs as `requestCreateLinkedRoomFromVisualMap`, then syncs
+   * `state`/registry on success (either room may be the currently-open one)
+   * or surfaces a toast on failure — the coordinator has already rolled back
+   * any partial mutation before returning.
+   */
+  function requestLinkTransitionFromVisualMap(
+    input: Omit<LinkTransitionInput, 'registry' | 'session' | 'pendingRoomEdits' | 'currentRoomData' | 'nextUid'>,
+  ): ReturnType<typeof linkTransitionTransaction> {
+    const result = linkTransitionTransaction({
+      ...input,
+      registry: productionRoomRegistryOps,
+      session: campaignSession,
+      pendingRoomEdits,
+      currentRoomData: state.roomData,
+      nextUid: state.nextUid,
+    });
+
+    if (!result.ok) {
+      reportVisualMapLinkFailure(`requestLinkTransitionFromVisualMap: ${result.reason}`, `Could not link doors: ${result.reason}`);
+      return result;
     }
 
-    let loaded = loadPersistedCampaignRoom(campaignSession, pendingRoomEdits, roomId, state.nextUid);
-    if (!loaded) {
-      // Legacy no-CampaignStore fallback: the room exists (it must, the
-      // visual map only fires this callback for rooms it just mutated in
-      // ROOM_REGISTRY) but has never been touched this session, so it is
-      // absent from `pendingRoomEdits` and there is no store to fall back
-      // on. Rebuild it from the authoritative registry instead of silently
-      // dropping the mutation.
-      const registryRoomDef = ROOM_REGISTRY.get(roomId);
-      if (!registryRoomDef) {
-        reportVisualMapLinkFailure(
-          `handleRoomTransitionLinkedFromVisualMap: room "${roomId}" not found in pendingRoomEdits, campaign store, or ROOM_REGISTRY`,
-          `Could not link door — room "${effectiveRoomNameForToast(roomId)}" could not be found.`,
-        );
-        return;
+    isWorldMapDirty = true;
+    if (state.roomData && (state.roomData.id === input.sourceRoomId || state.roomData.id === input.targetRoomId)) {
+      const roomDef = rebuildLiveEditorRoomDef();
+      if (roomDef) registerRoom(roomDef);
+      isCurrentRoomDirty = true;
+    }
+    return result;
+  }
+
+  /**
+   * Discard-time cleanup for the currently-open room's in-progress edit
+   * session: for every room created via requestCreateLinkedRoomFromVisualMap
+   * as the reciprocal target of an unlinked transition on THIS room, clears
+   * that target room's transition back to unlinked (`targetRoomId: ''`) and
+   * persists the cleanup immediately (the target room is never the current
+   * room, so the ordinary current-room save-boundary cadence does not apply
+   * to it). The target room itself is kept — never deleted — so it remains a
+   * valid, unlinked room rather than a dangling one-way link. Must be called
+   * BEFORE `discardCurrentRoomSessionChanges` reverts the source room, and
+   * on every path that discards the current room's session (Cancel, and
+   * "Discard" from the unsaved-changes prompt when switching rooms).
+   */
+  function discardLinkedRoomTargetsForCurrentSession(): void {
+    if (linkedRoomsCreatedFromCurrentRoom.length === 0) return;
+    for (const { targetRoomId, targetTransIndex } of linkedRoomsCreatedFromCurrentRoom) {
+      const result = clearTargetRoomTransitionOnDiscard({
+        targetRoomId,
+        targetTransIndex,
+        registry: productionRoomRegistryOps,
+        session: campaignSession,
+        pendingRoomEdits,
+        currentRoomData: state.roomData,
+        nextUid: state.nextUid,
+      });
+      if (!result.ok) {
+        console.error(`[editor] discardLinkedRoomTargetsForCurrentSession: ${result.reason}`);
       }
-      const { data, nextUid } = roomDefToEditorRoomData(registryRoomDef, state.nextUid);
-      loaded = { roomData: data, nextUid, source: 'legacy-pending-edits' };
     }
-    state.nextUid = Math.max(state.nextUid, loaded.nextUid);
-    const trans = loaded.roomData.transitions[transitionIndex];
-    if (!trans) {
-      reportVisualMapLinkFailure(
-        `handleRoomTransitionLinkedFromVisualMap: room "${roomId}" has no transition at index ${transitionIndex} (source=${loaded.source})`,
-        `Could not link door — room "${effectiveRoomNameForToast(roomId)}" has no transition #${transitionIndex + 1}.`,
-      );
-      return;
-    }
-    trans.targetRoomId = targetRoomId;
-    trans.targetSpawnBlock = [targetSpawnBlock[0], targetSpawnBlock[1]];
-    persistSavedCampaignRoom(campaignSession, pendingRoomEdits, loaded.roomData);
+    linkedRoomsCreatedFromCurrentRoom = [];
     isWorldMapDirty = true;
   }
 
   /**
    * Logs a precise developer error and surfaces a toast for a visual-map
-   * transition-link failure that must NOT be allowed to silently commit
-   * partial/unchanged data. Neither ROOM_REGISTRY nor persisted storage is
-   * touched by the caller before this runs, so state stays consistent.
+   * room-creation/transition-link failure that must NOT be allowed to
+   * silently commit partial/unchanged data. By the time this runs, the
+   * coordinator transaction (createLinkedRoomTransaction /
+   * linkTransitionTransaction) has already rolled back every registry and
+   * persistence mutation it made, so state is guaranteed consistent.
    */
   function reportVisualMapLinkFailure(devMessage: string, userMessage: string): void {
     console.error(`[editor] ${devMessage}`);
     showEditorToast(uiRoot, userMessage);
   }
 
-  /** Best-effort room display name for error toasts (falls back to the raw id). */
-  function effectiveRoomNameForToast(roomId: string): string {
-    return ROOM_REGISTRY.get(roomId)?.name ?? roomId;
-  }
 
   function rebuildLiveEditorRoomDef(): RoomDef | null {
     if (state.roomData === null) {
@@ -1397,6 +1457,10 @@ export function createEditorController(
     // must not be carried over or left dangling against the new room.
     cancelActiveGesture();
     clearHistory(history);
+    // A new room's edit session is starting — any linked-room-creation
+    // tracking from the outgoing room's session no longer applies (it was
+    // already either saved or discarded by the caller before reaching here).
+    linkedRoomsCreatedFromCurrentRoom = [];
     // Reset complexity-warning state for the newly-loaded room so a density
     // warning already shown for a previous room doesn't suppress a fresh
     // warning here, and so this room doesn't inherit a stale check flag.
@@ -1686,7 +1750,8 @@ export function createEditorController(
       onSaveAndExportCampaign: () => saveAndExportCampaign(),
       onWorldMapDataChanged: () => { isWorldMapDirty = true; },
       onRoomCreated: handleRoomCreatedFromVisualMap,
-      onRoomTransitionLinked: handleRoomTransitionLinkedFromVisualMap,
+      requestCreateLinkedRoom: requestCreateLinkedRoomFromVisualMap,
+      requestLinkTransition: requestLinkTransitionFromVisualMap,
     });
   }
 

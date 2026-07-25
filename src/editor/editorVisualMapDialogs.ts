@@ -15,7 +15,6 @@ import {
   setRoomNameOverride,
   setRoomWorldOverride,
   setRoomMapPosition,
-  setRoomTransitionLink,
   setWorldName,
   setWorldOrder,
 } from '../levels/rooms';
@@ -29,7 +28,6 @@ import {
   getOppositeDirection,
   getAdjacentRoomMapPosition,
 } from './editorVisualMapHelpers';
-import { computeSpawnBlockForMapLink } from './editorVisualMapLinkPrompt';
 
 // ── Shared constants ──────────────────────────────────────────────────────────
 
@@ -659,6 +657,10 @@ export function showCreateLinkedRoomDialog(
       longTransition: sourceTrans.longTransition,
     };
 
+    // Built but NOT YET registered — createLinkedRoomTransaction validates
+    // every prerequisite (source room/transition still valid, id still free)
+    // before touching ROOM_REGISTRY, so nothing is mutated until persistence
+    // is guaranteed to succeed too.
     const newRoomDef = roomJsonDefToRoomDef({
       id,
       name,
@@ -672,29 +674,26 @@ export function showCreateLinkedRoomDialog(
       skillTombs: [],
     });
 
-    registerRoom(newRoomDef);
-    setRoomNameOverride(id, name);
-    setRoomWorldOverride(id, worldId);
-
     const idealPos = getAdjacentRoomMapPosition(sourceRoomId, sourceTrans.direction, w, h)
       ?? { mapX: 0, mapY: 0 };
     const placed = findNearestNonOverlappingRoomPlacement(idealPos, ctx.placements, w, h);
-    ctx.placements.set(id, { room: newRoomDef, mapXWorld: placed.mapX, mapYWorld: placed.mapY });
-    setRoomMapPosition(id, placed.mapX, placed.mapY);
 
-    // Link the two transitions together (mirrors applyPendingDoorLink).
-    const sourceSpawn = computeSpawnBlockForMapLink(sourceRoom, sourceTrans);
-    const targetSpawn = computeSpawnBlockForMapLink(newRoomDef, newRoomDef.transitions[0]);
-    setRoomTransitionLink(sourceRoomId, sourceTransIndex, id, targetSpawn);
-    setRoomTransitionLink(id, 0, sourceRoomId, sourceSpawn);
+    const result = ctx.callbacks.requestCreateLinkedRoom?.({
+      sourceRoomId,
+      sourceTransIndex,
+      newRoomDef,
+      newRoomName: name,
+      newRoomWorldId: worldId,
+      mapX: placed.mapX,
+      mapY: placed.mapY,
+    }) ?? { ok: false, reason: 'No linked-room-creation handler wired up.' };
 
-    // newRoomDef already reflects the reciprocal link above (setRoomTransitionLink
-    // mutates the RoomDef instance stored in ROOM_REGISTRY in place), so persisting
-    // it now captures the fully-linked room in one shot.
-    ctx.callbacks.onRoomCreated?.(newRoomDef);
-    // The source room already existed and must be synchronized separately —
-    // it is not covered by onRoomCreated.
-    ctx.callbacks.onRoomTransitionLinked?.(sourceRoomId, sourceTransIndex, id, targetSpawn);
+    if (!result.ok) {
+      errEl.textContent = result.reason;
+      return;
+    }
+
+    ctx.placements.set(id, { room: result.newRoomDef, mapXWorld: placed.mapX, mapYWorld: placed.mapY });
     ctx.callbacks.onWorldMapDataChanged?.();
     ctx.setSelectedRoomId(id);
     modal.destroy();

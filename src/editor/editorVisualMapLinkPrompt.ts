@@ -12,10 +12,11 @@
  * the VisualMapLinkContext interface.
  */
 
-import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
-import { ROOM_REGISTRY, setRoomTransitionLink } from '../levels/rooms';
+import { ROOM_REGISTRY } from '../levels/rooms';
 import { effectiveRoomName } from './editorVisualMapHelpers';
+import type { LinkTransitionResult } from './visualMapRoomPersistenceCoordinator';
 import { validateTransitionLink, transitionLinkWarningMessage } from './transitionValidation';
+export { computeSpawnBlockForMapLink } from './transitionSpawnMath';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -58,9 +59,14 @@ export interface VisualMapLinkContext {
   readonly render: () => void;
   /** Called when a successful link mutates room data. */
   readonly onWorldMapDataChanged: (() => void) | undefined;
-  /** Called once per side of a successful link so each existing room can be persisted. */
-  readonly onRoomTransitionLinked:
-    | ((roomId: string, transitionIndex: number, targetRoomId: string, targetSpawnBlock: readonly [number, number]) => void)
+  /**
+   * Atomically links both sides and persists them — see
+   * `linkTransitionTransaction` in visualMapRoomPersistenceCoordinator.ts.
+   * Owned by the controller, which supplies the campaign session / pending
+   * edits / current room as transaction inputs.
+   */
+  readonly requestLinkTransition:
+    | ((input: { sourceRoomId: string; sourceTransIndex: number; targetRoomId: string; targetTransIndex: number }) => LinkTransitionResult)
     | undefined;
   getPendingLink(): PendingDoorLink | null;
   setPendingLink(link: PendingDoorLink | null): void;
@@ -70,40 +76,17 @@ export interface VisualMapLinkContext {
   clearLinkSource(): void;
 }
 
-// ── Pure helpers ──────────────────────────────────────────────────────────────
-
-/**
- * Returns the [xBlock, yBlock] spawn position for a player entering a room
- * through the given transition, inset from the door edge.
- * Uses xBlock/yBlock if available, otherwise falls back to positionBlock.
- */
-export function computeSpawnBlockForMapLink(
-  room: RoomDef,
-  transition: RoomTransitionDef,
-): readonly [number, number] {
-  const SPAWN_INSET_BLOCKS = 3;
-  // For left/right: opening runs along Y axis → center Y = yBlock + half opening.
-  // For up/down:   opening runs along X axis → center X = xBlock + half opening.
-  const openingCenterY = (transition.yBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
-  const openingCenterX = (transition.xBlock ?? transition.positionBlock) + Math.floor(transition.openingSizeBlocks / 2);
-
-  if (transition.direction === 'left') {
-    return [SPAWN_INSET_BLOCKS, openingCenterY];
-  }
-  if (transition.direction === 'right') {
-    return [room.widthBlocks - SPAWN_INSET_BLOCKS - 1, openingCenterY];
-  }
-  if (transition.direction === 'up') {
-    return [openingCenterX, SPAWN_INSET_BLOCKS];
-  }
-  return [openingCenterX, room.heightBlocks - SPAWN_INSET_BLOCKS - 1];
-}
-
 // ── Link persistence ──────────────────────────────────────────────────────────
 
 /**
- * Persists a confirmed door-link pair into the room registry, updating both
- * directions.  Updates the status bar with the result.
+ * Persists a confirmed door-link pair, updating both directions atomically
+ * via `requestLinkTransition` (backed by `linkTransitionTransaction` — see
+ * visualMapRoomPersistenceCoordinator.ts): the registry is only left mutated
+ * once persistence for BOTH sides has succeeded; on any failure the
+ * coordinator rolls every mutation back before this function sees the
+ * result, so neither the registry nor persisted storage is ever left
+ * half-linked. Updates the status bar (or shows a warning popup) with the
+ * result.
  */
 export function applyPendingDoorLink(link: PendingDoorLink, ctx: VisualMapLinkContext): void {
   const sourceRoom = ROOM_REGISTRY.get(link.sourceRoomId);
@@ -112,30 +95,26 @@ export function applyPendingDoorLink(link: PendingDoorLink, ctx: VisualMapLinkCo
   const targetTransition = targetRoom?.transitions[link.targetTransIndex];
   if (!sourceRoom || !targetRoom || !sourceTransition || !targetTransition) return;
 
-  const sourceSpawn = computeSpawnBlockForMapLink(sourceRoom, sourceTransition);
-  const targetSpawn = computeSpawnBlockForMapLink(targetRoom, targetTransition);
-  const didLinkSource = setRoomTransitionLink(
-    link.sourceRoomId,
-    link.sourceTransIndex,
-    link.targetRoomId,
-    targetSpawn,
-  );
-  const didLinkTarget = setRoomTransitionLink(
-    link.targetRoomId,
-    link.targetTransIndex,
-    link.sourceRoomId,
-    sourceSpawn,
-  );
+  const result: LinkTransitionResult = ctx.requestLinkTransition?.({
+    sourceRoomId: link.sourceRoomId,
+    sourceTransIndex: link.sourceTransIndex,
+    targetRoomId: link.targetRoomId,
+    targetTransIndex: link.targetTransIndex,
+  }) ?? { ok: false, reason: 'No link-transaction handler wired up.' };
 
-  if (didLinkSource && didLinkTarget) {
-    ctx.onRoomTransitionLinked?.(link.sourceRoomId, link.sourceTransIndex, link.targetRoomId, targetSpawn);
-    ctx.onRoomTransitionLinked?.(link.targetRoomId, link.targetTransIndex, link.sourceRoomId, sourceSpawn);
+  if (result.ok) {
     ctx.onWorldMapDataChanged?.();
     ctx.statusBar.textContent =
       `Linked: ${effectiveRoomName(link.sourceRoomId)} door #${link.sourceTransIndex + 1}` +
       ` <-> ${effectiveRoomName(link.targetRoomId)} door #${link.targetTransIndex + 1}`;
     ctx.statusBar.style.color = '#88ff88';
+    return;
   }
+
+  console.error(`[editor] applyPendingDoorLink failed: ${result.reason}`);
+  ctx.statusBar.textContent = `Could not link doors: ${result.reason}`;
+  ctx.statusBar.style.color = '#ff9933';
+  showLinkWarningPopup(ctx, `Could not link doors: ${result.reason}`);
 }
 
 // ── Prompt lifecycle ──────────────────────────────────────────────────────────

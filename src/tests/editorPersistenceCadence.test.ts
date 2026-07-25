@@ -197,18 +197,22 @@ test('controller persistence is routed through the store-aware production bounda
   const source = readControllerSource();
   const directCommits = source.match(/campaignStore\.commitRoom\(/g) ?? [];
   assert.equal(directCommits.length, 0, 'controller must not bypass the persistence boundary');
-  // Two call sites each, as of the visual-map room-persistence fix:
-  //   - commitActiveRoomToCampaign(): the currently-open room's save boundary.
-  //   - handleRoomTransitionLinkedFromVisualMap(): syncing an existing,
-  //     not-currently-open room whose transition was relinked via the visual
-  //     map (door-link, or the source side of "Create Linked Room").
-  // and:
-  //   - the in-room connected-room-creation flow (unchanged).
-  //   - handleRoomCreatedFromVisualMap(): the visual map's "+ Add Room" and
-  //     "Create Linked Room" new-room paths.
+  // As of the visual-map room-persistence atomicity hardening (build 521),
+  // the visual map's own room-creation/transition-linking mutations no
+  // longer call these directly from editorController.ts — they were moved
+  // into the atomic, DOM-free transactions in
+  // visualMapRoomPersistenceCoordinator.ts (createLinkedRoomTransaction /
+  // linkTransitionTransaction), which the controller's thin
+  // requestCreateLinkedRoomFromVisualMap / requestLinkTransitionFromVisualMap
+  // notifiers call into. The remaining call sites in editorController.ts are:
+  //   - persistSavedCampaignRoom: commitActiveRoomToCampaign() — the
+  //     currently-open room's save boundary.
+  //   - persistCreatedCampaignRoom: handleRoomCreatedFromVisualMap() (the
+  //     visual map's "+ Add Room" single-room path) and the in-room
+  //     connected-room-creation flow (unchanged).
   // Both still route exclusively through the store-aware persistence
   // boundary functions, never campaignStore.commitRoom() directly.
-  assert.equal((source.match(/persistSavedCampaignRoom\(/g) ?? []).length, 2);
+  assert.equal((source.match(/persistSavedCampaignRoom\(/g) ?? []).length, 1);
   assert.equal((source.match(/persistCreatedCampaignRoom\(/g) ?? []).length, 2);
 });
 

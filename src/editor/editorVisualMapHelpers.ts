@@ -13,6 +13,10 @@ import {
   ROOM_NAME_OVERRIDES,
   ROOM_WORLD_OVERRIDES,
 } from '../levels/rooms';
+import type {
+  CreateLinkedRoomInput, CreateLinkedRoomResult,
+  LinkTransitionInput, LinkTransitionResult,
+} from './visualMapRoomPersistenceCoordinator';
 
 export interface MapRoomPlacement {
   room: RoomDef;
@@ -30,26 +34,33 @@ export interface VisualMapCallbacks {
   /** Called whenever world-map metadata is mutated (rename, move, add room/world, door link). */
   onWorldMapDataChanged?: () => void;
   /**
-   * Called when a brand-new room was registered and placed by the visual map
-   * (header "+ Add Room", or double-click-unlinked-door "Create Linked Room").
-   * The RoomDef reflects final state (including any reciprocal transition
-   * link already applied) and must be persisted as a newly created room.
+   * Called when a brand-new, standalone room (no reciprocal link) was
+   * registered and placed by the visual map's "+ Add Room" header button.
+   * Must be persisted as a newly created room.
    */
   onRoomCreated?: (roomDef: RoomDef) => void;
   /**
-   * Called when an existing (already-persisted) room's transition target was
-   * mutated by the visual map — either as the reciprocal side of a newly
-   * created linked room, or as one side of linking two existing doors.
-   * Must be synchronized into persisted storage (or into the currently open
-   * room's state if that room is the one affected) without discarding any
-   * other unsaved content.
+   * Atomically registers, links, and persists a brand-new room reciprocally
+   * linked to an existing transition (double-click-unlinked-door "Create
+   * Linked Room"). Owned by the controller so it can supply the current
+   * campaign session / pending edits / in-memory current room as inputs to
+   * `createLinkedRoomTransaction`. Only returns `ok: true` once BOTH the
+   * registry mutation and persistence have succeeded; on failure every
+   * mutation has already been rolled back by the coordinator.
    */
-  onRoomTransitionLinked?: (
-    roomId: string,
-    transitionIndex: number,
-    targetRoomId: string,
-    targetSpawnBlock: readonly [number, number],
-  ) => void;
+  requestCreateLinkedRoom?: (
+    input: Omit<CreateLinkedRoomInput, 'registry' | 'session' | 'pendingRoomEdits' | 'currentRoomData' | 'nextUid'>,
+  ) => CreateLinkedRoomResult;
+  /**
+   * Atomically links two existing doors and persists both sides. Owned by
+   * the controller for the same reason as `requestCreateLinkedRoom`. Only
+   * returns `ok: true` once both registry mutation and persistence for both
+   * rooms have succeeded; on failure every mutation has already been rolled
+   * back by the coordinator.
+   */
+  requestLinkTransition?: (
+    input: Omit<LinkTransitionInput, 'registry' | 'session' | 'pendingRoomEdits' | 'currentRoomData' | 'nextUid'>,
+  ) => LinkTransitionResult;
 }
 
 // ── Room name / world lookup helpers ─────────────────────────────────────────

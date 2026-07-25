@@ -160,12 +160,15 @@ test('official editor wiring preserves a connected room across playtest, reopen,
 });
 
 test('visual-map room creation and door-linking persist through the store-aware boundary', async () => {
-  // Simulates the controller-side persistence boundary
-  // (handleRoomCreatedFromVisualMap / handleRoomTransitionLinkedFromVisualMap
-  // in editorController.ts) that the visual-map dialogs
-  // (editorVisualMapDialogs.ts, editorVisualMapLinkPrompt.ts) now notify via
-  // VisualMapCallbacks.onRoomCreated / onRoomTransitionLinked. This is a
-  // Node-safe reproduction of the full data flow without any DOM.
+  // Simulates the store-aware persistence boundary that
+  // createLinkedRoomTransaction / linkTransitionTransaction
+  // (visualMapRoomPersistenceCoordinator.ts) drive via
+  // persistCreatedCampaignRoom / persistSavedCampaignRoom. The coordinator
+  // itself (validate-before-mutate, rollback-on-failure, atomicity) is
+  // exercised directly with real production logic in
+  // visualMapRoomPersistenceCoordinator.test.ts; this is a Node-safe
+  // reproduction of the end-to-end data flow (registry mutation shape +
+  // persistence + export) without any DOM.
   const start = editorRoom('vm_start');
   start.transitions.push({
     uid: 20, direction: 'right', xBlock: 27, yBlock: 8, openingSizeBlocks: 3,
@@ -298,18 +301,29 @@ test('visual-map room creation and door-linking persist through the store-aware 
   assert.ok(packed.worldMap.rooms.some(r => r.id === 'vm_linked'));
 });
 
-test('regression: linking an unlinked transition on the CURRENTLY OPEN room stays dirty-in-memory until an explicit save boundary, then persists both reciprocal links through Save / room-switch-with-save / Save & Test / export, and Discard rolls back only the source-room half', async () => {
+test('regression: linking an unlinked transition on the CURRENTLY OPEN room stays dirty-in-memory until an explicit save boundary, then persists both reciprocal links through Save / room-switch-with-save / Save & Test / export; low-level store primitives for the pre-discard-cleanup state', async () => {
   // Reproduces the exact reported bug path: the room whose transition is
   // being linked from the visual map is the SAME room currently open for
   // editing in the room editor (state.roomData), not some other room.
   //
-  // This mirrors handleRoomTransitionLinkedFromVisualMap's current-room
-  // branch in editorController.ts: the mutation is applied directly to the
-  // live EditorRoomData object and the store is told markRoomDirty (never
-  // commitRoom) — respecting the persistence-cadence rule that ordinary
-  // active-room mutations stay in memory until Save / Save & Test / export /
-  // room-switch-with-save explicitly flushes them (see
-  // editorPersistenceCadence.test.ts).
+  // This mirrors createLinkedRoomTransaction's current-room branch
+  // (visualMapRoomPersistenceCoordinator.ts, called from
+  // editorController.ts's requestCreateLinkedRoomFromVisualMap): the
+  // mutation is applied directly to the live EditorRoomData object and the
+  // store is told markRoomDirty (never commitRoom) — respecting the
+  // persistence-cadence rule that ordinary active-room mutations stay in
+  // memory until Save / Save & Test / export / room-switch-with-save
+  // explicitly flushes them (see editorPersistenceCadence.test.ts).
+  //
+  // NOTE: this test exercises the raw store primitives only, UP TO the
+  // moment of Cancel/Discard. As of build 521, discarding no longer leaves
+  // the target room with a dangling one-way link — the source room's
+  // discard is immediately followed by
+  // discardLinkedRoomTargetsForCurrentSession(), which clears the target
+  // room's reciprocal transition via clearTargetRoomTransitionOnDiscard.
+  // That full discard-cleanup behavior (target room kept, unlinked, not
+  // orphaned) is covered directly against real coordinator logic in
+  // visualMapRoomPersistenceCoordinator.test.ts.
   const src = editorRoom('src_room');
   src.transitions.push({
     uid: 50, direction: 'right', xBlock: 27, yBlock: 8, openingSizeBlocks: 3,
@@ -451,15 +465,17 @@ test('regression: linking an unlinked transition on the CURRENTLY OPEN room stay
   );
   assert.equal(discardStore.dirtyRoomIds.has('src_room'), false);
 
-  // DECISION (documented in editorController.ts on
-  // handleRoomTransitionLinkedFromVisualMap): the already-persisted target
-  // room is NOT rolled back. It remains a fully valid, registered room with
-  // a payload — its own transition still points back at src_room (a
-  // one-way link, since src_room's link was discarded) — never a dangling
-  // world-map reference or a half-written file. Export must still succeed
-  // with no world-map/payload mismatch.
+  // At the raw-store-primitive level exercised by this test (i.e. BEFORE
+  // discardLinkedRoomTargetsForCurrentSession runs — see the note at the top
+  // of this test), the already-persisted target room is not touched by
+  // discarding the source room alone: it remains a fully valid, registered
+  // room with a payload — its own transition still points back at src_room.
+  // As of build 521, the real discard flow immediately follows this with
+  // clearTargetRoomTransitionOnDiscard so the one-way link never survives a
+  // real Cancel — see visualMapRoomPersistenceCoordinator.test.ts's
+  // "Discard keeps the target room but clears both directions" case.
   assert.ok(discardStore.rawRoomsById.get('target_room')?.transitions?.some(t => t.to === 'src_room'),
-    'the target room keeps its one-way link back to src_room — orphaned, not rolled back');
+    'without the discard-cleanup step, the target room keeps its one-way link back to src_room');
 
   const discardRegistry = new Map([
     ['src_room', { id: 'src_room', name: 'src_room', worldNumber: 1, mapX: 0, mapY: 0 }],
