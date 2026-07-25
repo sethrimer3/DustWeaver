@@ -647,6 +647,14 @@ export interface RoomDef {
    */
   backgroundId?: BackgroundId;
   /**
+   * When `true`, render the blurred (`_Blur`/`_Blur_Dark`) variant of the
+   * selected background instead of the sharp original. Omitted (not `false`)
+   * when unset, for backward compatibility with rooms saved before this
+   * field existed. Ignored when the selected background has no discovered
+   * blur asset.
+   */
+  backgroundBlur?: true;
+  /**
    * Block lighting model. Falls back to 'Ambient' (omni) when not set.
    * Legacy 'DEFAULT' and 'Above' values are accepted and migrated internally.
    */

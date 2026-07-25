@@ -22,18 +22,20 @@ export interface EditorBackgroundOption {
   readonly label: string;
   readonly previewUrl: string | null;
   readonly imageUrl: string | null;
+  /** URL of the `_Blur`/`_Blur_Dark` asset variant, if one was discovered. `null` when no blur variant exists (e.g. procedural backgrounds). */
+  readonly blurUrl: string | null;
   readonly isProcedural?: boolean;
 }
 
 const PROCEDURAL_BACKGROUND_OPTIONS: readonly EditorBackgroundOption[] = [
-  { id: 'crystallineCracks', label: 'Crystalline Cracks', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_prologue', label: 'Thero Prologue (Shape Glow)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch1', label: 'Thero Chapter 1 (Vermiculate)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch2', label: 'Thero Chapter 2 (Gravity Grid)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch3', label: 'Thero Chapter 3 (Euler Fluid)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch4', label: 'Thero Chapter 4 (Floater Lattice)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch5', label: 'Thero Chapter 5 (Tetris Blocks)', previewUrl: null, imageUrl: null, isProcedural: true },
-  { id: 'thero_ch6', label: 'Thero Chapter 6 (Substrate)', previewUrl: null, imageUrl: null, isProcedural: true },
+  { id: 'crystallineCracks', label: 'Crystalline Cracks', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_prologue', label: 'Thero Prologue (Shape Glow)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch1', label: 'Thero Chapter 1 (Vermiculate)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch2', label: 'Thero Chapter 2 (Gravity Grid)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch3', label: 'Thero Chapter 3 (Euler Fluid)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch4', label: 'Thero Chapter 4 (Floater Lattice)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch5', label: 'Thero Chapter 5 (Tetris Blocks)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
+  { id: 'thero_ch6', label: 'Thero Chapter 6 (Substrate)', previewUrl: null, imageUrl: null, blurUrl: null, isProcedural: true },
 ];
 
 const LEGACY_BACKGROUND_URLS: Readonly<Record<string, string>> = {
@@ -57,7 +59,7 @@ function publicUrl(fullPath: string): string {
 }
 
 function buildStaticBackgroundOptions(): EditorBackgroundOption[] {
-  const byFolder = new Map<string, { imageUrl: string | null; previewUrl: string | null }>();
+  const byFolder = new Map<string, { imageUrl: string | null; previewUrl: string | null; blurUrl: string | null }>();
   const depthOneRe = /^\/ASSETS\/SPRITES\/BACKGROUNDS\/([^/]+)\/([^/]+)$/;
 
   for (const fullPath of Object.keys(BACKGROUND_GLOB)) {
@@ -67,14 +69,19 @@ function buildStaticBackgroundOptions(): EditorBackgroundOption[] {
     const filename = match[2];
     if (folder === 'OLD') continue;
 
-    const entry = byFolder.get(folder) ?? { imageUrl: null, previewUrl: null };
+    const entry = byFolder.get(folder) ?? { imageUrl: null, previewUrl: null, blurUrl: null };
     const url = publicUrl(fullPath);
+    const isBlurDark = /_Blur_Dark\.(png|webp|jpe?g)$/i.test(filename);
     const isBlur = /_Blur(?:_Dark)?\.(png|webp|jpe?g)$/i.test(filename);
     const isPrimary = new RegExp(`^${folder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.(png|webp|jpe?g)$`, 'i').test(filename);
 
     if (isPrimary) entry.imageUrl = url;
     if (isBlur && entry.previewUrl === null) entry.previewUrl = url;
     if (entry.previewUrl === null) entry.previewUrl = url;
+    // Prefer the plain `_Blur` variant over `_Blur_Dark` when both exist, but
+    // accept either — a folder with only `_Blur_Dark` still counts as having
+    // a usable blur asset.
+    if (isBlur && (entry.blurUrl === null || !isBlurDark)) entry.blurUrl = url;
     byFolder.set(folder, entry);
   }
 
@@ -85,6 +92,7 @@ function buildStaticBackgroundOptions(): EditorBackgroundOption[] {
       label: folderToLabel(folder),
       imageUrl: entry.imageUrl,
       previewUrl: entry.previewUrl ?? entry.imageUrl,
+      blurUrl: entry.blurUrl,
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -100,8 +108,17 @@ const BACKGROUND_IMAGE_URLS = new Map<string, string | null>(
   BACKGROUND_OPTIONS.map(option => [option.id, option.imageUrl]),
 );
 
+const BACKGROUND_BLUR_URLS = new Map<string, string | null>(
+  BACKGROUND_OPTIONS.map(option => [option.id, option.blurUrl]),
+);
+
 export function backgroundIdToImageUrl(id: BackgroundId): string | null {
   const discovered = BACKGROUND_IMAGE_URLS.get(id);
   if (discovered !== undefined) return discovered;
   return LEGACY_BACKGROUND_URLS[id] ?? null;
+}
+
+/** Returns the discovered `_Blur`/`_Blur_Dark` asset URL for a background, or `null` if none exists (legacy and procedural backgrounds never have one). */
+export function backgroundIdToBlurUrl(id: BackgroundId): string | null {
+  return BACKGROUND_BLUR_URLS.get(id) ?? null;
 }

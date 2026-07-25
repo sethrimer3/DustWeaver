@@ -205,17 +205,22 @@ export function applyEdgeResize(
   roomData: EditorRoomData,
   history: EditorHistory,
   edge: RoomEdge,
-  delta: 1 | -1,
+  delta: -5 | -1 | 1 | 5,
 ): void {
   const room = roomData;
 
   const isHorizontal = edge === 'left' || edge === 'right';
   const prop = isHorizontal ? 'widthBlocks' : 'heightBlocks';
   const currentSize = room[prop];
-  const newSize = currentSize + delta;
+  // Clamp the requested delta so the room never drops below the minimum
+  // size of 10, even for the ±5 bulk operation. This still applies as a
+  // single atomic step (one undo entry, one shift), just with a smaller
+  // effective delta near the floor.
+  const clampedDelta = currentSize + delta < 10 ? 10 - currentSize : delta;
+  const newSize = currentSize + clampedDelta;
 
-  // Enforce minimum room size of 10
-  if (newSize < 10) return;
+  // Enforce minimum room size of 10 (also covers the delta === 0 case)
+  if (newSize < 10 || clampedDelta === 0) return;
   const pending = capturePendingSnapshot(roomData, undefined, undefined, false, 'Room resize');
 
   room[prop] = newSize;
@@ -225,8 +230,8 @@ export function applyEdgeResize(
   // When adding/removing from top or left, we need to shift all content
   const needsShift = edge === 'top' || edge === 'left';
   if (needsShift) {
-    const shiftX = edge === 'left' ? delta : 0;
-    const shiftY = edge === 'top' ? delta : 0;
+    const shiftX = edge === 'left' ? clampedDelta : 0;
+    const shiftY = edge === 'top' ? clampedDelta : 0;
 
     // Shift player spawn
     room.playerSpawnBlock[0] += shiftX;

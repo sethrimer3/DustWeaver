@@ -442,6 +442,8 @@ export interface RoomJsonDef {
   soundHardness?: BlockSoundHardness;
   /** Background visual ID. Falls back to worldNumber if not set. */
   backgroundId?: BackgroundId;
+  /** When true, render the blurred variant of the background. Omitted when false. */
+  backgroundBlur?: true;
   /**
    * Lighting model. Falls back to `'Ambient'` when not set.
    * Legacy `'DEFAULT'` and `'Above'` values are accepted and treated as

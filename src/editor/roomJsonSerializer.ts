@@ -179,6 +179,9 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
     json.blockThemeId = blockThemeToId(data.blockTheme);
   }
   if (data.backgroundId) json.backgroundId = data.backgroundId;
+  // Omit entirely when false/unset — only serialize when explicitly true, for
+  // backward compatibility with saved rooms that predate this field.
+  if (data.backgroundBlur === true) json.backgroundBlur = true;
   if (data.lightingEffect) json.lightingEffect = data.lightingEffect;
   // Only write songId when it differs from the default ('_continue')
   if (data.songId !== '_continue') json.songId = data.songId;

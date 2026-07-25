@@ -609,6 +609,8 @@ export interface EditorRoomData {
   blockTheme: BlockTheme;
   /** Background visual for this room. */
   backgroundId: BackgroundId;
+  /** When true, render the blurred variant of the selected background. Omitted when false. */
+  backgroundBlur?: true;
   /** Lighting model for this room. */
   lightingEffect: LightingEffect;
   /**

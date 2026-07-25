@@ -413,6 +413,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
   if (json.mapX !== undefined || json.mapY !== undefined) out.map = [json.mapX ?? 0, json.mapY ?? 0];
   out.theme = blockThemeToId(defaultTheme);
   if (json.backgroundId)   out.bg = json.backgroundId;
+  if (json.backgroundBlur === true) out.bgBlur = true;
   if (json.lightingEffect) out.light = json.lightingEffect;
   if (json.songId && json.songId !== '_continue') out.song = json.songId;
   if (specialWalls.length > 0) out.specialWalls = specialWalls;

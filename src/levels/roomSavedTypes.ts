@@ -258,6 +258,8 @@ export interface SavedRoomV2 {
   map?: [number, number];
   theme?: BlockThemeId | BlockTheme;
   bg?: BackgroundId;
+  /** When true, render the blurred variant of `bg`. Omitted when false. */
+  bgBlur?: true;
   light?: LightingEffect;
   song?: string;
   /** [widthBlocks, heightBlocks] */

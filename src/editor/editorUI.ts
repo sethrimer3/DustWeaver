@@ -299,10 +299,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     lbl.style.cssText = `min-width: 50px; font-size: 11px; color: rgba(200,255,200,0.7);`;
     row.appendChild(lbl);
 
+    const addBigBtn = makeEdgeBtn('+5', () => callbacks?.onEdgeResize(edge, 5));
     const addBtn = makeEdgeBtn('+', () => callbacks?.onEdgeResize(edge, 1));
     const removeBtn = makeEdgeBtn('−', () => callbacks?.onEdgeResize(edge, -1));
+    const removeBigBtn = makeEdgeBtn('−5', () => callbacks?.onEdgeResize(edge, -5));
+    row.appendChild(addBigBtn);
     row.appendChild(addBtn);
     row.appendChild(removeBtn);
+    row.appendChild(removeBigBtn);
     edgeResizeDiv.appendChild(row);
   }
   roomDimDiv.appendChild(edgeResizeDiv);
@@ -465,6 +469,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   bgDiv.appendChild(bgCurrentBtn);
   bgDiv.appendChild(bgPickerPanel);
+
+  const bgBlurLabel = document.createElement('label');
+  bgBlurLabel.style.cssText = `
+    display: flex; align-items: center; gap: 6px; margin-top: 6px;
+    font-size: 11px; color: rgba(200,255,200,0.8); cursor: pointer;
+  `;
+  const bgBlurCheckbox = document.createElement('input');
+  bgBlurCheckbox.type = 'checkbox';
+  bgBlurCheckbox.addEventListener('change', () => {
+    callbacks?.onBackgroundBlurChange(bgBlurCheckbox.checked);
+  });
+  bgBlurLabel.appendChild(bgBlurCheckbox);
+  bgBlurLabel.appendChild(document.createTextNode('Use blurred version'));
+  bgDiv.appendChild(bgBlurLabel);
+
   container.appendChild(bgDiv);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
@@ -794,6 +813,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
         btn.style.boxShadow = isSelected ? `0 0 0 1px ${GREEN} inset` : 'none';
       }
+    }
+    {
+      const hasBlurAsset = findBackgroundOption(currentBgId)?.blurUrl != null;
+      bgBlurCheckbox.disabled = !hasBlurAsset;
+      const desiredChecked = hasBlurAsset && state.roomData?.backgroundBlur === true;
+      if (bgBlurCheckbox.checked !== desiredChecked) bgBlurCheckbox.checked = desiredChecked;
     }
 
     // Update song dropdown

@@ -11,7 +11,7 @@
 
 import type { BackgroundId } from '../levels/roomDef';
 import { loadImg, isSpriteReady, isSpriteDecodeReady, decodeImg, hasImageFailed } from './imageCache';
-import { backgroundIdToImageUrl } from './backgroundCatalogue';
+import { backgroundIdToImageUrl, backgroundIdToBlurUrl } from './backgroundCatalogue';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -33,7 +33,11 @@ function worldBgImagePath(worldNumber: number): string {
  * Returns the image path for a named BackgroundId, or null for procedural
  * backgrounds (e.g. crystallineCracks) that have no static image.
  */
-function backgroundIdToImagePath(id: BackgroundId): string | null {
+function backgroundIdToImagePath(id: BackgroundId, useBlur?: boolean): string | null {
+  if (useBlur) {
+    const blurUrl = backgroundIdToBlurUrl(id);
+    if (blurUrl !== null) return blurUrl;
+  }
   return backgroundIdToImageUrl(id);
 }
 
@@ -122,8 +126,8 @@ function wrapToTileStart(offset: number, tileSize: number): number {
  * with no static image URL).  Safe to call multiple times; decodeImg() is
  * idempotent for already-decoded URLs.
  */
-export function preloadBackgroundImageDecoded(id: BackgroundId): void {
-  const url = backgroundIdToImagePath(id);
+export function preloadBackgroundImageDecoded(id: BackgroundId, useBlur?: boolean): void {
+  const url = backgroundIdToImagePath(id, useBlur);
   if (url !== null) void decodeImg(url);
 }
 
@@ -138,10 +142,10 @@ export function preloadBackgroundImageDecoded(id: BackgroundId): void {
  *
  * Fire-and-forget.  Safe to call multiple times — decodeImg() is idempotent.
  */
-export function preloadRoomBackgroundDecoded(worldNumber: number, backgroundId?: BackgroundId): void {
+export function preloadRoomBackgroundDecoded(worldNumber: number, backgroundId?: BackgroundId, useBlur?: boolean): void {
   if (worldNumber === 99) return;
   const url = backgroundId != null
-    ? backgroundIdToImagePath(backgroundId)
+    ? backgroundIdToImagePath(backgroundId, useBlur)
     : worldBgImagePath(worldNumber);
   if (url !== null) void decodeImg(url);
 }
@@ -158,10 +162,10 @@ export function preloadRoomBackgroundDecoded(worldNumber: number, backgroundId?:
  * Use this alongside `areRoomSpritesReady()` in the loading-overlay tick so the
  * player is only unblocked once the background image is actually decoded.
  */
-export function isRoomBackgroundDecodeReady(worldNumber: number, backgroundId?: BackgroundId): boolean {
+export function isRoomBackgroundDecodeReady(worldNumber: number, backgroundId?: BackgroundId, useBlur?: boolean): boolean {
   if (worldNumber === 99) return true;
   const url = backgroundId != null
-    ? backgroundIdToImagePath(backgroundId)
+    ? backgroundIdToImagePath(backgroundId, useBlur)
     : worldBgImagePath(worldNumber);
   if (url === null) return true; // procedural background — no image needed
   const img = loadImg(url);
@@ -197,6 +201,7 @@ export function renderWorldBackground(
   roomHeightWorld: number,
   zoom: number,
   backgroundId?: BackgroundId,
+  useBlur?: boolean,
 ): void {
   _bgDrawReady = 0;
   _bgDrawNotReady = 0;
@@ -221,7 +226,7 @@ export function renderWorldBackground(
 
   // Determine the image URL to use
   const imgUrl = backgroundId != null
-    ? backgroundIdToImagePath(backgroundId)
+    ? backgroundIdToImagePath(backgroundId, useBlur)
     : worldBgImagePath(worldNumber);
 
   if (imgUrl === null) {

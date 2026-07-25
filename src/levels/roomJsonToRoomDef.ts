@@ -241,6 +241,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   if (roomBlockTheme) room.blockTheme = roomBlockTheme;
   if (json.soundHardness) room.soundHardness = json.soundHardness;
   if (json.backgroundId) room.backgroundId = json.backgroundId;
+  if (json.backgroundBlur === true) room.backgroundBlur = true;
   if (json.lightingEffect) room.lightingEffect = json.lightingEffect;
   const resolvedSongId = parseRoomJsonSongId(json);
   if (resolvedSongId !== '_continue') room.songId = resolvedSongId;

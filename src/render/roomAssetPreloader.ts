@@ -223,7 +223,7 @@ export async function decodeRoomThemeSprites(room: RoomDef): Promise<void> {
  * Safe to call multiple times; preloadRoomBackgroundDecoded() is idempotent.
  */
 export function decodeRoomBackground(room: RoomDef): void {
-  preloadRoomBackgroundDecoded(room.worldNumber ?? 0, room.backgroundId);
+  preloadRoomBackgroundDecoded(room.worldNumber ?? 0, room.backgroundId, room.backgroundBlur === true);
 }
 
 /**
@@ -238,5 +238,5 @@ export function decodeRoomBackground(room: RoomDef): void {
  * background image are decode-ready.
  */
 export function isRoomBackgroundDecodeReady(room: RoomDef): boolean {
-  return _isBgDecodeReady(room.worldNumber ?? 0, room.backgroundId);
+  return _isBgDecodeReady(room.worldNumber ?? 0, room.backgroundId, room.backgroundBlur === true);
 }

@@ -32,6 +32,7 @@ Keep this file short and actionable. It is not a design document or changelog.
 - [ ] Add crumble/falling block palette entries if those block types become active editor items.
 - [ ] Investigate menu animation lag if still reproducible with current assets and renderer path.
 - [ ] Verify and polish ultra ice behavior: wall contact stops slip, touching ultra ice resets grapple, and zero-velocity stuck cases return control.
+- [ ] Editor UI redesign (deferred remainder): the full sidebar/collapsible-panel redesign requested for `src/editor/editorUI.ts` / `editorController.ts` was not completed this pass — only the background-blur option and the ±5 atomic room-resize buttons landed. Still needed: two independent 260px left/right sidebars with the specified content order, a reusable accessible collapsible-panel component (`<button>` header + chevron + `aria-expanded`/`aria-controls`, all-collapsed on first-ever open), in-memory session-persisted panel/sidebar-visibility state (survives editor close/reopen, not app restart), per-sidebar hide arrows with inward-pointing edge reveal tabs, and replacing the existing hardcoded left-260px pointer-exclusion hit check in `editorController.ts` with shared hit-test logic that accounts for both sidebars' visibility/width and their reveal tabs. Also remove the detached top-right map bar and replace it with the "Zone Map (M)" / "Itemized Map (N)" button row under Save and Export Campaign.
 
 ## Completed / superseded references
 

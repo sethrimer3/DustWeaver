@@ -632,6 +632,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       mapY: json.mapY ?? 0,
       blockTheme: resolveJsonBlockTheme(json.blockTheme, json.blockThemeId) ?? 'blackRock',
       backgroundId: json.backgroundId ?? 'brownRock',
+      backgroundBlur: json.backgroundBlur === true ? true : undefined,
       lightingEffect: json.lightingEffect ?? 'Ambient',
       ambientLightDirection: json.ambientLightDirection,
       directionalBias:       json.directionalBias,

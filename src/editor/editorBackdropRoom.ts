@@ -41,7 +41,7 @@ import type { EditorRoomData } from './editorElementTypes';
 export type EditorBackdropRoom = Pick<
   RoomDef,
   'id' | 'name' | 'worldNumber' | 'widthBlocks' | 'heightBlocks'
-  | 'backgroundId' | 'customBlockPlacements' | 'transitions'
+  | 'backgroundId' | 'backgroundBlur' | 'customBlockPlacements' | 'transitions'
 >;
 
 export interface EditorBackdropRoomCache {
@@ -69,6 +69,7 @@ export function buildEditorBackdropRoom(data: EditorRoomData): EditorBackdropRoo
     widthBlocks: data.widthBlocks,
     heightBlocks: data.heightBlocks,
     backgroundId: data.backgroundId,
+    backgroundBlur: data.backgroundBlur,
     customBlockPlacements: (data.customBlockPlacements ?? []).length > 0
       ? (data.customBlockPlacements ?? []).map(p =>
           [p.xBlock, p.yBlock, p.blockId, p.tileWidth, p.tileHeight] as [number, number, string, number, number],

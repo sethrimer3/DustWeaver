@@ -288,6 +288,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
     if (roomTheme) json.blockTheme = roomTheme;
   }
   if (saved.bg)    json.backgroundId = saved.bg;
+  if (saved.bgBlur === true) json.backgroundBlur = true;
   if (saved.light) json.lightingEffect = saved.light;
   if (saved.song)  json.songId = saved.song;
   if (dustSkillTombs && dustSkillTombs.length > 0) json.dustSkillTombs = dustSkillTombs;

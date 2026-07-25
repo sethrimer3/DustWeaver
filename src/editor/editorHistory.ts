@@ -121,6 +121,7 @@ export type ElementCollectionKey = typeof COLLECTIONS[number];
 
 const ROOM_FIELDS = [
   'id', 'name', 'worldNumber', 'mapX', 'mapY', 'blockTheme', 'backgroundId',
+  'backgroundBlur',
   'lightingEffect', 'ambientLightDirection', 'directionalBias',
   'sideExposureStrength', 'minimumWallLight', 'falloffPower',
   'backgroundLightSpill', 'solidLightSoftness', 'blockSeamBlending',

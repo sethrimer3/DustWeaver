@@ -335,7 +335,7 @@ export interface EditorUICallbacks {
   onPropertyChange: (prop: string, value: string | number) => void;
   onRoomDimensionsChange: (prop: 'widthBlocks' | 'heightBlocks', value: number) => void;
   /** Add or remove one row/column from the given edge. delta is +1 (add) or -1 (remove). */
-  onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => void;
+  onEdgeResize: (edge: RoomEdge, delta: -5 | -1 | 1 | 5) => void;
   onBlockThemeChange: (theme: BlockTheme) => void;
   /** Called when the user clicks a theme slot's body — activates that slot. */
   onBlockThemeSlotActivate: (slotIndex: number) => void;
@@ -358,6 +358,7 @@ export interface EditorUICallbacks {
   onSeamBlendingChange: (mode: BlockSeamBlending) => void;
   onVoidEdgeStyleChange: (style: VoidEdgeStyle) => void;
   onBackgroundChange: (backgroundId: BackgroundId) => void;
+  onBackgroundBlurChange: (useBlur: boolean) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
   onSave: () => void;
   onConfirm: () => void;

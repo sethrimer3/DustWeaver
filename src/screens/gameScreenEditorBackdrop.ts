@@ -96,6 +96,7 @@ export function renderEditorBackdrop(
       currentRoom.heightBlocks * BLOCK_SIZE_SMALL,
       zoom,
       currentRoom.backgroundId,
+      currentRoom.backgroundBlur === true,
     );
     if (isTheroShowcaseRoom(currentRoom.id)) {
       renderTheroShowcaseEffect(ctx, currentRoom.id, virtualWidthPx, virtualHeightPx, performance.now());

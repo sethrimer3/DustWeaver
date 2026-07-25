@@ -79,6 +79,7 @@ export function renderBackgroundPass(r: BackgroundPassContext): void {
         stagedH,
         zoom,
         stagedRoom.room.backgroundId,
+        stagedRoom.room.backgroundBlur === true,
       );
     } finally {
       ctx.restore();
@@ -100,6 +101,7 @@ export function renderBackgroundPass(r: BackgroundPassContext): void {
         roomHeightWorld,
         zoom,
         currentRoom.backgroundId,
+        currentRoom.backgroundBlur === true,
       );
     } finally {
       ctx.restore();
@@ -116,6 +118,7 @@ export function renderBackgroundPass(r: BackgroundPassContext): void {
       roomHeightWorld,
       zoom,
       currentRoom.backgroundId,
+      currentRoom.backgroundBlur === true,
     );
   }
 

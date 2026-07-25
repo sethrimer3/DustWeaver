@@ -6,6 +6,7 @@
  */
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { backgroundIdToBlurUrl } from '../render/backgroundCatalogue';
 import type { RoomDef } from '../levels/roomDef';
 import { parseCustomBlockSource, serializeCustomBlock, toNamespacedId, makeUniqueId, countCustomBlockUsage } from '../levels/customBlocks';
 import { registerCustomBlockSprite, invalidateCustomBlockSprite, updateCustomBlockProperties, clearCustomBlockSpriteCache } from '../render/customBlockSpriteCache';
@@ -763,7 +764,7 @@ export function createEditorController(
         onRoomDimensionsChange: (dimProp: 'widthBlocks' | 'heightBlocks', value: number) => {
           runRoomFieldMutation(dimProp, room => applyRoomDimensionChange(room, dimProp, value));
         },
-        onEdgeResize: (edge: RoomEdge, delta: 1 | -1) => {
+        onEdgeResize: (edge: RoomEdge, delta: -5 | -1 | 1 | 5) => {
           if (state.roomData) applyEdgeResize(state.roomData, history, edge, delta);
           applyEdits('metadata');
         },
@@ -842,7 +843,18 @@ export function createEditorController(
           runRoomFieldMutation('voidEdgeStyle', room => { room.voidEdgeStyle = style; });
         },
         onBackgroundChange: (bgId: BackgroundId) => {
-          runRoomFieldMutation('backgroundId', room => { room.backgroundId = bgId; });
+          runRoomFieldMutation('backgroundId', room => {
+            room.backgroundId = bgId;
+            // Blur is per-asset — drop any stale selection if the new
+            // background has no discovered blur variant.
+            if (backgroundIdToBlurUrl(bgId) === null) room.backgroundBlur = undefined;
+          });
+        },
+        onBackgroundBlurChange: (useBlur: boolean) => {
+          runRoomFieldMutation('backgroundBlur', room => {
+            const hasBlurAsset = backgroundIdToBlurUrl(room.backgroundId) !== null;
+            room.backgroundBlur = useBlur && hasBlurAsset ? true : undefined;
+          });
         },
         onRoomSongChange: (songId: RoomSongId) => {
           runRoomFieldMutation('songId', room => { room.songId = songId; });
