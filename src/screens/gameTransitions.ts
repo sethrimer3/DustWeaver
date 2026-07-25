@@ -34,11 +34,24 @@ export function getOppositeTransitionDirection(direction: TransitionDirection): 
  * Returns the runtime xBlock/yBlock for a transition, migrating from legacy
  * positionBlock/depthBlock if the new fields are not yet present.
  */
+/**
+ * Normalizes a transition's saved depth field: an explicitly-present value
+ * <= 0 is invalid and clamps to 2; a fully omitted field keeps the legacy
+ * fallback of 3. Defensive runtime normalization mirroring
+ * roomJsonToRoomDef.ts's load-time migration, in case older in-memory
+ * RoomDef data reaches here with an un-migrated depth.
+ */
+function normalizedGradientWidthBlocks(t: RoomTransitionDef): number {
+  const gw = t.gradientWidthBlocks;
+  if (gw === undefined) return 3;
+  return gw <= 0 ? 2 : gw;
+}
+
 function getTransitionXYBlock(t: RoomTransitionDef, room: RoomDef): { xBlock: number; yBlock: number } {
   if (t.xBlock !== undefined && t.yBlock !== undefined) {
     return { xBlock: t.xBlock, yBlock: t.yBlock };
   }
-  const gw = t.gradientWidthBlocks ?? 3;
+  const gw = normalizedGradientWidthBlocks(t);
   switch (t.direction) {
     case 'left':  return { xBlock: t.depthBlock ?? 0, yBlock: t.positionBlock };
     case 'right': return { xBlock: t.depthBlock ?? (room.widthBlocks  - gw), yBlock: t.positionBlock };
@@ -123,7 +136,7 @@ export function checkRoomTransitions(
   for (let ti = 0; ti < currentRoom.transitions.length; ti++) {
     const t = currentRoom.transitions[ti];
     const { xBlock, yBlock } = getTransitionXYBlock(t, currentRoom);
-    const gw = t.gradientWidthBlocks ?? 3;
+    const gw = normalizedGradientWidthBlocks(t);
     const isHoriz = t.direction === 'left' || t.direction === 'right';
     const zoneW = isHoriz ? gw : t.openingSizeBlocks;
     const zoneH = isHoriz ? t.openingSizeBlocks : gw;

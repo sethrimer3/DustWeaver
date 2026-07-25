@@ -7,6 +7,7 @@
  */
 
 import type { BrushMode, EditorRoomData } from './editorState';
+import type { TransitionDirection } from '../levels/roomDef';
 import {
   isCellOccupiedByTile,
   isCellCoveredByWaterZone,
@@ -216,6 +217,165 @@ export function getRectBrushPreview(
  * brush paints a NxN grid of items, not an NxN grid of single cells.
  * Returns null for non-square brush modes.
  */
+// ── Room-transition geometry (pure, edge-based — NOT the 2D flood-fill above) ──
+//
+// Transitions are edge-anchored trigger strips layered on top of complete
+// boundary walls (see AGENTS.md: "Do not reintroduce boundary holes"). These
+// helpers compute the geometry for a transition placement but never mutate
+// room data or touch wall arrays — they are pure functions shared by
+// editorPlaceTool.ts (actual placement) and editorPlacementPreviewDrawer.ts
+// (live preview), so the two can never drift apart.
+
+/** Default depth (into-the-wall gradient span) for a newly placed transition. */
+export const DEFAULT_TRANSITION_GRADIENT_BLOCKS = 2;
+
+/** Default edge-parallel opening length for a newly placed transition. */
+const DEFAULT_TRANSITION_OPENING_BLOCKS = 6;
+
+export interface TransitionPlacement {
+  direction: TransitionDirection;
+  xBlock: number;
+  yBlock: number;
+  openingSizeBlocks: number;
+  gradientWidthBlocks: number;
+  positionBlock: number;
+}
+
+/**
+ * Single-click (or fill-tool, once its span is known) transition placement:
+ * anchors the zone at the clicked cell, clamped so it fits inside the room.
+ * `gradientWidthBlocks` is clamped to a minimum of 2 regardless of what's
+ * passed in — depth 0/negative is never permitted for a newly placed zone.
+ */
+export function computeSingleTransitionPlacement(
+  room: EditorRoomData,
+  bx: number,
+  by: number,
+  direction: TransitionDirection,
+  openingSizeBlocks?: number,
+  gradientWidthBlocks: number = DEFAULT_TRANSITION_GRADIENT_BLOCKS,
+): TransitionPlacement {
+  const isHoriz = direction === 'left' || direction === 'right';
+  const opening = openingSizeBlocks ?? (isHoriz
+    ? Math.max(1, Math.min(DEFAULT_TRANSITION_OPENING_BLOCKS, room.heightBlocks - 2))
+    : Math.max(1, Math.min(DEFAULT_TRANSITION_OPENING_BLOCKS, room.widthBlocks - 2)));
+  const gw = Math.max(2, gradientWidthBlocks);
+  const zoneW = isHoriz ? gw : opening;
+  const zoneH = isHoriz ? opening : gw;
+  const xBlock = Math.min(Math.max(0, bx), Math.max(0, room.widthBlocks - zoneW));
+  const yBlock = Math.min(Math.max(0, by), Math.max(0, room.heightBlocks - zoneH));
+  const positionBlock = isHoriz ? yBlock : xBlock;
+  return { direction, xBlock, yBlock, openingSizeBlocks: opening, gradientWidthBlocks: gw, positionBlock };
+}
+
+/**
+ * Fill-tool transition placement: depth is fixed at
+ * {@link DEFAULT_TRANSITION_GRADIENT_BLOCKS}. The opening expands along the
+ * edge-parallel axis from the clicked cell in both directions through the
+ * contiguous run of unobstructed in-bounds tiles, stopping at the room
+ * boundary or the first occupied/wall tile — whichever comes first.
+ *
+ * Returns `null` when the clicked cell itself is out of bounds or already
+ * obstructed (nothing to expand from).
+ */
+export function computeFillTransitionPlacement(
+  room: EditorRoomData,
+  bx: number,
+  by: number,
+  direction: TransitionDirection,
+): TransitionPlacement | null {
+  const isHoriz = direction === 'left' || direction === 'right';
+  const gw = DEFAULT_TRANSITION_GRADIENT_BLOCKS;
+
+  const maxAlong = isHoriz ? room.heightBlocks : room.widthBlocks;
+  const clickAlong = isHoriz ? by : bx;
+  if (clickAlong < 0 || clickAlong >= maxAlong) return null;
+
+  // Fixed coordinate along the boundary wall this direction faces — the
+  // opening always hugs that edge, regardless of exactly where inside the
+  // room the click landed along the perpendicular axis.
+  const edgeCoord =
+    direction === 'right' ? room.widthBlocks - 1 :
+    direction === 'down'  ? room.heightBlocks - 1 :
+    0;
+
+  const isBlocked = (along: number): boolean => {
+    const x = isHoriz ? edgeCoord : along;
+    const y = isHoriz ? along : edgeCoord;
+    return isCellOccupiedByTile(room, x, y);
+  };
+
+  if (isBlocked(clickAlong)) return null;
+
+  let lo = clickAlong;
+  while (lo - 1 >= 0 && !isBlocked(lo - 1)) lo--;
+  let hi = clickAlong;
+  while (hi + 1 < maxAlong && !isBlocked(hi + 1)) hi++;
+
+  const openingSizeBlocks = hi - lo + 1;
+  const zoneW = isHoriz ? gw : openingSizeBlocks;
+  const zoneH = isHoriz ? openingSizeBlocks : gw;
+  const xBlock = isHoriz
+    ? Math.min(Math.max(0, bx), Math.max(0, room.widthBlocks - zoneW))
+    : lo;
+  const yBlock = isHoriz
+    ? lo
+    : Math.min(Math.max(0, by), Math.max(0, room.heightBlocks - zoneH));
+  const positionBlock = isHoriz ? yBlock : xBlock;
+  return { direction, xBlock, yBlock, openingSizeBlocks, gradientWidthBlocks: gw, positionBlock };
+}
+
+/**
+ * Rect-tool transition placement: derives direction/edge, opening length,
+ * and depth from the inclusive bounding box between two clicked corners.
+ * The box's proximity to each of the four room boundary edges decides which
+ * edge/direction the transition attaches to (nearest edge wins); the box
+ * dimension perpendicular to that edge becomes the depth (gradient width,
+ * clamped to a minimum of 2), and the dimension parallel to it becomes the
+ * opening length.
+ */
+export function computeRectTransitionPlacement(
+  room: EditorRoomData,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): TransitionPlacement {
+  const x0 = Math.min(ax, bx);
+  const x1 = Math.max(ax, bx);
+  const y0 = Math.min(ay, by);
+  const y1 = Math.max(ay, by);
+
+  const distLeft = x0;
+  const distRight = (room.widthBlocks - 1) - x1;
+  const distTop = y0;
+  const distBottom = (room.heightBlocks - 1) - y1;
+  const minDist = Math.min(distLeft, distRight, distTop, distBottom);
+
+  let direction: TransitionDirection;
+  if (minDist === distLeft) direction = 'left';
+  else if (minDist === distRight) direction = 'right';
+  else if (minDist === distTop) direction = 'up';
+  else direction = 'down';
+
+  const isHoriz = direction === 'left' || direction === 'right';
+  const boxW = x1 - x0 + 1;
+  const boxH = y1 - y0 + 1;
+
+  const gw = Math.max(2, isHoriz ? boxW : boxH);
+  const openingSizeBlocks = Math.max(1, isHoriz ? boxH : boxW);
+
+  const xBlock = isHoriz
+    ? (direction === 'left' ? 0 : Math.max(0, room.widthBlocks - gw))
+    : x0;
+  const yBlock = isHoriz
+    ? y0
+    : (direction === 'up' ? 0 : Math.max(0, room.heightBlocks - gw));
+
+  const positionBlock = isHoriz ? yBlock : xBlock;
+  return { direction, xBlock, yBlock, openingSizeBlocks, gradientWidthBlocks: gw, positionBlock };
+}
+
 export function getSquareBrushPreview(
   mode: BrushMode,
   cursorX: number,

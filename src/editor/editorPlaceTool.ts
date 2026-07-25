@@ -36,7 +36,10 @@ import {
   isCellCoveredByLavaZone,
   isCellCoveredByTimeStopField,
 } from './editorHitTest';
-import { getBrushCells, getFillBrushCells, type FillKind } from './editorBrush';
+import {
+  getBrushCells, getFillBrushCells, type FillKind,
+  computeSingleTransitionPlacement, computeFillTransitionPlacement, computeRectTransitionPlacement,
+} from './editorBrush';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import {
   canPlaceOnLayer, getPlacementTargetLayer, isLayerVisible, isAnyLayerSoloed,
@@ -972,33 +975,32 @@ function placeAt(state: EditorState, bx: number, by: number): void {
   } else if (item.id === 'room_transition') {
     const directionMap: ('right' | 'down' | 'left' | 'up')[] = ['right', 'down', 'left', 'up'];
     const direction = directionMap[state.placementRotationSteps % 4];
-    const isHoriz = direction === 'left' || direction === 'right';
 
-    const DEFAULT_WIDTH  = 6;
-    const DEFAULT_GRADIENT = 0;
-
-    const openingSizeBlocks = isHoriz
-      ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))
-      : Math.max(1, Math.min(DEFAULT_WIDTH, room.widthBlocks  - 2));
-
-    const gw = DEFAULT_GRADIENT;
-    const zoneW = isHoriz ? gw : openingSizeBlocks;
-    const zoneH = isHoriz ? openingSizeBlocks : gw;
-    const xBlock = Math.min(Math.max(0, bx), room.widthBlocks  - zoneW);
-    const yBlock = Math.min(Math.max(0, by), room.heightBlocks - zoneH);
-
-    const positionBlock = isHoriz ? yBlock : xBlock;
+    // Rect tool: two-click gesture using the shared brushRectStartBlockX/Y
+    // anchor state (set by the controller on the first click, cleared after
+    // placement). The inclusive bounding box between the anchor and this
+    // (second-click) cell determines the transition's edge/direction,
+    // opening, and depth — exactly one transition per gesture.
+    let placement;
+    if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null && state.brushRectStartBlockY !== null) {
+      placement = computeRectTransitionPlacement(room, state.brushRectStartBlockX, state.brushRectStartBlockY, bx, by);
+    } else if (state.brushMode === 'fill') {
+      placement = computeFillTransitionPlacement(room, bx, by, direction);
+    } else {
+      placement = computeSingleTransitionPlacement(room, bx, by, direction);
+    }
+    if (placement === null) return;
 
     room.transitions.push({
       uid: allocateUid(state),
-      direction,
-      xBlock,
-      yBlock,
-      openingSizeBlocks,
-      gradientWidthBlocks: DEFAULT_GRADIENT,
+      direction: placement.direction,
+      xBlock: placement.xBlock,
+      yBlock: placement.yBlock,
+      openingSizeBlocks: placement.openingSizeBlocks,
+      gradientWidthBlocks: placement.gradientWidthBlocks,
       targetRoomId: '',
       targetSpawnBlock: [3, 3],
-      positionBlock,
+      positionBlock: placement.positionBlock,
     });
   } else if (item.zipMoveBlockVariant !== undefined) {
     const startX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;

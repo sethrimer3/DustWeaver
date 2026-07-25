@@ -17,7 +17,10 @@ import { getPlacementPreview, evaluateBrushOperation } from './editorPlaceTool';
 import { findFloorBlockRow, findCeilingBlockRow } from './editorHitTest';
 import { anchorForMaterial } from './editorPixelMaterialTool';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
-import { getRectBrushPreview, getSquareBrushPreview } from './editorBrush';
+import {
+  getRectBrushPreview, getSquareBrushPreview,
+  computeSingleTransitionPlacement, computeFillTransitionPlacement, computeRectTransitionPlacement,
+} from './editorBrush';
 import { getPlacementStatus } from './editorLayers';
 import type { EditorRenderMask } from './editorRenderMask';
 import {
@@ -636,29 +639,29 @@ export function drawPlacementPreview(
   if (item.id === 'room_transition') {
     const directionMap: ('right' | 'down' | 'left' | 'up')[] = ['right', 'down', 'left', 'up'];
     const direction = directionMap[state.placementRotationSteps % 4];
-    const isHoriz = direction === 'left' || direction === 'right';
 
-    const DEFAULT_WIDTH = 6;
-    const openingSizeBlocks = isHoriz
-      ? Math.max(1, Math.min(DEFAULT_WIDTH, room.heightBlocks - 2))
-      : Math.max(1, Math.min(DEFAULT_WIDTH, room.widthBlocks - 2));
-
-    const gw = 0;
-    const zoneW = isHoriz ? gw : openingSizeBlocks;
-    const zoneH = isHoriz ? openingSizeBlocks : gw;
-    const xBlock = Math.min(Math.max(0, state.cursorBlockX), room.widthBlocks - zoneW);
-    const yBlock = Math.min(Math.max(0, state.cursorBlockY), room.heightBlocks - zoneH);
+    // Mirror the same brush-mode dispatch placeAt() uses, so the preview
+    // never shows different geometry than what a click would actually create.
+    let placement;
+    if (state.brushMode === 'rect' && state.brushRectStartBlockX !== null && state.brushRectStartBlockY !== null) {
+      placement = computeRectTransitionPlacement(room, state.brushRectStartBlockX, state.brushRectStartBlockY, state.cursorBlockX, state.cursorBlockY);
+    } else if (state.brushMode === 'fill') {
+      placement = computeFillTransitionPlacement(room, state.cursorBlockX, state.cursorBlockY, direction);
+    } else {
+      placement = computeSingleTransitionPlacement(room, state.cursorBlockX, state.cursorBlockY, direction);
+    }
+    if (placement === null) return;
 
     const previewTransition: EditorTransition = {
       uid: -1,
-      direction,
-      xBlock,
-      yBlock,
-      openingSizeBlocks,
-      gradientWidthBlocks: gw,
+      direction: placement.direction,
+      xBlock: placement.xBlock,
+      yBlock: placement.yBlock,
+      openingSizeBlocks: placement.openingSizeBlocks,
+      gradientWidthBlocks: placement.gradientWidthBlocks,
       targetRoomId: '',
       targetSpawnBlock: [3, 3],
-      positionBlock: isHoriz ? yBlock : xBlock,
+      positionBlock: placement.positionBlock,
     };
     drawTransitionZone(ctx, previewTransition, room, offsetXPx, offsetYPx, zoom, PREVIEW_COLOR, 0, true);
     return;

@@ -103,7 +103,15 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
   const transitions: RoomTransitionDef[] = json.transitions.map(t => {
     // Prefer explicit xBlock/yBlock; fall back to positionBlock/depthBlock migration.
     const isHoriz = t.direction === 'left' || t.direction === 'right';
-    const gw = t.gradientWidthBlocks ?? 3;
+    // Normalize legacy saved data: an explicitly-present depth <= 0 is
+    // invalid and gets clamped to 2. A fully OMITTED field keeps the
+    // original fallback of 3 — this is a back-compat migration, not a UI
+    // default (see editorBrush.ts DEFAULT_TRANSITION_GRADIENT_BLOCKS for the
+    // separate new-placement default of 2).
+    const normalizedGradientWidthBlocks = t.gradientWidthBlocks === undefined
+      ? undefined
+      : (t.gradientWidthBlocks <= 0 ? 2 : t.gradientWidthBlocks);
+    const gw = normalizedGradientWidthBlocks ?? 3;
     const xBlock = t.xBlock !== undefined ? t.xBlock
       : (isHoriz ? (t.depthBlock ?? 0) : t.positionBlock);
     const yBlock = t.yBlock !== undefined ? t.yBlock
@@ -129,7 +137,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
       targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
       fadeColor: t.fadeColor,
       depthBlock: t.depthBlock,
-      gradientWidthBlocks: t.gradientWidthBlocks,
+      gradientWidthBlocks: normalizedGradientWidthBlocks,
       isSecretDoor: t.isSecretDoor,
     };
   });

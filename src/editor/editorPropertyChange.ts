@@ -157,7 +157,10 @@ export function applyPropertyToElement(
         trans.longTransition = numVal === 1;
       }
       if (prop === 'transition.gradientWidthBlocks' && !isNaN(numVal)) {
-        const newGw = Math.max(0, numVal);
+        // Depth (gradient width) must be at least 2 — this is an explicit
+        // inspector edit, never the legacy-omitted fallback case, so clamp
+        // unconditionally (see editorBrush.ts DEFAULT_TRANSITION_GRADIENT_BLOCKS).
+        const newGw = Math.max(2, numVal);
         const oldGw = trans.gradientWidthBlocks ?? 0;
         // Keep the trigger edge (the transition's actual crossing line) fixed
         // in place; grow the zone into the room from the far side instead of

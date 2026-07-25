@@ -9,7 +9,7 @@
  * Extracted from editorVisualMap.ts (BUILD 311).
  */
 
-import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
+import type { RoomTransitionDef } from '../levels/roomDef';
 import type { DoorHitArea } from './editorVisualMapLinkPrompt';
 import type { MapRoomPlacement, SnapIndicator } from './editorVisualMapHelpers';
 import {
@@ -17,6 +17,7 @@ import {
   effectiveWorldId,
   worldDisplayName,
   hexToRgba,
+  getDoorCenterWorld,
 } from './editorVisualMapHelpers';
 
 // ── Draw-call constants ───────────────────────────────────────────────────────
@@ -73,19 +74,20 @@ function findDoorHitAreaIn(
   return null;
 }
 
+/**
+ * Screen-space door center, derived from the single shared
+ * `getDoorCenterWorld` helper (the same one used for snapping and link
+ * lines) so the visual-map square, hitbox, link lines, and snapping can
+ * never disagree on where a door is anchored — independent of transition
+ * depth.
+ */
 function getDoorCenterPx(
   trans: RoomTransitionDef,
-  zoom: number,
-  roomSx: number,
-  roomSy: number,
+  placement: MapRoomPlacement,
+  worldToScreen: (xWorld: number, yWorld: number) => [number, number],
 ): [number, number] {
-  const gw = trans.gradientWidthBlocks ?? 3;
-  const isHoriz = trans.direction === 'left' || trans.direction === 'right';
-  const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
-  const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
-  const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
-  const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
-  return [roomSx + (xB + zoneW / 2) * zoom, roomSy + (yB + zoneH / 2) * zoom];
+  const [wx, wy] = getDoorCenterWorld(trans, placement);
+  return worldToScreen(wx, wy);
 }
 
 // ── Exported draw functions ───────────────────────────────────────────────────
@@ -146,7 +148,7 @@ export function drawRoom(
 
   // Draw doors (transitions)
   for (let i = 0; i < room.transitions.length; i++) {
-    drawDoor(ctx2d, drawCtx, room, i, sx, sy, rw, rh);
+    drawDoor(ctx2d, drawCtx, placement, i);
   }
 }
 
@@ -154,27 +156,17 @@ export function drawRoom(
 export function drawDoor(
   ctx2d: CanvasRenderingContext2D,
   drawCtx: VisualMapDrawCtx,
-  room: RoomDef,
+  placement: MapRoomPlacement,
   transIndex: number,
-  roomSx: number,
-  roomSy: number,
-  _roomW: number,
-  _roomH: number,
 ): void {
+  const room = placement.room;
   const trans = room.transitions[transIndex];
   const ds = Math.max(4, Math.min(DOOR_SIZE, drawCtx.zoom * 1.5));
-  const gw = trans.gradientWidthBlocks ?? 3;
-  const isHoriz = trans.direction === 'left' || trans.direction === 'right';
 
-  const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
-  const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
-  const zoneW = isHoriz ? gw : trans.openingSizeBlocks;
-  const zoneH = isHoriz ? trans.openingSizeBlocks : gw;
-  const zoneCxPx = (xB + zoneW / 2) * drawCtx.zoom;
-  const zoneCyPx = (yB + zoneH / 2) * drawCtx.zoom;
+  const [zoneCxPx, zoneCyPx] = getDoorCenterPx(trans, placement, drawCtx.worldToScreen);
 
-  const dx = roomSx + zoneCxPx - ds / 2;
-  const dy = roomSy + zoneCyPx - ds / 2;
+  const dx = zoneCxPx - ds / 2;
+  const dy = zoneCyPx - ds / 2;
 
   const isHovered    = drawCtx.hoveredDoor?.roomId === room.id && drawCtx.hoveredDoor?.transitionIndex === transIndex;
   const isLinkSource = drawCtx.linkSourceRoomId === room.id && drawCtx.linkSourceTransIndex === transIndex;
@@ -234,8 +226,7 @@ export function drawConnectionLines(
       if (drawn.has(pairKey)) continue;
       drawn.add(pairKey);
 
-      const [sx, sy] = drawCtx.worldToScreen(placement.mapXWorld, placement.mapYWorld);
-      const srcPos = getDoorCenterPx(trans, drawCtx.zoom, sx, sy);
+      const srcPos = getDoorCenterPx(trans, placement, drawCtx.worldToScreen);
 
       const targetRoom = targetPlacement.room;
       const reverseTrans = targetRoom.transitions.find(t => t.targetRoomId === roomId);
@@ -244,7 +235,7 @@ export function drawConnectionLines(
 
       let tgtPos: [number, number];
       if (reverseTrans) {
-        tgtPos = getDoorCenterPx(reverseTrans, drawCtx.zoom, tsx, tsy);
+        tgtPos = getDoorCenterPx(reverseTrans, targetPlacement, drawCtx.worldToScreen);
       } else {
         tgtPos = [tsx + trw / 2, tsy + (targetRoom.heightBlocks * drawCtx.zoom) / 2];
       }
