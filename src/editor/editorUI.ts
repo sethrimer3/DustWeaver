@@ -36,7 +36,7 @@ import { createFloaterLatticeEffect } from '../render/effects/floaterLatticeEffe
 import { createTetrisBlockEffect } from '../render/effects/tetrisBlockEffect';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
 import type { BackgroundId } from '../levels/roomDef';
-import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
+import { createComplexityGate } from './editorContentRevision';
 import { dominantCategory, ROOM_COMPLEXITY_CATEGORY_LABELS, type RoomComplexitySeverity } from '../levels/roomComplexity';
 import {
   computeDensityDisplaySignature, capitalizeSeverity, formatDensityTotalLine, formatDensitySuffixLine,
@@ -185,9 +185,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   // controller's roomContentRevision counter, so an idle editor (no
   // structural change since the last completed edit) doesn't re-run
   // analyzeEditorRoomComplexity every single frame.
-  let lastComplexityRoomId = '';
-  let lastComplexityRevision = -1;
-  let lastComplexityReport: ReturnType<typeof analyzeEditorRoomComplexity> | null = null;
+  // The gate itself lives in editorContentRevision.ts so its cadence is
+  // unit-testable without building this panel's DOM.
+  const complexityGate = createComplexityGate();
 
   if (import.meta.env.DEV) {
     const devToolsDiv = document.createElement('div');
@@ -709,14 +709,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     // (bumped once per completed edit/undo/redo/load, never mid-drag) has
     // advanced since the last analysis, instead of every frame.
     if (state.roomData) {
-      let report = lastComplexityReport;
-      if (report === null || state.roomData.id !== lastComplexityRoomId || state.roomContentRevision !== lastComplexityRevision) {
-        report = analyzeEditorRoomComplexity(state.roomData);
-        editorPerfCounters.complexityAnalyses++;
-        lastComplexityReport = report;
-        lastComplexityRoomId = state.roomData.id;
-        lastComplexityRevision = state.roomContentRevision;
-      }
+      const report = complexityGate.resolve(
+        state.roomData, state.roomData.id, state.roomContentRevision,
+      );
       const topCategory = ROOM_COMPLEXITY_CATEGORY_LABELS[dominantCategory(report.categoryCounts)];
       const sig = computeDensityDisplaySignature(true, report.totalPlacedCount, report.severity, topCategory);
       if (sig !== lastDensitySig) {

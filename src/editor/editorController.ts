@@ -36,6 +36,10 @@ import {
   isPointerOwnedByGesture, shouldScanHover,
   type PointerOwnershipInput,
 } from './editorPointerOwnership';
+import {
+  createStrokeRevisionState, noteContentMutation, flushStrokeRevision,
+  discardPendingStrokeRevision,
+} from './editorContentRevision';
 import { saveBlockThemeSlots } from './editorThemeSlotPreferences';
 import { updateEditorCamera, EditorCameraInput, applyEditorZoomInput, panEditorCameraByScreenDelta } from './editorCamera';
 import {
@@ -263,6 +267,12 @@ export function createEditorController(
    * Reset on editor close so a re-open re-applies the cursor from scratch.
    */
   let lastAppliedCanvasCursor = '';
+
+  /**
+   * Deferral slot for a continuous drag-paint/erase stroke's single
+   * `roomContentRevision` bump — see editorContentRevision.ts.
+   */
+  const strokeRevision = createStrokeRevisionState();
 
   /**
    * Cancels whatever continuous gesture (drag / rect-resize / transition-
@@ -1064,6 +1074,7 @@ export function createEditorController(
     state.isDragging = false;
     state.isSelectionBoxActive = false;
     lastAppliedCanvasCursor = '';
+    discardPendingStrokeRevision(strokeRevision);
     originalRoomDef = null;
     pendingRoomEdits.clear();
     initialRoomIds = new Set();
@@ -1129,11 +1140,20 @@ export function createEditorController(
    * Mark active-room edits dirty and update only editor-local state.
    * Placement edits never trigger full room rebuild/reload.
    */
-  function applyEdits(changeKind: 'placement' | 'metadata' = 'metadata'): void {
+  function applyEdits(
+    changeKind: 'placement' | 'metadata' = 'metadata',
+    options?: { continuous?: boolean },
+  ): void {
     if (!state.roomData) return;
     isCurrentRoomDirty = isHistoryDirty(history) || activePaintPending !== null;
     state.pendingComplexityCheck = true;
-    state.roomContentRevision++;
+    // Item C: a continuous drag-paint / drag-erase stroke calls this once per
+    // painted block. Working data, the campaign store, and the live preview
+    // must all update per block, but `roomContentRevision` — which
+    // invalidates whole-room derived summaries such as the sidebar
+    // complexity analysis — is bumped only once, on release. See
+    // editorContentRevision.ts.
+    noteContentMutation(state, strokeRevision, options?.continuous === true);
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
       campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
@@ -1191,7 +1211,9 @@ export function createEditorController(
     // warning here, and so this room doesn't inherit a stale check flag.
     state.pendingComplexityCheck = false;
     state.lastWarnedComplexitySeverity = 'normal';
-    state.roomContentRevision++;
+    // Room load invalidates derived summaries exactly once, and supersedes
+    // (discards) any deferred stroke bump from the outgoing room.
+    noteContentMutation(state, strokeRevision);
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       const loaded = campaignSession.campaignStore.getRoom(room.id, state.nextUid);
       state.roomData = loaded.roomData;
@@ -2080,7 +2102,7 @@ export function createEditorController(
         );
         lastDragPixelX = px.x;
         lastDragPixelY = px.y;
-        if (changed) applyEdits('placement');
+        if (changed) applyEdits('placement', { continuous: true });
       }
     } else if (canDragPaint) {
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
@@ -2089,14 +2111,14 @@ export function createEditorController(
         if (state.activeTool === EditorTool.Place) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           const placed = placeAtCursor(state);
-          if (placed) applyEdits('placement');
+          if (placed) applyEdits('placement', { continuous: true });
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
         } else if (state.activeTool === EditorTool.Delete) {
           const placementStartMs = import.meta.env.DEV ? performance.now() : 0;
           const deleted = deleteAtCursorBrushed(state);
-          if (deleted) applyEdits('placement');
+          if (deleted) applyEdits('placement', { continuous: true });
           if (import.meta.env.DEV) {
             logEditorPerf('editor placement mutation', placementStartMs);
           }
@@ -2129,14 +2151,14 @@ export function createEditorController(
         );
         lastDragPixelX = px.x;
         lastDragPixelY = px.y;
-        if (changed) applyEdits('placement');
+        if (changed) applyEdits('placement', { continuous: true });
       }
     } else if (canRightDragPaint) {
       if (state.cursorBlockX !== lastDragBlockX || state.cursorBlockY !== lastDragBlockY) {
         lastDragBlockX = state.cursorBlockX;
         lastDragBlockY = state.cursorBlockY;
         const deleted = deleteAtCursorBrushed(state);
-        if (deleted) applyEdits('placement');
+        if (deleted) applyEdits('placement', { continuous: true });
       }
     }
 
@@ -2190,6 +2212,14 @@ export function createEditorController(
         canvas.style.cursor = resizeCursor;
         lastAppliedCanvasCursor = resizeCursor;
       }
+    }
+
+    // Item C: a completed drag-paint / drag-erase stroke bumps
+    // roomContentRevision exactly once, here on release, rather than once per
+    // painted block. Runs before the complexity check and the ui.update()
+    // below so the single re-analysis this frame sees the final content.
+    if (!inputState.isMouseDown && !inputState.isRightMouseDown) {
+      flushStrokeRevision(state, strokeRevision);
     }
 
     // Room-complexity warning: check at most once per completed operation
