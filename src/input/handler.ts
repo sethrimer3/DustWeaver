@@ -177,6 +177,28 @@ function clearJoystickKeys(state: InputState): void {
   state.isKeyD = false;
 }
 
+/**
+ * Clears every edge-triggered "fires once" input flag without touching held
+ * state (isKeyW/isMouseDownFlag/etc.) or continuous pointer state. Used by
+ * gameplay-blocking gates (e.g. the post-load entry fade) so a buffered
+ * jump/interact/grapple press made while gameplay was blocked cannot fire the
+ * instant input resumes — the physical key/button must be pressed again.
+ */
+export function clearAllTriggeredInputFlags(state: InputState): void {
+  state.isJumpTriggeredFlag = false;
+  state.isDownTriggeredFlag = false;
+  state.isAttackFiredFlag = 0;
+  state.isGrappleFireTriggeredFlag = 0;
+  state.isGrappleReleaseTriggeredFlag = 0;
+  state.isGrappleZipRequestedFlag = 0;
+  state.isInteractTriggeredFlag = false;
+  state.isInteractPressEdgeFlag = false;
+  state.isInteractReleaseEdgeFlag = false;
+  state.isFullscreenToggleTriggeredFlag = false;
+  state.isMapKeyTriggeredFlag = false;
+  state.isDialogueAdvanceTriggeredFlag = false;
+}
+
 export function attachInputListeners(canvas: HTMLCanvasElement, state: InputState): () => void {
   // Track joystick touch ID so multi-touch doesn't confuse movement with aiming
   let joystickTouchId = -1;

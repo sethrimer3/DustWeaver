@@ -24,7 +24,7 @@ import { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
 import { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
-import { createInputState, attachInputListeners } from '../input/handler';
+import { createInputState, attachInputListeners, clearAllTriggeredInputFlags } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { spawnHeraldForTesting, spawnIceWizardForTesting } from './gameEnemySpawn';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
@@ -103,6 +103,14 @@ import {
 import * as TP from '../debug/transitionProfiler';
 import type { TransitionDebugStats } from '../render/transitions/transitionState';
 import { GameLoadingOverlay } from './gameLoadingOverlay';
+import { GameEntryFadeOverlay } from './gameEntryFadeOverlay';
+import {
+  createEntryFadeState,
+  armEntryFade,
+  cancelEntryFade,
+  isEntryFadeActive,
+  tickEntryFade,
+} from './gameEntryFadeController';
 import {
   createAdaptiveQualityState,
   updateAdaptiveQuality,
@@ -712,6 +720,18 @@ export function startGameScreen(
     isInitialCampaignLoad = false; // subsequent room loads use the standard fade
   }
 
+  // ── Post-load entry fade (todo #11) ───────────────────────────────────────
+  // Deterministic 1.5s fade-to-black / 1.0s hold / 1.5s fade-in cover for full
+  // campaign entry/re-entry (new game, load save, Return to Last Save,
+  // restart). Every startGameScreen() call is itself one such entry (a fresh
+  // gameplay session), except an immediate editor-playtest open, which skips
+  // the effect since gameplay is never actually shown first.
+  const entryFadeOverlay = new GameEntryFadeOverlay(uiRoot);
+  const entryFadeState = createEntryFadeState();
+  if (openEditorImmediately !== true) {
+    armEntryFade(entryFadeState);
+  }
+
   /** Hides the overlay once sprites are ready, the minimum show time has passed,
    *  no async room load is in progress, the initial resident build phase is done,
    *  the zone transition load is done, and the entry viewport warm completed. */
@@ -1063,7 +1083,7 @@ export function startGameScreen(
     getCurrentRoom: () => currentRoom,
     getCurrentRoomOrigin: () => [currentRoomOriginXWorld, currentRoomOriginYWorld],
     loadRoom,
-    onResetTransitionReveal: () => { /* no-op: transition reveal system removed */ },
+    onResetTransitionReveal: () => { armEntryFade(entryFadeState); },
     onResetFrameClock: () => { lastTimestampMs = 0; },
     onExitToMainMenu: () => {
       isRunning = false;
@@ -1385,6 +1405,31 @@ export function startGameScreen(
       lastTimestampMs = 0;
       rafHandle = requestAnimationFrame(frame);
       return;
+    }
+
+    // ── Post-load entry fade (todo #11) ───────────────────────────────────────
+    // All readiness gates above have cleared (initial zone load, async/zone
+    // room load, entry warm, sprite/background decode) — only now may the
+    // deterministic fade-to-black / hold / fade-in sequence begin timing.
+    // Ordinary room-to-room transitions never arm this state, so they fall
+    // straight through here every frame with no effect.
+    if (isEntryFadeActive(entryFadeState)) {
+      const fadeResult = tickEntryFade(entryFadeState, elapsedMs);
+      entryFadeOverlay.setAlpha(fadeResult.overlayAlpha);
+      if (fadeResult.didJustResumeGameplay) {
+        // Resume normal simulation/input/timers starting this frame while the
+        // cover continues fading away on top; no loading/fade time may become
+        // a catch-up tick, and no input buffered while blocked may fire now.
+        lastTimestampMs = 0;
+        clearAllTriggeredInputFlags(inputState);
+      }
+      if (fadeResult.blocksGameplay) {
+        if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+        FP.setBakeForbiddenInGameplay(false);
+        FP.endFrame();
+        rafHandle = requestAnimationFrame(frame);
+        return;
+      }
     }
 
     // ── Dialogue advance input (capture before collectCommands drains the flag)
@@ -2152,6 +2197,8 @@ export function startGameScreen(
     playerSpeedGraphOverlay.destroy();
     window.removeEventListener('resize', onResize);
     loadingOverlay.destroy();
+    cancelEntryFade(entryFadeState);
+    entryFadeOverlay.destroy();
     if (menuButton !== null && menuButton.parentElement !== null) {
       menuButton.parentElement.removeChild(menuButton);
     }
