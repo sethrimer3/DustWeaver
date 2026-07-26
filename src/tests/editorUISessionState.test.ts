@@ -73,6 +73,26 @@ test('controller snapshots session UI state before ui.destroy() and restores it 
   assert.ok(restoreIdx > createIdx, 'restore must happen after the new EditorUI is constructed');
 });
 
+test('Swap Menu Sides control exists with atomic content-group swap and session-only sidebarsSwapped state', () => {
+  const source = readSource('../editor/editorUI.ts');
+  assert.ok(source.includes('sidebarsSwapped: boolean;'), 'expected EditorSessionUIState to carry a sidebarsSwapped flag');
+  assert.ok(source.includes('function swapMenuSides(): void'), 'expected a swapMenuSides implementation');
+  assert.ok(source.includes('const leftContentGroup = document.createElement'));
+  assert.ok(source.includes('const rightContentGroup = document.createElement'));
+  // Swap must move the wrapper elements (not rebuild DOM) between the two
+  // fixed physical shells.
+  assert.ok(source.includes('leftHost.appendChild(leftContentGroup);'));
+  assert.ok(source.includes('rightHost.appendChild(rightContentGroup);'));
+  // Both sidebar header rows must expose the control so it stays reachable
+  // whenever either sidebar is visible.
+  const leftBtnIdx = source.indexOf("makeSwapBtn('Swap Menus', swapMenuSides)");
+  const rightBtnIdx = source.indexOf("makeSwapBtn('Swap Menus', swapMenuSides)", leftBtnIdx + 1);
+  assert.ok(leftBtnIdx >= 0 && rightBtnIdx > leftBtnIdx, 'expected two independent Swap Menus buttons');
+  // Snapshot/restore must round-trip the flag, backward-compatibly.
+  assert.ok(source.includes('return { sectionExpanded, leftSidebarVisible, rightSidebarVisible, sidebarsSwapped };'));
+  assert.ok(source.includes('const wantSwapped = snapshot.sidebarsSwapped === true;'));
+});
+
 test('hardcoded EDITOR_PANEL_WIDTH_CSS_PX constant is fully removed from the controller', () => {
   const source = readSource('../editor/editorController.ts');
   assert.ok(!source.includes('EDITOR_PANEL_WIDTH_CSS_PX'), 'expected the old hardcoded 260px constant to be gone');

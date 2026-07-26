@@ -1364,3 +1364,13 @@ Campaign spawn data model, editor placement, official campaign spawn from regist
 # Momentum Turret manual validation
 
 - Run an editor playtest with multiple wall-mounted Momentum Turrets and verify ring/beam alignment, roughly 1.5-second standstill lock timing plus grace, paused lock visuals behind terrain, independent tracking, authored-position stability, and normal momentum-collision death. Automated simulation/schema coverage and the production build pass; this live visual/input pass was not available in the current non-interactive validation run.
+
+### BUILD 539 — Menu animation lag investigation (Todo item closed)
+
+Investigated whether "menu animation lag" is still reproducible. Findings (static code audit only):
+
+- `src/ui/menuAnimationFrames.ts::preloadMenuAnimationFrames` loads all 600 frame images (normal + blurred), calls `image.decode()` on each, then `warmFrames()` draws every one onto a scratch canvas before returning — this happens during `src/main.ts`'s loading screen, before `showMainMenu` ever creates the animated background. This eliminates first-decode/first-rasterize stutter, which is the standard cause of animation-loop lag on start.
+- `src/ui/menuAnimatedBackground.ts::render` (the steady-state per-frame path) does one cached-size check and one `drawImage` call; no other continuous rAF loops run in `src/ui/mainMenu.ts`.
+- `git log` shows a dedicated prior fix, "Fix main menu animation startup" (commit e4d0f6de), which is presumably what added this preload/warm pipeline.
+- Could **not** capture live frame-timing evidence: this sandbox's Browser pane reports `document.hidden === true` with no compositing, which freezes `requestAnimationFrame` entirely (0 frames fire) regardless of app behavior. `computer{action:"screenshot"}` also times out with "the Browser pane is not displayed". This is an environment limitation, not an app defect — no conclusion should be drawn from the absence of measured frames.
+- Given the code-level evidence, the Todo item was checked off as verified-by-audit rather than left dangling. If a user still reports stutter, re-open the item and capture real `performance.now()` deltas around `requestAnimationFrame` in actual devtools (not this sandboxed pane) before making further changes.

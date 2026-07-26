@@ -33,8 +33,8 @@ test('two independent 260px sidebars exist: left (#editor-ui) and right (#editor
 
 test('Zone Map (M) / Itemized Map (N) button row sits directly below "Save and Export Campaign"', () => {
   const source = readEditorUISource();
-  const exportAllIdx = source.indexOf("container.appendChild(exportAllBtn);");
-  const mapRowIdx = source.indexOf('container.appendChild(mapButtonRow);');
+  const exportAllIdx = source.indexOf("leftContentGroup.appendChild(exportAllBtn);");
+  const mapRowIdx = source.indexOf('leftContentGroup.appendChild(mapButtonRow);');
   assert.ok(exportAllIdx >= 0 && mapRowIdx >= 0);
   assert.ok(mapRowIdx > exportAllIdx, 'map button row must be appended after the Save and Export Campaign button');
 
@@ -68,16 +68,18 @@ test('right sidebar holds tools/brush/categories/palette; left sidebar holds roo
   ];
   for (const m of rightMarkers) {
     assert.ok(source.includes(m), `expected right sidebar to contain: ${m}`);
-    assert.ok(source.includes(`rightSidebar.appendChild(${m.split('.')[0]}.wrapper);`)
-      || source.includes(`rightSidebar.appendChild(${m.split('.')[0]}.wrapper)`),
-      `expected the section wrapper for "${m}" to be appended to rightSidebar`);
+    // Sections are appended into the right content-group wrapper, which
+    // defaults to (and, absent a swap, stays in) the physical right shell —
+    // see the Swap Menu Sides tests in editorUISessionState.test.ts.
+    assert.ok(source.includes(`rightContentGroup.appendChild(${m.split('.')[0]}.wrapper);`),
+      `expected the section wrapper for "${m}" to be appended to rightContentGroup`);
   }
 
   const leftMarkers = [
     'roomDimSection.body.appendChild(roomDimDiv);',
     'bgSection.body.appendChild(bgDiv);',
     'songSection.body.appendChild(songDiv);',
-    'container.appendChild(layersPanel.div);',
+    'leftContentGroup.appendChild(layersPanel.div);',
     'inspectorSection.body.appendChild(inspectorDiv);',
     'exportSection.body.appendChild(exportBtn);',
   ];

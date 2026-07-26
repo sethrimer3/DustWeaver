@@ -56,7 +56,6 @@ High-confidence from current docs:
 User-known issues to verify before editing:
 
 - World-map sketch rendering can regress when removing outside room-edge artifacts.
-- Menu animation lag may still need asset/renderer work.
 - Ultra ice behavior may still need polish: wall contact should stop slip, touching ultra ice should reset grapple, and stuck zero-velocity on ice should return control.
 - Desired long-term direction is to keep rooms within a world/zone loaded or resident/frozen, with longer loading only between zones.
 

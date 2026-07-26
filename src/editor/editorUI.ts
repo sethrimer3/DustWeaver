@@ -69,6 +69,14 @@ export interface EditorSessionUIState {
   sectionExpanded: Record<string, boolean>;
   leftSidebarVisible: boolean;
   rightSidebarVisible: boolean;
+  /**
+   * Whether the two content groups (left group: room/global controls,
+   * settings, layers, inspector, export; right group: tools, brush,
+   * categories, palette) currently occupy the opposite physical sidebar
+   * from their default arrangement. Session-only — never persisted to
+   * disk/localStorage/room JSON.
+   */
+  sidebarsSwapped: boolean;
 }
 
 export interface EditorUI {
@@ -168,8 +176,50 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const leftHideArrow = makeHideArrow('◂', 'Hide left panel', () => setLeftSidebarVisible(false));
   const rightHideArrow = makeHideArrow('▸', 'Hide right panel', () => setRightSidebarVisible(false));
+
+  // ── Swap Menu Sides ────────────────────────────────────────────────────────
+  // Two stable content-group wrappers hold everything except the physical
+  // hide-arrow/reveal-tab chrome above. Swapping moves these wrapper elements
+  // (not their children) between the fixed left/right shells, so DOM
+  // identity, focus, scroll position, and any per-node state survive.
+  const leftContentGroup = document.createElement('div');
+  const rightContentGroup = document.createElement('div');
+  let sidebarsSwapped = false;
+
+  function makeSwapBtn(title: string, onClick: () => void): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '⇄';
+    btn.title = title;
+    btn.setAttribute('aria-label', title);
+    btn.style.cssText = `
+      width: 22px; height: 20px; padding: 0; margin-bottom: 4px; margin-right: 4px;
+      background: ${BTN_BG}; border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
+      color: ${TEXT_COLOR}; font-size: 11px; cursor: pointer; float: right;
+    `;
+    btn.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
+    return btn;
+  }
+  function swapMenuSides(): void {
+    sidebarsSwapped = !sidebarsSwapped;
+    const leftHost = sidebarsSwapped ? rightSidebar : container;
+    const rightHost = sidebarsSwapped ? container : rightSidebar;
+    // Insert after the hide arrow / swap button chrome already in each shell.
+    leftHost.appendChild(leftContentGroup);
+    rightHost.appendChild(rightContentGroup);
+  }
+  const leftSwapBtn = makeSwapBtn('Swap Menus', swapMenuSides);
+  const rightSwapBtn = makeSwapBtn('Swap Menus', swapMenuSides);
   container.appendChild(leftHideArrow);
+  container.appendChild(leftSwapBtn);
   rightSidebar.appendChild(rightHideArrow);
+  rightSidebar.appendChild(rightSwapBtn);
+  // Default (unswapped) arrangement: left group in the left shell, right
+  // group in the right shell. All later `leftContentGroup`/
+  // `rightContentGroup` appendChild calls below populate these wrappers
+  // while they're already attached here.
+  container.appendChild(leftContentGroup);
+  rightSidebar.appendChild(rightContentGroup);
 
   function setLeftSidebarVisible(visible: boolean): void {
     leftSidebarVisible = visible;
@@ -197,7 +247,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     title.textContent = '🛠 Zone Editor';
   }
   title.style.cssText = `font-size: 15px; color: ${ACCENT_GOLD}; margin-bottom: 12px; font-weight: bold;`;
-  container.appendChild(title);
+  leftContentGroup.appendChild(title);
 
   // ── Confirm / Cancel bar ─────────────────────────────────────────────────
   const confirmCancelBar = document.createElement('div');
@@ -235,7 +285,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     background: rgba(100,30,20,0.4); border-color: #ff6644; color: #ff6644;
   `;
   confirmCancelBar.appendChild(cancelBtn);
-  container.appendChild(confirmCancelBar);
+  leftContentGroup.appendChild(confirmCancelBar);
 
   // ── Save and Export Campaign button ──────────────────────────────────────
   // Always shows "Save and Export Campaign" regardless of whether this is a custom
@@ -245,7 +295,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     width: 100%; padding: 8px; font-size: 12px; margin-bottom: 10px;
     background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
   `;
-  container.appendChild(exportAllBtn);
+  leftContentGroup.appendChild(exportAllBtn);
 
   // ── Zone Map / Itemized Map row ──────────────────────────────────────────
   // Replaces the old detached top-right "Zone Map" bar — reuses the same
@@ -265,7 +315,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     background: rgba(212,168,75,0.6); border-color: rgba(212,168,75,0.6); color: ${ACCENT_GOLD};
   `;
   mapButtonRow.appendChild(itemizedMapBtn);
-  container.appendChild(mapButtonRow);
+  leftContentGroup.appendChild(mapButtonRow);
 
   // ── Room density indicator ───────────────────────────────────────────────
   // Lightweight, non-modal readout of the current room's estimated
@@ -294,7 +344,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   densityIndicator.appendChild(densitySeverityLabelLine);
   densityIndicator.appendChild(densitySeveritySpan);
   densityIndicator.appendChild(densitySuffixLine);
-  container.appendChild(densityIndicator);
+  leftContentGroup.appendChild(densityIndicator);
   let lastDensitySig = '';
   // Cache the last room-complexity analysis, keyed on room identity + the
   // controller's roomContentRevision counter, so an idle editor (no
@@ -329,7 +379,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     `;
     devToolsDiv.appendChild(roundTripBtn);
 
-    container.appendChild(devToolsDiv);
+    leftContentGroup.appendChild(devToolsDiv);
   }
 
   // Run the one-time palette-preview audit at editor init time.
@@ -354,7 +404,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const toolsSection = createCollapsibleSection('Tools', { key: 'tools' });
   toolsSection.body.appendChild(toolBar);
-  rightSidebar.appendChild(toolsSection.wrapper);
+  rightContentGroup.appendChild(toolsSection.wrapper);
 
   // ── Brush mode selector ──────────────────────────────────────────────────
   const brushRow = document.createElement('div');
@@ -383,7 +433,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
   brushSection.body.appendChild(brushRow);
-  rightSidebar.appendChild(brushSection.wrapper);
+  rightContentGroup.appendChild(brushSection.wrapper);
   const roomDimDiv = document.createElement('div');
 
   // Edge resize buttons (add/remove row/column from each edge)
@@ -424,7 +474,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const roomDimSection = createCollapsibleSection('Room Dimensions', { key: 'roomDimensions' });
   roomDimSection.body.appendChild(roomDimDiv);
-  container.appendChild(roomDimSection.wrapper);
+  leftContentGroup.appendChild(roomDimSection.wrapper);
 
   // ── Background picker ────────────────────────────────────────────────────
   const bgDiv = document.createElement('div');
@@ -591,7 +641,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const bgSection = createCollapsibleSection('Background', { key: 'background' });
   bgSection.body.appendChild(bgDiv);
-  container.appendChild(bgSection.wrapper);
+  leftContentGroup.appendChild(bgSection.wrapper);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
   const songDiv = document.createElement('div');
@@ -614,11 +664,11 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   songDiv.appendChild(songSelect);
   const songSection = createCollapsibleSection('Room Song', { key: 'roomSong' });
   songSection.body.appendChild(songDiv);
-  container.appendChild(songSection.wrapper);
+  leftContentGroup.appendChild(songSection.wrapper);
 
   // ── Layers panel (always visible — editor-only visibility/lock/solo/target) ──
   const layersPanel = createEditorLayersPanel(() => callbacks);
-  container.appendChild(layersPanel.div);
+  leftContentGroup.appendChild(layersPanel.div);
 
   // ── Category tabs ────────────────────────────────────────────────────────
   let lastRenderedRoomId = '';
@@ -641,14 +691,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const categoriesSection = createCollapsibleSection('Categories', { key: 'categories' });
   categoriesSection.body.appendChild(catBar);
-  rightSidebar.appendChild(categoriesSection.wrapper);
+  rightContentGroup.appendChild(categoriesSection.wrapper);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
   const paletteSection = createCollapsibleSection('Palette', { key: 'palette' });
   paletteSection.body.appendChild(paletteDiv);
-  rightSidebar.appendChild(paletteSection.wrapper);
+  rightContentGroup.appendChild(paletteSection.wrapper);
 
   // Track rendered palette state to avoid recreating buttons every frame.
   // Single structural signature (computePaletteStructureSig) replaces the old
@@ -803,7 +853,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const inspectorSection = createCollapsibleSection('Inspector', { key: 'inspector' });
   inspectorSection.body.appendChild(inspectorDiv);
-  container.appendChild(inspectorSection.wrapper);
+  leftContentGroup.appendChild(inspectorSection.wrapper);
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
@@ -813,7 +863,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   const exportSection = createCollapsibleSection('Export', { key: 'export' });
   exportSection.body.appendChild(exportBtn);
-  container.appendChild(exportSection.wrapper);
+  leftContentGroup.appendChild(exportSection.wrapper);
 
   root.appendChild(container);
   root.appendChild(rightSidebar);
@@ -1294,7 +1344,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         if (section.key !== null) sectionExpanded[section.key] = section.isExpanded();
       }
       sectionExpanded[LAYERS_SESSION_KEY] = !layersPanel.isCollapsed();
-      return { sectionExpanded, leftSidebarVisible, rightSidebarVisible };
+      return { sectionExpanded, leftSidebarVisible, rightSidebarVisible, sidebarsSwapped };
     },
     applySessionUIState: (snapshot: EditorSessionUIState): void => {
       for (const section of collapsibleSections) {
@@ -1307,6 +1357,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       }
       setLeftSidebarVisible(snapshot.leftSidebarVisible);
       setRightSidebarVisible(snapshot.rightSidebarVisible);
+      // Backward-compatible: older snapshots lack `sidebarsSwapped` and
+      // should leave the default unswapped arrangement in place.
+      const wantSwapped = snapshot.sidebarsSwapped === true;
+      if (wantSwapped !== sidebarsSwapped) {
+        swapMenuSides();
+      }
     },
     destroy: () => {
       lastPaletteStructureSig = '';
