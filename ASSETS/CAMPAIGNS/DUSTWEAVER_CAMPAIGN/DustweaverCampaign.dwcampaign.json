@@ -3,7 +3,7 @@
   "kind": "DustWeaverCampaign",
   "metadata": {
     "version": 11,
-    "lastEditedAt": "2026-07-26T05:06:53.327Z"
+    "lastEditedAt": "2026-07-26T05:16:18.687Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -234,7 +234,14 @@
         "name": "Darkening Hall",
         "worldId": 1,
         "mapX": -101,
-        "mapY": 565
+        "mapY": 566
+      },
+      {
+        "id": "darkest_cave",
+        "name": "Darkest Cave",
+        "worldId": 1,
+        "mapX": -181,
+        "mapY": 566
       }
     ]
   },
@@ -45229,15 +45236,54 @@
         20
       ],
       "spawn": [
-        30,
-        10
+        52,
+        15
       ],
       "solids": {
-        "byTheme": {}
+        "byTheme": {
+          "__default__": {
+            "rects": [
+              [
+                0,
+                0,
+                60,
+                2
+              ],
+              [
+                0,
+                2,
+                2,
+                10
+              ],
+              [
+                58,
+                2,
+                2,
+                10
+              ],
+              [
+                40,
+                18,
+                20,
+                2
+              ]
+            ]
+          },
+          "darkGlass": {
+            "rects": [
+              [
+                0,
+                18,
+                40,
+                2
+              ]
+            ]
+          }
+        }
       },
       "map": [
         -101,
-        565
+        566
       ],
       "theme": "bk",
       "bg": "brownRock",
@@ -45246,7 +45292,7 @@
         {
           "dir": "right",
           "to": "bend",
-          "pos": 13,
+          "pos": 12,
           "size": 6,
           "spawn": [
             3,
@@ -45254,35 +45300,259 @@
           ],
           "depth": 58,
           "gw": 2
+        },
+        {
+          "dir": "left",
+          "to": "darkest_cave",
+          "pos": 12,
+          "size": 6,
+          "spawn": [
+            76,
+            15
+          ],
+          "gw": 2
         }
+      ],
+      "saveTombs": [
+        [
+          31,
+          16
+        ]
       ],
       "bakedWallTemplate": {
         "schemaVersion": 2,
-        "sourceHash": "7f261b86",
-        "wallCount": 4,
+        "sourceHash": "a5dbc82c",
+        "wallCount": 9,
         "xWorld": [
           0,
           0,
           0,
-          472
+          472,
+          0,
+          320,
+          464,
+          0,
+          0
         ],
         "yWorld": [
           0,
           152,
           8,
-          8
+          8,
+          144,
+          144,
+          0,
+          0,
+          16
         ],
         "wWorld": [
           480,
           480,
+          8,
+          8,
+          320,
+          160,
+          16,
+          464,
+          16
+        ],
+        "hWorld": [
+          8,
+          8,
+          144,
+          144,
+          16,
+          16,
+          96,
+          16,
+          80
+        ],
+        "isPlatformFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "platformEdge": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "themeIndex": [
+          255,
+          255,
+          255,
+          255,
+          9,
+          0,
+          0,
+          0,
+          0
+        ],
+        "themeNames": [
+          "overgrowth",
+          "waterStone",
+          "grayStone",
+          "darkStone",
+          "magma",
+          "sand",
+          "darkGlass"
+        ],
+        "soundHardnessIndex": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "isInvisibleFlag": [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rampOrientationIndex": [
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255
+        ],
+        "isPillarHalfWidthFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "isIceFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "isUltraIceFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rimStyleIndex": [
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535
+        ],
+        "rimStyles": []
+      }
+    },
+    {
+      "v": 3,
+      "id": "darkest_cave",
+      "name": "Darkest Cave",
+      "world": 1,
+      "size": [
+        80,
+        50
+      ],
+      "spawn": [
+        40,
+        25
+      ],
+      "solids": {
+        "byTheme": {}
+      },
+      "map": [
+        -181,
+        566
+      ],
+      "theme": "bk",
+      "bg": "brownRock",
+      "light": "Ambient",
+      "transitions": [
+        {
+          "dir": "right",
+          "to": "darkening_hall",
+          "pos": 12,
+          "size": 6,
+          "spawn": [
+            3,
+            15
+          ],
+          "depth": 78,
+          "gw": 2
+        }
+      ],
+      "bakedWallTemplate": {
+        "schemaVersion": 2,
+        "sourceHash": "3b8d72af",
+        "wallCount": 4,
+        "xWorld": [
+          0,
+          0,
+          0,
+          632
+        ],
+        "yWorld": [
+          0,
+          392,
+          8,
+          8
+        ],
+        "wWorld": [
+          640,
+          640,
           8,
           8
         ],
         "hWorld": [
           8,
           8,
-          144,
-          144
+          384,
+          384
         ],
         "isPlatformFlag": [
           0,
@@ -45350,6 +45620,6 @@
   ],
   "editor": {
     "createdWithBuild": "529",
-    "lastEditedIso": "2026-07-26T05:06:53.327Z"
+    "lastEditedIso": "2026-07-26T05:16:18.687Z"
   }
 }
