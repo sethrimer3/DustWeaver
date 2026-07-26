@@ -27,6 +27,7 @@ import {
   APEX_FLOAT_GRAVITY_MULTIPLIER,
   NORMAL_MAX_FALL_WORLD_PER_SEC,
   FAST_MAX_FALL_WORLD_PER_SEC,
+  POST_THRESHOLD_FALL_ACCEL_WORLD_PER_SEC2,
   JUMP_BUFFER_TICKS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
   GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC,
@@ -113,8 +114,12 @@ export function applyPlayerGravityAndJump(
   // exceed the normal fall speed cap without causing tunnelling issues
   // because the rope constraint clamps displacement each tick.
   if (!isTouchingWater && world.isGrappleActiveFlag === 0 && cluster.velocityYWorld > 0) {
-    const normalFallCap = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
+    const normalFallThreshold = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
     const fastFallCap = ov(debugSpeedOverrides.fastFallCapWorld, FAST_MAX_FALL_WORLD_PER_SEC);
+    const postThresholdAccel = ov(
+      debugSpeedOverrides.postThresholdFallAccelWorld,
+      POST_THRESHOLD_FALL_ACCEL_WORLD_PER_SEC2,
+    );
     // Enter committed fast-fall mode when holding down while falling.
     // Use crouch-held input as the authoritative "down" signal because
     // playerMoveInputDyWorld is not guaranteed on keyboard movement paths.
@@ -123,17 +128,35 @@ export function applyPlayerGravityAndJump(
       cluster.isFastFallModeFlag = 1;
     }
 
-    // Apply terminal velocity cap FIRST so gravity cannot push velocity above
-    // fastFallCap before the brake runs.  Without this, gravity adds ~15 units
-    // per tick, the cap would then restore it to fastFallCap each frame, and
-    // the brake would be completely nullified.
-    const maxFall = cluster.isFastFallModeFlag === 1 ? fastFallCap : normalFallCap;
-    if (cluster.velocityYWorld > maxFall) {
-      cluster.velocityYWorld = maxFall;
+    if (cluster.isFastFallModeFlag === 1) {
+      // Committed fast-fall: intentional, still hard-capped at fastFallCap.
+      if (cluster.velocityYWorld > fastFallCap) {
+        cluster.velocityYWorld = fastFallCap;
+      }
+    } else {
+      // Ordinary freefall: no hard terminal cap. Below normalFallThreshold,
+      // this tick's normal-gravity acceleration (already applied above) is
+      // left as-is. Once past the threshold, replace the portion of this
+      // tick's acceleration that exceeded it with the much gentler
+      // postThresholdAccel, split exactly at the crossing point so the
+      // result is frame-rate independent and never overshoot-dependent.
+      // An already-higher velocity carried in from another mechanic (grapple,
+      // spring, knockback, etc.) is never reduced — it simply continues
+      // accelerating at postThresholdAccel from wherever it already was.
+      const vyBeforeThisTickGravity = cluster.velocityYWorld - grav * dtSec;
+      if (vyBeforeThisTickGravity >= normalFallThreshold) {
+        cluster.velocityYWorld = vyBeforeThisTickGravity + postThresholdAccel * dtSec;
+      } else if (cluster.velocityYWorld > normalFallThreshold) {
+        const dtAtNormalGravity = (normalFallThreshold - vyBeforeThisTickGravity) / grav;
+        const dtAtPostThresholdAccel = dtSec - dtAtNormalGravity;
+        cluster.velocityYWorld = normalFallThreshold + postThresholdAccel * dtAtPostThresholdAccel;
+      }
     }
 
     // Upward brake: holding jump while in committed fast-fall brakes descent
-    // back toward normalFallCap.  Once at or below normalFallCap, exit mode.
+    // back toward normalFallThreshold.  Once at or below it, exit fast-fall
+    // mode — ordinary freefall (including post-threshold acceleration) then
+    // resumes from that velocity next tick rather than a fresh 160 baseline.
     //
     // Bug fix: we subtract (upwardBrake + grav) instead of just
     // upwardBrake.  Gravity was already applied above this section, so without
@@ -142,12 +165,12 @@ export function applyPlayerGravityAndJump(
     // was already baked in, giving a true net deceleration of brakeStrength/s.
     const isBraking = cluster.isFastFallModeFlag === 1
         && world.playerJumpHeldFlag === 1
-        && cluster.velocityYWorld > normalFallCap;
+        && cluster.velocityYWorld > normalFallThreshold;
     if (isBraking) {
       const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
       cluster.velocityYWorld -= (upwardBrake + grav) * dtSec;
-      if (cluster.velocityYWorld <= normalFallCap) {
-        cluster.velocityYWorld = normalFallCap;
+      if (cluster.velocityYWorld <= normalFallThreshold) {
+        cluster.velocityYWorld = normalFallThreshold;
         cluster.isFastFallModeFlag = 0;
       }
     }

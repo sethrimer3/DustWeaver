@@ -8,6 +8,24 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 542 — Two-Stage Unbounded Natural Fall Curve
+
+**Why:** Todo item required replacing the ordinary-air terminal fall-speed cap (previously a hard clamp at `NORMAL_MAX_FALL_WORLD_PER_SEC` = 160.5 px/s) with a two-stage curve: normal gravity up to ~160 px/s, then unbounded continued acceleration at 20 px/s² so long falls keep gaining speed naturally instead of hitting an artificial ceiling.
+
+**What was done:**
+1. `src/sim/clusters/movementConstants.ts`: reframed `NORMAL_MAX_FALL_WORLD_PER_SEC` doc comment as a threshold (not a cap); added `POST_THRESHOLD_FALL_ACCEL_WORLD_PER_SEC2 = 20.0` and a `postThresholdFallAccelWorld` debug override slot (kept `normalFallCapWorld`/`fastFallCapWorld` override key names unchanged for backward compatibility with `src/ui/debugPanel.ts`).
+2. `src/sim/clusters/playerVerticalMovement.ts`'s fall-speed-cap section now branches on `isFastFallModeFlag`:
+   - Committed fast-fall (holding down): unchanged, still hard-clamped to `fastFallCap` (240 px/s) — this remains an intentional, capped mechanic per the acceptance criteria.
+   - Ordinary freefall: no hard clamp. Reconstructs this tick's pre-gravity velocity (`cluster.velocityYWorld - grav * dtSec`, valid since `grav` is the exact value already added once this tick in the gravity section above) and, once at/above the threshold, replaces the excess-gravity delta with `postThresholdAccel`. When the tick crosses the threshold mid-frame, splits `dtSec` exactly at the crossing instant (`dtAtNormalGravity = (threshold - vyBefore) / grav`) so the result is both frame-rate-independent and free of overshoot-dependent behavior. A velocity already above the threshold from another mechanic (grapple, spring, knockback, etc.) is never reduced — it simply continues accelerating at the gentle post-threshold rate from wherever it already was.
+   - The existing upward brake (holding jump during committed fast-fall) is unchanged except renamed variables (`normalFallCap` → `normalFallThreshold`): it still decelerates back to the threshold and clears fast-fall mode there; ordinary freefall then resumes from that exact velocity next tick (verified by test — it does NOT stay pinned at 160 forever, since ordinary freefall's own post-threshold acceleration takes over immediately).
+   - Water, grapple-active, wall-slide, and rising-motion paths are untouched (all already gated out of this section by pre-existing guards).
+3. Bumped `BUILD_NUMBER` to 542 and checked off the Todo item.
+4. Added `src/tests/playerFallCurve.test.ts` (8 tests): threshold approach under gravity, +20/+40 px/s after 1s/2s past threshold, unbounded very-long-fall (30s sim, no cap), dt-subdivision equivalence (1/60s vs 1/240s steps produce the same result), exact-crossing-tick has no overshoot, pre-existing higher velocity from another mechanic is never reduced, fast-fall's hard cap is preserved, and brake-to-threshold-then-resume.
+
+**Validation:** `npx tsx --test src/tests/playerFallCurve.test.ts src/tests/movementV2Skid.test.ts src/tests/playerWaterPhysics.test.ts` — 68/68 pass. `npm run build` and `npm run lint` both pass cleanly. `npm test` (the full suite, run via `node --import tsx --test`) took over 20 minutes in this sandbox and did not finish within a reasonable session window — this appears to be a pre-existing environment characteristic (very large test count) unrelated to this change, not a hang: a `timeout 100`-bounded partial run got through ~2883 output lines / a large majority of files with only 4 failures, all in `src/tests/roomRenderChunkWarmScheduler.test.ts` (`getOrCreatePrewarmWallCache is not a function` and a related radius-3 queue assertion) — confirmed present identically on `main` (pre-change) via `git stash`, so unrelated to this fix. No fall/movement/water test failures appeared anywhere in the partial run. **Follow-up for a future agent/session:** consider profiling why `npm test` takes so long end-to-end (possibly worth its own Todo item — the per-file targeted runs are fast, so the cost is likely fixed per-file process/import overhead across a very large number of test files, or one specific slow file/suite not yet identified because the full run couldn't be observed to completion in this session).
+
+---
+
 ## BUILD 539 — Expose Prewarm Debug Panel in Pause-Menu Debug UI
 
 **Why:** Todo item 61 and `docs/render-chunk-prewarming.md` noted that the Prewarm rendering debug panel was not exposed in the pause-menu debug options or on the floating on-screen debug toggle panel.

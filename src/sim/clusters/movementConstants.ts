@@ -20,6 +20,7 @@ export const debugSpeedOverrides = {
   gravityWorld: NaN,
   normalFallCapWorld: NaN,
   fastFallCapWorld: NaN,
+  postThresholdFallAccelWorld: NaN,
   groundAccelWorld: NaN,
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
@@ -109,7 +110,12 @@ export const APEX_GRAVITY_MULTIPLIER       = APEX_FLOAT_GRAVITY_MULTIPLIER;
 // By default gravity approaches normalMaxFall.  If the player holds down
 // while falling, the cap smoothly approaches fastMaxFall.
 
-/** Default maximum downward fall speed (px/s). Increased by 50% from 107.0. */
+/**
+ * Ordinary-fall threshold (px/s), not a hard cap. Normal gravity accelerates
+ * the player down to roughly this speed; beyond it, ordinary (non-committed)
+ * freefall continues accelerating indefinitely at
+ * `POST_THRESHOLD_FALL_ACCEL_WORLD_PER_SEC2` instead of stopping here.
+ */
 export const NORMAL_MAX_FALL_WORLD_PER_SEC = 160.5;
 
 /** Maximum downward fall speed when holding down (px/s). Increased by 50% from 160.0. */
@@ -121,6 +127,15 @@ export const FAST_MAX_FALL_WORLD_PER_SEC = 240.0;
  * Increased by 50% from 200.0.
  */
 export const FAST_MAX_FALL_APPROACH_PER_SEC = 300.0;
+
+/**
+ * Downward acceleration (px/s²) applied once ordinary (non-committed-fast-fall)
+ * freefall speed passes `NORMAL_MAX_FALL_WORLD_PER_SEC`. Replaces the old hard
+ * terminal-velocity clamp with an unbounded, much gentler continued
+ * acceleration — e.g. ~180 px/s after one additional second of falling past
+ * the threshold, ~200 px/s after two.
+ */
+export const POST_THRESHOLD_FALL_ACCEL_WORLD_PER_SEC2 = 20.0;
 
 // ============================================================================
 // Coyote time & jump buffer
