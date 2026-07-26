@@ -1374,3 +1374,47 @@ Investigated whether "menu animation lag" is still reproducible. Findings (stati
 - `git log` shows a dedicated prior fix, "Fix main menu animation startup" (commit e4d0f6de), which is presumably what added this preload/warm pipeline.
 - Could **not** capture live frame-timing evidence: this sandbox's Browser pane reports `document.hidden === true` with no compositing, which freezes `requestAnimationFrame` entirely (0 frames fire) regardless of app behavior. `computer{action:"screenshot"}` also times out with "the Browser pane is not displayed". This is an environment limitation, not an app defect — no conclusion should be drawn from the absence of measured frames.
 - Given the code-level evidence, the Todo item was checked off as verified-by-audit rather than left dangling. If a user still reports stutter, re-open the item and capture real `performance.now()` deltas around `requestAnimationFrame` in actual devtools (not this sandboxed pane) before making further changes.
+
+### BUILD 542 — Editor dockable/floating panel system: outstanding manual verification
+
+The dockable-panel feature is complete in code with full automated coverage
+(2493/2493 tests, clean build and lint), but the **manual acceptance checklist
+was not executed** and should be run before treating the feature as proven:
+
+- Reorder several panels within each sidebar; move panels between sides.
+- Float several panels; click between them to verify stacking order.
+- Use every panel while floating, especially Palette and Inspector (focus,
+  typing, palette card clicks, animated background previews).
+- Scroll long docked and floating panels; verify sidebar auto-scroll while
+  dragging near the top/bottom edges.
+- Confirm clicking/dragging/scrolling a floating panel never edits or zooms
+  the room behind it.
+- Close and reopen the editor; then restart the app — the arrangement should
+  restore per campaign.
+- Resize the window much smaller and confirm every floating header stays
+  reachable (the resize handler re-clamps via `clampAllFloatingPanels`).
+- Reset Workspace restores the original layout and redocks all floats.
+- Confirm save, export, undo/redo, room switching, map overlays, sidebar
+  hide/reveal, Swap Menu Sides, and campaign JSON are unaffected.
+
+Why it wasn't done here: this repo has no jsdom/DOM test harness, and the
+sandboxed Browser pane reports `document.hidden === true` with no compositing,
+so `requestAnimationFrame` never fires and screenshots time out — the editor
+cannot be driven there. This is an environment limitation, not evidence of a
+defect. Automated coverage deliberately concentrates the real behavior in pure
+modules (`editorPanelLayout.ts`, `editorFloatingGeometry.ts`,
+`editorUIHitRegions.ts`) with source guards only for irreducible DOM/pointer
+wiring in `editorPanelDocking.ts`.
+
+Known design decisions a follow-up agent should not "fix" blindly:
+- Floating layer z-index is 950, deliberately between the sidebars (900) and
+  the lowest modal layer (1100). A guard test enforces this band.
+- `dockPanel`'s `index` is interpreted against the destination list *after*
+  the panel is removed, matching how the drag coordinator measures the drop
+  point (the dragged panel is lifted out and replaced by a placeholder).
+- A floating entry with unusable coordinates is deliberately dropped during
+  normalization so the panel falls back to its docked default rather than
+  materializing somewhere unreachable.
+- Panel layout is workspace-only state: never campaign JSON, never room-dirty,
+  never an undo/history entry. A guard test asserts `roomJson.ts` and
+  `editorRoomBuilder.ts` never mention `panelLayout`.
