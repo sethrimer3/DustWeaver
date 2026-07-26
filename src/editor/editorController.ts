@@ -151,7 +151,10 @@ import {
   isTransitionAtRoomEdge,
   showTransitionConnectPopup,
   showConnectedRoomCreationDialog,
+  showWidthMismatchPopup,
 } from './editorTransitionConnectPopup';
+import { findTransitionWidthMismatch } from './editorVisualMapHelpers';
+import { getTransitionWarningIconPos, TRANSITION_WARNING_ICON_RADIUS_PX } from './editorRendererHelpers';
 import {
   CampaignSpawnContext,
   syncCampaignSpawnBlockFromSession,
@@ -170,7 +173,7 @@ import { invalidateRoomContour } from '../ui/mapSketchRenderer';
 import { setActiveSeamBlending } from '../render/walls/blockSpriteRenderer';
 import { editorRoomDataToJson } from './roomJson';
 import type { RoomJsonDef } from './roomJson';
-import { buildWorldMapFromRegistry } from './editableCampaignSession';
+import { buildWorldMapFromRegistry, mergeWorldMapWithRegistry } from './editableCampaignSession';
 import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
 import type { SavedRoomV2 } from '../levels/roomSchemaV2';
 import { auditRoomJson, printRoomAuditTable } from '../levels/roomFileAudit';
@@ -402,6 +405,22 @@ export function createEditorController(
   let isWorldMapDirty = false;
   // True if the current room has unsaved edits since it was last loaded.
   let isCurrentRoomDirty = false;
+
+  /**
+   * Marks the world map dirty AND immediately mirrors the live ROOM_REGISTRY
+   * (positions/links/name overrides) into campaignStore.worldMap. Without
+   * this, campaignStore's snapshot only gets refreshed at export time, so
+   * campaignStore.getRoom() would stamp a stale mapX/mapY onto any room
+   * hydrated for the first time after a drag/link on the visual map — which
+   * then gets re-registered into ROOM_REGISTRY, clobbering the correct
+   * dragged position (see openVisualMap's registerRoom(state.roomData) call).
+   */
+  function markWorldMapDirty(): void {
+    isWorldMapDirty = true;
+    const store = campaignSession?.campaignStore;
+    if (store === undefined) return;
+    store.updateWorldMap(mergeWorldMapWithRegistry(campaignSession!, WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER));
+  }
 
   // Edge extension cache rebuilt whenever a new room is loaded into the editor.
   // Passed to renderEditorOverlays so extension tiles are visible as blue ghost
@@ -653,7 +672,7 @@ export function createEditorController(
     const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(roomDef, state.nextUid);
     state.nextUid = newNextUid;
     persistCreatedCampaignRoom(campaignSession, pendingRoomEdits, newRoomData);
-    isWorldMapDirty = true;
+    markWorldMapDirty();
   }
 
   /**
@@ -692,7 +711,7 @@ export function createEditorController(
     }
 
     state.nextUid = Math.max(state.nextUid, result.newNextUid);
-    isWorldMapDirty = true;
+    markWorldMapDirty();
     if (result.sourcePatchedCurrentRoom && state.roomData) {
       // Deliberately not routed through applyEdits('metadata'): that helper
       // recomputes isCurrentRoomDirty from the undo-history transaction
@@ -732,7 +751,7 @@ export function createEditorController(
       return result;
     }
 
-    isWorldMapDirty = true;
+    markWorldMapDirty();
     if (state.roomData && (state.roomData.id === input.sourceRoomId || state.roomData.id === input.targetRoomId)) {
       const roomDef = rebuildLiveEditorRoomDef();
       if (roomDef) registerRoom(roomDef);
@@ -771,7 +790,7 @@ export function createEditorController(
       }
     }
     linkedRoomsCreatedFromCurrentRoom = [];
-    isWorldMapDirty = true;
+    markWorldMapDirty();
   }
 
   /**
@@ -1701,7 +1720,7 @@ export function createEditorController(
           cancelTransitionLink(state);
         }
       },
-      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
+      onWorldMapDataChanged: () => { markWorldMapDirty(); },
     });
   }
 
@@ -1753,7 +1772,7 @@ export function createEditorController(
         visualMapCleanup = null;
       },
       onSaveAndExportCampaign: () => saveAndExportCampaign(),
-      onWorldMapDataChanged: () => { isWorldMapDirty = true; },
+      onWorldMapDataChanged: () => { markWorldMapDirty(); },
       onRoomCreated: handleRoomCreatedFromVisualMap,
       requestCreateLinkedRoom: requestCreateLinkedRoomFromVisualMap,
       requestLinkTransition: requestLinkTransitionFromVisualMap,
@@ -2130,13 +2149,13 @@ export function createEditorController(
                     const { data: newRoomData, nextUid: newNextUid } = roomDefToEditorRoomData(newRoomDef, state.nextUid);
                     state.nextUid = newNextUid;
                     persistCreatedCampaignRoom(campaignSession, pendingRoomEdits, newRoomData);
-                    isWorldMapDirty = true;
+                    markWorldMapDirty();
                     isCurrentRoomDirty = true;
                     // Rebuild the current room to reflect the updated source transition.
                     applyEdits('metadata');
                     showEditorToast(uiRoot, `Room "${newRoomDef.id}" created and linked.`);
                   },
-                  onWorldMapDataChanged: () => { isWorldMapDirty = true; },
+                  onWorldMapDataChanged: () => { markWorldMapDirty(); },
                 });
               });
             }

@@ -1,0 +1,140 @@
+{
+  "v": 3,
+  "id": "the_squeeze",
+  "name": "The Squeeze",
+  "world": 2,
+  "size": [
+    40,
+    100
+  ],
+  "spawn": [
+    20,
+    50
+  ],
+  "solids": {
+    "byTheme": {}
+  },
+  "map": [
+    -158,
+    -221
+  ],
+  "theme": "bk",
+  "bg": "brownRock",
+  "light": "Ambient",
+  "transitions": [
+    {
+      "dir": "down",
+      "to": "underwater_lake",
+      "pos": 25,
+      "size": 6,
+      "spawn": [
+        288,
+        3
+      ],
+      "fade": "#FFF4D6",
+      "depth": 98,
+      "gw": 2
+    },
+    {
+      "dir": "up",
+      "to": "first_light",
+      "pos": 9,
+      "size": 6,
+      "spawn": [
+        12,
+        46
+      ],
+      "gw": 2
+    }
+  ],
+  "bakedWallTemplate": {
+    "schemaVersion": 2,
+    "sourceHash": "5c8d2d57",
+    "wallCount": 4,
+    "xWorld": [
+      0,
+      0,
+      0,
+      312
+    ],
+    "yWorld": [
+      0,
+      792,
+      8,
+      8
+    ],
+    "wWorld": [
+      320,
+      320,
+      8,
+      8
+    ],
+    "hWorld": [
+      8,
+      8,
+      784,
+      784
+    ],
+    "isPlatformFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "platformEdge": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "themeIndex": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "soundHardnessIndex": [
+      2,
+      2,
+      2,
+      2
+    ],
+    "isInvisibleFlag": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "rampOrientationIndex": [
+      255,
+      255,
+      255,
+      255
+    ],
+    "isPillarHalfWidthFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "isIceFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "isUltraIceFlag": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "rimStyleIndex": [
+      65535,
+      65535,
+      65535,
+      65535
+    ],
+    "rimStyles": []
+  }
+}

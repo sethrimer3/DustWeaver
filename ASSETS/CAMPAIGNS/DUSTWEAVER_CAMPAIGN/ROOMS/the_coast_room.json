@@ -1,0 +1,161 @@
+{
+  "v": 3,
+  "id": "the_coast",
+  "name": "The Coast",
+  "world": 2,
+  "size": [
+    200,
+    100
+  ],
+  "spawn": [
+    100,
+    50
+  ],
+  "solids": {
+    "byTheme": {
+      "sand": {
+        "rects": [
+          [
+            70,
+            96,
+            130,
+            4
+          ]
+        ]
+      }
+    }
+  },
+  "map": [
+    -352,
+    -273
+  ],
+  "theme": "bk",
+  "bg": "BeachCoast",
+  "light": "Ambient",
+  "transitions": [
+    {
+      "dir": "right",
+      "to": "first_light",
+      "pos": 68,
+      "size": 28,
+      "spawn": [
+        3,
+        29
+      ],
+      "depth": 198,
+      "gw": 2
+    }
+  ],
+  "bakedWallTemplate": {
+    "schemaVersion": 2,
+    "sourceHash": "12c46d4d",
+    "wallCount": 5,
+    "xWorld": [
+      0,
+      0,
+      0,
+      1592,
+      560
+    ],
+    "yWorld": [
+      0,
+      792,
+      8,
+      8,
+      768
+    ],
+    "wWorld": [
+      1600,
+      1600,
+      8,
+      8,
+      1040
+    ],
+    "hWorld": [
+      8,
+      8,
+      784,
+      784,
+      32
+    ],
+    "isPlatformFlag": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "platformEdge": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "themeIndex": [
+      255,
+      255,
+      255,
+      255,
+      8
+    ],
+    "themeNames": [
+      "overgrowth",
+      "waterStone",
+      "grayStone",
+      "darkStone",
+      "magma",
+      "sand"
+    ],
+    "soundHardnessIndex": [
+      2,
+      2,
+      2,
+      2,
+      0
+    ],
+    "isInvisibleFlag": [
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "rampOrientationIndex": [
+      255,
+      255,
+      255,
+      255,
+      255
+    ],
+    "isPillarHalfWidthFlag": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "isIceFlag": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "isUltraIceFlag": [
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "rimStyleIndex": [
+      65535,
+      65535,
+      65535,
+      65535,
+      65535
+    ],
+    "rimStyles": []
+  }
+}

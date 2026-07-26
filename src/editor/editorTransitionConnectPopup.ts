@@ -197,6 +197,103 @@ export function showTransitionConnectPopup(
   return () => dismiss(false);
 }
 
+/** How long the "Auto match width?" popup stays visible before dismissing. */
+const WIDTH_MISMATCH_POPUP_AUTO_DISMISS_MS = 6000;
+
+/**
+ * Shows a short-lived "Auto match width?" popup anchored above the given
+ * screen position (typically the width-mismatch warning icon that was
+ * clicked). Calls `onConfirm` if the user clicks Yes, or disappears
+ * automatically after `WIDTH_MISMATCH_POPUP_AUTO_DISMISS_MS` milliseconds.
+ *
+ * Returns a cleanup function that hides the popup immediately.
+ */
+export function showWidthMismatchPopup(
+  uiRoot: HTMLElement,
+  screenXPx: number,
+  screenYPx: number,
+  onConfirm: () => void,
+): () => void {
+  const promptEl = document.createElement('div');
+  promptEl.style.cssText = `
+    position: absolute; left: ${screenXPx}px; top: ${screenYPx}px; z-index: 2000;
+    transform: translate(-50%, -100%) translateY(-10px);
+    width: 200px; overflow: hidden; border-radius: 5px;
+    background: rgba(30,20,4,0.97); border: 1px solid rgba(255,200,80,0.8);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    color: #ffe8b8; font-family: monospace; cursor: pointer;
+    opacity: 0; transition: opacity 180ms ease, transform 180ms ease;
+    pointer-events: auto;
+  `;
+
+  const contentEl = document.createElement('div');
+  contentEl.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px 9px;';
+
+  const labelEl = document.createElement('div');
+  labelEl.textContent = 'Auto match width?';
+  labelEl.style.cssText = 'font-size:12px; font-weight:bold; flex:1;';
+  contentEl.appendChild(labelEl);
+
+  const yesBtn = document.createElement('button');
+  yesBtn.type = 'button';
+  yesBtn.textContent = 'Yes';
+  yesBtn.style.cssText = `
+    padding: 4px 10px; border-radius: 3px; border: 1px solid rgba(255,200,80,0.8);
+    background: rgba(120,80,10,0.8); color: #ffe8b8; font-family: monospace;
+    font-size: 12px; cursor: pointer; white-space: nowrap;
+  `;
+  contentEl.appendChild(yesBtn);
+  promptEl.appendChild(contentEl);
+
+  const timerBar = document.createElement('div');
+  timerBar.style.cssText = `
+    height: 3px; width: 100%; background: #ffcc33;
+    transition: width ${WIDTH_MISMATCH_POPUP_AUTO_DISMISS_MS}ms linear;
+  `;
+  promptEl.appendChild(timerBar);
+  uiRoot.appendChild(promptEl);
+
+  let dismissed = false;
+  let timeoutId = 0;
+  let removeId = 0;
+
+  const dismiss = (animate: boolean): void => {
+    if (dismissed) return;
+    dismissed = true;
+    window.clearTimeout(timeoutId);
+    window.clearTimeout(removeId);
+    if (animate) {
+      promptEl.style.opacity = '0';
+      promptEl.style.transform = 'translate(-50%, -100%) translateY(-10px)';
+      removeId = window.setTimeout(() => {
+        if (promptEl.parentElement) promptEl.parentElement.removeChild(promptEl);
+      }, 220);
+    } else {
+      if (promptEl.parentElement) promptEl.parentElement.removeChild(promptEl);
+    }
+  };
+
+  const handleYes = (event: Event): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    dismiss(false);
+    onConfirm();
+  };
+
+  yesBtn.addEventListener('click', handleYes);
+  promptEl.addEventListener('click', handleYes);
+
+  timeoutId = window.setTimeout(() => dismiss(true), WIDTH_MISMATCH_POPUP_AUTO_DISMISS_MS);
+
+  requestAnimationFrame(() => {
+    promptEl.style.opacity = '1';
+    promptEl.style.transform = 'translate(-50%, -100%) translateY(0)';
+    timerBar.style.width = '0%';
+  });
+
+  return () => dismiss(false);
+}
+
 // ── Connected room creation dialog ────────────────────────────────────────────
 
 /** Callbacks provided by the editor controller to handle post-creation wiring. */

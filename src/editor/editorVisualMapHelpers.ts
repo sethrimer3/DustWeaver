@@ -321,6 +321,28 @@ export function getOppositeDirection(dir: TransitionDirection): TransitionDirect
 }
 
 /**
+ * Looks up the reciprocal transition (in the registered target room) that
+ * points back at `sourceRoomId` from the opposite direction, and returns its
+ * `openingSizeBlocks` when it differs from `t.openingSizeBlocks`. Returns
+ * `null` when there is no target room, no reciprocal, or the widths already
+ * match — i.e. `null` means "nothing to warn about".
+ */
+export function findTransitionWidthMismatch(
+  sourceRoomId: string,
+  t: { direction: TransitionDirection; targetRoomId: string; openingSizeBlocks: number },
+): number | null {
+  if (!t.targetRoomId) return null;
+  const target = ROOM_REGISTRY.get(t.targetRoomId);
+  if (!target) return null;
+  const wantDir = getOppositeDirection(t.direction);
+  const reciprocal = target.transitions.find(
+    (r: RoomTransitionDef) => r.direction === wantDir && r.targetRoomId === sourceRoomId,
+  );
+  if (!reciprocal) return null;
+  return reciprocal.openingSizeBlocks !== t.openingSizeBlocks ? reciprocal.openingSizeBlocks : null;
+}
+
+/**
  * Computes the map-world position at which a newly created room should be
  * placed so that it sits directly adjacent to `sourceRoomId` on the side
  * indicated by `direction`.

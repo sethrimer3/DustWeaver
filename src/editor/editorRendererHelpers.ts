@@ -15,6 +15,28 @@ import { getStairsSolidRects } from '../levels/stairsGeometry';
 import type { CrumbleVariant, EditorRoomData, EditorTransition, EditorWall, AmbientLightDirection, EditorEnemy } from './editorState';
 import { getTransitionEditorHitbox } from './editorHitTest';
 import { editorPerfCounters } from './editorPerfCounters';
+import { findTransitionWidthMismatch } from './editorVisualMapHelpers';
+
+/** Click/tap tolerance radius, in screen px, around a transition's width-mismatch warning icon. */
+export const TRANSITION_WARNING_ICON_RADIUS_PX = 9;
+
+/**
+ * Screen-space center of the width-mismatch warning icon drawn above a
+ * transition's label. Shared by the renderer (to draw it) and the click
+ * handler (to hit-test it) so the two never drift apart.
+ */
+export function getTransitionWarningIconPos(
+  t: EditorTransition, ox: number, oy: number, zoom: number,
+): { x: number; y: number } {
+  const gw = t.gradientWidthBlocks ?? 3;
+  const isHoriz = t.direction === 'left' || t.direction === 'right';
+  const wBlock = isHoriz ? gw : t.openingSizeBlocks;
+  const hBlock = isHoriz ? t.openingSizeBlocks : gw;
+  const bs = BLOCK_SIZE_SMALL;
+  const cx = (t.xBlock + wBlock / 2) * bs * zoom + ox;
+  const cy = (t.yBlock + hBlock / 2) * bs * zoom + oy;
+  return { x: cx, y: cy - 16 * zoom - 6 };
+}
 
 export { buildElementTooltipId, buildElementTypeName, drawHoverTooltip } from './editorElementLabels';
 
@@ -629,6 +651,30 @@ export function drawTransitionZone(
   ctx.textBaseline = 'middle';
   const label = t.targetRoomId ? `#${doorNumber} →${t.targetRoomId}` : `#${doorNumber} (unlinked)`;
   ctx.fillText(label, cx, cy);
+
+  // Width-mismatch warning icon: this transition's opening size disagrees
+  // with its reciprocal's in the target room.
+  if (findTransitionWidthMismatch(_room.id, t) !== null) {
+    const icon = getTransitionWarningIconPos(t, ox, oy, zoom);
+    ctx.save();
+    ctx.fillStyle = '#ffcc33';
+    ctx.strokeStyle = '#664400';
+    ctx.lineWidth = 1;
+    const s = 7;
+    ctx.beginPath();
+    ctx.moveTo(icon.x, icon.y - s);
+    ctx.lineTo(icon.x + s, icon.y + s);
+    ctx.lineTo(icon.x - s, icon.y + s);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('!', icon.x, icon.y + 2);
+    ctx.restore();
+  }
 }
 
 /** Draws a red arrow starting at the trigger edge, pointing outward in the facing direction. */

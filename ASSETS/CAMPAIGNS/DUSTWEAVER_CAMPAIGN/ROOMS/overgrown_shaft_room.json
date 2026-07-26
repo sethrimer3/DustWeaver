@@ -599,14 +599,14 @@
       "size": 7,
       "spawn": [
         280,
-        196
+        157
       ],
       "fade": "#FFF4D6"
     }
   ],
   "bakedWallTemplate": {
     "schemaVersion": 2,
-    "sourceHash": "51190648",
+    "sourceHash": "38ef00be",
     "wallCount": 43,
     "xWorld": [
       0,
