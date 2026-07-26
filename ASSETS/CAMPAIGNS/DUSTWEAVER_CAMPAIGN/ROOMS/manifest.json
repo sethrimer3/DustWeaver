@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "1dff898b493e63a2",
+  "campaignHash": "226095f813836d28",
   "campaignVersion": 11,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-26T04:57:24.299Z",
+  "exportedAt": "2026-07-26T05:06:53.384Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -94,8 +94,8 @@
     "bend": {
       "roomId": "bend",
       "file": "bend_room.json",
-      "hash": "67b1df09da250b64",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "hash": "37e08342de9671a6",
+      "updatedAt": "2026-07-26T05:06:53.384Z"
     },
     "chasm": {
       "roomId": "chasm",
@@ -154,14 +154,20 @@
     "first_light": {
       "roomId": "first_light",
       "file": "first_light_room.json",
-      "hash": "2a7e7b9b2c8b02f8",
-      "updatedAt": "2026-07-26T04:57:24.299Z"
+      "hash": "9b926ebdd5210696",
+      "updatedAt": "2026-07-26T05:00:13.704Z"
     },
     "the_coast": {
       "roomId": "the_coast",
       "file": "the_coast_room.json",
-      "hash": "6b6241643fba5f51",
-      "updatedAt": "2026-07-26T04:57:24.299Z"
+      "hash": "f92c31dfa389783f",
+      "updatedAt": "2026-07-26T05:00:13.704Z"
+    },
+    "darkening_hall": {
+      "roomId": "darkening_hall",
+      "file": "darkening_hall_room.json",
+      "hash": "6d6d277bf4567a7e",
+      "updatedAt": "2026-07-26T05:06:53.384Z"
     }
   },
   "adjacency": {
@@ -269,7 +275,8 @@
     "bend": {
       "roomId": "bend",
       "targets": [
-        "chasm"
+        "chasm",
+        "darkening_hall"
       ]
     },
     "chasm": {
@@ -341,6 +348,12 @@
       "roomId": "the_coast",
       "targets": [
         "first_light"
+      ]
+    },
+    "darkening_hall": {
+      "roomId": "darkening_hall",
+      "targets": [
+        "bend"
       ]
     }
   }

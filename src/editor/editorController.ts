@@ -432,6 +432,8 @@ export function createEditorController(
 
   // Cleanup function for any currently-visible "Create connected room?" popup.
   let dismissConnectPopup: (() => void) | null = null;
+  // Cleanup function for any currently-visible "Auto match width?" popup.
+  let dismissWidthMismatchPopup: (() => void) | null = null;
   const loadedMainCampaignSpawn = getLoadedOfficialCampaignSpawn();
   const mainCampaignSession: EditableCampaignSession = {
     source: 'main',
@@ -1332,6 +1334,7 @@ export function createEditorController(
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
     if (visualMapCleanup) { visualMapCleanup(); visualMapCleanup = null; }
     if (dismissConnectPopup) { dismissConnectPopup(); dismissConnectPopup = null; }
+    if (dismissWidthMismatchPopup) { dismissWidthMismatchPopup(); dismissWidthMismatchPopup = null; }
     cancelTransitionLink(state);
     state.isActive = false;
     state.roomData = null;
@@ -1865,7 +1868,47 @@ export function createEditorController(
     if (inputState.isClickFired && state.roomData !== null) {
       // Ignore clicks on the UI panel area (CSS pixel comparison)
       if (isOverEditorCanvas(inputState.clickScreenXPx)) {
-        if (
+        // Width-mismatch warning icon click: takes priority over normal
+        // selection so the popup can be summoned without first selecting
+        // the transition.
+        let clickedWidthMismatchIcon = false;
+        if (state.activeTool === EditorTool.Select) {
+          const virtualClickX = (inputState.clickScreenXPx / cssWidthPx) * virtualWidthPx;
+          const virtualClickY = (inputState.clickScreenYPx / cssHeightPx) * virtualHeightPx;
+          for (const trans of state.roomData.transitions) {
+            const mismatchWidth = findTransitionWidthMismatch(state.roomData.id, trans);
+            if (mismatchWidth === null) continue;
+            const icon = getTransitionWarningIconPos(trans, freshOffset.offsetXPx, freshOffset.offsetYPx, camera.zoom);
+            const dx = virtualClickX - icon.x;
+            const dy = virtualClickY - icon.y;
+            if (dx * dx + dy * dy <= TRANSITION_WARNING_ICON_RADIUS_PX * TRANSITION_WARNING_ICON_RADIUS_PX) {
+              clickedWidthMismatchIcon = true;
+              if (dismissWidthMismatchPopup) { dismissWidthMismatchPopup(); dismissWidthMismatchPopup = null; }
+              const capturedRoomId = state.roomData.id;
+              const capturedTransUid = trans.uid;
+              dismissWidthMismatchPopup = showWidthMismatchPopup(
+                uiRoot, inputState.clickScreenXPx, inputState.clickScreenYPx,
+                () => {
+                  dismissWidthMismatchPopup = null;
+                  if (!state.roomData || state.roomData.id !== capturedRoomId) return;
+                  const liveTrans = state.roomData.transitions.find((t: EditorTransition) => t.uid === capturedTransUid);
+                  if (!liveTrans) return;
+                  const currentMismatch = findTransitionWidthMismatch(capturedRoomId, liveTrans);
+                  if (currentMismatch === null) return;
+                  state.selectedElements = [{ type: 'transition', uid: capturedTransUid }];
+                  bumpSelectionRevision(state);
+                  const changed = handlePropertyChange(state, history, 'transition.openingSizeBlocks', currentMismatch, state.guideDustPathSelectedPointIndex);
+                  if (changed) applyEdits('metadata');
+                },
+              );
+              break;
+            }
+          }
+        }
+        if (clickedWidthMismatchIcon) {
+          // Consumed by the warning icon — skip normal click handling below.
+        } else if (
+
           activePaintPending === null &&
           (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete) &&
           state.selectedPaletteItem?.id !== 'campaign_spawn' &&
@@ -1880,7 +1923,9 @@ export function createEditorController(
             activePaintTracksCampaignSpawn,
           ).pending;
         }
-        if (state.isLinkingTransition) {
+        if (clickedWidthMismatchIcon) {
+          // Consumed by the warning icon — skip selection/link handling below.
+        } else if (state.isLinkingTransition) {
           // In link mode: clicking a transition completes the link
           const clicked = selectAtCursor(state);
           if (clicked && clicked.type === 'transition' && linkSourceRoomData) {

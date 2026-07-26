@@ -1,78 +1,67 @@
 {
   "v": 3,
-  "id": "first_light",
-  "name": "First Light",
-  "world": 2,
+  "id": "darkening_hall",
+  "name": "Darkening Hall",
+  "world": 1,
   "size": [
-    50,
-    50
+    60,
+    20
   ],
   "spawn": [
-    25,
-    25
+    30,
+    10
   ],
   "solids": {
     "byTheme": {}
   },
   "map": [
-    -189,
-    -271
+    -101,
+    565
   ],
   "theme": "bk",
   "bg": "brownRock",
   "light": "Ambient",
   "transitions": [
     {
-      "dir": "down",
-      "to": "the_squeeze",
-      "pos": 40,
+      "dir": "right",
+      "to": "bend",
+      "pos": 13,
       "size": 6,
       "spawn": [
-        12,
-        3
+        3,
+        37
       ],
-      "depth": 48,
-      "gw": 2
-    },
-    {
-      "dir": "left",
-      "to": "the_coast",
-      "pos": 16,
-      "size": 28,
-      "spawn": [
-        196,
-        29
-      ],
+      "depth": 58,
       "gw": 2
     }
   ],
   "bakedWallTemplate": {
     "schemaVersion": 2,
-    "sourceHash": "afb15662",
+    "sourceHash": "7f261b86",
     "wallCount": 4,
     "xWorld": [
       0,
       0,
       0,
-      392
+      472
     ],
     "yWorld": [
       0,
-      392,
+      152,
       8,
       8
     ],
     "wWorld": [
-      400,
-      400,
+      480,
+      480,
       8,
       8
     ],
     "hWorld": [
       8,
       8,
-      384,
-      384
+      144,
+      144
     ],
     "isPlatformFlag": [
       0,
