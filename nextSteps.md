@@ -8,6 +8,22 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 528 — Map Sketch Room-Edge Artifact Regression Protection
+
+**Why:** Todo item 41 identified that world-map sketch rendering can regress when removing outside room-edge artifacts, and required narrow automated regression protection or visual debug checks. Existing comments in `mapSketchRenderer.ts` misstated that out-of-bounds neighbors are treated as air, contradicting the actual code which suppresses outer boundary edges to prevent unwanted rectangular box outline artifacts around rooms.
+
+**What was done:**
+1. Updated documentation comments in `src/ui/mapSketchRenderer.ts` to explain the exact deliberate suppression invariant: outer boundary edges facing out-of-bounds are skipped so outside box artifacts never trace around caves or solid rocks; only empty interior neighbors emit contour segments.
+2. Created comprehensive automated regression tests in `src/tests/mapSketchRenderer.test.ts`:
+   - Solid Room Perimeter Protection: verified that a completely solid room emits exactly zero sketch contours in both legacy `drawRoomSketch` and open-air `drawRoomSketchOpenAir`, confirming total elimination of outside room-edge artifacts.
+   - Cavity & Perimeter Wall Discrimination: recorded rendered canvas coordinates to prove that rooms with perimeter walls and internal cavities draw only internal boundary lines, strictly staying clear of outer boundary screen coordinates.
+   - Transition Open-Air Exception: verified that `drawRoomSketchOpenAir` permits boundary lines solely at transition openings (doorway gaps) while cleanly suppressing non-transition boundary walls.
+3. Marked Todo item 41 as complete in `docs/Todo.md` and bumped `BUILD_NUMBER` to 528.
+
+**Validation:** `npx tsx --test src/tests/mapSketchRenderer.test.ts` passes all 9 unit tests. Full `npm test` passes cleanly (2324/2324 pass).
+
+---
+
 ## BUILD 525 — Editor Phase 4: Hover Resolution Change-Gating
 
 **Why:** The editor's idle hover resolution (`selectAtCursor`) was scanning every element collection on every frame even when the cursor, room content, and layer state hadn't changed. On large rooms this is a measurable per-frame cost.
