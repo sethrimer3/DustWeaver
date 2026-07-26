@@ -104,5 +104,7 @@ test('every gesture path (click, right-click, drag-paint, right-drag-paint, hove
   // click, right-click, drag-paint, right-drag-paint, hover isOverCanvas, wheel zoom = 6 call sites
   // (plus the arrow function's own definition uses isPointOverEditorCanvas, counted separately).
   assert.ok(matches.length >= 6, `expected at least 6 isOverEditorCanvas(...) call sites, found ${matches.length}`);
-  assert.ok(source.includes('isPointOverEditorCanvas(xPx, uiHitRegionParams)'));
+  // The helper now takes both axes so floating panel rectangles can be tested
+  // (sidebars alone only ever needed X) — see editorUIHitRegions.ts.
+  assert.ok(source.includes('isPointOverEditorCanvas(xPx, yPx, uiHitRegionParams)'));
 });
