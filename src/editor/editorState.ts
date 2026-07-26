@@ -406,6 +406,8 @@ export interface EditorUICallbacks {
   onApplyLayerPreset?: (presetId: import('./editorWorkspacePreferences').LayerPresetId) => void;
   /** Called when the user clicks "Reset Workspace" (Phase 6). */
   onResetWorkspace?: () => void;
+  /** Called when any workspace UI preference (collapse, sidebar scroll, sidebar swap) changes. */
+  onWorkspaceUIChange?: () => void;
 }
 
 /** Selects the placement block theme and updates the recent-theme strip. */

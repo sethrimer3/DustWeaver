@@ -63,6 +63,8 @@ export interface EditorWorkspaceUIPrefs {
   rightSidebarScrollTop: number;
   /** Dockable panel arrangement (sidebar membership/order + floating windows). */
   panelLayout: EditorPanelLayout;
+  /** Whether the two content groups are swapped between left/right physical shells. */
+  sidebarsSwapped: boolean;
 }
 
 /**
@@ -79,14 +81,6 @@ export interface EditorSessionUIState {
   sectionExpanded: Record<string, boolean>;
   leftSidebarVisible: boolean;
   rightSidebarVisible: boolean;
-  /**
-   * Whether the two content groups (left group: room/global controls,
-   * settings, layers, inspector, export; right group: tools, brush,
-   * categories, palette) currently occupy the opposite physical sidebar
-   * from their default arrangement. Session-only — never persisted to
-   * disk/localStorage/room JSON.
-   */
-  sidebarsSwapped: boolean;
 }
 
 export interface EditorUI {
@@ -228,6 +222,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     // Insert after the hide arrow / swap button chrome already in each shell.
     leftHost.appendChild(leftContentGroup);
     rightHost.appendChild(rightContentGroup);
+    callbacks?.onWorkspaceUIChange?.();
   }
   const leftSwapBtn = makeSwapBtn('Swap Menus', swapMenuSides);
   const rightSwapBtn = makeSwapBtn('Swap Menus', swapMenuSides);
@@ -1392,6 +1387,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
     applyWorkspaceUIPrefs: (prefs: EditorWorkspaceUIPrefs) => {
       layersPanel.setCollapsed(prefs.layerPanelCollapsed);
+      if (sidebarsSwapped !== prefs.sidebarsSwapped) {
+        swapMenuSides();
+      }
       // Restore the panel arrangement, re-clamped against the current
       // viewport so a layout saved on a larger window can never leave a
       // floating panel's header off-screen and unreachable.
@@ -1407,6 +1405,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       leftSidebarScrollTop: container.scrollTop,
       rightSidebarScrollTop: rightSidebar.scrollTop,
       panelLayout: docking.getLayout(),
+      sidebarsSwapped,
     }),
     getSidebarVisibility: () => ({ left: leftSidebarVisible, right: rightSidebarVisible }),
     getFloatingPanelRects: () => docking.getFloatingPanelRects(),

@@ -20,6 +20,7 @@ export const debugSpeedOverrides = {
   gravityWorld: NaN,
   normalFallCapWorld: NaN,
   fastFallCapWorld: NaN,
+  longFallAccelWorld: NaN,
   groundAccelWorld: NaN,
   groundDecelWorld: NaN,
   airAccelWorld: NaN,
@@ -105,12 +106,32 @@ export const APEX_FLOAT_GRAVITY_MULTIPLIER = 0.5;
 export const APEX_THRESHOLD_WORLD_PER_SEC  = APEX_FLOAT_VELOCITY_THRESHOLD;
 export const APEX_GRAVITY_MULTIPLIER       = APEX_FLOAT_GRAVITY_MULTIPLIER;
 
-// ── Fall system (normal fall + fast fall) ────────────────────────────────────
-// By default gravity approaches normalMaxFall.  If the player holds down
-// while falling, the cap smoothly approaches fastMaxFall.
+// ── Fall system (normal fall + two-stage long fall) ──────────────────────────
+// By default gravity accelerates the player until they reach the normal fall
+// threshold (~160 px/s).  Above that threshold, a slow secondary acceleration
+// (LONG_FALL_ACCEL) takes over in place of clamping — velocity continues to
+// grow without bound so long falls feel progressively heavier.
+// If the player holds down, a higher hard cap (fastMaxFall) overrides this
+// entirely, entering committed fast-fall mode.
 
-/** Default maximum downward fall speed (px/s). Increased by 50% from 107.0. */
+/**
+ * Stage-1 fall threshold (px/s).  Below this speed gravity accelerates
+ * normally.  At or above it, LONG_FALL_ACCEL_WORLD_PER_SEC2 takes over.
+ * Previously used as a hard terminal cap; now used as the transition point
+ * for the two-stage curve.
+ * Increased by 50% from 107.0.
+ */
 export const NORMAL_MAX_FALL_WORLD_PER_SEC = 160.5;
+
+/**
+ * Stage-2 long-fall acceleration (px/s²) applied while ordinary freefall
+ * velocity is at or above NORMAL_MAX_FALL_WORLD_PER_SEC.  This replaces the
+ * old hard cap: instead of clamping, the player continues to accelerate
+ * slowly so a two-second passive fall from threshold reaches ~200 px/s.
+ * Value: 20 px/s².  Does NOT apply during fast-fall, water, grapple, wall
+ * slide, or when another force has already pushed vy above the threshold.
+ */
+export const LONG_FALL_ACCEL_WORLD_PER_SEC2 = 20.0;
 
 /** Maximum downward fall speed when holding down (px/s). Increased by 50% from 160.0. */
 export const FAST_MAX_FALL_WORLD_PER_SEC = 240.0;

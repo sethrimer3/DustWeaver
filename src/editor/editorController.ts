@@ -488,6 +488,7 @@ export function createEditorController(
       // Panel arrangement is workspace state only: never campaign JSON, never
       // room-dirty, never an undo/history entry.
       panelLayout: uiSnapshot?.panelLayout ?? defaultPanelLayout(),
+      sidebarsSwapped: uiSnapshot?.sidebarsSwapped ?? false,
     };
     workspaceSaver.schedule(prefs);
   }
@@ -891,6 +892,7 @@ export function createEditorController(
         leftSidebarScrollTop: workspacePrefs.leftSidebarScrollTop,
         rightSidebarScrollTop: workspacePrefs.rightSidebarScrollTop,
         panelLayout: workspacePrefs.panelLayout,
+        sidebarsSwapped: workspacePrefs.sidebarsSwapped,
       });
       // Persist (debounced) after any completed reorder, cross-sidebar move,
       // float, redock, or floating-window move. The docking system only fires
@@ -1324,8 +1326,12 @@ export function createEditorController(
             leftSidebarScrollTop: 0,
             rightSidebarScrollTop: 0,
             panelLayout: resetWorkspacePanelLayout(),
+            sidebarsSwapped: false,
           });
           ui?.update(state);
+          scheduleWorkspaceSave();
+        },
+        onWorkspaceUIChange: () => {
           scheduleWorkspaceSave();
         },
       });

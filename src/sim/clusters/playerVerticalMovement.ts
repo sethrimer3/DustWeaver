@@ -26,6 +26,7 @@ import {
   APEX_FLOAT_VELOCITY_THRESHOLD,
   APEX_FLOAT_GRAVITY_MULTIPLIER,
   NORMAL_MAX_FALL_WORLD_PER_SEC,
+  LONG_FALL_ACCEL_WORLD_PER_SEC2,
   FAST_MAX_FALL_WORLD_PER_SEC,
   JUMP_BUFFER_TICKS,
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
@@ -108,13 +109,17 @@ export function applyPlayerGravityAndJump(
     }
   }
 
-  // ── Fall speed cap (committed fast fall + optional upward brake) ────────
-  // Skip terminal velocity cap during grapple — the swing can legitimately
-  // exceed the normal fall speed cap without causing tunnelling issues
-  // because the rope constraint clamps displacement each tick.
+  // ── Two-stage fall curve + fast-fall cap ─────────────────────────────────
+  // Skip both the cap and the long-fall curve during:
+  //   • water contact  (vertical forces handled by applyPlayerWaterVerticalForces)
+  //   • active grapple (swing physics clamp displacement; natural speed can exceed
+  //                     the threshold; do not reduce it)
+  //   • upward motion  (velocityYWorld < 0 — handled by gravity + jump-cut above)
   if (!isTouchingWater && world.isGrappleActiveFlag === 0 && cluster.velocityYWorld > 0) {
-    const normalFallCap = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
-    const fastFallCap = ov(debugSpeedOverrides.fastFallCapWorld, FAST_MAX_FALL_WORLD_PER_SEC);
+    const longFallThreshold = ov(debugSpeedOverrides.normalFallCapWorld, NORMAL_MAX_FALL_WORLD_PER_SEC);
+    const fastFallCap       = ov(debugSpeedOverrides.fastFallCapWorld,   FAST_MAX_FALL_WORLD_PER_SEC);
+    const longFallAccel     = ov(debugSpeedOverrides.longFallAccelWorld,  LONG_FALL_ACCEL_WORLD_PER_SEC2);
+
     // Enter committed fast-fall mode when holding down while falling.
     // Use crouch-held input as the authoritative "down" signal because
     // playerMoveInputDyWorld is not guaranteed on keyboard movement paths.
@@ -123,33 +128,60 @@ export function applyPlayerGravityAndJump(
       cluster.isFastFallModeFlag = 1;
     }
 
-    // Apply terminal velocity cap FIRST so gravity cannot push velocity above
-    // fastFallCap before the brake runs.  Without this, gravity adds ~15 units
-    // per tick, the cap would then restore it to fastFallCap each frame, and
-    // the brake would be completely nullified.
-    const maxFall = cluster.isFastFallModeFlag === 1 ? fastFallCap : normalFallCap;
-    if (cluster.velocityYWorld > maxFall) {
-      cluster.velocityYWorld = maxFall;
-    }
-
-    // Upward brake: holding jump while in committed fast-fall brakes descent
-    // back toward normalFallCap.  Once at or below normalFallCap, exit mode.
-    //
-    // Bug fix: we subtract (upwardBrake + grav) instead of just
-    // upwardBrake.  Gravity was already applied above this section, so without
-    // canceling it the net deceleration would be (brake - gravity) ≈ negative
-    // (i.e., still accelerating).  Adding grav back cancels the gravity that
-    // was already baked in, giving a true net deceleration of brakeStrength/s.
-    const isBraking = cluster.isFastFallModeFlag === 1
-        && world.playerJumpHeldFlag === 1
-        && cluster.velocityYWorld > normalFallCap;
-    if (isBraking) {
-      const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
-      cluster.velocityYWorld -= (upwardBrake + grav) * dtSec;
-      if (cluster.velocityYWorld <= normalFallCap) {
-        cluster.velocityYWorld = normalFallCap;
-        cluster.isFastFallModeFlag = 0;
+    if (cluster.isFastFallModeFlag === 1) {
+      // ── Fast-fall: hard cap at fastFallCap ───────────────────────────────
+      // Committed fast-fall still uses a hard ceiling so holding down always
+      // feels intentionally fast without going faster than expected.
+      if (cluster.velocityYWorld > fastFallCap) {
+        cluster.velocityYWorld = fastFallCap;
       }
+
+      // Upward brake: holding jump while in committed fast-fall brakes descent
+      // back toward longFallThreshold.  Once at or below that level, exit mode.
+      //
+      // Bug fix: we subtract (upwardBrake + grav) instead of just
+      // upwardBrake.  Gravity was already applied above this section, so without
+      // canceling it the net deceleration would be (brake - gravity) ≈ negative
+      // (i.e., still accelerating).  Adding grav back cancels the gravity that
+      // was already baked in, giving a true net deceleration of brakeStrength/s.
+      const isBraking = world.playerJumpHeldFlag === 1
+          && cluster.velocityYWorld > longFallThreshold;
+      if (isBraking) {
+        const upwardBrake = ov(debugSpeedOverrides.upwardBrakeStrengthWorld, UPWARD_BRAKE_STRENGTH_PER_SEC2);
+        cluster.velocityYWorld -= (upwardBrake + grav) * dtSec;
+        if (cluster.velocityYWorld <= longFallThreshold) {
+          cluster.velocityYWorld = longFallThreshold;
+          cluster.isFastFallModeFlag = 0;
+        }
+      }
+    } else {
+      // ── Ordinary freefall: two-stage curve ──────────────────────────────
+      // Stage 1: below the threshold — gravity is already applied above; nothing
+      // extra to do here (normal gravity is accelerating the player toward
+      // longFallThreshold naturally).
+      //
+      // Stage 2: at or above the threshold — normal gravity would push the player
+      // further, but we want a much slower secondary acceleration (longFallAccel)
+      // rather than the full baseGrav.  Cancel the portion of gravity that
+      // exceeded the threshold and replace it with longFallAccel.
+      //
+      // Never reduce an already-high velocity caused by a grapple, knockback, or
+      // other mechanic that pushed vy above longFallThreshold intentionally.
+      if (cluster.velocityYWorld >= longFallThreshold) {
+        // Undo the gravity that was applied in the unified pass above, then
+        // apply only the slow long-fall acceleration for this tick.
+        cluster.velocityYWorld -= grav * dtSec;
+        cluster.velocityYWorld += longFallAccel * dtSec;
+        // Safety: ensure we didn’t accidentally reduce a pre-existing high
+        // velocity below where it came from (e.g. from a grapple launch that
+        // already pushed vy above the threshold before this tick).
+        // This prevents one tick of gravity undo from overshooting downward when
+        // vy was launched very high.
+        if (cluster.velocityYWorld < longFallThreshold) {
+          cluster.velocityYWorld = longFallThreshold;
+        }
+      }
+      // If vy < longFallThreshold, stage-1: gravity already applied; do nothing.
     }
 
     // DEBUG: fast-fall brake diagnostics removed (verified correct)

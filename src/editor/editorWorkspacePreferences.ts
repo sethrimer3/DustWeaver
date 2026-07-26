@@ -71,6 +71,7 @@ export interface EditorWorkspacePreferences {
    * layout — see normalizePanelLayout's invariants.
    */
   panelLayout: EditorPanelLayout;
+  sidebarsSwapped: boolean;
 }
 
 export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences {
@@ -83,6 +84,7 @@ export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences 
     leftSidebarScrollTop: 0,
     rightSidebarScrollTop: 0,
     panelLayout: defaultPanelLayout(),
+    sidebarsSwapped: false,
   };
 }
 
@@ -140,6 +142,7 @@ function sanitize(raw: unknown): EditorWorkspacePreferences {
     // Absent (v1), malformed, or partial layouts all normalize to a complete
     // layout with every registered panel in exactly one location.
     panelLayout: normalizePanelLayout(o.panelLayout),
+    sidebarsSwapped: typeof o.sidebarsSwapped === 'boolean' ? o.sidebarsSwapped : fallback.sidebarsSwapped,
   };
 }
 
