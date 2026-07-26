@@ -42,7 +42,7 @@ export interface BlockSpriteSet {
 // dirt_8x8_edge.png, etc.) were removed, so no image is loaded here — an
 // unset Image never issues a network request and never reports ready, letting
 // callers fall through to the folder-based sprite lookup.
-const _deadLegacySprite = new Image();
+const _deadLegacySprite = typeof Image !== 'undefined' ? new Image() : ({} as HTMLImageElement);
 const _brownRockSprite8  = _deadLegacySprite;
 const _brownRockSprite16 = _deadLegacySprite;
 const _brownRockSprite32 = _deadLegacySprite;

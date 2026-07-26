@@ -11,12 +11,15 @@ export interface DialoguePortraitOption {
   readonly url: string;
 }
 
-const BASE = import.meta.env.BASE_URL;
+const _IS_VITE_RUNTIME = import.meta.env?.BASE_URL !== undefined;
+const BASE = import.meta.env?.BASE_URL ?? '/';
 
-const _PORTRAIT_GLOB = import.meta.glob(
-  '/ASSETS/SPRITES/Portraits/*.{png,webp,jpg,jpeg}',
-  { query: '?url', import: 'default' },
-);
+const _PORTRAIT_GLOB = _IS_VITE_RUNTIME
+  ? import.meta.glob(
+      '/ASSETS/SPRITES/Portraits/*.{png,webp,jpg,jpeg}',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
 const _PORTRAIT_FILE_RE = /^\/ASSETS\/SPRITES\/Portraits\/([^/]+)\.(png|webp|jpg|jpeg)$/i;
 

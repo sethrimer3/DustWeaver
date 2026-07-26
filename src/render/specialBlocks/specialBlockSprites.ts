@@ -11,11 +11,13 @@
 
 import { loadImg } from '../imageCache';
 
-// Build-time discovery of all special block sprites
-const _SPECIAL_BLOCKS_GLOB = import.meta.glob(
-  '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
-  { query: '?url', import: 'default' },
-);
+const _IS_VITE_RUNTIME = import.meta.env?.BASE_URL !== undefined;
+const _SPECIAL_BLOCKS_GLOB = _IS_VITE_RUNTIME
+  ? import.meta.glob(
+      '/ASSETS/SPRITES/specialBLOCKS/**/*.{png,webp,jpg,jpeg}',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
 // ── Kinetic block sprites ─────────────────────────────────────────────────────
 

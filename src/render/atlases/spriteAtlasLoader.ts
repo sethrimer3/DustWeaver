@@ -19,15 +19,21 @@ type AtlasState =
   | { status: 'loaded'; atlas: LoadedSpriteAtlas }
   | { status: 'failed'; metadata: SpriteAtlasMetadata | null; imageUrl: string | null; reason: string };
 
-const _ATLAS_METADATA_GLOB = import.meta.glob(
-  '/ASSETS/DERIVED/SPRITE_ATLASES/*.json',
-  { eager: true, import: 'default' },
-) as Record<string, SpriteAtlasMetadata>;
+const _IS_VITE_RUNTIME = import.meta.env?.BASE_URL !== undefined;
 
-const _ATLAS_IMAGE_GLOB = import.meta.glob(
-  '/ASSETS/DERIVED/SPRITE_ATLASES/*.png',
-  { eager: true, query: '?url', import: 'default' },
-) as Record<string, string>;
+const _ATLAS_METADATA_GLOB = (_IS_VITE_RUNTIME
+  ? import.meta.glob(
+      '/ASSETS/DERIVED/SPRITE_ATLASES/*.json',
+      { eager: true, import: 'default' },
+    )
+  : {}) as Record<string, SpriteAtlasMetadata>;
+
+const _ATLAS_IMAGE_GLOB = (_IS_VITE_RUNTIME
+  ? import.meta.glob(
+      '/ASSETS/DERIVED/SPRITE_ATLASES/*.png',
+      { eager: true, query: '?url', import: 'default' },
+    )
+  : {}) as Record<string, string>;
 
 const _states = new Map<string, AtlasState>();
 const _warned = new Set<string>();
