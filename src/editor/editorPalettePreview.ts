@@ -456,7 +456,7 @@ function _makeSpecialBlockPreview(item: PaletteItem, blockTheme: string): HTMLDi
   }
 
   const effectiveTheme = item.blockThemeOverride ?? blockTheme;
-  const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item.id, effectiveTheme);
+  const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item, effectiveTheme);
   const wrap = document.createElement('div');
   wrap.style.cssText = containerCss;
   const shape = document.createElement('div');

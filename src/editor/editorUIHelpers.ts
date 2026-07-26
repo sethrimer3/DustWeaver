@@ -322,7 +322,20 @@ export function makeThemeSlot(
 /**
  * Builds the CSS for the inner shape div of a block preview, based on the item type and theme.
  */
-export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shapeCss: string; containerCss: string } {
+/** Preview cell side length, in px, that a footprint of 2 blocks fills exactly. */
+const PREVIEW_CELL_PX = 40;
+/** Per-block px scale inside the preview cell: a 1-block item renders at half size, a 2-block item fills the cell. */
+const PREVIEW_BLOCK_UNIT_PX = 20;
+
+/** Computes the centred, size-scaled box (in px) representing a footprint of `wBlocks` x `hBlocks`. */
+function previewFootprintBox(wBlocks: number, hBlocks: number): { w: number; h: number; left: number; top: number } {
+  const w = Math.min(PREVIEW_CELL_PX, wBlocks * PREVIEW_BLOCK_UNIT_PX);
+  const h = Math.min(PREVIEW_CELL_PX, hBlocks * PREVIEW_BLOCK_UNIT_PX);
+  return { w, h, left: (PREVIEW_CELL_PX - w) / 2, top: (PREVIEW_CELL_PX - h) / 2 };
+}
+
+export function makeBlockPreviewShapeCss(item: PaletteItem, theme: string): { shapeCss: string; containerCss: string } {
+  const itemId = item.id;
   const fill = THEME_FILL_COLOR[theme] ?? '#555';
   const spriteUrl = THEME_BLOCK_SPRITE_URL[theme] ?? '';
   const baseTile = `
@@ -334,17 +347,41 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
     width: 40px; height: 40px; overflow: hidden; position: relative; flex-shrink: 0;
     border-radius: 2px; background: rgba(0,0,0,0.3);
   `;
+  const wBlocks = item.defaultWidthBlocks ?? 1;
+  const hBlocks = item.defaultHeightBlocks ?? 1;
+  const box = previewFootprintBox(wBlocks, hBlocks);
+  const boxPosCss = `position: absolute; left: ${box.left}px; top: ${box.top}px; width: ${box.w}px; height: ${box.h}px;`;
+
+  // Stairs: stepped silhouette, scaled to the item's block footprint so 1x1
+  // stairs read visibly smaller than 1x2/2x2 stairs.
+  if (item.isStairsItem === 1) {
+    return {
+      containerCss,
+      shapeCss: `${baseTile} ${boxPosCss} background-size: cover;
+        clip-path: polygon(
+          0% 100%, 0% 75%, 25% 75%, 25% 50%, 50% 50%, 50% 25%, 75% 25%, 75% 0%, 100% 0%, 100% 100%
+        );`,
+    };
+  }
+
+  // Spikes: a hazard triangle in the same red used by the in-room spike overlay.
+  if (item.isSpikeItem === 1) {
+    return {
+      containerCss,
+      shapeCss: `
+        ${boxPosCss} background: rgba(160,20,20,0.55);
+        border: 1px solid rgba(220,60,60,0.9); box-sizing: border-box;
+        clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+      `,
+    };
+  }
 
   switch (itemId) {
     case 'block_1x1':
-      return {
-        containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover;`,
-      };
     case 'block_2x2':
       return {
         containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%;`,
+        shapeCss: `${baseTile} ${boxPosCss} background-size: cover;`,
       };
     case 'ramp_1x1':
       return {
@@ -382,14 +419,10 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
     }
     // ── Crumble block variants (same shape as their non-crumble counterpart) ──
     case 'crumble_block':
-      return {
-        containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.75;`,
-      };
     case 'crumble_block_2x2':
       return {
         containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%; opacity: 0.75;`,
+        shapeCss: `${baseTile} ${boxPosCss} background-size: cover; opacity: 0.75;`,
       };
     case 'crumble_ramp_1x1':
       return {
@@ -475,14 +508,10 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
           border: 2px solid rgba(70,220,110,0.85); box-sizing: border-box;`,
       };
     case 'breakable_block_1x1':
-      return {
-        containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover; opacity: 0.9;`,
-      };
     case 'breakable_block_2x2':
       return {
         containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: 50% 50%; opacity: 0.9;`,
+        shapeCss: `${baseTile} ${boxPosCss} background-size: cover; opacity: 0.9;`,
       };
     case 'kinetic_block_1x1':
       return {
@@ -502,7 +531,7 @@ export function makeBlockPreviewShapeCss(itemId: string, theme: string): { shape
     default:
       return {
         containerCss,
-        shapeCss: `${baseTile} width: 40px; height: 40px; background-size: cover;`,
+        shapeCss: `${baseTile} ${boxPosCss} background-size: cover;`,
       };
   }
 }
@@ -519,7 +548,7 @@ export function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: 
     transition: background 0.1s;
   `;
 
-  const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item.id, theme);
+  const { containerCss, shapeCss } = makeBlockPreviewShapeCss(item, theme);
   const previewWrap = document.createElement('div');
   previewWrap.style.cssText = containerCss;
   const shape = document.createElement('div');
