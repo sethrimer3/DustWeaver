@@ -120,6 +120,7 @@ import { DustSelectionWheelController, isDustWheelAvailable } from './gameDustSe
 import { cancelSecondaryWeaveGesture } from '../input/secondaryWeaveGesture';
 import { createDustWheelGestureState, updateDustWheelGesture } from '../input/dustWheelInput';
 import { cancelAllDustTypeSwitches } from '../sim/weaves/dustTypeSwitch';
+import { spawnPlayerDeathDisintegration } from '../sim/clusters/playerDeathDisintegration';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import {
   applyGameEditorRoomActivation,
@@ -1702,6 +1703,7 @@ export function startGameScreen(
     if (playerForDeath !== undefined
       && playerForDeath.isAliveFlag === 0
       && !gameOverlayController.state.isPlayerDead) {
+      spawnPlayerDeathDisintegration(world, playerForDeath.positionXWorld, playerForDeath.positionYWorld);
       gameOverlayController.showPlayerDeathScreen();
       dustWheelController.cancel(timestampMs);
       // Resolve any in-progress mote transformation immediately rather than
