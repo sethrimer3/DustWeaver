@@ -58,7 +58,6 @@ import type { MomentumTrail } from '../render/clusters/momentumTrail';
 import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
-import type { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
 import type { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
@@ -159,8 +158,6 @@ export interface RenderFrameContext {
   /** Runtime visual cloud derived from canonical player health. */
   stormweaveLifeMotes: StormweaveLifeMotes;
   darkRoomOverlay: DarkRoomOverlay;
-  /** Arrow Weave renderer — bow crescent, dissipation, and arrow bodies. */
-  arrowWeaveRenderer: ArrowWeaveRenderer;
   /** Shield Sword Weave renderer — golden-crossguard sword and slash trail. */
   swordWeaveRenderer: SwordWeaveRenderer;
   /** Independent (Stage 3/5) Sword Weave renderer — aimed crescent swipe + sword→shield fade. */
@@ -333,7 +330,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, swordWeaveRenderer,
     newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
@@ -622,8 +619,6 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  // Arrow Weave — bow crescent, dissipation, and stuck/in-flight arrows
-  arrowWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
   // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
   // of the player so the crossguard reads against the body).
   swordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);

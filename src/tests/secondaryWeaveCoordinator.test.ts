@@ -403,3 +403,27 @@ test('cancellation while the button is still held mid-assembly aborts the arrow 
   for (let i = 0; i < NEW_SWORD_SLASH_TICKS + 5; i++) idleTick(world);
   assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no arrow must fire purely from a cancelled assembly');
 });
+
+test('global bow behavior regression test: WEAVE_ARROW equipped in legacy combat mode operates via actual follower motes in Stage 3 coordinator', () => {
+  const { world, player } = makeFixture(6);
+  world.combatMode = 'legacy';
+  world.playerSecondaryWeaveId = 'arrow';
+  world.canUsePlayerSecondaryWeaveFlag = 1;
+
+  press(world, player.positionXWorld + 50, player.positionYWorld);
+  // Hold enough ticks to form shield crescent and assemble arrow
+  for (let i = 0; i < NEW_SWORD_SLASH_TICKS + BOW_ARROW_LOAD_3_TICKS + 5; i++) {
+    hold(world, player.positionXWorld + 50, player.positionYWorld);
+  }
+
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_ASSEMBLING, 'actual-mote arrow assembling in legacy mode');
+  assert.ok(world.bowArrowCount >= 3, 'at least 3 actual motes loaded');
+  assert.equal(world.isPlayerSecondaryWeaveActiveFlag, 0, 'obsolete legacy arrow active flag must remain 0');
+
+  // Verify that actual particle indices are in BEHAVIOR_MODE_BOW_ARROW
+  let bowMoteCount = 0;
+  for (let i = 0; i < world.particleCount; i++) {
+    if (world.behaviorMode[i] === BEHAVIOR_MODE_BOW_ARROW) bowMoteCount++;
+  }
+  assert.ok(bowMoteCount >= 3, 'actual particles are reserved in BOW_ARROW behavior mode in legacy combat mode');
+});

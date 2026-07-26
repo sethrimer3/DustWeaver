@@ -19,7 +19,6 @@ import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { CrackedBlockShatterRenderer } from '../render/crackedBlockShatterRenderer';
 import { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
-import { ArrowWeaveRenderer } from '../render/effects/arrowWeaveRenderer';
 import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
 import { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
@@ -455,7 +454,6 @@ export function startGameScreen(
   const momentumTrail = new MomentumTrail();
   const stormweaveLifeMotes = new StormweaveLifeMotes();
   const decorationWaveState = new DecorationWaveState();
-  const arrowWeaveRenderer = new ArrowWeaveRenderer();
   const swordWeaveRenderer = new SwordWeaveRenderer();
   const newSwordWeaveRenderer = new NewSwordWeaveRenderer();
   const bowTrajectoryPreviewRenderer = new BowTrajectoryPreviewRenderer();
@@ -1838,7 +1836,7 @@ export function startGameScreen(
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
-      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, arrowWeaveRenderer, swordWeaveRenderer,
+      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, swordWeaveRenderer,
       newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,

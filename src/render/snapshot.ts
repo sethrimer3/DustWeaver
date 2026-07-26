@@ -123,12 +123,8 @@ interface _ReusableBacking {
   voidLaserAliveFlag: Uint8Array;
   voidLaserDustAliveFlag: Uint8Array;
   iceSpikeAliveFlag: Uint8Array;
-  // Arrow Weave scalar fields updated each frame
-  isArrowWeaveLoadingFlag: 0 | 1;
-  arrowWeaveCurrentMoteCount: number;
   playerWeaveAimDirXWorld: number;
   playerWeaveAimDirYWorld: number;
-  arrowCount: number;
   // Shield Sword Weave scalar fields updated each frame
   playerSecondaryWeaveId: string;
   swordWeaveStateEnum: number;
@@ -428,22 +424,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     dwaNailVelYWorld:            world.dwaNailVelYWorld,
     dwaNailLifetimeTicks:        world.dwaNailLifetimeTicks,
     isDwaNailAliveFlag:          world.isDwaNailAliveFlag,
-    // Arrow Weave — typed-array fields are shared views (always up-to-date);
-    // scalar fields are updated in updateSnapshotInPlace.
-    isArrowWeaveLoadingFlag:    world.isArrowWeaveLoadingFlag,
-    arrowWeaveCurrentMoteCount: world.arrowWeaveCurrentMoteCount,
     playerWeaveAimDirXWorld:    world.playerWeaveAimDirXWorld,
     playerWeaveAimDirYWorld:    world.playerWeaveAimDirYWorld,
-    arrowCount:                 world.arrowCount,
-    arrowXWorld:                world.arrowXWorld,
-    arrowYWorld:                world.arrowYWorld,
-    arrowDirXWorld:             world.arrowDirXWorld,
-    arrowDirYWorld:             world.arrowDirYWorld,
-    arrowMoteCount:             world.arrowMoteCount,
-    isArrowStuckFlag:           world.isArrowStuckFlag,
-    isArrowHitEnemyFlag:        world.isArrowHitEnemyFlag,
-    arrowLifetimeTicksLeft:     world.arrowLifetimeTicksLeft,
-    arrowDustKind:              world.arrowDustKind,
     // Shield Sword Weave
     playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
     swordWeaveStateEnum:           world.swordWeaveStateEnum,
@@ -596,12 +578,8 @@ export function updateSnapshotInPlace(
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
   b.grasshopperCount          = world.grasshopperCount;
 
-  // Arrow Weave scalar fields (typed-array fields are shared views, no update needed)
-  b.isArrowWeaveLoadingFlag    = world.isArrowWeaveLoadingFlag;
-  b.arrowWeaveCurrentMoteCount = world.arrowWeaveCurrentMoteCount;
   b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;
   b.playerWeaveAimDirYWorld    = world.playerWeaveAimDirYWorld;
-  b.arrowCount                 = world.arrowCount;
 
   // Shield Sword Weave scalar fields
   b.playerSecondaryWeaveId        = world.playerSecondaryWeaveId;
@@ -866,15 +844,6 @@ export function refreshSnapshotWorldArrayRefs(
   raw.dwaNailVelYWorld               = world.dwaNailVelYWorld;
   raw.dwaNailLifetimeTicks           = world.dwaNailLifetimeTicks;
   raw.isDwaNailAliveFlag             = world.isDwaNailAliveFlag;
-  raw.arrowXWorld                    = world.arrowXWorld;
-  raw.arrowYWorld                    = world.arrowYWorld;
-  raw.arrowDirXWorld                 = world.arrowDirXWorld;
-  raw.arrowDirYWorld                 = world.arrowDirYWorld;
-  raw.arrowMoteCount                 = world.arrowMoteCount;
-  raw.isArrowStuckFlag               = world.isArrowStuckFlag;
-  raw.isArrowHitEnemyFlag            = world.isArrowHitEnemyFlag;
-  raw.arrowLifetimeTicksLeft         = world.arrowLifetimeTicksLeft;
-  raw.arrowDustKind                  = world.arrowDustKind;
   raw.grappleWrapPointXWorld         = world.grappleWrapPointXWorld;
   raw.grappleWrapPointYWorld         = world.grappleWrapPointYWorld;
   raw.ropeSegmentCount               = world.ropeSegmentCount;

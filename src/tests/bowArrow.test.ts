@@ -284,3 +284,39 @@ test('cancel returns all reserved motes to orbit with no arrow left', () => {
   assert.equal(world.bowArrowCount, 0);
   assert.equal(countArrowMotes(world), 0, 'all motes returned to orbit');
 });
+
+test('particle identity regression test: exact follower particle IDs are reserved, launched, and returned to normal Storm behavior', () => {
+  const { world } = makeFixture(8);
+  beginBowArrowAssembly(world, world.tick, 1);
+  assembleFor(world, BOW_ARROW_LOAD_5_TICKS + 13);
+  assert.equal(world.bowArrowCount, 5, '5 motes loaded into arrow');
+
+  // Verify and record the exact particle indices reserved for the arrow
+  const reservedIndices: number[] = [];
+  for (let i = 0; i < world.bowArrowCount; i++) {
+    const idx = world.bowArrowParticleIndex[i];
+    assert.ok(idx >= 0 && idx < world.particleCount, 'valid particle index');
+    assert.equal(world.behaviorMode[idx], BEHAVIOR_MODE_BOW_ARROW, 'particle marked with bow arrow behavior mode');
+    reservedIndices.push(idx);
+  }
+
+  // Fire arrow and verify the same particle indices remain in bow arrow behavior mode during outbound flight
+  fireBowArrow(world, 1, 0);
+  assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_OUTBOUND);
+  for (const idx of reservedIndices) {
+    assert.equal(world.behaviorMode[idx], BEHAVIOR_MODE_BOW_ARROW, 'particle remains reserved during flight');
+  }
+
+  // Complete outbound flight to max travel distance
+  let resolved = false;
+  for (let i = 0; i < 600 && !resolved; i++) {
+    world.tick++;
+    resolved = tickBowArrowOutbound(world);
+  }
+  assert.ok(resolved, 'outbound flight resolved');
+
+  // Verify every single reserved particle index has been restored to behaviorMode 0 (normal Storm following)
+  for (const idx of reservedIndices) {
+    assert.equal(world.behaviorMode[idx], 0, 'exact particle index returned to Storm following behavior');
+  }
+});
