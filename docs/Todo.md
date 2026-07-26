@@ -61,7 +61,7 @@ Each new item should be an implementation-ready mini-brief where possible: state
 - [ ] Implement `evictStalePrewarmedChunks` with an LRU or memory cap if warmed chunk memory growth is observed.
 - [ ] Make radius-3 render chunk warming more adaptive by incorporating frame-time checks, if needed.
 - [x] Expose the prewarm debug panel in pause-menu debug UI if useful. (Completed in BUILD 539: added 'Prewarm Panel (debug)' option to pause menu when Debug Mode is on in src/ui/pauseMenu.ts, backed by new setDebugPanelVisible helper in src/ui/debugPanelManager.ts; also added 'prewarm' and 'freeze' toggles to DEBUG_PANEL_DEFS in src/ui/debugPanel.ts; validated with new unit tests in src/tests/debugPanelManager.test.ts.)
-- [ ] Add CI smoke test for `npm ci && npm run build`.
+- [x] Add CI smoke test for `npm ci && npm run build`. (Verified: `.github/workflows/ci.yml` already runs `npm ci`, `npm run build`, `npm run lint`, and `npm test` on every push and PR targeting `main`. No code changes needed.)
 - [ ] Consider `BgWallGridView` dense/sparse adapter only if large-room memory pressure becomes a real issue.
 - [ ] Add sprite assets and registrations for enemy palette previews that currently use procedural placeholders.
 - [ ] Add crumble/falling block palette entries if those block types become active editor items.
