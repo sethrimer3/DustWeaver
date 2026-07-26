@@ -95,6 +95,12 @@ export function toggleDebugPanel(id: DebugPanelId): void {
   saveToStorage();
 }
 
+/** Set one debug panel's visibility and persist the change. */
+export function setDebugPanelVisible(id: DebugPanelId, visible: boolean): void {
+  debugPanelVisibility[id] = visible;
+  saveToStorage();
+}
+
 /** Hide all debug panels and persist. */
 export function hideAllDebugPanels(): void {
   (Object.keys(debugPanelVisibility) as DebugPanelId[]).forEach((key) => {

@@ -57,6 +57,7 @@ import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { MomentumTrail } from '../render/clusters/momentumTrail';
 import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
+import type { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
@@ -149,6 +150,8 @@ export interface RenderFrameContext {
   weakWallJumpDebris: WeakWallJumpDebrisRenderer;
   skillTombRenderer: SkillTombRenderer;
   skillTombEffectRenderer: SkillTombEffectRenderer;
+  /** One-shot cosmetic golden-mote burst for Dust Container / Shard pickups. */
+  dustContainerPickupEffect: DustContainerPickupEffect;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
   /** Phantasmal golden cloak extension — visible while the player is grappling. */
@@ -329,7 +332,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect,
     playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, swordWeaveRenderer,
     newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
@@ -591,6 +594,10 @@ export function renderFrame(r: RenderFrameContext): void {
 
   // Dust-switch trail + participating motes — drawn behind the player sprite.
   renderDustSwitchTrails(ctx, world, ox, oy, zoom, graphicsQuality);
+
+  // One-shot golden-mote pickup burst — drawn behind the player sprite so
+  // absorbed motes visibly disappear behind it rather than popping in front.
+  dustContainerPickupEffect.render(ctx, ox, oy, zoom);
 
   // TimeStop Field stored-momentum arrow — behind the player sprite, kept
   // independent from the active-velocity speedometer/debug overlays.

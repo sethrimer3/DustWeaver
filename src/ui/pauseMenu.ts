@@ -40,6 +40,7 @@ import {
   getAirCurrentsDebugEnabled,
   setAirCurrentsDebugEnabled,
 } from './renderSettings';
+import { debugPanelVisibility, setDebugPanelVisible } from './debugPanelManager';
 import { createSlideReveal } from './slideReveal';
 import {
   getSpriteAtlasConfigState,

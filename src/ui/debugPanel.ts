@@ -90,19 +90,6 @@ const CLOAK_FIELDS: readonly CloakFieldDef[] = [
 interface DebugPanelDef {
   readonly id: DebugPanelId;
   readonly label: string;
-}
-
-const DEBUG_PANEL_DEFS: readonly DebugPanelDef[] = [
-  { id: 'movement',    label: 'Movement Debug' },
-  { id: 'grapple',     label: 'Grapple / Zip Debug' },
-  { id: 'water',       label: 'Water / Liquid Debug' },
-  { id: 'performance', label: 'Performance Debug' },
-  { id: 'chunks',      label: 'Rendering / Chunks Debug' },
-  { id: 'particles',   label: 'Particles / Dust Debug' },
-  { id: 'room',        label: 'Room / Editor Debug' },
-  { id: 'resident',    label: 'Resident Room Debug' },
-  { id: 'iceMoteAura', label: 'Ice Mote Aura Debug' },
-  { id: 'speedGraph',  label: 'Speed Graph' },
 ];
 
 export interface DebugPanel {

@@ -30,6 +30,12 @@ import {
  * @param progress       Player progression state, or undefined in arcade mode.
  * @param player         The live player cluster (positionXWorld/Y, entityId).
  * @param levelRng       Room-level RNG for particle spawning.
+ * @param onPickupBurst  Optional callback invoked once per first-time Dust
+ *   Container / Shard pickup with the collectible's world-space center, so
+ *   the caller can drive a render-only cosmetic effect without coupling this
+ *   deterministic sim/progression code to Canvas or DOM. Not invoked for the
+ *   automatic 4th-shard container forge (that grant piggybacks on the shard's
+ *   own pickup, which already fired its callback).
  */
 export function processRoomPickups(
   world: WorldState,
@@ -40,6 +46,7 @@ export function processRoomPickups(
   levelRng: RngState,
   roomOriginXWorld = 0,
   roomOriginYWorld = 0,
+  onPickupBurst?: (kind: 'container' | 'shard', xWorld: number, yWorld: number) => void,
 ): void {
   // ── Dust container pickups ─────────────────────────────────────────────────
   // One permanent Dust Container adds four mote-capacity slots and fills all
@@ -64,6 +71,7 @@ export function processRoomPickups(
           progress.collectedDustContainerKeys.push(pickupKey);
         }
       }
+      if (onPickupBurst) onPickupBurst('container', cx, cy);
     }
   }
 
@@ -94,6 +102,9 @@ export function processRoomPickups(
           progress.dustContainerPieces %= DUST_CONTAINER_SHARDS_PER_CONTAINER;
         }
       }
+      // Only the shard's own 4-mote burst fires here — the auto-forged
+      // container (if any) intentionally does not add a second 16-mote burst.
+      if (onPickupBurst) onPickupBurst('shard', cx, cy);
     }
   }
 

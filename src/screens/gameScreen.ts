@@ -61,6 +61,7 @@ import { MAX_CRUMBLE_BLOCKS } from '../sim/world';
 import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { processRoomPickups } from './gamePickups';
+import { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometerOverlayRenderer';
@@ -357,6 +358,7 @@ export function startGameScreen(
     // value from the previous room can never bleed a frame into this one.
     newSwordWeaveRenderer.reset();
     bowTrajectoryPreviewRenderer.reset();
+    dustContainerPickupEffect.reset();
   }
 
   /**
@@ -458,6 +460,7 @@ export function startGameScreen(
   const newSwordWeaveRenderer = new NewSwordWeaveRenderer();
   const bowTrajectoryPreviewRenderer = new BowTrajectoryPreviewRenderer();
   const fallingBlockDust = new FallingBlockDustRenderer();
+  const dustContainerPickupEffect = new DustContainerPickupEffect();
 
   // ── Dialogue system ──────────────────────────────────────────────────────
   // The dialogue overlay renders at full device resolution (not the virtual
@@ -1716,7 +1719,9 @@ export function startGameScreen(
       skillTombEffectRenderer.update(tombPx, tombPy, elapsedMs / 1000);
 
       processRoomPickups(world, currentRoom, collectedDustContainerKeySet, progress, playerForTomb, levelRng,
-        currentRoomOriginXWorld, currentRoomOriginYWorld);
+        currentRoomOriginXWorld, currentRoomOriginYWorld,
+        (kind, xWorld, yWorld) => dustContainerPickupEffect.spawnPickupBurst(kind, xWorld, yWorld));
+      dustContainerPickupEffect.update(FIXED_DT_MS / 1000, playerForTomb.positionXWorld, playerForTomb.positionYWorld);
     }
 
     // ── Update camera to follow player ──────────────────────────────────────
@@ -1835,7 +1840,7 @@ export function startGameScreen(
 
     renderFrame({
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem,
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect,
       playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, swordWeaveRenderer,
       newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
