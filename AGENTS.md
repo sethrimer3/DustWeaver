@@ -55,3 +55,12 @@ npm run desktop
 3. Make the smallest coherent change.
 4. Run the narrowest useful validation first, then the full validation commands when practical.
 5. Report changed files, validation results, and any uncertain areas.
+
+## Branch and integration policy
+
+- A coding task is not complete merely because its commits were pushed to a feature branch.
+- Before ending a task that changed code, ensure the work is either merged into `main` or has an open pull request targeting `main`.
+- Do not leave completed work only on an `agent/`, `codex/`, `claude/`, `copilot/`, or other feature branch without an open pull request.
+- If permissions, conflicts, failing validation, or required review prevent integration, explicitly report the branch name, commit SHA, missing integration step, and blocker. Never describe the task as complete.
+- Auto-sync or backup commits do not satisfy this integration requirement.
+- Before starting new work, check whether the current branch contains commits not merged into `main`. Preserve and integrate that work before switching branches unless the user explicitly directs otherwise.

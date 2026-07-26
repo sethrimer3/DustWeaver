@@ -1,7 +1,7 @@
 import type { SavedCampaignV1, SavedCampaignMetadata } from '../levels/campaignSchema';
 import { validateSavedCampaignTopLevel } from '../levels/campaignSchema';
 import type { SavedRoomV2 } from '../levels/roomSchemaV2';
-import { dehydrateRoom, hydrateV2Room } from '../levels/roomSchemaV2';
+import { dehydrateRoom, hydrateV2Room, validateRoomRoundtrip } from '../levels/roomSchemaV2';
 import type { EditorRoomData } from './editorState';
 import { editorRoomDataToJson, jsonToEditorRoomData } from './roomJson';
 import type { WorldMapJsonDef, WorldMapRoomEntry } from './worldMapData';
@@ -251,7 +251,18 @@ export function createCampaignStore(
   function commitRoom(roomId: string, roomData: EditorRoomData): void {
     const dehydrateStartMs = isDev() ? performance.now() : 0;
     const jsonDef = editorRoomDataToJson(roomData);
+    if (isDev()) {
+      const persistenceErrors = validateRoomRoundtrip(jsonDef);
+      if (persistenceErrors.length > 0) {
+        throw new Error(
+          `Room "${roomId}" was not saved because persistence validation found data loss: ${persistenceErrors.join('; ')}`,
+        );
+      }
+    }
     const saved = dehydrateRoom(jsonDef);
+    if (saved.id !== roomId || saved.size[0] <= 0 || saved.size[1] <= 0 || saved.solids === undefined) {
+      throw new Error(`Room "${roomId}" was not saved because its encoded form is empty or corrupt.`);
+    }
     const adjusted = applyWorldMapRoomMetadata(saved, worldMapRoomById.get(roomId));
     rawRoomsById.set(roomId, adjusted);
     hydratedRoomsById.set(roomId, roomData);

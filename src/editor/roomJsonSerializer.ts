@@ -107,6 +107,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isRadiantWeb: e.isRadiantWebFlag === 1,
       isCrimsonWizard: e.isCrimsonWizardFlag === 1,
       isHerald: e.isHeraldFlag === 1,
+      isIceWizard: e.isIceWizardFlag === 1,
       isGrappleHunter: e.isGrappleHunterFlag === 1,
       isSlime: e.isSlimeFlag === 1,
       isLargeSlime: e.isLargeSlimeFlag === 1,
@@ -128,6 +129,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       isDustConstellationLarge: e.isDustConstellationLargeFlag === 1,
       isOrbitalDustCore: e.isOrbitalDustCoreFlag === 1,
       isOrbitalDustCoreLarge: e.isOrbitalDustCoreLargeFlag === 1,
+      isDustBlockMimic: e.isDustBlockMimicFlag === 1,
+      isDustBlockMimicLarge: e.isDustBlockMimicLargeFlag === 1,
+      isDustWeaverArchitect: e.isDustWeaverArchitectFlag === 1,
+      isDustWeaverArchitectLarge: e.isDustWeaverArchitectLargeFlag === 1,
       isVoidSingularity: e.isVoidSingularityFlag === 1,
       isVoidSingularityPair: e.isVoidSingularityPairFlag === 1,
       isDustLeech:        e.isDustLeechFlag === 1,
@@ -295,6 +300,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
   if (data.sideExposureStrength !== undefined) json.sideExposureStrength = data.sideExposureStrength;
   if (data.minimumWallLight     !== undefined) json.minimumWallLight     = data.minimumWallLight;
   if (data.falloffPower         !== undefined) json.falloffPower         = data.falloffPower;
+  if (data.backgroundLightSpill !== undefined) json.backgroundLightSpill = data.backgroundLightSpill;
+  if (data.solidLightSoftness   !== undefined) json.solidLightSoftness   = data.solidLightSoftness;
   if (data.sunrays              !== undefined) json.sunrays              = data.sunrays;
   if (data.blockSeamBlending && data.blockSeamBlending !== 'off') {
     json.blockSeamBlending = data.blockSeamBlending;
