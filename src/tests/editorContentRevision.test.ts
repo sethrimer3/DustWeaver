@@ -130,3 +130,19 @@ test('complexity gate: reset() forces the next resolve to re-analyse', () => {
   h.uiFrame();
   assert.equal(editorPerfCounters.complexityAnalyses, 2);
 });
+
+test('noteContentMutation: wallGeometry=false bumps mutationSerial but not wallGeometryRevision', () => {
+  const h = harness();
+  const initialMutationSerial = h.stroke.mutationSerial;
+  const initialWallGeomRevision = h.stroke.wallGeometryRevision;
+
+  // Custom block / background block paint step (not a wall geometry change)
+  noteContentMutation(h.holder, h.stroke, true, false);
+  assert.equal(h.stroke.mutationSerial, initialMutationSerial + 1);
+  assert.equal(h.stroke.wallGeometryRevision, initialWallGeomRevision);
+
+  // Wall paint step
+  noteContentMutation(h.holder, h.stroke, true, true);
+  assert.equal(h.stroke.mutationSerial, initialMutationSerial + 2);
+  assert.equal(h.stroke.wallGeometryRevision, initialWallGeomRevision + 1);
+});

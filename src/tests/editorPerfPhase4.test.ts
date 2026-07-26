@@ -81,7 +81,7 @@ test('resolveHoverAtCursor: change gating avoids redundant hover scans on static
   assert.equal(editorPerfCounters.hoverScans, 4, 'layer state change invalidates hover cache');
 });
 
-test('getEditorWallTopology: caches wall topology by room and mutationSerial', () => {
+test('getEditorWallTopology: caches wall topology by room and wallGeometryRevision', () => {
   resetEditorPerfCounters();
   resetEditorWallTopologyCache();
 
@@ -92,12 +92,12 @@ test('getEditorWallTopology: caches wall topology by room and mutationSerial', (
   assert.equal(top1.occupied.has('0,0'), true);
   assert.equal(top1.occupied.has('1,1'), true);
 
-  // Calling again with same mutationSerial should serve from cache.
+  // Calling again with same wallGeometryRevision should serve from cache.
   const top2 = getEditorWallTopology(room, 10);
   assert.equal(top2, top1);
   assert.equal(editorPerfCounters.wallTopologyRebuilds, 1);
 
-  // Calling with new mutationSerial should rebuild.
+  // Calling with new wallGeometryRevision should rebuild.
   getEditorWallTopology(room, 11);
   assert.equal(editorPerfCounters.wallTopologyRebuilds, 2);
 });
