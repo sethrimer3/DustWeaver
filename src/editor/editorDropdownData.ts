@@ -92,8 +92,16 @@ function makeBlockThemeOption(theme: { id: string; label: string }): { id: Block
   return { id: theme.id, shortId: folderThemeShortId(theme.id), label: theme.label };
 }
 
+// Special-block wall themes (Ice Block, Ultra Ice Block) are discovered
+// alongside the regular material themes so the wall renderer can look them
+// up by id, but they already have dedicated palette cards under the
+// "Special Blocks" category (see PALETTE_ITEMS in editorPaletteItems.ts) —
+// they must not also appear as swatches in the plain Block Theme picker.
+const _SPECIAL_BLOCK_THEME_IDS = new Set(['iceBlock', 'ultraIceBlock']);
+
 /** Available block themes for placement and wall inspection. */
 export const BLOCK_THEMES: readonly { id: BlockTheme; shortId: BlockThemeId; label: string }[] = [...FOLDER_BLOCK_THEMES]
+  .filter(theme => !_SPECIAL_BLOCK_THEME_IDS.has(theme.id))
   .sort((a, b) => {
     const orderA = LEGACY_BLOCK_THEME_ORDER[a.id] ?? 1000;
     const orderB = LEGACY_BLOCK_THEME_ORDER[b.id] ?? 1000;

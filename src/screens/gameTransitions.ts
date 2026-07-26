@@ -11,6 +11,7 @@ export type { TransitionDirection };
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
 import { isRoomFileCacheActive, loadRoomForGameplayAsync, getActiveRoomAdjacency } from '../levels/roomFileLoader';
+import { getTransitionXYBlock, normalizedGradientWidthBlocks } from '../levels/transitionGeometry';
 import type { WorldState } from '../sim/world';
 
 export const TRANSITION_SPAWN_INSET_BLOCKS = 3;
@@ -30,36 +31,6 @@ export function getOppositeTransitionDirection(direction: TransitionDirection): 
   return 'up';
 }
 
-/**
- * Returns the runtime xBlock/yBlock for a transition, migrating from legacy
- * positionBlock/depthBlock if the new fields are not yet present.
- */
-/**
- * Normalizes a transition's saved depth field: an explicitly-present value
- * <= 0 is invalid and clamps to 2; a fully omitted field keeps the legacy
- * fallback of 3. Defensive runtime normalization mirroring
- * roomJsonToRoomDef.ts's load-time migration, in case older in-memory
- * RoomDef data reaches here with an un-migrated depth.
- */
-function normalizedGradientWidthBlocks(t: RoomTransitionDef): number {
-  const gw = t.gradientWidthBlocks;
-  if (gw === undefined) return 3;
-  return gw <= 0 ? 2 : gw;
-}
-
-function getTransitionXYBlock(t: RoomTransitionDef, room: RoomDef): { xBlock: number; yBlock: number } {
-  if (t.xBlock !== undefined && t.yBlock !== undefined) {
-    return { xBlock: t.xBlock, yBlock: t.yBlock };
-  }
-  const gw = normalizedGradientWidthBlocks(t);
-  switch (t.direction) {
-    case 'left':  return { xBlock: t.depthBlock ?? 0, yBlock: t.positionBlock };
-    case 'right': return { xBlock: t.depthBlock ?? (room.widthBlocks  - gw), yBlock: t.positionBlock };
-    case 'up':    return { xBlock: t.positionBlock, yBlock: t.depthBlock ?? 0 };
-    case 'down':  return { xBlock: t.positionBlock, yBlock: t.depthBlock ?? (room.heightBlocks - gw) };
-  }
-}
-
 export function computeSpawnBlockForTransition(
   room: RoomDef,
   transition: RoomTransitionDef,
@@ -69,6 +40,7 @@ export function computeSpawnBlockForTransition(
   entryOffsetFraction = 0.5,
 ): readonly [number, number] {
   const { xBlock, yBlock } = getTransitionXYBlock(transition, room);
+  const gw = normalizedGradientWidthBlocks(transition);
   const clampedFraction = Math.min(1, Math.max(0, entryOffsetFraction));
   // Keep a 1-block margin from each edge of the opening: the outermost blocks
   // of a door frame are sometimes occupied by wall/pillar geometry even
@@ -80,16 +52,21 @@ export function computeSpawnBlockForTransition(
   const openingPosHoriz = yBlock + openingOffset;
   const openingPosVert  = xBlock + openingOffset;
 
+  // Arrival spawn coordinate sits just past the destination transition's own
+  // inner/near edge — i.e. relative to the transition's actual placed
+  // geometry, not the room's outer boundary. This matches ordinary boundary
+  // transitions (xBlock/yBlock at 0 or roomSize - gw) by construction, but
+  // also works correctly for interior transitions placed away from a wall.
   if (transition.direction === 'left') {
-    return [TRANSITION_SPAWN_INSET_BLOCKS, openingPosHoriz] as const;
+    return [xBlock + gw, openingPosHoriz] as const;
   }
   if (transition.direction === 'right') {
-    return [room.widthBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1, openingPosHoriz] as const;
+    return [xBlock - 1, openingPosHoriz] as const;
   }
   if (transition.direction === 'up') {
-    return [openingPosVert, TRANSITION_SPAWN_INSET_BLOCKS] as const;
+    return [openingPosVert, yBlock + gw] as const;
   }
-  return [openingPosVert, room.heightBlocks - TRANSITION_SPAWN_INSET_BLOCKS - 1] as const;
+  return [openingPosVert, yBlock - 1] as const;
 }
 
 /**

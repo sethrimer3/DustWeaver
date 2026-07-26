@@ -19,8 +19,6 @@ import {
   getMoteLifeSlotPosition,
   MOTE_LIFE_ORIGIN_Y_PX,
   MOTE_LIFE_SLOT_GAP_PX,
-  MOTE_LIFE_SLOT_ROWS,
-  MOTE_LIFE_SLOT_SIZE_PX,
   MOTE_LIFE_SLOT_WIDTH_PX,
   MOTE_LIFE_SLOT_HEIGHT_PX,
 } from '../render/hud/moteLifeSlots';
@@ -236,13 +234,9 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   const playerForMoteLife = world.clusters[0];
   const currentMoteCount = playerForMoteLife ? getPlayerMoteCount(playerForMoteLife) : 0;
   const maxMoteCapacity = playerForMoteLife ? getPlayerMoteCapacity(playerForMoteLife) : 0;
-  const dustSquareSize = MOTE_LIFE_SLOT_SIZE_PX;
   const dustSquareWidth = MOTE_LIFE_SLOT_WIDTH_PX;
   const dustSquareHeight = MOTE_LIFE_SLOT_HEIGHT_PX;
   const dustStartX = 8;
-  const dustStartY = MOTE_LIFE_ORIGIN_Y_PX
-    + MOTE_LIFE_SLOT_ROWS * dustSquareHeight
-    + (MOTE_LIFE_SLOT_ROWS - 1) * MOTE_LIFE_SLOT_GAP_PX;
 
   ctx.save();
   for (let moteIndex = 0; moteIndex < maxMoteCapacity; moteIndex++) {

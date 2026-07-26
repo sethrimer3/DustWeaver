@@ -968,7 +968,6 @@ export function applyResidentRoomActivation(
     progress,
     dialogueState,
     dialogueRenderer,
-    levelRng,
   } = ctx;
 
   // ── Phase A equivalent: room metadata + renderer setup (shared) ──────────

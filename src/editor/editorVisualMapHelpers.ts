@@ -13,6 +13,7 @@ import {
   ROOM_NAME_OVERRIDES,
   ROOM_WORLD_OVERRIDES,
 } from '../levels/rooms';
+import { getTransitionActiveEdgeBlock, isBoundaryTransition } from '../levels/transitionGeometry';
 import type {
   CreateLinkedRoomInput, CreateLinkedRoomResult,
   LinkTransitionInput, LinkTransitionResult,
@@ -203,9 +204,14 @@ export interface SnapIndicator {
  * Returns the door's logical anchor in map-world coordinates given its containing
  * room's current placement.
  *
- * The anchor is placed exactly on the relevant room edge (left=cx, right=cx+roomW,
- * top=cy, bottom=cy+roomH) so that when two rooms snap together via opposite doors
- * the result is flush wall-to-wall placement with zero overlap and zero gap.
+ * The anchor is placed on the transition's actual active/directional edge —
+ * its real placed geometry (`xBlock`/`yBlock`/`gradientWidthBlocks`) — rather
+ * than assuming the transition sits on the room's outer perimeter. For
+ * ordinary boundary transitions this is equivalent to the room edge (so
+ * wall-to-wall door snapping still lines up flush with zero gap/overlap);
+ * for a transition placed away from a wall (interior transition) the anchor
+ * correctly tracks its actual position inside the room instead of being
+ * pinned to the boundary.
  *
  * The perpendicular coordinate is the centre of the opening along that edge.
  */
@@ -215,19 +221,18 @@ export function getDoorCenterWorld(
 ): [number, number] {
   const cx = placement.mapXWorld;
   const cy = placement.mapYWorld;
-  const rw = placement.room.widthBlocks;
-  const rh = placement.room.heightBlocks;
   const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+  const activeEdge = getTransitionActiveEdgeBlock(trans, placement.room);
   const xB = trans.xBlock !== undefined ? trans.xBlock : (isHoriz ? 0 : trans.positionBlock);
   const yB = trans.yBlock !== undefined ? trans.yBlock : (isHoriz ? trans.positionBlock : 0);
 
   switch (trans.direction) {
-    // Horizontal transitions: anchor is on the left or right room edge.
-    case 'right': return [cx + rw, cy + yB + trans.openingSizeBlocks / 2];
-    case 'left':  return [cx,      cy + yB + trans.openingSizeBlocks / 2];
-    // Vertical transitions: anchor is on the top or bottom room edge.
-    case 'down':  return [cx + xB + trans.openingSizeBlocks / 2, cy + rh];
-    case 'up':    return [cx + xB + trans.openingSizeBlocks / 2, cy];
+    // Horizontal transitions: anchor tracks the active (facing) X edge.
+    case 'right': return [cx + activeEdge, cy + yB + trans.openingSizeBlocks / 2];
+    case 'left':  return [cx + activeEdge, cy + yB + trans.openingSizeBlocks / 2];
+    // Vertical transitions: anchor tracks the active (facing) Y edge.
+    case 'down':  return [cx + xB + trans.openingSizeBlocks / 2, cy + activeEdge];
+    case 'up':    return [cx + xB + trans.openingSizeBlocks / 2, cy + activeEdge];
   }
 }
 
@@ -267,6 +272,11 @@ export function applyDoorSnap(
 
   for (let si = 0; si < draggingRoom.transitions.length; si++) {
     const srcTrans = draggingRoom.transitions[si];
+    // Only wall-to-wall boundary transitions produce a sane flush snap. An
+    // interior transition's active edge doesn't sit on the room perimeter,
+    // so snapping to it would drag rooms into an overlapping/nonsensical
+    // position — skip it as a snap source (it still renders/links normally).
+    if (!isBoundaryTransition(srcTrans, draggingRoom)) continue;
     const [srcWx, srcWy] = getDoorCenterWorld(srcTrans, draggingPlacement);
 
     for (const [otherId, otherPlacement] of allPlacements) {
@@ -274,6 +284,7 @@ export function applyDoorSnap(
       for (let ti = 0; ti < otherPlacement.room.transitions.length; ti++) {
         const tgtTrans = otherPlacement.room.transitions[ti];
         if (!isOppositeDoor(srcTrans.direction, tgtTrans.direction)) continue;
+        if (!isBoundaryTransition(tgtTrans, otherPlacement.room)) continue;
 
         const [tgtWx, tgtWy] = getDoorCenterWorld(tgtTrans, otherPlacement);
         const distWorld = Math.hypot(srcWx - tgtWx, srcWy - tgtWy);
