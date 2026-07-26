@@ -1,15 +1,6 @@
 /**
  * Tests for render chunk prewarm scheduling and memory management
  * (src/screens/roomRenderChunkWarmScheduler.ts).
- *
- * Verifies:
- * - Stale prewarmed chunk eviction when rooms leave the neighborhood (keep-set).
- * - Enforcing quality-tier memory budgets via evictStalePrewarmedChunks.
- * - Eviction priority: highest radius first (speculative radius-3 -> radius-2 -> radius-1),
- *   and largest memory footprint first within the same radius.
- * - Current active room prewarmed chunks are never evicted.
- * - Adaptive radius-3 chunk warming: radius-3 rooms are skipped when recent frame
- *   time exceeds the pause threshold (>20ms) or when graphics quality is below 'high'.
  */
 
 import { test } from 'node:test';
@@ -25,7 +16,7 @@ import {
 import {
   getOrCreatePrewarmWallCache,
   hasPrewarmedWallChunks,
-} from '../render/walls/blockSpriteRenderer';
+} from '../render/walls/wallChunkPrewarmStore';
 import { clearAllRenderSnapshots } from '../render/walls/roomRenderCacheStore';
 import { RoomRuntimeCache } from '../screens/roomRuntimeCache';
 
@@ -69,25 +60,28 @@ test('evictStalePrewarmedChunks drops rooms outside keepSet while preserving act
     ['room2', room2],
   ]);
   const runtimeCache = new RoomRuntimeCache();
-
   const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    getOrCreatePrewarmWallCache('room0', 'key0').stats.totalChunkCount = 1;
+    getOrCreatePrewarmWallCache('room1', 'key1').stats.totalChunkCount = 1;
+    getOrCreatePrewarmWallCache('room2', 'key2').stats.totalChunkCount = 1;
 
-  getOrCreatePrewarmWallCache('room0', 'key0').stats.totalChunkCount = 1;
-  getOrCreatePrewarmWallCache('room1', 'key1').stats.totalChunkCount = 1;
-  getOrCreatePrewarmWallCache('room2', 'key2').stats.totalChunkCount = 1;
+    assert.equal(hasPrewarmedWallChunks('room0'), true);
+    assert.equal(hasPrewarmedWallChunks('room1'), true);
+    assert.equal(hasPrewarmedWallChunks('room2'), true);
 
-  assert.equal(hasPrewarmedWallChunks('room0'), true);
-  assert.equal(hasPrewarmedWallChunks('room1'), true);
-  assert.equal(hasPrewarmedWallChunks('room2'), true);
+    evictStalePrewarmedChunks(new Set(['room1']), 'high');
 
-  evictStalePrewarmedChunks(new Set(['room1']), 'high');
-
-  assert.equal(hasPrewarmedWallChunks('room0'), true, 'Current active room should never be evicted');
-  assert.equal(hasPrewarmedWallChunks('room1'), true, 'Kept neighbor room should not be evicted');
-  assert.equal(hasPrewarmedWallChunks('room2'), false, 'Stale room outside keep set should be evicted');
-
-  handle.cancel();
-  clearAllRenderSnapshots();
+    assert.equal(hasPrewarmedWallChunks('room0'), true, 'Current active room should never be evicted');
+    assert.equal(hasPrewarmedWallChunks('room1'), true, 'Kept neighbor room should not be evicted');
+    assert.equal(hasPrewarmedWallChunks('room2'), false, 'Stale room outside keep set should be evicted');
+  } catch (e) {
+    console.error('Test 1 failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
 });
 
 test('evictStalePrewarmedChunks enforces memory budget by evicting highest radius first', () => {
@@ -103,23 +97,24 @@ test('evictStalePrewarmedChunks enforces memory budget by evicting highest radiu
     ['room3', room3],
   ]);
   const runtimeCache = new RoomRuntimeCache();
-
   const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'low', () => 10, 800, 600, 1);
+  try {
+    getOrCreatePrewarmWallCache('room1', 'key1').stats.memoryEstimateKB = 2000;
+    getOrCreatePrewarmWallCache('room2', 'key2').stats.memoryEstimateKB = 2000;
+    getOrCreatePrewarmWallCache('room3', 'key3').stats.memoryEstimateKB = 2000;
 
-  // For 'low' quality tier, PREWARM_MEMORY_BUDGET_KB is 4096 KB.
-  // Allocate 2000 KB each for room1, room2, room3 (total = 6000 KB > 4096 KB budget).
-  getOrCreatePrewarmWallCache('room1', 'key1').stats.memoryEstimateKB = 2000;
-  getOrCreatePrewarmWallCache('room2', 'key2').stats.memoryEstimateKB = 2000;
-  getOrCreatePrewarmWallCache('room3', 'key3').stats.memoryEstimateKB = 2000;
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3']), 'low');
 
-  evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3']), 'low');
-
-  assert.equal(hasPrewarmedWallChunks('room3'), false, 'Radius-3 room should be evicted first under memory cap');
-  assert.equal(hasPrewarmedWallChunks('room2'), true, 'Radius-2 room should survive once under budget');
-  assert.equal(hasPrewarmedWallChunks('room1'), true, 'Radius-1 room should survive once under budget');
-
-  handle.cancel();
-  clearAllRenderSnapshots();
+    assert.equal(hasPrewarmedWallChunks('room3'), false, 'Radius-3 room should be evicted first under memory cap');
+    assert.equal(hasPrewarmedWallChunks('room2'), true, 'Radius-2 room should survive once under budget');
+    assert.equal(hasPrewarmedWallChunks('room1'), true, 'Radius-1 room should survive once under budget');
+  } catch (e) {
+    console.error('Test 2 failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
 });
 
 test('evictStalePrewarmedChunks evicts largest memory footprint first within same radius', () => {
@@ -135,22 +130,24 @@ test('evictStalePrewarmedChunks evicts largest memory footprint first within sam
     ['room2B', room2B],
   ]);
   const runtimeCache = new RoomRuntimeCache();
-
   const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'low', () => 10, 800, 600, 1);
+  try {
+    getOrCreatePrewarmWallCache('room1', 'key1').stats.memoryEstimateKB = 1500;
+    getOrCreatePrewarmWallCache('room2A', 'key2A').stats.memoryEstimateKB = 3000;
+    getOrCreatePrewarmWallCache('room2B', 'key2B').stats.memoryEstimateKB = 1000;
 
-  // Budget for low is 4096 KB. Total = 1500 + 3000 + 1000 = 5500 KB > 4096 KB.
-  getOrCreatePrewarmWallCache('room1', 'key1').stats.memoryEstimateKB = 1500;
-  getOrCreatePrewarmWallCache('room2A', 'key2A').stats.memoryEstimateKB = 3000;
-  getOrCreatePrewarmWallCache('room2B', 'key2B').stats.memoryEstimateKB = 1000;
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2A', 'room2B']), 'low');
 
-  evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2A', 'room2B']), 'low');
-
-  assert.equal(hasPrewarmedWallChunks('room2A'), false, 'Larger memory candidate within same radius should be evicted first');
-  assert.equal(hasPrewarmedWallChunks('room2B'), true, 'Smaller memory candidate should survive once under budget');
-  assert.equal(hasPrewarmedWallChunks('room1'), true, 'Lower radius room should survive');
-
-  handle.cancel();
-  clearAllRenderSnapshots();
+    assert.equal(hasPrewarmedWallChunks('room2A'), false, 'Larger memory candidate within same radius should be evicted first');
+    assert.equal(hasPrewarmedWallChunks('room2B'), true, 'Smaller memory candidate should survive once under budget');
+    assert.equal(hasPrewarmedWallChunks('room1'), true, 'Lower radius room should survive');
+  } catch (e) {
+    console.error('Test 3 failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
 });
 
 test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is poor', () => {
@@ -167,28 +164,39 @@ test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is
   ]);
   const runtimeCache = new RoomRuntimeCache();
 
-  // Test 1: Good frame time (10ms <= 20ms threshold) and 'high' quality -> radius-3 task is kept in queue
-  const handleGood = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
-  assert.equal(getPrewarmStats().queueLength, 3, 'Initial queue has radius 1, 2, 3 rooms');
-  runChunkPrewarmSliceNow(50);
-  assert.equal(getPrewarmStats().pausedForFrameTime, false);
-  assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room should remain queued when frame time is stable');
-  handleGood.cancel();
+  let handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().pausedForFrameTime, false);
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room should remain queued when frame time is stable');
+  } catch (e) {
+    console.error('Test 4A failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+  }
 
-  // Test 2: Poor frame time (30ms > 20ms threshold) -> radius-3 task is dropped from queue
-  const handlePoor = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 30, 800, 600, 1);
-  assert.equal(getPrewarmStats().queueLength, 3);
-  runChunkPrewarmSliceNow(50);
-  assert.equal(getPrewarmStats().pausedForFrameTime, true, 'pausedForFrameTime should be true when frame time > 20ms');
-  assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue during poor frame time');
-  handlePoor.cancel();
+  handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 30, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().pausedForFrameTime, true, 'pausedForFrameTime should be true when frame time > 20ms');
+    assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue during poor frame time');
+  } catch (e) {
+    console.error('Test 4B failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+  }
 
-  // Test 3: Below high quality -> radius-3 task is likewise dropped from queue
-  const handleMed = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'med', () => 10, 800, 600, 1);
-  assert.equal(getPrewarmStats().queueLength, 3);
-  runChunkPrewarmSliceNow(50);
-  assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue on med quality');
-  handleMed.cancel();
-
-  clearAllRenderSnapshots();
+  handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'med', () => 10, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue on med quality');
+  } catch (e) {
+    console.error('Test 4C failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
 });
