@@ -8,6 +8,39 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 543 — Two-Stage Unbounded Player Fall Curve
+
+**Why:** The old `NORMAL_MAX_FALL_WORLD_PER_SEC = 160.5 px/s` hard terminal cap made very long falls feel flat — once the player reached the cap, further freefall produced no additional speed. The design intent was a two-stage curve: normal gravity up to ~160 px/s, then a slow secondary acceleration (20 px/s²) with no terminal ceiling.
+
+**What was done:**
+
+1. Added `LONG_FALL_ACCEL_WORLD_PER_SEC2 = 20.0` to `src/sim/clusters/movementConstants.ts` — the secondary acceleration rate applied once vy ≥ `NORMAL_MAX_FALL_WORLD_PER_SEC`. Also added `longFallAccelWorld: NaN` to `debugSpeedOverrides` so it can be live-tuned from the debug panel like other movement constants.
+
+2. Updated the fall-section comment block in `movementConstants.ts` to document the two-stage curve (`NORMAL_MAX_FALL_WORLD_PER_SEC` is now "stage-1 threshold", not "terminal cap").
+
+3. Rewrote the fall-cap section in `src/sim/clusters/playerVerticalMovement.ts`:
+   - **Stage 1 (vy < threshold):** normal gravity runs unchanged, no clamping.
+   - **Stage 2 (vy ≥ threshold, not fast-falling):** gravity applied in the unified pass is cancelled (`vy -= grav*dt`) and replaced with the slow long-fall acceleration (`vy += longFallAccel*dt`). A floor guard ensures this never reduces a pre-existing high velocity (e.g. from a grapple launch) below the threshold.
+   - **Fast-fall mode:** retains a hard ceiling at `FAST_MAX_FALL_WORLD_PER_SEC`. The upward brake still brakes back toward `longFallThreshold` and exits fast-fall mode there.
+   - **Grapple / water:** both paths are unchanged — grapple gets full gravity, water gets `applyPlayerWaterVerticalForces`, neither is affected by the stage-2 branch.
+   - `normalFallCapWorld` debug override now controls the stage-1 threshold (same semantic, same value); `fastFallCapWorld` and `upwardBrakeStrengthWorld` are unchanged.
+
+4. Added 16 deterministic tests in `src/tests/playerLongFallCurve.test.ts`:
+   - Stage-1: gravity tick accuracy; ticks-to-threshold count.
+   - Stage-2: vy increases each tick; +20 px/s after 1 s; +40 px/s after 2 s; unbounded after 5 s (far above old cap).
+   - Threshold-crossing: net gain per tick is less than a full gravity step.
+   - Pre-existing high velocity (400 px/s launch) is never reduced below threshold.
+   - Fast-fall: hard cap enforced; multiple seconds of fast-fall stays ≤ fastFallCap.
+   - Grapple: full gravity, no stage-2 intercept.
+   - Water: function returns without crash; stage-2 logic does not apply.
+   - Jump from long-fall speed: vy goes strongly negative.
+   - Upward brake: exits fast-fall mode, vy reaches threshold.
+   - Frame-rate independence: 60 × 1/60 s ≈ 6 × 10/60 s (within 1 px/s).
+
+**Validation:** 2509/2509 tests pass, `npm run lint` clean, `tsc --noEmit` clean, `npm run build` clean.
+
+---
+
 ## BUILD 539 — Expose Prewarm Debug Panel in Pause-Menu Debug UI
 
 **Why:** Todo item 61 and `docs/render-chunk-prewarming.md` noted that the Prewarm rendering debug panel was not exposed in the pause-menu debug options or on the floating on-screen debug toggle panel.

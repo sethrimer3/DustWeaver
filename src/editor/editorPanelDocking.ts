@@ -312,6 +312,8 @@ export function createEditorPanelDocking(
     grabOffsetYPx: number;
     startClientXPx: number;
     startClientYPx: number;
+    latestClientXPx: number;
+    latestClientYPx: number;
     /** False until the pointer passes DRAG_THRESHOLD_PX — a tap must not reorder anything. */
     exceededThreshold: boolean;
     /** Where the panel would land if released now. */
@@ -400,9 +402,24 @@ export function createEditorPanelDocking(
 
   function tickAutoScroll(): void {
     if (drag === null || drag.autoScrollSide === null) return;
+    drag.autoScrollFrame = null;
+    
     const shell = (drag.autoScrollSide === 'left' ? leftContainer : rightContainer).parentElement;
     if (shell !== null) shell.scrollTop += drag.autoScrollDir * AUTO_SCROLL_SPEED_PX;
-    drag.autoScrollFrame = requestAnimationFrame(tickAutoScroll);
+
+    const side = sidebarUnderPointer(drag.latestClientXPx, drag.latestClientYPx);
+    highlightSidebar(side);
+
+    if (side !== null) {
+      const index = computeDropIndex(side, drag.latestClientYPx, drag.panelHost.id);
+      drag.dropTarget = { kind: 'dock', side, index };
+      showPlaceholderAt(side, index, drag.panelHost.id);
+    } else {
+      drag.dropTarget = { kind: 'float' };
+      hidePlaceholder();
+    }
+
+    updateAutoScroll(side, drag.latestClientYPx);
   }
 
   function updateAutoScroll(side: EditorSidebarSide | null, clientYPx: number): void {
@@ -416,7 +433,12 @@ export function createEditorPanelDocking(
     else if (r.bottom - clientYPx < AUTO_SCROLL_EDGE_PX) dir = 1;
 
     if (dir === 0) { stopAutoScroll(); return; }
-    if (drag.autoScrollSide === side && drag.autoScrollDir === dir) return;
+    if (drag.autoScrollSide === side && drag.autoScrollDir === dir) {
+      if (drag.autoScrollFrame === null) {
+        drag.autoScrollFrame = requestAnimationFrame(tickAutoScroll);
+      }
+      return;
+    }
     stopAutoScroll();
     drag.autoScrollSide = side;
     drag.autoScrollDir = dir;
@@ -438,6 +460,8 @@ export function createEditorPanelDocking(
       grabOffsetYPx: e.clientY - hostRect.top,
       startClientXPx: e.clientX,
       startClientYPx: e.clientY,
+      latestClientXPx: e.clientX,
+      latestClientYPx: e.clientY,
       exceededThreshold: false,
       dropTarget: null,
       autoScrollFrame: null,
@@ -469,6 +493,9 @@ export function createEditorPanelDocking(
 
   function onPointerMove(e: PointerEvent): void {
     if (drag === null || e.pointerId !== drag.pointerId) return;
+    
+    drag.latestClientXPx = e.clientX;
+    drag.latestClientYPx = e.clientY;
 
     if (!drag.exceededThreshold) {
       const dx = e.clientX - drag.startClientXPx;
