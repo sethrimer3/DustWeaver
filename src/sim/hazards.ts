@@ -33,6 +33,7 @@ import {
   type PlayerWaterState,
 } from './clusters/playerWaterPhysics';
 import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from './momentumCombatConfig';
+import { rechargeGrappleCharge } from './clusters/grappleShared';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -542,6 +543,18 @@ export function applyHazards(world: WorldState): void {
       world.playerWaterSkipEventVelocityXWorld = entryVelocityXWorld;
       world.playerWaterSkipEventVelocityYWorld = entryVelocityYWorld;
     }
+  }
+
+  // ── Grapple recharge at water surface ───────────────────────────────────
+  // When overlapping a non-frozen water zone with any part of the player
+  // hitbox above that zone's top surface, restore grapple charge.
+  if (
+    world.isPlayerInWaterFlag === 1 &&
+    world.playerWaterZoneIndex >= 0 &&
+    world.frozenWaterZoneMask[world.playerWaterZoneIndex] === 0 &&
+    player.positionYWorld - player.halfHeightWorld < world.playerBuoyancySurfaceYWorld
+  ) {
+    rechargeGrappleCharge(world);
   }
 
   world.isPlayerWasInWaterLastTickFlag = world.isPlayerInWaterFlag;

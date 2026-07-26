@@ -369,3 +369,97 @@ describe('stone-skip water bounce', () => {
     assert.equal(world.playerWaterSkipEventXWorld, player.positionXWorld);
   });
 });
+
+describe('grapple charge recharge at water surface', () => {
+  test('recharges grapple charge and triggers golden ring VFX on partial surface overlap when charge was depleted', () => {
+    const world = createPlayerWorld(95); // player height 10 => top is 85 < 100 (surface), bottom is 105 (overlapping)
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+    world.grappleRechargeRingTicksLeft = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 1);
+    assert.equal(world.prevHasGrappleChargeFlag, 1);
+    assert.equal(world.grappleRechargeRingTicksLeft, world.grappleRechargeRingTotalTicks);
+  });
+
+  test('does not recharge when player is fully submerged in water', () => {
+    const world = createPlayerWorld(120); // player top is 110 >= 100 (surface)
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 0);
+    assert.equal(world.grappleRechargeRingTicksLeft, 0);
+  });
+
+  test('does not recharge outside water', () => {
+    const world = createPlayerWorld(50); // player bottom is 60 < 100 (surface)
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 0);
+    assert.equal(world.grappleRechargeRingTicksLeft, 0);
+  });
+
+  test('does not recharge when fully covered in a shallow water zone even if playerWaterState is SURFACE', () => {
+    const world = createPlayerWorld(120); // top is 110
+    world.waterZoneYWorld[0] = 105; // shallow surface at 105; top 110 is below surface
+    world.waterZoneHWorld[0] = 10;
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 0);
+  });
+
+  test('recharges on same-tick surface entry without waiting for subsequent ticks', () => {
+    const world = createPlayerWorld(95);
+    const player = world.clusters[0];
+    world.isPlayerWasInWaterLastTickFlag = 0;
+    player.velocityYWorld = 50; // entering from above
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.isPlayerInWaterFlag, 1);
+    assert.equal(world.hasGrappleChargeFlag, 1);
+  });
+
+  test('one-shot recharge VFX: does not repeatedly restart recharge ring on subsequent surface ticks', () => {
+    const world = createPlayerWorld(95);
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+    assert.equal(world.hasGrappleChargeFlag, 1);
+    assert.equal(world.grappleRechargeRingTicksLeft, world.grappleRechargeRingTotalTicks);
+
+    // Simulate countdown on subsequent tick while still at water surface
+    world.grappleRechargeRingTicksLeft -= 1;
+    const expectedRemaining = world.grappleRechargeRingTicksLeft;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 1);
+    assert.equal(world.grappleRechargeRingTicksLeft, expectedRemaining, 'ring VFX timer should not be reset on subsequent ticks');
+  });
+
+  test('does not recharge on frozen water zone via surface helper', () => {
+    const world = createPlayerWorld(95);
+    world.frozenWaterZoneMask[0] = 1;
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+
+    applyHazards(world);
+
+    assert.equal(world.hasGrappleChargeFlag, 0);
+  });
+});
+
