@@ -271,6 +271,7 @@ export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
       targetSpawnBlock: [t.spawn[0], t.spawn[1]],
     };
     if (t.fade) jt.fadeColor = t.fade;
+    if (t.fadeOpacity !== undefined) jt.gradientOpacity = t.fadeOpacity;
     if (t.depth !== undefined) jt.depthBlock = t.depth;
     if (t.lt) jt.longTransition = true;
     if (t.secret) jt.isSecretDoor = true;

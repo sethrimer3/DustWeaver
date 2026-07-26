@@ -291,6 +291,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       targetRoomId: t.targetRoomId,
       targetSpawnBlock: [...t.targetSpawnBlock] as [number, number],
       fadeColor: t.fadeColor,
+      gradientOpacity: t.gradientOpacity,
       isSecretDoor: t.isSecretDoor,
       gradientWidthBlocks: t.gradientWidthBlocks,
       longTransition: t.longTransition,

@@ -165,6 +165,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         || (t.direction === 'up'   && t.yBlock === 0);
       if (!isAtEdge || legacyDepthBlock !== 0) jt.depthBlock = legacyDepthBlock;
       if (t.fadeColor) jt.fadeColor = t.fadeColor;
+      if (t.gradientOpacity !== undefined && t.gradientOpacity !== 1) jt.gradientOpacity = t.gradientOpacity;
       if (t.isSecretDoor) jt.isSecretDoor = t.isSecretDoor;
       if (t.longTransition) jt.longTransition = t.longTransition;
       if (gw !== 3 || t.gradientWidthBlocks !== undefined) jt.gradientWidthBlocks = gw;

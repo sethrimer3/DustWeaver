@@ -650,6 +650,7 @@ export function showCreateLinkedRoomDialog(
       yBlock,
       gradientWidthBlocks: gradientWidth,
       fadeColor: sourceTrans.fadeColor,
+      gradientOpacity: sourceTrans.gradientOpacity,
       isSecretDoor: sourceTrans.isSecretDoor,
       longTransition: sourceTrans.longTransition,
     };

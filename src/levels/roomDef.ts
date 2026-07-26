@@ -500,6 +500,11 @@ export interface RoomTransitionDef {
   /** Color used for the tunnel fade gradient. Defaults to black if unset. */
   fadeColor?: string;
   /**
+   * Opacity of the tunnel fade gradient's opaque endpoint, in 0..1.
+   * Defaults to fully opaque (1) if unset (legacy rooms).
+   */
+  gradientOpacity?: number;
+  /**
    * @deprecated Legacy field: left edge (L/R) or top edge (U/D) of the gradient
    * zone. Superseded by xBlock/yBlock.
    */

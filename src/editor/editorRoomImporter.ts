@@ -224,6 +224,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       targetRoomId: t.targetRoomId,
       targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as [number, number],
       fadeColor: t.fadeColor,
+      gradientOpacity: t.gradientOpacity,
       depthBlock: t.depthBlock,
       isSecretDoor: t.isSecretDoor,
       gradientWidthBlocks: t.gradientWidthBlocks,

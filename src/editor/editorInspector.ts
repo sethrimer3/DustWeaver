@@ -25,6 +25,8 @@ import {
   addNumberField,
   addSliderField,
   addColorSliders,
+  addColorPickerField,
+  addOpacityField,
 } from './editorFormWidgets';
 import { makeBtn } from './editorUIHelpers';
 import { ACCENT_GOLD, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
@@ -179,10 +181,14 @@ export function updateInspector(
           .filter((w): w is NonNullable<typeof w> => w !== undefined);
         renderSurfaceRimSection(div, selectedWalls, callbacks);
       } else if (type === 'transition') {
-        addSelect(div, 'fadeColor',
+        addColorPickerField(div, 'fadeColor', '#000000',
+          v => callbacks?.onPropertyChange('transition.fadeColor', v));
+        addSelect(div, 'Preset',
           FADE_COLOR_OPTIONS,
           '(mixed)',
           v => callbacks?.onPropertyChange('transition.fadeColor', v));
+        addOpacityField(div, 'Opacity', 1,
+          v => callbacks?.onPropertyChange('transition.gradientOpacity', v));
       } else if (type === 'spike') {
         addSelect(div, 'blockTheme',
           BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
@@ -273,11 +279,15 @@ export function updateInspector(
       addField(div, 'targetSpawnY', String(trans.targetSpawnBlock[1]),
         v => callbacks?.onPropertyChange('transition.targetSpawnBlockY', parseInt(v)));
 
-      // Fade color dropdown
-      addSelect(div, 'fadeColor',
+      // Custom gradient color, with presets remaining as a convenience shortcut.
+      addColorPickerField(div, 'fadeColor', trans.fadeColor ?? '#000000',
+        v => callbacks?.onPropertyChange('transition.fadeColor', v));
+      addSelect(div, 'Preset',
         FADE_COLOR_OPTIONS,
         trans.fadeColor ?? '#000000',
         v => callbacks?.onPropertyChange('transition.fadeColor', v));
+      addOpacityField(div, 'Opacity', trans.gradientOpacity ?? 1,
+        v => callbacks?.onPropertyChange('transition.gradientOpacity', v));
 
       addCheckbox(div, 'isSecretDoor', trans.isSecretDoor === true,
         v => callbacks?.onPropertyChange('transition.isSecretDoor', v ? 1 : 0));

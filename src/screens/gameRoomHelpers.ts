@@ -25,6 +25,18 @@ export function worldBgColor(worldNumber: number): string {
 
 
 /**
+ * Normalizes a persisted/authored transition gradient opacity to a finite
+ * value in 0..1, falling back to fully opaque (1) for legacy rooms with no
+ * opacity field or malformed input.
+ */
+export function clampGradientOpacity(value: number | undefined): number {
+  if (typeof value !== 'number' || !isFinite(value)) return 1;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+/**
  * Draws a gradient darkness overlay at room transition zone trigger edges.
  * The gradient fades from transparent to the transition's fadeColor at the trigger edge.
  * Uses xBlock/yBlock for zone placement; falls back to positionBlock/depthBlock for
@@ -70,24 +82,26 @@ export function drawTunnelDarkness(
     const openLeftWorld   = xB * BLOCK_SIZE_MEDIUM;
     const openRightWorld  = (xB + (!isHoriz ? t.openingSizeBlocks : fadeBlocks)) * BLOCK_SIZE_MEDIUM;
 
-    // Determine fade colors based on transition fadeColor
+    // Determine fade colors based on transition fadeColor and gradientOpacity.
+    // Legacy rooms with no opacity field render at full opacity (1) as before.
     let fadeOpaqueColor: string;
     let fadeTransparentColor: string;
     const fc = t.fadeColor;
-    if (fc && fc.length === 7 && fc[0] === '#' && fc !== '#000000') {
+    const opacity = clampGradientOpacity(t.gradientOpacity);
+    if (fc && fc.length === 7 && fc[0] === '#') {
       // Parse hex color to rgba (validated 7-char hex format)
       const r = parseInt(fc.slice(1, 3), 16);
       const g = parseInt(fc.slice(3, 5), 16);
       const b = parseInt(fc.slice(5, 7), 16);
       if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
-        fadeOpaqueColor = `rgba(${r},${g},${b},1)`;
+        fadeOpaqueColor = `rgba(${r},${g},${b},${opacity})`;
         fadeTransparentColor = `rgba(${r},${g},${b},0)`;
       } else {
-        fadeOpaqueColor = 'rgba(0,0,0,1)';
+        fadeOpaqueColor = `rgba(0,0,0,${opacity})`;
         fadeTransparentColor = 'rgba(0,0,0,0)';
       }
     } else {
-      fadeOpaqueColor = 'rgba(0,0,0,1)';
+      fadeOpaqueColor = `rgba(0,0,0,${opacity})`;
       fadeTransparentColor = 'rgba(0,0,0,0)';
     }
 

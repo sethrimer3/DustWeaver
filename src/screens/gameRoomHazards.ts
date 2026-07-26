@@ -20,6 +20,7 @@ import {
 } from '../sim/world';
 import { nextFloat, nextFloatTriangle } from '../sim/rng';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
+import { resetPlayerWaterBubbles } from '../render/playerWaterBubbles';
 import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { markTimeStopFieldsDirty } from '../sim/timeStopField/timeStopFieldCache';
 import {
@@ -217,6 +218,10 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
 
   // Invalidate the liquid body render cache whenever zones are (re)loaded.
   markLiquidBodiesDirty();
+  // The player movement-bubble pool is a module-level cosmetic cache keyed
+  // to water-body/run identity, which is invalidated above — clear it too so
+  // it cannot leak stale bubbles across room changes or into dry rooms.
+  resetPlayerWaterBubbles();
 
   // ── Custom-block wind vents (Phase 2H) ───────────────────────────────────
   // One runtime slot per registered placement (see RoomCustomBlockWindVentDef's

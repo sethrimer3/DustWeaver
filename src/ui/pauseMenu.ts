@@ -222,6 +222,14 @@ export function showPauseMenu(
             'Draws arrows over the room showing the live wind field created by player and enemy movement. Only visible while Debug mode is on.',
           ),
         );
+        optionsPanel.appendChild(
+          makeCheckboxRow(
+            'Prewarm Panel (debug)',
+            debugPanelVisibility.prewarm,
+            (enabled) => { setDebugPanelVisible('prewarm', enabled); },
+            'Displays real-time render chunk prewarm statistics and background warming queue status. Only active while Debug mode is on.',
+          ),
+        );
       }
     } else {
       // Graphics quality buttons

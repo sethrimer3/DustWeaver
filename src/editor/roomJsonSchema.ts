@@ -153,6 +153,8 @@ export interface RoomJsonTransition {
   targetRoomId: string;
   targetSpawnBlock: [number, number];
   fadeColor?: string;
+  /** Opacity of the tunnel fade gradient's opaque endpoint, in 0..1. Defaults to 1 (opaque) if unset. */
+  gradientOpacity?: number;
   /** @deprecated Superseded by xBlock/yBlock. Kept for backward compat. */
   depthBlock?: number;
   isSecretDoor?: boolean;

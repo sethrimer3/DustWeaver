@@ -27,7 +27,7 @@ import {
   LIQUID_BUBBLE_RISE_SPEED,
   LIQUID_BUBBLE_DRIFT_AMOUNT,
 } from './liquidBodyBuilder';
-import { resetWaterSurfaceRipples } from './waterSplashSystem';
+import { resetWaterSurfaceRipples, getDisturbanceOffsetAt } from './waterSplashSystem';
 
 // Re-export types and constants so existing importers need no changes.
 export type { MergedRect, TopEdgeRun, LiquidBubble, LiquidBody } from './liquidBodyBuilder';
@@ -51,6 +51,47 @@ export const LIQUID_EDGE_WAVE_SPEED = 0.065;
 
 /** Spatial wave frequency (radians per world unit). */
 export const LIQUID_EDGE_WAVE_SPATIAL_FREQ = 0.32;
+
+/**
+ * Distance (world units) from a top-edge run's endpoints over which wave
+ * amplitude tapers to zero. Shared by surface rendering and anything that
+ * needs to sample the same wave shape (e.g. surface-riding bubbles) so the
+ * two can never visually diverge.
+ */
+export const LIQUID_EDGE_WAVE_TAPER_WORLD = BLOCK_SIZE_MEDIUM * 0.8;
+
+/**
+ * Samples the animated water-surface height offset (world units, positive =
+ * downward) at a given world X along one exposed top-edge run, at the given
+ * tick. Combines the base procedural sine wave (tapered to zero at the run's
+ * endpoints) with any active splash/ripple disturbance.
+ *
+ * This is the single source of truth for "where is the water surface right
+ * now" — used both by the wave renderer (liquidRenderer.ts) and by anything
+ * that must visually ride the surface (e.g. playerWaterBubbles.ts), so they
+ * cannot drift apart.
+ */
+export function sampleLiquidSurfaceOffsetWorld(
+  xWorld: number,
+  surfaceYWorld: number,
+  tick: number,
+  bodyIndex: number,
+  runXWorld: number,
+  runWWorld: number,
+): number {
+  const phaseBase  = tick * LIQUID_EDGE_WAVE_SPEED + bodyIndex * 1.7;
+  const phaseBase2 = tick * LIQUID_EDGE_WAVE_SPEED * 0.7 + bodyIndex * 2.9 + 1.2;
+  const tFromLeft  = xWorld - runXWorld;
+  const taper = Math.max(0, Math.min(
+    Math.min(1, tFromLeft / (LIQUID_EDGE_WAVE_TAPER_WORLD + 0.001)),
+    Math.min(1, (runWWorld - tFromLeft) / (LIQUID_EDGE_WAVE_TAPER_WORLD + 0.001)),
+  ));
+  const baseWave = (Math.sin(phaseBase + xWorld * LIQUID_EDGE_WAVE_SPATIAL_FREQ) * 0.65
+                 + Math.sin(phaseBase2 + xWorld * LIQUID_EDGE_WAVE_SPATIAL_FREQ * 0.6) * 0.35)
+                 * LIQUID_EDGE_WAVE_AMPLITUDE * taper;
+  const disturbance = getDisturbanceOffsetAt(xWorld, surfaceYWorld);
+  return baseWave + disturbance;
+}
 
 /** Maximum bubble lifetime in ticks. */
 const BUBBLE_MAX_AGE_TICKS = 600;

@@ -149,7 +149,18 @@ export function applyPropertyToElement(
       if (prop === 'transition.targetRoomId' && typeof value === 'string') trans.targetRoomId = value;
       if (prop === 'transition.targetSpawnBlockX' && !isNaN(numVal)) trans.targetSpawnBlock[0] = numVal;
       if (prop === 'transition.targetSpawnBlockY' && !isNaN(numVal)) trans.targetSpawnBlock[1] = numVal;
-      if (prop === 'transition.fadeColor' && typeof value === 'string') trans.fadeColor = value;
+      if (prop === 'transition.fadeColor' && typeof value === 'string') {
+        // Accept only canonical #RRGGBB; fall back to black for malformed input
+        // (e.g. a native <input type="color"> always yields this format, but
+        // guard against programmatic/legacy callers).
+        trans.fadeColor = /^#[0-9a-fA-F]{6}$/.test(value) ? value : '#000000';
+      }
+      if (prop === 'transition.gradientOpacity') {
+        // numVal uses parseInt above and would truncate fractional opacity
+        // (e.g. 0.5), so parse this field as a float instead.
+        const opacityVal = typeof value === 'number' ? value : parseFloat(value as string);
+        if (!isNaN(opacityVal)) trans.gradientOpacity = Math.max(0, Math.min(1, opacityVal));
+      }
       if (prop === 'transition.isSecretDoor') {
         trans.isSecretDoor = numVal === 1;
       }

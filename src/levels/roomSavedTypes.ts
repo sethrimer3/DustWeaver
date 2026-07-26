@@ -205,6 +205,8 @@ export interface SavedTransition {
   /** [xBlock, yBlock] */
   spawn: [number, number];
   fade?: string;
+  /** Gradient opaque-endpoint opacity in 0..1. Omitted when equal to the default of 1 (opaque). */
+  fadeOpacity?: number;
   depth?: number;
   /** When true, this is a long/teleport-style transition (non-seamless). */
   lt?: boolean;

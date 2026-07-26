@@ -121,7 +121,7 @@ export function renderWaterZones(
     const vy = playerAlive ? player!.velocityYWorld : 0;
     const px = playerAlive ? player!.positionXWorld : 0;
     const py = playerAlive ? player!.positionYWorld : 0;
-    tickPlayerWaterBubbles(px, py, vx, vy, world.isPlayerInWaterFlag);
+    tickPlayerWaterBubbles(px, py, vx, vy, world.isPlayerInWaterFlag, bodies, tick);
   }
 
   // Tick skip-bounce droplet spray (independent of current water contact —
@@ -154,10 +154,11 @@ export function renderWaterZones(
     drawWaterRippleHighlights(ctx, offsetXPx, offsetYPx, zoom);
   }
 
-  // Draw player movement bubbles on top of water (cosmetic overlay)
-  if (world.isPlayerInWaterFlag === 1 && playerAlive) {
-    drawPlayerWaterBubbles(ctx, offsetXPx, offsetYPx, zoom);
-  }
+  // Draw player movement bubbles on top of water (cosmetic overlay).
+  // Persists after the player exits water — only new emission is gated
+  // elsewhere; already-spawned bubbles must keep rendering through their
+  // normal lifetime regardless of current water contact.
+  drawPlayerWaterBubbles(ctx, offsetXPx, offsetYPx, zoom);
 
   // Skip-bounce droplet spray draws regardless of current water contact —
   // the burst is already arcing away from the surface by the time it's visible.

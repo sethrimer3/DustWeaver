@@ -159,6 +159,71 @@ export function addNumberField(
   parent.appendChild(row);
 }
 
+export function addColorPickerField(
+  parent: HTMLElement, label: string, value: string,
+  onChange: (v: string) => void,
+): void {
+  const row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px; min-width: 0;';
+
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(241,231,203,0.7);`;
+
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.value = value;
+  input.style.cssText = `
+    flex: 1; min-width: 0; height: 22px; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    padding: 1px 2px; border-radius: 2px; box-sizing: border-box; cursor: pointer;
+  `;
+  input.addEventListener('input', () => onChange(input.value));
+  input.addEventListener('click', (e) => e.stopPropagation());
+
+  row.appendChild(lbl);
+  row.appendChild(input);
+  parent.appendChild(row);
+}
+
+/** Percent-labelled 0-100 slider that reports a normalized 0..1 value. */
+export function addOpacityField(
+  parent: HTMLElement, label: string, value: number,
+  onChange: (v: number) => void,
+): void {
+  const row = document.createElement('div');
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+
+  const lbl = document.createElement('span');
+  lbl.textContent = label;
+  lbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(241,231,203,0.7);`;
+
+  const percentValue = Math.round(Math.max(0, Math.min(1, value)) * 100);
+
+  const slider = document.createElement('input');
+  slider.type = 'range';
+  slider.value = String(percentValue);
+  slider.min = '0';
+  slider.max = '100';
+  slider.step = '1';
+  slider.style.cssText = `flex: 1; accent-color: ${ACCENT_GOLD};`;
+
+  const valueDisplay = document.createElement('span');
+  valueDisplay.textContent = `${percentValue}%`;
+  valueDisplay.style.cssText = `min-width: 34px; font-size: 11px; color: ${TEXT_COLOR}; text-align: right;`;
+
+  slider.addEventListener('input', () => {
+    const v = parseInt(slider.value, 10);
+    valueDisplay.textContent = `${v}%`;
+    onChange(v / 100);
+  });
+  slider.addEventListener('click', (e) => e.stopPropagation());
+
+  row.appendChild(lbl);
+  row.appendChild(slider);
+  row.appendChild(valueDisplay);
+  parent.appendChild(row);
+}
+
 export function addSliderField(
   parent: HTMLElement, label: string, value: number, min: number, max: number,
   onChange: (v: number) => void,

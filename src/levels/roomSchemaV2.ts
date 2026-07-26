@@ -730,6 +730,7 @@ function dehydrateTransition(t: RoomJsonTransition): SavedTransition {
     spawn: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]],
   };
   if (t.fadeColor) out.fade = t.fadeColor;
+  if (t.gradientOpacity !== undefined && t.gradientOpacity !== 1) out.fadeOpacity = t.gradientOpacity;
   if (t.depthBlock !== undefined) out.depth = t.depthBlock;
   if (t.longTransition) out.lt = true;
   if (t.isSecretDoor) out.secret = true;

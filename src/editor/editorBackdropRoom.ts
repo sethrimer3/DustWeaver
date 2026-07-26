@@ -84,6 +84,7 @@ export function buildEditorBackdropRoom(data: EditorRoomData): EditorBackdropRoo
       openingSizeBlocks: t.openingSizeBlocks,
       targetSpawnBlock: [t.targetSpawnBlock[0], t.targetSpawnBlock[1]] as readonly [number, number],
       fadeColor: t.fadeColor,
+      gradientOpacity: t.gradientOpacity,
       depthBlock: t.depthBlock,
       isSecretDoor: t.isSecretDoor,
       gradientWidthBlocks: t.gradientWidthBlocks,
