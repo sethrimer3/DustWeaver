@@ -3,7 +3,7 @@
   "kind": "DustWeaverCampaign",
   "metadata": {
     "version": 11,
-    "lastEditedAt": "2026-07-26T05:16:18.687Z"
+    "lastEditedAt": "2026-07-26T05:25:30.477Z"
   },
   "campaign": {
     "id": "DUSTWEAVER_CAMPAIGN",
@@ -242,6 +242,20 @@
         "worldId": 1,
         "mapX": -181,
         "mapY": 566
+      },
+      {
+        "id": "mysterious_curiosity",
+        "name": "Mysterious Curiosity",
+        "worldId": 1,
+        "mapX": -181,
+        "mapY": 616
+      },
+      {
+        "id": "dark_teleporter",
+        "name": "Dark Teleporter",
+        "worldId": 1,
+        "mapX": -211,
+        "mapY": 575
       }
     ]
   },
@@ -45503,7 +45517,108 @@
         25
       ],
       "solids": {
-        "byTheme": {}
+        "byTheme": {
+          "darkGlass": {
+            "rects": [
+              [
+                0,
+                24,
+                2,
+                8
+              ],
+              [
+                16,
+                34,
+                10,
+                2
+              ],
+              [
+                14,
+                36,
+                4,
+                2
+              ],
+              [
+                22,
+                36,
+                12,
+                2
+              ],
+              [
+                0,
+                38,
+                6,
+                12
+              ],
+              [
+                30,
+                38,
+                6,
+                2
+              ],
+              [
+                6,
+                40,
+                2,
+                10
+              ],
+              [
+                34,
+                40,
+                4,
+                2
+              ],
+              [
+                8,
+                42,
+                4,
+                8
+              ],
+              [
+                36,
+                42,
+                22,
+                6
+              ],
+              [
+                12,
+                44,
+                4,
+                6
+              ],
+              [
+                58,
+                44,
+                6,
+                4
+              ],
+              [
+                16,
+                46,
+                8,
+                4
+              ],
+              [
+                64,
+                46,
+                2,
+                2
+              ],
+              [
+                24,
+                48,
+                6,
+                2
+              ],
+              [
+                36,
+                48,
+                2,
+                2
+              ]
+            ]
+          }
+        }
       },
       "map": [
         -181,
@@ -45524,35 +45639,560 @@
           ],
           "depth": 78,
           "gw": 2
+        },
+        {
+          "dir": "down",
+          "to": "mysterious_curiosity",
+          "pos": 30,
+          "size": 6,
+          "spawn": [
+            33,
+            3
+          ],
+          "depth": 48,
+          "gw": 2
+        },
+        {
+          "dir": "left",
+          "to": "dark_teleporter",
+          "pos": 32,
+          "size": 6,
+          "spawn": [
+            26,
+            26
+          ],
+          "gw": 2
         }
       ],
       "bakedWallTemplate": {
         "schemaVersion": 2,
-        "sourceHash": "3b8d72af",
-        "wallCount": 4,
+        "sourceHash": "5cb7c09e",
+        "wallCount": 21,
         "xWorld": [
           0,
           0,
           0,
-          632
+          632,
+          0,
+          0,
+          16,
+          16,
+          64,
+          96,
+          128,
+          0,
+          288,
+          112,
+          128,
+          176,
+          240,
+          272,
+          304,
+          464,
+          304
         ],
         "yWorld": [
           0,
           392,
           8,
-          8
+          8,
+          384,
+          304,
+          304,
+          320,
+          336,
+          352,
+          368,
+          192,
+          320,
+          288,
+          272,
+          288,
+          304,
+          320,
+          336,
+          352,
+          368
         ],
         "wWorld": [
           640,
           640,
+          8,
+          8,
+          240,
+          16,
+          32,
+          48,
+          32,
+          32,
+          64,
+          16,
+          16,
+          32,
+          80,
+          96,
+          48,
+          16,
+          160,
+          48,
+          224
+        ],
+        "hWorld": [
+          8,
+          8,
+          384,
+          384,
+          16,
+          80,
+          16,
+          64,
+          48,
+          32,
+          16,
+          64,
+          80,
+          16,
+          16,
+          16,
+          16,
+          16,
+          32,
+          16,
+          16
+        ],
+        "isPlatformFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "platformEdge": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "themeIndex": [
+          255,
+          255,
+          255,
+          255,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9,
+          9
+        ],
+        "themeNames": [
+          "overgrowth",
+          "waterStone",
+          "grayStone",
+          "darkStone",
+          "magma",
+          "sand",
+          "darkGlass"
+        ],
+        "soundHardnessIndex": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2
+        ],
+        "isInvisibleFlag": [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rampOrientationIndex": [
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255,
+          255
+        ],
+        "isPillarHalfWidthFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "isIceFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "isUltraIceFlag": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "rimStyleIndex": [
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535,
+          65535
+        ],
+        "rimStyles": []
+      }
+    },
+    {
+      "v": 3,
+      "id": "mysterious_curiosity",
+      "name": "Mysterious Curiosity",
+      "world": 1,
+      "size": [
+        60,
+        60
+      ],
+      "spawn": [
+        30,
+        30
+      ],
+      "solids": {
+        "byTheme": {}
+      },
+      "map": [
+        -181,
+        616
+      ],
+      "theme": "bk",
+      "bg": "brownRock",
+      "light": "Ambient",
+      "transitions": [
+        {
+          "dir": "up",
+          "to": "darkest_cave",
+          "pos": 30,
+          "size": 6,
+          "spawn": [
+            33,
+            46
+          ],
+          "gw": 2
+        }
+      ],
+      "bakedWallTemplate": {
+        "schemaVersion": 2,
+        "sourceHash": "541e8002",
+        "wallCount": 4,
+        "xWorld": [
+          0,
+          0,
+          0,
+          472
+        ],
+        "yWorld": [
+          0,
+          472,
+          8,
+          8
+        ],
+        "wWorld": [
+          480,
+          480,
           8,
           8
         ],
         "hWorld": [
           8,
           8,
-          384,
-          384
+          464,
+          464
+        ],
+        "isPlatformFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "platformEdge": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "themeIndex": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "soundHardnessIndex": [
+          2,
+          2,
+          2,
+          2
+        ],
+        "isInvisibleFlag": [
+          1,
+          1,
+          1,
+          1
+        ],
+        "rampOrientationIndex": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "isPillarHalfWidthFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "isIceFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "isUltraIceFlag": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "rimStyleIndex": [
+          65535,
+          65535,
+          65535,
+          65535
+        ],
+        "rimStyles": []
+      }
+    },
+    {
+      "v": 3,
+      "id": "dark_teleporter",
+      "name": "Dark Teleporter",
+      "world": 1,
+      "size": [
+        30,
+        30
+      ],
+      "spawn": [
+        15,
+        15
+      ],
+      "solids": {
+        "byTheme": {}
+      },
+      "map": [
+        -211,
+        575
+      ],
+      "theme": "bk",
+      "bg": "brownRock",
+      "light": "Ambient",
+      "transitions": [
+        {
+          "dir": "right",
+          "to": "darkest_cave",
+          "pos": 23,
+          "size": 6,
+          "spawn": [
+            3,
+            35
+          ],
+          "depth": 28,
+          "gw": 2
+        }
+      ],
+      "bakedWallTemplate": {
+        "schemaVersion": 2,
+        "sourceHash": "de6feaa2",
+        "wallCount": 4,
+        "xWorld": [
+          0,
+          0,
+          0,
+          232
+        ],
+        "yWorld": [
+          0,
+          232,
+          8,
+          8
+        ],
+        "wWorld": [
+          240,
+          240,
+          8,
+          8
+        ],
+        "hWorld": [
+          8,
+          8,
+          224,
+          224
         ],
         "isPlatformFlag": [
           0,
@@ -45620,6 +46260,6 @@
   ],
   "editor": {
     "createdWithBuild": "529",
-    "lastEditedIso": "2026-07-26T05:16:18.687Z"
+    "lastEditedIso": "2026-07-26T05:25:30.477Z"
   }
 }
