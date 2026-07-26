@@ -187,7 +187,6 @@ Enable the overlay by pressing the debug-panel key in-game and activating the
 - Radius-3 warming only gates on `graphics='high'` today; a future improvement
   could also gate on `getLastFrameMs() < FRAME_TIME_PAUSE_THRESHOLD_MS` to be
   fully adaptive.
-- The prewarm panel is not yet exposed as a toggle button in the pause-menu
-  debug section; add it to `pauseMenu.ts` if preferred.
+- The prewarm panel is now exposed both as a toggle option in the pause-menu debug section (`pauseMenu.ts`) when Debug Mode is enabled, and as a toggle button on the floating debug menu (`debugPanel.ts`).
 
 See also: `nextSteps.md` for outstanding work items.

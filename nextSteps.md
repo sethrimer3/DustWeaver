@@ -8,6 +8,21 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 539 — Expose Prewarm Debug Panel in Pause-Menu Debug UI
+
+**Why:** Todo item 61 and `docs/render-chunk-prewarming.md` noted that the Prewarm rendering debug panel was not exposed in the pause-menu debug options or on the floating on-screen debug toggle panel.
+
+**What was done:**
+1. Added `setDebugPanelVisible(id, visible)` helper function to `src/ui/debugPanelManager.ts` to allow direct visibility state changes from checkbox toggles while preserving localStorage persistence.
+2. Exposed `'Prewarm Panel (debug)'` checkbox row in `src/ui/pauseMenu.ts` under Options whenever Debug mode is active (`state.isDebugOn`).
+3. Added `'prewarm'` (Prewarm Debug) and `'freeze'` (Freeze Profiler) buttons to `DEBUG_PANEL_DEFS` in `src/ui/debugPanel.ts`, completing visibility access for all render debug overlays.
+4. Added comprehensive unit tests in `src/tests/debugPanelManager.test.ts` verifying default visibility state (`prewarm = false`), explicit visibility toggling via `setDebugPanelVisible`, flipping via `toggleDebugPanel`, and global reset via `hideAllDebugPanels`.
+5. Updated `docs/render-chunk-prewarming.md` and marked Todo item 61 complete in `docs/Todo.md`. Bumped `BUILD_NUMBER` to 539.
+
+**Validation:** `node --import tsx --test src/tests/debugPanelManager.test.ts` passes cleanly (4/4 tests). Full validation (`npm run lint`, `npm run build`, and `npm test` with 2395/2395 passing) completes without errors.
+
+---
+
 ## BUILD 528 — Map Sketch Room-Edge Artifact Regression Protection
 
 **Why:** Todo item 41 identified that world-map sketch rendering can regress when removing outside room-edge artifacts, and required narrow automated regression protection or visual debug checks. Existing comments in `mapSketchRenderer.ts` misstated that out-of-bounds neighbors are treated as air, contradicting the actual code which suppresses outer boundary edges to prevent unwanted rectangular box outline artifacts around rooms.
