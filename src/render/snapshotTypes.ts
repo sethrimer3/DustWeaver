@@ -390,33 +390,10 @@ export interface WorldSnapshot {
   readonly dwaNailLifetimeTicks: Uint16Array;
   readonly isDwaNailAliveFlag: Uint8Array;
 
-  // ── Arrow Weave state ─────────────────────────────────────────────────────
-  /** 1 while the player is loading an arrow (holding secondary weave button). */
-  readonly isArrowWeaveLoadingFlag: 0 | 1;
-  /** Current loaded mote count (0, 2, 3, or 4) for bow visual sizing. */
-  readonly arrowWeaveCurrentMoteCount: number;
-  /** Current aim direction X (world units, normalized) — for bow placement. */
+  /** Current aim direction X (world units, normalized) — for weave placement. */
   readonly playerWeaveAimDirXWorld: number;
-  /** Current aim direction Y (world units, normalized) — for bow placement. */
+  /** Current aim direction Y (world units, normalized) — for weave placement. */
   readonly playerWeaveAimDirYWorld: number;
-  /** Number of allocated arrow slots (some may be expired with lifetime ≤ 0). */
-  readonly arrowCount: number;
-  /** Tip X position of each arrow (world units). Shared view into WorldState. */
-  readonly arrowXWorld: Float32Array;
-  /** Tip Y position of each arrow (world units). Shared view into WorldState. */
-  readonly arrowYWorld: Float32Array;
-  /** Normalized X travel direction of each arrow. Shared view into WorldState. */
-  readonly arrowDirXWorld: Float32Array;
-  /** Normalized Y travel direction of each arrow. Shared view into WorldState. */
-  readonly arrowDirYWorld: Float32Array;
-  /** Mote count per arrow (2, 3, or 4). Shared view into WorldState. */
-  readonly arrowMoteCount: Uint8Array;
-  /** 1 when the arrow is stuck in terrain; 0 while in flight. */
-  readonly isArrowStuckFlag: Uint8Array;
-  /** 1 when the arrow hit an enemy (invisible, playing hit sequence). */
-  readonly isArrowHitEnemyFlag: Uint8Array;
-  /** Remaining lifetime ticks per arrow (0 = expired). */
-  readonly arrowLifetimeTicksLeft: Float32Array;
 
   // ── Shield Sword Weave state ─────────────────────────────────────────────
   /** ID of the equipped secondary weave (e.g. 'arrow', 'shield_sword'). */
@@ -446,8 +423,6 @@ export interface WorldSnapshot {
   // ── Independent Sword/Shield/Bow Weaves (Stage 3/5) ──────────────────────
   /** Dust kind (ParticleKind) currently at the front of the player's ordered mote queue — used to theme sword/shield/bow visuals. */
   readonly currentWeaveDustKind: number;
-  /** Per-fired-arrow dust kind captured at fire time (ParticleKind). Shared view into WorldState. */
-  readonly arrowDustKind: Uint8Array;
   readonly hasSwordWeaveUnlockedFlag: 0 | 1;
   readonly hasShieldWeaveUnlockedFlag: 0 | 1;
   readonly hasBowWeaveUnlockedFlag: 0 | 1;

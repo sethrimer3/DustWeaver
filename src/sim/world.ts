@@ -54,8 +54,6 @@ export const MAX_ROPE_SEGMENTS = 32;
 export const MAX_MOTE_SLOTS = 20;
 /** Fixed trail-sample history capacity per mote slot for the dust-switch trail effect. */
 export const DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT = 6;
-/** Maximum simultaneous arrows in flight or stuck (legacy WEAVE_ARROW path). */
-export const MAX_ARROWS = 8;
 
 /** Maximum real motes that sweep the Sword Weave crescent slash. */
 export const MAX_SWORD_SLASH_MOTES = 8;
@@ -406,49 +404,6 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   weakWallJumpCascadeWallSideX: number;
 
-  // ── Arrow Weave loading state ──────────────────────────────────────────────
-  /** 1 while the player is holding the arrow weave button and loading an arrow. */
-  isArrowWeaveLoadingFlag: 0 | 1;
-  /** World tick when loading began (-1 = not loading). */
-  arrowWeaveLoadStartTick: number;
-  /** Current loaded mote count (0, 2, 3, or 4). */
-  arrowWeaveCurrentMoteCount: number;
-
-  // ── Arrow Weave flight buffer (MAX_ARROWS slots) ───────────────────────────
-  /** Number of allocated arrow slots (may include expired entries with lifetime ≤ 0). */
-  arrowCount: number;
-  /** Tip X position of each arrow (world units). */
-  arrowXWorld: Float32Array;
-  /** Tip Y position of each arrow (world units). */
-  arrowYWorld: Float32Array;
-  /** X velocity of each arrow (world units/s). */
-  arrowVelXWorld: Float32Array;
-  /** Y velocity of each arrow (world units/s). */
-  arrowVelYWorld: Float32Array;
-  /** Normalized X component of the arrow's travel direction. */
-  arrowDirXWorld: Float32Array;
-  /** Normalized Y component of the arrow's travel direction. */
-  arrowDirYWorld: Float32Array;
-  /** Number of motes in this arrow (2, 3, or 4). */
-  arrowMoteCount: Uint8Array;
-  /** 1 when the arrow is stuck in terrain; 0 while in flight. */
-  isArrowStuckFlag: Uint8Array;
-  /**
-   * 1 when the arrow hit an enemy while in flight and is playing its hit
-   * sequence.  The arrow is invisible in this state and removed when done.
-   */
-  isArrowHitEnemyFlag: Uint8Array;
-  /** Countdown ticks until this arrow slot is freed (0 = expired). */
-  arrowLifetimeTicksLeft: Float32Array;
-  /** Number of motes remaining to hit in the current hit sequence. */
-  arrowHitSequenceMotesLeft: Uint8Array;
-  /** Ticks until the next mote in the hit sequence fires. */
-  arrowHitSequenceDelayTicks: Float32Array;
-  /** Index into world.clusters of the enemy currently being hit (-1 = none). */
-  arrowHitTargetClusterIndex: Int32Array;
-  /** Ticks before this stuck arrow can begin a new hit sequence (invulnerability). */
-  arrowDamageCooldownTicks: Float32Array;
-
   // ── Shield Sword Weave state ───────────────────────────────────────────────
   /**
    * Current sword state machine value.  See sim/weaves/swordWeave.ts for the
@@ -597,8 +552,6 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   bowArrowTravelPx: number;
   /** Dust kind (ParticleKind) captured at fire time so a later switch cannot retag it. */
   bowArrowDustKind: number;
-  /** Dust kind (ParticleKind) captured per legacy fired arrow, MAX_ARROWS entries. */
-  arrowDustKind: Uint8Array;
   /** 1 while the independent (Stage 3) Shield Weave crescent currently owns the player's motes. */
   shieldWeaveIndependentActiveFlag: 0 | 1;
 
@@ -864,25 +817,6 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     weakWallJumpCascadeXWorld: 0.0,
     weakWallJumpCascadeYWorld: 0.0,
     weakWallJumpCascadeWallSideX: 0,
-    // ── Arrow Weave ───────────────────────────────────────────────────
-    isArrowWeaveLoadingFlag:       0,
-    arrowWeaveLoadStartTick:       -1,
-    arrowWeaveCurrentMoteCount:    0,
-    arrowCount:                    0,
-    arrowXWorld:                   new Float32Array(MAX_ARROWS),
-    arrowYWorld:                   new Float32Array(MAX_ARROWS),
-    arrowVelXWorld:                new Float32Array(MAX_ARROWS),
-    arrowVelYWorld:                new Float32Array(MAX_ARROWS),
-    arrowDirXWorld:                new Float32Array(MAX_ARROWS),
-    arrowDirYWorld:                new Float32Array(MAX_ARROWS),
-    arrowMoteCount:                new Uint8Array(MAX_ARROWS),
-    isArrowStuckFlag:              new Uint8Array(MAX_ARROWS),
-    isArrowHitEnemyFlag:           new Uint8Array(MAX_ARROWS),
-    arrowLifetimeTicksLeft:        new Float32Array(MAX_ARROWS),
-    arrowHitSequenceMotesLeft:     new Uint8Array(MAX_ARROWS),
-    arrowHitSequenceDelayTicks:    new Float32Array(MAX_ARROWS),
-    arrowHitTargetClusterIndex:    new Int32Array(MAX_ARROWS).fill(-1),
-    arrowDamageCooldownTicks:      new Float32Array(MAX_ARROWS),
     // ── Shield Sword Weave ────────────────────────────────────────────
     swordWeaveStateEnum:           0,
     swordWeaveStateTicksElapsed:   0,
@@ -893,7 +827,6 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     swordWeaveHandAnchorXWorld:    0,
     swordWeaveHandAnchorYWorld:    0,
     swordWeaveLengthRatio:         1.0,
-    arrowDustKind:                 new Uint8Array(MAX_ARROWS),
     shieldWeaveIndependentActiveFlag: 0,
     // ── Stage 3: independent Sword/Shield/Bow unlock flags ─────────────
     hasSwordWeaveUnlockedFlag:     0,

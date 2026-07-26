@@ -42,7 +42,6 @@ import { applyWallForces, applyWallBounce, settleFloorDust } from './particles/w
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
 import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
-import { tickArrows } from './weaves/arrowWeave';
 import { updateMomentumCombatState, applyMomentumCombatCollisionDamage } from './momentumCombat';
 import { getCombatMode } from './combatMode';
 import { applyHazards, computePlayerWaterState } from './hazards';
@@ -300,9 +299,6 @@ export function tick(world: WorldState): void {
 
   // 4.55. Player Weave combat — applies weave activation patterns for bound dust
   applyPlayerWeaveCombat(world);
-
-  // 4.56. Arrow Weave flight update — move arrows, detect wall sticking, apply enemy hit sequences
-  tickArrows(world);
 
   // 4.57. Crimson Wizard fire/smoke/projectile buffers
   tickCrimsonWizardEffects(world);

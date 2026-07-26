@@ -47,6 +47,25 @@ import {
   BOW_ARROW_PHASE_ASSEMBLING,
   BOW_ARROW_PHASE_OUTBOUND,
 } from './bowArrow';
+import { WEAVE_ARROW, WEAVE_SHIELD, WEAVE_SWORD, WEAVE_SHIELD_SWORD } from './weaveDefinition';
+
+function _hasSwordUnlocked(world: WorldState): boolean {
+  return world.hasSwordWeaveUnlockedFlag === 1 ||
+    world.playerSecondaryWeaveId === WEAVE_SWORD ||
+    world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD;
+}
+
+function _hasShieldUnlocked(world: WorldState): boolean {
+  return world.hasShieldWeaveUnlockedFlag === 1 ||
+    world.playerSecondaryWeaveId === WEAVE_SHIELD ||
+    world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD ||
+    world.playerSecondaryWeaveId === WEAVE_ARROW;
+}
+
+function _hasBowUnlocked(world: WorldState): boolean {
+  return world.hasBowWeaveUnlockedFlag === 1 ||
+    world.playerSecondaryWeaveId === WEAVE_ARROW;
+}
 
 /** Finds the live player cluster, or null. */
 function _findPlayer(world: WorldState) {
@@ -108,7 +127,7 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
     // swipe reserves motes, so the same particle can never be claimed by both
     // an old latched Bow arrow and a new Sword swipe at once.
     if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) cancelBowArrow(world);
-    if (world.hasSwordWeaveUnlockedFlag === 1) {
+    if (_hasSwordUnlocked(world)) {
       startNewSwordSwipe(world, player, gesture.gestureId, gesture.pressAimXWorld, gesture.pressAimYWorld);
     }
   }
@@ -124,7 +143,7 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
   const isHeldPhase = gesture.phase === SecondaryWeaveGesturePhase.Press
     || gesture.phase === SecondaryWeaveGesturePhase.Holding;
   const shieldShouldBeActive =
-    world.hasShieldWeaveUnlockedFlag === 1 &&
+    _hasShieldUnlocked(world) &&
     isHeldPhase &&
     !_isSwordBlockingShield(world);
 
@@ -136,7 +155,7 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
     const aimDirY = gesture.holdAimYWorld - player.positionYWorld;
 
     // The tick the Shield first forms is the schedule origin for the arrow.
-    if (firstShieldTick && world.hasBowWeaveUnlockedFlag === 1) {
+    if (firstShieldTick && _hasBowUnlocked(world)) {
       beginBowArrowAssembly(world, world.tick, gesture.gestureId);
     }
     // Reserve/advance the arrow BEFORE the crescent so reserved motes (marked
@@ -169,7 +188,7 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
   // pending fire if enough are reserved but still seating, or cancel outright
   // if fewer than the minimum are even reserved (task section 6). ──────────
   if (gesture.releaseEventFlag) {
-    if (world.hasBowWeaveUnlockedFlag === 1 && world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
+    if (_hasBowUnlocked(world) && world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
       const aimDirX = gesture.releaseAimXWorld - player.positionXWorld;
       const aimDirY = gesture.releaseAimYWorld - player.positionYWorld;
       if (!fireBowArrow(world, aimDirX, aimDirY)) {

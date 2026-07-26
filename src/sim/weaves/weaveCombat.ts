@@ -10,11 +10,6 @@ import { WorldState } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { getElementProfile } from '../particles/elementProfiles';
 import { WEAVE_ARROW, WEAVE_SHIELD_SWORD, WEAVE_STORM } from './weaveDefinition';
-import {
-  startArrowLoading,
-  updateArrowLoading,
-  fireArrowFromLoading,
-} from './arrowWeave';
 import { tickSwordWeave } from './swordWeave';
 import { applyShieldWeaveCrescent } from './shieldWeave';
 import { tickSecondaryWeaveCoordinator } from './secondaryWeaveCoordinator';
@@ -127,12 +122,13 @@ function applyStormAttraction(world: WorldState): void {
  * computed entirely outside this function and is unaffected either way.
  */
 export function applyPlayerWeaveCombat(world: WorldState): void {
+  // Always run the independent secondary weave coordinator across all combat
+  // modes so Bow Weave consistently reserves and launches actual follower motes.
+  tickSecondaryWeaveCoordinator(world);
+
   if (world.combatMode === 'legacy') {
     applyLegacyPlayerWeaveCombat(world);
-    return;
   }
-
-  tickSecondaryWeaveCoordinator(world);
 }
 
 function applyLegacyPlayerWeaveCombat(world: WorldState): void {
@@ -176,20 +172,10 @@ function applyLegacyPlayerWeaveCombat(world: WorldState): void {
   if (world.canUsePlayerSecondaryWeaveFlag === 0) {
     resetLockedSecondaryWeaveInput(world);
   } else if (world.playerSecondaryWeaveId === WEAVE_ARROW) {
-    // ── Arrow Weave secondary ────────────────────────────────────────────────
-    if (world.playerSecondaryWeaveTriggeredFlag === 1) {
-      world.playerSecondaryWeaveTriggeredFlag = 0;
-      world.isPlayerSecondaryWeaveActiveFlag = 1;
-      startArrowLoading(world);
-    }
-    if (world.isPlayerSecondaryWeaveActiveFlag === 1) {
-      updateArrowLoading(world);
-    }
-    if (world.playerSecondaryWeaveEndFlag === 1) {
-      world.playerSecondaryWeaveEndFlag = 0;
-      world.isPlayerSecondaryWeaveActiveFlag = 0;
-      fireArrowFromLoading(world, playerX, playerY);
-    }
+    // Handled globally by tickSecondaryWeaveCoordinator above.
+    world.playerSecondaryWeaveTriggeredFlag = 0;
+    world.playerSecondaryWeaveEndFlag = 0;
+    world.isPlayerSecondaryWeaveActiveFlag = 0;
   } else if (world.playerSecondaryWeaveId === WEAVE_SHIELD_SWORD) {
     // ── Shield Sword Weave secondary ────────────────────────────────────────
     // RMB held → guard swipe then shield (delegated to tickSwordWeave).
