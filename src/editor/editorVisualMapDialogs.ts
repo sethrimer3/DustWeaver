@@ -28,10 +28,7 @@ import {
   getOppositeDirection,
   getAdjacentRoomMapPosition,
 } from './editorVisualMapHelpers';
-
-// ── Shared constants ──────────────────────────────────────────────────────────
-
-const GREEN = '#00c864';
+import { ACCENT_GOLD } from './editorStyles';
 
 /** Preset palette offered in the room color picker. */
 const COLOR_PRESETS = [
@@ -70,7 +67,7 @@ export function createModal(overlay: HTMLElement): { panel: HTMLElement; destroy
 
   const panel = document.createElement('div');
   panel.style.cssText = `
-    background: rgba(10,10,20,0.98); border: 1px solid rgba(0,200,100,0.5);
+    background: rgba(10,10,20,0.98); border: 1px solid rgba(212,168,75,0.5);
     border-radius: 6px; padding: 20px; min-width: 280px; max-width: 400px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.7);
   `;
@@ -131,13 +128,13 @@ export function showMoveToWorldDialog(
 
   const title = document.createElement('h3');
   title.textContent = `Move "${effectiveRoomName(roomId)}" to Zone`;
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_GOLD}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   const sel = document.createElement('select');
   sel.style.cssText = `
     width: 100%; padding: 6px; background: rgba(20,20,30,0.9);
-    color: #c0ffd0; border: 1px solid rgba(0,200,100,0.4);
+    color: #f1e7cb; border: 1px solid rgba(212,168,75,0.4);
     border-radius: 3px; font-family: monospace; font-size: 12px; margin-bottom: 12px;
   `;
   for (const id of sorted) {
@@ -152,14 +149,14 @@ export function showMoveToWorldDialog(
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const okBtn = makeHeaderBtn('Move', '#44cc88');
+  const okBtn = makeHeaderBtn('Move', '#d4a84b');
   okBtn.style.cssText += ' flex: 1;';
   okBtn.addEventListener('click', () => {
     const newWorldId = parseInt(sel.value, 10);
     setRoomWorldOverride(roomId, newWorldId);
     ctx.callbacks.onWorldMapDataChanged?.();
     ctx.statusBar.textContent = `Moved "${effectiveRoomName(roomId)}" to ${worldDisplayName(newWorldId)}`;
-    ctx.statusBar.style.color = '#88ff88';
+    ctx.statusBar.style.color = '#f0c75e';
     modal.destroy();
     ctx.render();
   });
@@ -178,7 +175,7 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
 
   const title = document.createElement('h3');
   title.textContent = '+ Add New Room';
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_GOLD}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   function makeField(labelText: string, input: HTMLInputElement | HTMLSelectElement): void {
@@ -186,11 +183,11 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
     row.style.cssText = 'margin-bottom: 10px;';
     const lbl = document.createElement('label');
     lbl.textContent = labelText;
-    lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+    lbl.style.cssText = 'display: block; color: rgba(241,231,203,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
     input.style.cssText = (input.style.cssText || '') + `
       width: 100%; box-sizing: border-box; padding: 5px 8px;
-      background: rgba(20,20,30,0.9); color: #c0ffd0;
-      border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+      background: rgba(20,20,30,0.9); color: #f1e7cb;
+      border: 1px solid rgba(212,168,75,0.4); border-radius: 3px;
       font-family: monospace; font-size: 12px;
     `;
     row.appendChild(lbl);
@@ -242,7 +239,7 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const createBtn = makeHeaderBtn('Create Room', '#44cc88');
+  const createBtn = makeHeaderBtn('Create Room', '#d4a84b');
   createBtn.style.cssText += ' flex: 1;';
   createBtn.addEventListener('click', () => {
     const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');
@@ -295,7 +292,7 @@ export function showAddRoomDialog(ctx: VisualMapDialogContext): void {
     modal.destroy();
     ctx.render();
     ctx.statusBar.textContent = `Room "${name}" created \u2014 double-click to edit it, export room JSON to save gameplay content.`;
-    ctx.statusBar.style.color = '#88ff88';
+    ctx.statusBar.style.color = '#f0c75e';
   });
 
   const cancelBtn = makeHeaderBtn('Cancel', '#888888');
@@ -314,7 +311,7 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
 
   const title = document.createElement('h3');
   title.textContent = '+ Add New Zone';
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_GOLD}; margin: 0 0 16px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   let maxId = 0;
@@ -329,14 +326,14 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
   nameInput.placeholder = `Zone ${nextId}`;
   nameInput.style.cssText = `
     width: 100%; box-sizing: border-box; padding: 6px 8px;
-    background: rgba(20,20,30,0.9); color: #c0ffd0;
-    border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+    background: rgba(20,20,30,0.9); color: #f1e7cb;
+    border: 1px solid rgba(212,168,75,0.4); border-radius: 3px;
     font-family: monospace; font-size: 12px; margin-bottom: 12px;
   `;
 
   const lbl = document.createElement('label');
   lbl.textContent = `Zone Name (will be assigned id: ${nextId})`;
-  lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+  lbl.style.cssText = 'display: block; color: rgba(241,231,203,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
   modal.panel.appendChild(lbl);
   modal.panel.appendChild(nameInput);
 
@@ -352,7 +349,7 @@ export function showAddWorldDialog(ctx: VisualMapDialogContext): void {
     ctx.callbacks.onWorldMapDataChanged?.();
     modal.destroy();
     ctx.statusBar.textContent = `Zone "${name}" (id: ${nextId}) created \u2014 right-click rooms to move them into it.`;
-    ctx.statusBar.style.color = '#88ff88';
+    ctx.statusBar.style.color = '#f0c75e';
     ctx.render();
   });
 
@@ -377,13 +374,13 @@ export function showColorPickerDialog(
 
   const title = document.createElement('h3');
   title.textContent = `\ud83c\udfa8 Room Color: "${roomName}"`;
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 12px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_GOLD}; margin: 0 0 12px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   // Preset swatch grid
   const swatchLbl = document.createElement('div');
   swatchLbl.textContent = 'Preset colors:';
-  swatchLbl.style.cssText = 'color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace; margin-bottom: 6px;';
+  swatchLbl.style.cssText = 'color: rgba(241,231,203,0.6); font-size: 11px; font-family: monospace; margin-bottom: 6px;';
   modal.panel.appendChild(swatchLbl);
 
   const swatchGrid = document.createElement('div');
@@ -427,7 +424,7 @@ export function showColorPickerDialog(
 
   const nativeLbl = document.createElement('label');
   nativeLbl.textContent = 'Custom:';
-  nativeLbl.style.cssText = 'color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace; white-space: nowrap;';
+  nativeLbl.style.cssText = 'color: rgba(241,231,203,0.6); font-size: 11px; font-family: monospace; white-space: nowrap;';
 
   const nativeInput = document.createElement('input');
   nativeInput.type = 'color';
@@ -447,7 +444,7 @@ export function showColorPickerDialog(
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const applyBtn = makeHeaderBtn('Apply', '#44cc88');
+  const applyBtn = makeHeaderBtn('Apply', '#d4a84b');
   applyBtn.style.cssText += ' flex: 1;';
   applyBtn.addEventListener('click', () => {
     if (selectedHex) {
@@ -457,7 +454,7 @@ export function showColorPickerDialog(
     } else {
       ctx.roomColorOverrides.delete(roomId);
       ctx.statusBar.textContent = `Color reset for "${roomName}"`;
-      ctx.statusBar.style.color = 'rgba(200,255,200,0.6)';
+      ctx.statusBar.style.color = 'rgba(241,231,203,0.6)';
     }
     modal.destroy();
     ctx.render();
@@ -468,7 +465,7 @@ export function showColorPickerDialog(
   clearBtn.addEventListener('click', () => {
     ctx.roomColorOverrides.delete(roomId);
     ctx.statusBar.textContent = `Color reset for "${roomName}"`;
-    ctx.statusBar.style.color = 'rgba(200,255,200,0.6)';
+    ctx.statusBar.style.color = 'rgba(241,231,203,0.6)';
     modal.destroy();
     ctx.render();
   });
@@ -511,12 +508,12 @@ export function showCreateLinkedRoomDialog(
 
   const title = document.createElement('h3');
   title.textContent = '+ Create Linked Room';
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 6px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_GOLD}; margin: 0 0 6px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   const subtitleEl = document.createElement('div');
   subtitleEl.textContent = `Placed ${sourceTrans.direction} of "${effectiveRoomName(sourceRoomId)}" with a matching transition.`;
-  subtitleEl.style.cssText = 'color: rgba(200,255,200,0.6); font-size:11px; font-family:monospace; margin-bottom:14px;';
+  subtitleEl.style.cssText = 'color: rgba(241,231,203,0.6); font-size:11px; font-family:monospace; margin-bottom:14px;';
   modal.panel.appendChild(subtitleEl);
 
   function makeField(labelText: string, input: HTMLInputElement | HTMLSelectElement): void {
@@ -524,11 +521,11 @@ export function showCreateLinkedRoomDialog(
     row.style.cssText = 'margin-bottom: 10px;';
     const lbl = document.createElement('label');
     lbl.textContent = labelText;
-    lbl.style.cssText = 'display: block; color: rgba(200,255,200,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
+    lbl.style.cssText = 'display: block; color: rgba(241,231,203,0.6); font-size: 11px; margin-bottom: 3px; font-family: monospace;';
     input.style.cssText = (input.style.cssText || '') + `
       width: 100%; box-sizing: border-box; padding: 5px 8px;
-      background: rgba(20,20,30,0.9); color: #c0ffd0;
-      border: 1px solid rgba(0,200,100,0.4); border-radius: 3px;
+      background: rgba(20,20,30,0.9); color: #f1e7cb;
+      border: 1px solid rgba(212,168,75,0.4); border-radius: 3px;
       font-family: monospace; font-size: 12px;
     `;
     row.appendChild(lbl);
@@ -615,7 +612,7 @@ export function showCreateLinkedRoomDialog(
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const createBtn = makeHeaderBtn('Create Room', '#44cc88');
+  const createBtn = makeHeaderBtn('Create Room', '#d4a84b');
   createBtn.style.cssText += ' flex: 1;';
   createBtn.addEventListener('click', () => {
     const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');
@@ -699,7 +696,7 @@ export function showCreateLinkedRoomDialog(
     modal.destroy();
     ctx.render();
     ctx.statusBar.textContent = `Room "${name}" created and linked to "${effectiveRoomName(sourceRoomId)}".`;
-    ctx.statusBar.style.color = '#88ff88';
+    ctx.statusBar.style.color = '#f0c75e';
   });
 
   const cancelBtn = makeHeaderBtn('Cancel', '#888888');

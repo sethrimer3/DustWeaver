@@ -19,13 +19,14 @@ import {
   hexToRgba,
   getDoorCenterWorld,
 } from './editorVisualMapHelpers';
+import { PANEL_BORDER, ACCENT_GOLD_BRIGHT, TEXT_COLOR, MUTED_TEXT_COLOR } from './editorStyles';
 
 // ── Draw-call constants ───────────────────────────────────────────────────────
 
-const ROOM_FILL           = 'rgba(30,40,55,0.9)';
-const ROOM_STROKE         = 'rgba(0,200,100,0.6)';
-const ROOM_CURRENT_FILL   = 'rgba(0,80,40,0.5)';
-const ROOM_CURRENT_STROKE = '#00c864';
+const ROOM_FILL           = 'rgba(9,22,42,0.9)';
+const ROOM_STROKE         = PANEL_BORDER;
+const ROOM_CURRENT_FILL   = 'rgba(12,28,52,0.75)';
+const ROOM_CURRENT_STROKE = ACCENT_GOLD_BRIGHT;
 const ROOM_SELECTED_STROKE = '#ffffff';
 const DOOR_SIZE           = 16;
 const DOOR_FILL_LINKED    = '#44aaff';
@@ -33,7 +34,6 @@ const DOOR_FILL_UNLINKED  = '#ff8844';
 const DOOR_FILL_HOVER     = '#ffff44';
 const LINK_LINE_COLOR     = 'rgba(100,200,255,0.6)';
 const LINK_LINE_ACTIVE    = 'rgba(255,255,100,0.8)';
-const TEXT_COLOR          = '#c0ffd0';
 
 /** Highlight color for doorways that are about to snap together. */
 export const DOOR_SNAP_COLOR = '#ffe840';
@@ -136,7 +136,7 @@ export function drawRoom(
   ctx2d.fillText(label, sx + rw / 2, sy + rh / 2 - fontSize * 0.9, rw - 4);
 
   // Room ID
-  ctx2d.fillStyle = 'rgba(200,255,200,0.35)';
+  ctx2d.fillStyle = MUTED_TEXT_COLOR;
   ctx2d.font = `${Math.max(7, fontSize - 2)}px monospace`;
   ctx2d.fillText(room.id, sx + rw / 2, sy + rh / 2 + fontSize * 0.1, rw - 4);
 

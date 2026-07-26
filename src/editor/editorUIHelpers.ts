@@ -8,7 +8,7 @@
 
 import type { PaletteItem } from './editorState';
 import { addHoverStyle } from '../ui/helpers';
-import { PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
+import { PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, ACCENT_GOLD } from './editorStyles';
 import { FOLDER_BLOCK_THEMES } from '../render/walls/folderBlockThemes';
 
 // ── Block-theme visual constants ─────────────────────────────────────────────
@@ -122,12 +122,12 @@ export function createCollapsibleSection(
 
   const titleEl = document.createElement('div');
   titleEl.textContent = titleText;
-  titleEl.style.cssText = `font-size: 11px; color: ${GREEN}; font-weight: bold;`;
+  titleEl.style.cssText = `font-size: 11px; color: ${ACCENT_GOLD}; font-weight: bold;`;
   header.appendChild(titleEl);
 
   const chevron = document.createElement('span');
   chevron.setAttribute('aria-hidden', 'true');
-  chevron.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.6);';
+  chevron.style.cssText = 'font-size: 10px; color: rgba(241,231,203,0.6);';
   header.appendChild(chevron);
 
   wrapper.appendChild(header);
@@ -198,8 +198,8 @@ export function makeThemeChip(themeId: string, label: string, shortId: string, i
   const btn = document.createElement('button');
   btn.style.cssText = `
     min-width: 0; padding: 4px 2px; cursor: pointer; border-radius: 4px;
-    background: ${isActive ? 'rgba(0,200,100,0.2)' : BTN_BG};
-    border: 2px solid ${isActive ? GREEN : PANEL_BORDER};
+    background: ${isActive ? 'rgba(212,168,75,0.2)' : BTN_BG};
+    border: 2px solid ${isActive ? ACCENT_GOLD : PANEL_BORDER};
     color: ${TEXT_COLOR}; font-size: 9px; font-family: monospace;
     display: flex; flex-direction: column; align-items: center; gap: 3px;
     transition: background 0.1s;
@@ -242,8 +242,8 @@ export function makeThemePaletteButton(isOpen: boolean, onClick: () => void): HT
   btn.title = 'Open block theme palette';
   btn.style.cssText = `
     width: 30px; padding: 4px 0; cursor: pointer; border-radius: 4px;
-    background: ${isOpen ? 'rgba(0,200,100,0.2)' : BTN_BG};
-    border: 2px solid ${isOpen ? GREEN : PANEL_BORDER};
+    background: ${isOpen ? 'rgba(212,168,75,0.2)' : BTN_BG};
+    border: 2px solid ${isOpen ? ACCENT_GOLD : PANEL_BORDER};
     color: ${TEXT_COLOR}; font-size: 13px; font-family: monospace;
     transition: background 0.1s;
   `;
@@ -277,8 +277,8 @@ export function makeThemeSlot(
     position: relative; width: 100%; aspect-ratio: 1 / 1; cursor: pointer;
     border-radius: 4px; overflow: hidden; box-sizing: border-box;
     background: ${fill};
-    border: 2px solid ${isActive ? GREEN : PANEL_BORDER};
-    box-shadow: ${isActive ? `0 0 0 2px rgba(0,220,120,0.55)` : 'none'};
+    border: 2px solid ${isActive ? ACCENT_GOLD : PANEL_BORDER};
+    box-shadow: ${isActive ? `0 0 0 2px rgba(240,199,94,0.55)` : 'none'};
     transition: border-color 0.1s;
   `;
   const spriteUrl = THEME_BLOCK_SPRITE_URL[themeId] ?? '';
@@ -580,7 +580,7 @@ export function makeBlockPreviewCard(item: PaletteItem, theme: string, onClick: 
   card.appendChild(lbl);
 
   card.addEventListener('mouseenter', () => {
-    if (card.style.background !== ACTIVE_BG) card.style.background = 'rgba(0,200,100,0.12)';
+    if (card.style.background !== ACTIVE_BG) card.style.background = 'rgba(212,168,75,0.12)';
   });
   card.addEventListener('mouseleave', () => {
     if (card.style.background !== ACTIVE_BG) card.style.background = BTN_BG;
@@ -622,7 +622,7 @@ export function makePaletteCardShell(
   card.appendChild(lbl);
 
   card.addEventListener('mouseenter', () => {
-    if (card.style.background !== ACTIVE_BG) card.style.background = 'rgba(0,200,100,0.12)';
+    if (card.style.background !== ACTIVE_BG) card.style.background = 'rgba(212,168,75,0.12)';
   });
   card.addEventListener('mouseleave', () => {
     if (card.style.background !== ACTIVE_BG) card.style.background = BTN_BG;

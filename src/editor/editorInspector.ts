@@ -27,7 +27,7 @@ import {
   addColorSliders,
 } from './editorFormWidgets';
 import { makeBtn } from './editorUIHelpers';
-import { GREEN, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
+import { ACCENT_GOLD, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { ALL_PASSIVE_TECHNIQUE_IDS, PASSIVE_TECHNIQUE_DEFINITIONS } from '../progression/passiveTechniques';
 import { buildDialogueTriggerInspector } from './editorDialogueTriggerInspector';
@@ -70,7 +70,7 @@ function renderSurfaceRimSection(
 
   const heading = document.createElement('div');
   heading.textContent = 'Surface Rim';
-  heading.style.cssText = `color: ${GREEN}; font-size: 12px; margin-top: 10px; margin-bottom: 4px; font-weight: bold; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
+  heading.style.cssText = `color: ${ACCENT_GOLD}; font-size: 12px; margin-top: 10px; margin-bottom: 4px; font-weight: bold; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
   parent.appendChild(heading);
 
   const styles = walls.map(w => normalizeSurfaceRimStyle(w.surfaceRim));
@@ -100,7 +100,7 @@ function renderSurfaceRimSection(
   colorRow.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
   const colorLbl = document.createElement('span');
   colorLbl.textContent = 'Color';
-  colorLbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+  colorLbl.style.cssText = `min-width: 90px; font-size: 11px; color: rgba(241,231,203,0.7);`;
   const colorInput = document.createElement('input');
   colorInput.type = 'color';
   const colorMixed = mixed('color');
@@ -113,7 +113,7 @@ function renderSurfaceRimSection(
   if (colorMixed) {
     const mixedTag = document.createElement('span');
     mixedTag.textContent = '(mixed)';
-    mixedTag.style.cssText = 'font-size: 10px; color: rgba(200,255,200,0.5);';
+    mixedTag.style.cssText = 'font-size: 10px; color: rgba(241,231,203,0.5);';
     colorRow.appendChild(mixedTag);
   }
   parent.appendChild(colorRow);
@@ -147,7 +147,7 @@ export function updateInspector(
 ): void {
   div.innerHTML = '';
   if (state.selectedElements.length === 0 || state.roomData === null) {
-    div.innerHTML = `<div style="color: rgba(200,255,200,0.4); font-size: 11px;">Select an element to inspect</div>`;
+    div.innerHTML = `<div style="color: rgba(241,231,203,0.4); font-size: 11px;">Select an element to inspect</div>`;
     return;
   }
 
@@ -157,7 +157,7 @@ export function updateInspector(
   if (state.selectedElements.length > 1) {
     const heading = document.createElement('div');
     heading.textContent = `Inspector: ${state.selectedElements.length} elements`;
-    heading.style.cssText = `color: ${GREEN}; font-size: 13px; margin-bottom: 8px; font-weight: bold;`;
+    heading.style.cssText = `color: ${ACCENT_GOLD}; font-size: 13px; margin-bottom: 8px; font-weight: bold;`;
     div.appendChild(heading);
 
     // Show shared properties for multi-selection
@@ -166,7 +166,7 @@ export function updateInspector(
       const type = state.selectedElements[0].type;
       const typeLabel = document.createElement('div');
       typeLabel.textContent = `All: ${type}`;
-      typeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+      typeLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.5); margin-bottom: 4px;`;
       div.appendChild(typeLabel);
 
       if (type === 'wall') {
@@ -192,7 +192,7 @@ export function updateInspector(
     } else {
       const typeInfo = document.createElement('div');
       typeInfo.textContent = `Mixed types: ${[...types].join(', ')}`;
-      typeInfo.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+      typeInfo.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.5); margin-bottom: 4px;`;
       div.appendChild(typeInfo);
     }
     return;
@@ -203,7 +203,7 @@ export function updateInspector(
 
   const heading = document.createElement('div');
   heading.textContent = `Inspector: ${el.type}`;
-  heading.style.cssText = `color: ${GREEN}; font-size: 13px; margin-bottom: 8px; font-weight: bold;`;
+  heading.style.cssText = `color: ${ACCENT_GOLD}; font-size: 13px; margin-bottom: 8px; font-weight: bold;`;
   div.appendChild(heading);
 
   if (el.type === 'wall') {
@@ -219,7 +219,7 @@ export function updateInspector(
         v => callbacks?.onPropertyChange('wall.blockTheme', v));
       const typeLabel = wall.isPlatformFlag === 1 ? 'Platform (one-way)' : 'Solid Block';
       const typeDiv = document.createElement('div');
-      typeDiv.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.5); margin-top: 4px;`;
+      typeDiv.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.5); margin-top: 4px;`;
       typeDiv.textContent = `Type: ${typeLabel}`;
       div.appendChild(typeDiv);
       renderSurfaceRimSection(div, [wall], callbacks);
@@ -305,7 +305,7 @@ export function updateInspector(
       // ── Starting options section ────────────────────────────────────────
       const sectionLabel = document.createElement('div');
       sectionLabel.textContent = 'Starting Options';
-      sectionLabel.style.cssText = `font-size: 11px; color: ${GREEN}; margin-top: 8px; margin-bottom: 4px; font-weight: bold;`;
+      sectionLabel.style.cssText = `font-size: 11px; color: ${ACCENT_GOLD}; margin-top: 8px; margin-bottom: 4px; font-weight: bold;`;
       div.appendChild(sectionLabel);
 
       addNumberField(div, 'Starting Dust Motes', opts?.startingHealth ?? 10, 0, 999999,
@@ -316,7 +316,7 @@ export function updateInspector(
       // Starting Dust Types — checkbox list
       const dustLabel = document.createElement('div');
       dustLabel.textContent = 'Starting Dust Types';
-      dustLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      dustLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 3px;`;
       div.appendChild(dustLabel);
 
       const currentDustTypes = new Set<string>(opts?.startingDustTypes ?? []);
@@ -327,19 +327,19 @@ export function updateInspector(
         const chip = document.createElement('label');
         chip.style.cssText = `
           display: flex; align-items: center; gap: 3px;
-          background: rgba(0,0,0,0.3); border: 1px solid ${isKindChecked ? GREEN : PANEL_BORDER};
+          background: rgba(0,0,0,0.3); border: 1px solid ${isKindChecked ? ACCENT_GOLD : PANEL_BORDER};
           border-radius: 3px; padding: 2px 5px; cursor: pointer;
-          font-size: 10px; color: ${isKindChecked ? GREEN : TEXT_COLOR};
+          font-size: 10px; color: ${isKindChecked ? ACCENT_GOLD : TEXT_COLOR};
         `;
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = isKindChecked;
-        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.style.cssText = `accent-color: ${ACCENT_GOLD}; width: 10px; height: 10px;`;
         cb.addEventListener('click', e => e.stopPropagation());
         cb.addEventListener('change', () => {
           if (cb.checked) { currentDustTypes.add(kindName); } else { currentDustTypes.delete(kindName); }
-          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
-          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          chip.style.borderColor = cb.checked ? ACCENT_GOLD : PANEL_BORDER;
+          chip.style.color = cb.checked ? ACCENT_GOLD : TEXT_COLOR;
           callbacks?.onPropertyChange('campaignSpawn.startingDustTypes', JSON.stringify([...currentDustTypes]));
         });
         chip.appendChild(cb);
@@ -351,7 +351,7 @@ export function updateInspector(
       // Starting Weaves — checkbox list
       const weavesLabel = document.createElement('div');
       weavesLabel.textContent = 'Starting Weaves';
-      weavesLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      weavesLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 3px;`;
       div.appendChild(weavesLabel);
 
       const currentWeaves = new Set<string>(opts?.startingWeaves ?? []);
@@ -365,14 +365,14 @@ export function updateInspector(
         const chip = document.createElement('label');
         chip.style.cssText = `
           display: flex; align-items: center; gap: 3px;
-          background: rgba(0,0,0,0.3); border: 1px solid ${isWeaveChecked ? GREEN : PANEL_BORDER};
+          background: rgba(0,0,0,0.3); border: 1px solid ${isWeaveChecked ? ACCENT_GOLD : PANEL_BORDER};
           border-radius: 3px; padding: 2px 5px; cursor: pointer;
-          font-size: 10px; color: ${isWeaveChecked ? GREEN : TEXT_COLOR};
+          font-size: 10px; color: ${isWeaveChecked ? ACCENT_GOLD : TEXT_COLOR};
         `;
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = isWeaveChecked;
-        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.style.cssText = `accent-color: ${ACCENT_GOLD}; width: 10px; height: 10px;`;
         cb.addEventListener('click', e => e.stopPropagation());
         cb.addEventListener('change', () => {
           if (cb.checked) {
@@ -380,8 +380,8 @@ export function updateInspector(
           } else {
             currentWeaves.delete(weaveId);
           }
-          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
-          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          chip.style.borderColor = cb.checked ? ACCENT_GOLD : PANEL_BORDER;
+          chip.style.color = cb.checked ? ACCENT_GOLD : TEXT_COLOR;
           callbacks?.onPropertyChange('campaignSpawn.startingWeaves', JSON.stringify([...currentWeaves]));
         });
         chip.appendChild(cb);
@@ -393,7 +393,7 @@ export function updateInspector(
       // Starting Passive Techniques — checkbox list
       const passivesLabel = document.createElement('div');
       passivesLabel.textContent = 'Starting Passives';
-      passivesLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 3px;`;
+      passivesLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 3px;`;
       div.appendChild(passivesLabel);
 
       const currentPassives = new Set<string>(opts?.startingPassives ?? []);
@@ -407,14 +407,14 @@ export function updateInspector(
         const chip = document.createElement('label');
         chip.style.cssText = `
           display: flex; align-items: center; gap: 3px;
-          background: rgba(0,0,0,0.3); border: 1px solid ${isPassiveChecked ? GREEN : PANEL_BORDER};
+          background: rgba(0,0,0,0.3); border: 1px solid ${isPassiveChecked ? ACCENT_GOLD : PANEL_BORDER};
           border-radius: 3px; padding: 2px 5px; cursor: pointer;
-          font-size: 10px; color: ${isPassiveChecked ? GREEN : TEXT_COLOR};
+          font-size: 10px; color: ${isPassiveChecked ? ACCENT_GOLD : TEXT_COLOR};
         `;
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.checked = isPassiveChecked;
-        cb.style.cssText = `accent-color: ${GREEN}; width: 10px; height: 10px;`;
+        cb.style.cssText = `accent-color: ${ACCENT_GOLD}; width: 10px; height: 10px;`;
         cb.addEventListener('click', e => e.stopPropagation());
         cb.addEventListener('change', () => {
           if (cb.checked) {
@@ -422,8 +422,8 @@ export function updateInspector(
           } else {
             currentPassives.delete(passiveId);
           }
-          chip.style.borderColor = cb.checked ? GREEN : PANEL_BORDER;
-          chip.style.color = cb.checked ? GREEN : TEXT_COLOR;
+          chip.style.borderColor = cb.checked ? ACCENT_GOLD : PANEL_BORDER;
+          chip.style.color = cb.checked ? ACCENT_GOLD : TEXT_COLOR;
           callbacks?.onPropertyChange('campaignSpawn.startingPassives', JSON.stringify([...currentPassives]));
         });
         chip.appendChild(cb);
@@ -562,11 +562,11 @@ export function updateInspector(
       div.appendChild(readout);
       const posInfo = document.createElement('div');
       posInfo.textContent = `X: ${blocker.xBlock}, Y: ${blocker.yBlock}`;
-      posInfo.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+      posInfo.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-bottom: 4px;`;
       div.appendChild(posInfo);
       const note = document.createElement('div');
       note.textContent = 'Blocks ambient-light propagation through this cell (no collision effect).';
-      note.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.5); margin-top: 6px; font-style: italic;`;
+      note.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.5); margin-top: 6px; font-style: italic;`;
       div.appendChild(note);
     }
   } else if (el.type === 'lightSource') {

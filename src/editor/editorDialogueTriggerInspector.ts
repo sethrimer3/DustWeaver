@@ -10,7 +10,7 @@
 
 import type { EditorState, EditorUICallbacks } from './editorState';
 import { makeBtn } from './editorUIHelpers';
-import { GREEN, PANEL_BORDER, BTN_BG, TEXT_COLOR } from './editorStyles';
+import { ACCENT_GOLD, PANEL_BORDER, BTN_BG, TEXT_COLOR } from './editorStyles';
 import { MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 import { DIALOGUE_PORTRAIT_OPTIONS } from '../dialogue/dialoguePortraits';
 
@@ -26,7 +26,7 @@ const TEXTAREA_STYLE = `
   color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
   border-radius: 2px; box-sizing: border-box; resize: vertical; min-height: 48px;
 `;
-const LABEL_STYLE = `font-size: 10px; color: rgba(200,255,200,0.55); margin-bottom: 2px;`;
+const LABEL_STYLE = `font-size: 10px; color: rgba(241,231,203,0.55); margin-bottom: 2px;`;
 const ENTRY_CARD_STYLE = `
   border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
   padding: 5px 6px; margin-bottom: 5px; background: rgba(0,0,0,0.25);
@@ -59,7 +59,7 @@ export function buildDialogueTriggerInspector(
   posSection.style.cssText = `margin-bottom: 6px;`;
   const posTitle = document.createElement('div');
   posTitle.textContent = 'Position & Size (blocks)';
-  posTitle.style.cssText = `font-size: 10px; color: ${GREEN}; margin-bottom: 4px; font-weight: bold;`;
+  posTitle.style.cssText = `font-size: 10px; color: ${ACCENT_GOLD}; margin-bottom: 4px; font-weight: bold;`;
   posSection.appendChild(posTitle);
 
   const posRow = document.createElement('div');
@@ -114,7 +114,7 @@ export function buildDialogueTriggerInspector(
   entriesHeader.style.cssText = `display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px;`;
   const entriesTitle = document.createElement('div');
   entriesTitle.textContent = `Entries (${trigger.entries.length} / ${MAX_DIALOGUE_ENTRIES})`;
-  entriesTitle.style.cssText = `font-size: 11px; color: ${GREEN}; font-weight: bold;`;
+  entriesTitle.style.cssText = `font-size: 11px; color: ${ACCENT_GOLD}; font-weight: bold;`;
   entriesHeader.appendChild(entriesTitle);
 
   const addBtn = makeBtn('+ Add', () => {
@@ -246,7 +246,7 @@ export function buildDialogueTriggerInspector(
   if (trigger.entries.length === 0) {
     const emptyNote = document.createElement('div');
     emptyNote.textContent = 'No entries yet. Click "+ Add" to begin.';
-    emptyNote.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.4); text-align: center; padding: 8px 0;`;
+    emptyNote.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.4); text-align: center; padding: 8px 0;`;
     div.appendChild(emptyNote);
   }
 }

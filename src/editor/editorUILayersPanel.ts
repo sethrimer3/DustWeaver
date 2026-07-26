@@ -82,7 +82,7 @@ export interface EditorLayersPanel {
   isCollapsed(): boolean;
 }
 
-const TOGGLE_ON_BG = 'rgba(0,200,100,0.35)';
+const TOGGLE_ON_BG = 'rgba(212,168,75,0.35)';
 const TOGGLE_OFF_BG = 'rgba(255,255,255,0.06)';
 const LOCK_ON_BG = 'rgba(220,80,60,0.4)';
 const SOLO_ON_BG = 'rgba(230,190,40,0.4)';

@@ -16,7 +16,7 @@ import {
 import {
   addDimField,
 } from './editorFormWidgets';
-import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, GREEN } from './editorStyles';
+import { PANEL_BG, PANEL_BORDER, ACTIVE_BG, BTN_BG, TEXT_COLOR, ACCENT_GOLD } from './editorStyles';
 import {
   makeBtn, makeEdgeBtn, makeThemeChip, makeThemeSlot,
   makeBlockPreviewCard, createCollapsibleSection,
@@ -196,7 +196,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   } else {
     title.textContent = '🛠 Zone Editor';
   }
-  title.style.cssText = `font-size: 15px; color: ${GREEN}; margin-bottom: 12px; font-weight: bold;`;
+  title.style.cssText = `font-size: 15px; color: ${ACCENT_GOLD}; margin-bottom: 12px; font-weight: bold;`;
   container.appendChild(title);
 
   // ── Confirm / Cancel bar ─────────────────────────────────────────────────
@@ -206,7 +206,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const confirmBtn = makeBtn('▶ Save & Test', () => callbacks?.onConfirm());
   confirmBtn.style.cssText += `
     flex: 1.35; padding: 8px 4px; font-size: 11px;
-    background: rgba(0,100,50,0.4); border-color: ${GREEN}; color: ${GREEN};
+    background: rgba(212,168,75,0.4); border-color: ${ACCENT_GOLD}; color: ${ACCENT_GOLD};
   `;
   confirmCancelBar.appendChild(confirmBtn);
 
@@ -256,13 +256,13 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const zoneMapBtn = makeBtn('🗺 Zone Map (M)', () => callbacks?.onOpenVisualMap());
   zoneMapBtn.style.cssText += `
     flex: 1; padding: 7px 4px; font-size: 11px;
-    background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};
+    background: rgba(212,168,75,0.6); border-color: rgba(212,168,75,0.6); color: ${ACCENT_GOLD};
   `;
   mapButtonRow.appendChild(zoneMapBtn);
   const itemizedMapBtn = makeBtn('📋 Itemized Map (N)', () => callbacks?.onOpenWorldMap());
   itemizedMapBtn.style.cssText += `
     flex: 1; padding: 7px 4px; font-size: 11px;
-    background: rgba(0,80,60,0.6); border-color: rgba(0,200,100,0.6); color: ${GREEN};
+    background: rgba(212,168,75,0.6); border-color: rgba(212,168,75,0.6); color: ${ACCENT_GOLD};
   `;
   mapButtonRow.appendChild(itemizedMapBtn);
   container.appendChild(mapButtonRow);
@@ -363,7 +363,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   const brushLabel = document.createElement('span');
   brushLabel.textContent = 'Brush:';
-  brushLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); min-width: 38px;`;
+  brushLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); min-width: 38px;`;
   brushRow.appendChild(brushLabel);
 
   const brushModes: { mode: BrushMode; label: string }[] = [
@@ -392,7 +392,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const edgeResizeTitle = document.createElement('div');
   edgeResizeTitle.textContent = 'Add / Remove Row or Column';
-  edgeResizeTitle.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.5); margin-bottom: 4px;`;
+  edgeResizeTitle.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.5); margin-bottom: 4px;`;
   edgeResizeDiv.appendChild(edgeResizeTitle);
 
   const edges: { edge: RoomEdge; label: string }[] = [
@@ -407,7 +407,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
     const lbl = document.createElement('span');
     lbl.textContent = label;
-    lbl.style.cssText = `min-width: 50px; font-size: 11px; color: rgba(200,255,200,0.7);`;
+    lbl.style.cssText = `min-width: 50px; font-size: 11px; color: rgba(241,231,203,0.7);`;
     row.appendChild(lbl);
 
     const addBigBtn = makeEdgeBtn('+5', () => callbacks?.onEdgeResize(edge, 5));
@@ -578,7 +578,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const bgBlurLabel = document.createElement('label');
   bgBlurLabel.style.cssText = `
     display: flex; align-items: center; gap: 6px; margin-top: 6px;
-    font-size: 11px; color: rgba(200,255,200,0.8); cursor: pointer;
+    font-size: 11px; color: rgba(241,231,203,0.8); cursor: pointer;
   `;
   const bgBlurCheckbox = document.createElement('input');
   bgBlurCheckbox.type = 'checkbox';
@@ -808,7 +808,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
   exportBtn.style.cssText += `
     width: 100%; padding: 10px; font-size: 13px;
-    background: rgba(0,100,50,0.4); border-color: ${GREEN};
+    background: rgba(212,168,75,0.4); border-color: ${ACCENT_GOLD};
   `;
   const exportSection = createCollapsibleSection('Export', { key: 'export' });
   exportSection.body.appendChild(exportBtn);
@@ -921,8 +921,8 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       syncCurrentBackgroundButton(currentBgId);
       for (const btn of bgPickerPanel.querySelectorAll<HTMLButtonElement>('button[data-background-id]')) {
         const isSelected = btn.dataset.backgroundId === currentBgId;
-        btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
-        btn.style.boxShadow = isSelected ? `0 0 0 1px ${GREEN} inset` : 'none';
+        btn.style.borderColor = isSelected ? ACCENT_GOLD : PANEL_BORDER;
+        btn.style.boxShadow = isSelected ? `0 0 0 1px ${ACCENT_GOLD} inset` : 'none';
       }
     }
     {
@@ -972,7 +972,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         themeSection.style.cssText = `margin-bottom: 8px;`;
         const themeTitle = document.createElement('div');
         themeTitle.textContent = 'Block Theme';
-        themeTitle.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 5px;`;
+        themeTitle.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-bottom: 5px;`;
         themeSection.appendChild(themeTitle);
 
         const slotRow = document.createElement('div');
@@ -999,7 +999,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           const targetSlot = themePaletteOpenForSlot;
           const paletteHeader = document.createElement('div');
           paletteHeader.textContent = 'Choose a theme to replace this slot:';
-          paletteHeader.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.6); margin-top: 6px; margin-bottom: 4px;`;
+          paletteHeader.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.6); margin-top: 6px; margin-bottom: 4px;`;
           themeSection.appendChild(paletteHeader);
           const themePaletteGrid = document.createElement('div');
           themePaletteGrid.style.cssText = `display: grid; grid-template-columns: 1fr 1fr; gap: 4px;`;
@@ -1018,7 +1018,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         // ── Block type preview grid ─────────────────────────────────────────
         const gridTitle = document.createElement('div');
         gridTitle.textContent = 'Block Types';
-        gridTitle.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 8px; margin-bottom: 5px;`;
+        gridTitle.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 8px; margin-bottom: 5px;`;
         paletteDiv.appendChild(gridTitle);
 
         const grid = document.createElement('div');
@@ -1219,7 +1219,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       for (const { btn, itemId } of paletteItems) {
         const isSelected = state.selectedPaletteItem?.id === itemId;
         btn.style.background = isSelected ? ACTIVE_BG : BTN_BG;
-        btn.style.borderColor = isSelected ? GREEN : PANEL_BORDER;
+        btn.style.borderColor = isSelected ? ACCENT_GOLD : PANEL_BORDER;
       }
       // Custom-block cards use their own active/inactive palette rather than
       // the generic ACTIVE_BG/BTN_BG pair, but are patched by this same

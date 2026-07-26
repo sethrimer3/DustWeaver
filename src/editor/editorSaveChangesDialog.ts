@@ -33,7 +33,7 @@ export function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo
 
   const panel = document.createElement('div');
   panel.style.cssText = `
-    background: rgba(10,12,20,0.97); border: 1px solid rgba(0,200,100,0.5);
+    background: rgba(10,12,20,0.97); border: 1px solid rgba(212,168,75,0.5);
     border-radius: 8px; padding: 24px 32px; display: flex; flex-direction: column;
     align-items: center; gap: 20px; font-family: 'Cinzel', monospace;
     min-width: 260px; box-shadow: 0 0 30px rgba(0,0,0,0.8);
@@ -42,7 +42,7 @@ export function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo
   const question = document.createElement('div');
   question.textContent = 'Save Changes?';
   question.style.cssText = `
-    font-size: 16px; font-weight: bold; color: #c0ffd0; letter-spacing: 0.05em;
+    font-size: 16px; font-weight: bold; color: #f1e7cb; letter-spacing: 0.05em;
   `;
   panel.appendChild(question);
 

@@ -232,10 +232,10 @@ export function showConnectedRoomCreationDialog(
 ): void {
   const modal = createModal(uiRoot);
 
-  const GREEN = '#44bbff';
+  const ACCENT_BLUE = '#44bbff';
   const title = document.createElement('h3');
   title.textContent = '+ Create Connected Room';
-  title.style.cssText = `color: ${GREEN}; margin: 0 0 6px; font-family: 'Cinzel', serif; font-size: 13px;`;
+  title.style.cssText = `color: ${ACCENT_BLUE}; margin: 0 0 6px; font-family: 'Cinzel', serif; font-size: 13px;`;
   modal.panel.appendChild(title);
 
   const subtitleEl = document.createElement('div');
@@ -307,7 +307,7 @@ export function showConnectedRoomCreationDialog(
   const btnRow = document.createElement('div');
   btnRow.style.cssText = 'display: flex; gap: 8px;';
 
-  const createBtn = makeHeaderBtn('Create Room', GREEN);
+  const createBtn = makeHeaderBtn('Create Room', ACCENT_BLUE);
   createBtn.style.cssText += ' flex: 1;';
   createBtn.addEventListener('click', () => {
     const id = idInput.value.trim().replace(/\s+/g, '_').replace(/_+/g, '_');

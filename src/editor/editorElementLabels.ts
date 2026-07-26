@@ -216,7 +216,7 @@ export function drawHoverTooltip(
 
   ctx.globalAlpha = 0.88;
   ctx.fillStyle = 'rgba(10,12,20,0.9)';
-  ctx.strokeStyle = 'rgba(0,200,100,0.55)';
+  ctx.strokeStyle = 'rgba(212,168,75,0.55)';
   ctx.lineWidth = 1;
   // Rounded rectangle
   const r = 3;
@@ -236,10 +236,10 @@ export function drawHoverTooltip(
 
   ctx.globalAlpha = 1.0;
   ctx.font = ID_FONT;
-  ctx.fillStyle = '#c0ffd0';
+  ctx.fillStyle = '#f1e7cb';
   ctx.fillText(idText,   tx + PADDING, ty + PADDING + LINE_HEIGHT - 2);
   ctx.font = TYPE_FONT;
-  ctx.fillStyle = 'rgba(170,220,180,0.7)';
+  ctx.fillStyle = 'rgba(212,168,75,0.75)';
   ctx.fillText(typeText, tx + PADDING, ty + PADDING + LINE_HEIGHT * 2 - 2);
 
   ctx.restore();

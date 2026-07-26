@@ -161,7 +161,7 @@ export function renderEditorIndicator(
   state?: EditorState,
 ): void {
   ctx.save();
-  ctx.fillStyle = 'rgba(0,200,100,0.85)';
+  ctx.fillStyle = 'rgba(212,168,75,0.85)';
   ctx.font = 'bold 8px monospace';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
@@ -190,7 +190,7 @@ export function renderEditorIndicator(
       rotHint = `R${state.placementRotationSteps}`;
     }
     const flipHint = state.placementFlipH ? ' [F]' : '';
-    ctx.fillStyle = 'rgba(200,255,200,0.75)';
+    ctx.fillStyle = 'rgba(241,231,203,0.75)';
     ctx.font = '7px monospace';
     ctx.fillText(`${rotHint}${flipHint}  [scroll]=rotate  [F]=flip`, canvasWidth / 2, 16);
   }

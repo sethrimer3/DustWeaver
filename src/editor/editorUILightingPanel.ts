@@ -88,7 +88,7 @@ export function createEditorLightingPanel(
     headerRow.style.cssText = 'display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;';
     const lbl = document.createElement('div');
     lbl.textContent = labelText;
-    lbl.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7);`;
+    lbl.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7);`;
     const valueLabel = document.createElement('span');
     valueLabel.style.cssText = `font-size: 11px; color: ${TEXT_COLOR}; font-family: monospace;`;
     valueLabel.textContent = defaultVal.toFixed(2);
@@ -117,7 +117,7 @@ export function createEditorLightingPanel(
   lightingDiv.style.cssText = `margin-bottom: 8px;`;
   const lightingLabel = document.createElement('div');
   lightingLabel.textContent = 'Lighting';
-  lightingLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-bottom: 4px;`;
+  lightingLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-bottom: 4px;`;
   lightingDiv.appendChild(lightingLabel);
   const lightingSelect = document.createElement('select');
   lightingSelect.style.cssText = `
@@ -140,7 +140,7 @@ export function createEditorLightingPanel(
   // ── Ambient Light Direction dropdown ──────────────────────────────────────
   const ambientDirLabel = document.createElement('div');
   ambientDirLabel.textContent = 'Ambient Direction';
-  ambientDirLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  ambientDirLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 4px;`;
   lightingDiv.appendChild(ambientDirLabel);
   const ambientDirSelect = document.createElement('select');
   ambientDirSelect.style.cssText = `
@@ -205,7 +205,7 @@ export function createEditorLightingPanel(
   ];
   const seamBlendLabel = document.createElement('div');
   seamBlendLabel.textContent = 'Block Seam Blending';
-  seamBlendLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  seamBlendLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 4px;`;
   lightingDiv.appendChild(seamBlendLabel);
   const seamBlendSelect = document.createElement('select');
   seamBlendSelect.style.cssText = `
@@ -233,7 +233,7 @@ export function createEditorLightingPanel(
   ];
   const voidEdgeLabel = document.createElement('div');
   voidEdgeLabel.textContent = 'Void Edge Style';
-  voidEdgeLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  voidEdgeLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 4px;`;
   lightingDiv.appendChild(voidEdgeLabel);
   const voidEdgeSelect = document.createElement('select');
   voidEdgeSelect.style.cssText = `
@@ -256,11 +256,11 @@ export function createEditorLightingPanel(
   // ── Sunrays (procedural god-rays) ──────────────────────────────────────────
   const sunraysLabel = document.createElement('div');
   sunraysLabel.textContent = 'Sunrays';
-  sunraysLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 10px; margin-bottom: 4px; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
+  sunraysLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 10px; margin-bottom: 4px; border-top: 1px solid ${PANEL_BORDER}; padding-top: 6px;`;
   lightingDiv.appendChild(sunraysLabel);
 
   const sunraysEnabledRow = document.createElement('label');
-  sunraysEnabledRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(200,255,200,0.7); cursor: pointer;';
+  sunraysEnabledRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(241,231,203,0.7); cursor: pointer;';
   const sunraysEnabledCheckbox = document.createElement('input');
   sunraysEnabledCheckbox.type = 'checkbox';
   sunraysEnabledRow.appendChild(sunraysEnabledCheckbox);
@@ -275,7 +275,7 @@ export function createEditorLightingPanel(
 
   const sunraysStyleLabel = document.createElement('div');
   sunraysStyleLabel.textContent = 'Ray Style';
-  sunraysStyleLabel.style.cssText = `font-size: 11px; color: rgba(200,255,200,0.7); margin-top: 6px; margin-bottom: 4px;`;
+  sunraysStyleLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 4px;`;
   lightingDiv.appendChild(sunraysStyleLabel);
   const sunraysStyleSelect = document.createElement('select');
   sunraysStyleSelect.style.cssText = `
@@ -297,7 +297,7 @@ export function createEditorLightingPanel(
 
   const sunraysSourceLabel = document.createElement('div');
   sunraysSourceLabel.textContent = 'Source: Top of Screen';
-  sunraysSourceLabel.style.cssText = `font-size: 10px; color: rgba(200,255,200,0.45); margin-top: 4px;`;
+  sunraysSourceLabel.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.45); margin-top: 4px;`;
   lightingDiv.appendChild(sunraysSourceLabel);
 
   const { row: sunraysAngleRow, slider: sunraysAngleSlider, valueLabel: sunraysAngleValLabel } =
@@ -318,7 +318,7 @@ export function createEditorLightingPanel(
   lightingDiv.appendChild(sunraysRayCountRow);
 
   const sunraysAnimRow = document.createElement('label');
-  sunraysAnimRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(200,255,200,0.7); cursor: pointer; margin-top: 6px;';
+  sunraysAnimRow.style.cssText = 'display: flex; align-items: center; gap: 6px; font-size: 11px; color: rgba(241,231,203,0.7); cursor: pointer; margin-top: 6px;';
   const sunraysAnimCheckbox = document.createElement('input');
   sunraysAnimCheckbox.type = 'checkbox';
   sunraysAnimRow.appendChild(sunraysAnimCheckbox);

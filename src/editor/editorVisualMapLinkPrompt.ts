@@ -107,7 +107,7 @@ export function applyPendingDoorLink(link: PendingDoorLink, ctx: VisualMapLinkCo
     ctx.statusBar.textContent =
       `Linked: ${effectiveRoomName(link.sourceRoomId)} door #${link.sourceTransIndex + 1}` +
       ` <-> ${effectiveRoomName(link.targetRoomId)} door #${link.targetTransIndex + 1}`;
-    ctx.statusBar.style.color = '#88ff88';
+    ctx.statusBar.style.color = '#f0c75e';
     return;
   }
 
@@ -325,6 +325,6 @@ export function completeDoorLink(ctx: VisualMapLinkContext, targetDoor: DoorHitA
 export function cancelDoorLink(ctx: VisualMapLinkContext): void {
   ctx.clearLinkSource();
   ctx.statusBar.textContent = 'Link cancelled';
-  ctx.statusBar.style.color = 'rgba(200,255,200,0.6)';
+  ctx.statusBar.style.color = 'rgba(241,231,203,0.6)';
   ctx.render();
 }

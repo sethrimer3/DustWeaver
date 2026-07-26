@@ -12,7 +12,7 @@
  */
 
 import type { ExportProgressEvent } from '../levels/roomCacheManifest';
-import { PANEL_BG, PANEL_BORDER, TEXT_COLOR, GREEN } from './editorStyles';
+import { PANEL_BG, PANEL_BORDER, TEXT_COLOR, ACCENT_GOLD } from './editorStyles';
 
 // ── Public interface ──────────────────────────────────────────────────────────
 
@@ -78,7 +78,7 @@ export function createExportProgressModal(
   // ── Title ─────────────────────────────────────────────────────────────────
   const titleEl = document.createElement('div');
   titleEl.textContent = title ?? '📦 Exporting Campaign';
-  titleEl.style.cssText = `font-size:15px;font-weight:bold;color:${GREEN};letter-spacing:0.05em;`;
+  titleEl.style.cssText = `font-size:15px;font-weight:bold;color:${ACCENT_GOLD};letter-spacing:0.05em;`;
   panel.appendChild(titleEl);
 
   // ── Row: status text + elapsed time ───────────────────────────────────────
@@ -92,7 +92,7 @@ export function createExportProgressModal(
   statusRow.appendChild(statusEl);
 
   const elapsedEl = document.createElement('div');
-  elapsedEl.style.cssText = 'font-size:11px;color:rgba(192,255,208,0.5);white-space:nowrap;';
+  elapsedEl.style.cssText = 'font-size:11px;color:rgba(212,168,75,0.5);white-space:nowrap;';
   statusRow.appendChild(elapsedEl);
 
   // ── Progress bar container ────────────────────────────────────────────────
@@ -114,7 +114,7 @@ export function createExportProgressModal(
   barFill.style.cssText = [
     'height:100%',
     'width:0%',
-    `background:${GREEN}`,
+    `background:${ACCENT_GOLD}`,
     'border-radius:5px',
     'transition:width 0.15s ease',
   ].join(';');
@@ -134,7 +134,7 @@ export function createExportProgressModal(
 
   // ── Secondary detail line (room count etc.) ───────────────────────────────
   const detailEl = document.createElement('div');
-  detailEl.style.cssText = 'font-size:11px;color:rgba(192,255,208,0.55);min-height:14px;';
+  detailEl.style.cssText = 'font-size:11px;color:rgba(212,168,75,0.55);min-height:14px;';
   panel.appendChild(detailEl);
 
   // ── Cancel button (only while the export is still running) ───────────────

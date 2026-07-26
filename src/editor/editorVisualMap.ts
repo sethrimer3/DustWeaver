@@ -16,7 +16,7 @@
 
 import { ROOM_REGISTRY, setRoomMapPosition, setRoomNameOverride } from '../levels/rooms';
 import { createSubstrateEffect } from '../render/effects/substrateEffect';
-import { GREEN } from './editorStyles';
+import { ACCENT_GOLD } from './editorStyles';
 import {
   MapRoomPlacement,
   SnapIndicator,
@@ -89,12 +89,12 @@ export function showVisualWorldMap(
   header.style.cssText = `
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     padding: 8px 16px; background: rgba(0,0,0,0.5);
-    border-bottom: 1px solid rgba(0,200,100,0.3);
+    border-bottom: 1px solid rgba(212,168,75,0.3);
   `;
 
   const titleEl = document.createElement('span');
   titleEl.textContent = '🗺 Visual Zone Map Editor';
-  titleEl.style.cssText = `color: ${GREEN}; font-family: 'Cinzel', serif; font-size: 14px; font-weight: bold; margin-right: 8px;`;
+  titleEl.style.cssText = `color: ${ACCENT_GOLD}; font-family: 'Cinzel', serif; font-size: 14px; font-weight: bold; margin-right: 8px;`;
   header.appendChild(titleEl);
 
   // ── Dialog context ─────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export function showVisualWorldMap(
     setSelectedRoomId: (id) => { selectedRoomId = id; },
   };
 
-  const addRoomBtn = makeHeaderBtn('+ Add Room', '#44cc88');
+  const addRoomBtn = makeHeaderBtn('+ Add Room', '#d4a84b');
   addRoomBtn.title = 'Create a new blank room';
   addRoomBtn.addEventListener('click', () => showAddRoomDialog(dialogCtx));
   header.appendChild(addRoomBtn);
@@ -142,7 +142,7 @@ export function showVisualWorldMap(
 
   const hintEl = document.createElement('span');
   hintEl.textContent = 'Drag rooms \u2022 Doors snap when close \u2022 Click door to link \u2022 Double-click room to jump \u2022 Double-click unlinked door to create linked room \u2022 Right-click room for options \u2022 Arrow keys nudge selected \u2022 N/ESC to close';
-  hintEl.style.cssText = `color: rgba(200,255,200,0.4); font-size: 10px; font-family: monospace; margin-left: auto;`;
+  hintEl.style.cssText = `color: rgba(241,231,203,0.4); font-size: 10px; font-family: monospace; margin-left: auto;`;
   header.appendChild(hintEl);
 
   const closeBtn = makeHeaderBtn('\u2715 Close', '#ff8888');
@@ -158,8 +158,8 @@ export function showVisualWorldMap(
   const statusBar = document.createElement('div');
   statusBar.style.cssText = `
     padding: 4px 16px; background: rgba(0,0,0,0.3);
-    border-bottom: 1px solid rgba(0,200,100,0.15);
-    color: rgba(200,255,200,0.6); font-size: 11px; font-family: monospace;
+    border-bottom: 1px solid rgba(212,168,75,0.15);
+    color: rgba(241,231,203,0.6); font-size: 11px; font-family: monospace;
     min-height: 20px;
   `;
   statusBar.textContent = 'Ready \u2014 right-click a room to rename or move it between zones';
@@ -440,7 +440,7 @@ export function showVisualWorldMap(
       }
       canvas.style.cursor = 'grabbing';
       statusBar.textContent = `Selected: ${effectiveRoomName(roomId)} (${roomId}) \u2014 ${worldDisplayName(effectiveWorldId(roomId))} \u2014 arrow keys to nudge`;
-      statusBar.style.color = 'rgba(200,255,200,0.6)';
+      statusBar.style.color = 'rgba(241,231,203,0.6)';
       render();
       return;
     }
@@ -570,7 +570,7 @@ export function showVisualWorldMap(
     const menu = document.createElement('div');
     menu.style.cssText = `
       position: absolute; z-index: 1200;
-      background: rgba(10,10,20,0.97); border: 1px solid rgba(0,200,100,0.5);
+      background: rgba(10,10,20,0.97); border: 1px solid rgba(212,168,75,0.5);
       border-radius: 4px; padding: 4px 0; min-width: 200px;
       font-family: monospace; font-size: 12px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.6);
@@ -585,14 +585,14 @@ export function showVisualWorldMap(
 
     const menuHeader = document.createElement('div');
     menuHeader.textContent = `${roomName} (${roomId})`;
-    menuHeader.style.cssText = `padding: 5px 12px 4px; color: ${GREEN}; font-size: 11px; border-bottom: 1px solid rgba(0,200,100,0.3);`;
+    menuHeader.style.cssText = `padding: 5px 12px 4px; color: ${ACCENT_GOLD}; font-size: 11px; border-bottom: 1px solid rgba(212,168,75,0.3);`;
     menu.appendChild(menuHeader);
 
     function addMenuItem(label: string, onClick: () => void): void {
       const item = document.createElement('div');
       item.textContent = label;
-      item.style.cssText = `padding: 6px 12px; color: #c0ffd0; cursor: pointer;`;
-      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(0,200,100,0.15)'; });
+      item.style.cssText = `padding: 6px 12px; color: #f1e7cb; cursor: pointer;`;
+      item.addEventListener('mouseenter', () => { item.style.background = 'rgba(212,168,75,0.15)'; });
       item.addEventListener('mouseleave', () => { item.style.background = ''; });
       item.addEventListener('click', () => {
         dismissContextMenu();
@@ -603,7 +603,7 @@ export function showVisualWorldMap(
 
     function addMenuSep(): void {
       const sep = document.createElement('div');
-      sep.style.cssText = `height: 1px; background: rgba(0,200,100,0.2); margin: 2px 0;`;
+      sep.style.cssText = `height: 1px; background: rgba(212,168,75,0.2); margin: 2px 0;`;
       menu.appendChild(sep);
     }
 
@@ -613,7 +613,7 @@ export function showVisualWorldMap(
         setRoomNameOverride(roomId, newName.trim());
         callbacks.onWorldMapDataChanged?.();
         statusBar.textContent = `Renamed "${roomId}" \u2192 "${newName.trim()}"`;
-        statusBar.style.color = '#88ff88';
+        statusBar.style.color = '#f0c75e';
         render();
       }
     });
