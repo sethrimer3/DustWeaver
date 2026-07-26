@@ -39,6 +39,7 @@ const ITEM_SPRITE_URL: Readonly<Record<string, string>> = Object.freeze({
   enemy_rock_elemental:  'SPRITES/ENEMIES/earthElemental/earthElemental_head_deactivated.png',
   enemy_beetle:          'SPRITES/ENEMIES/goldenBeetle/goldenBeetle_walking.png',
   enemy_radiant_tether:  'SPRITES/ENEMIES/radiantTeather/radiantTether_flying.png',
+  enemy_crimson_wizard:  'SPRITES/ENEMIES/BOSSES/CrimsonWizard/CrimsonWizard_Idle.png',
   // Collectables / triggers with sprite assets
   save_tomb:             'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/saveTomb.png',
   skill_tomb:            'SPRITES/OBJECTS&TRIGGERS/INTERACTABLES&COLLECTABLES/skillTomb.png',
@@ -175,6 +176,48 @@ const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
     bg: '#147d85',
     extraCss: `border-radius: 3px; border: 2px solid #35d6b8; box-sizing: border-box;`,
     glyph: 'S',
+  },
+  // Grid-block enemies (speed variants — colour-coded: slow=teal, medium=amber, fast=red)
+  enemy_grid_block_1x1_slow: {
+    bg: '#1a3a3a',
+    extraCss: `border: 2px solid rgba(60,200,180,0.8); box-sizing: border-box;`,
+    glyph: '1',
+  },
+  enemy_grid_block_1x1_medium: {
+    bg: '#3a2e00',
+    extraCss: `border: 2px solid rgba(220,170,20,0.8); box-sizing: border-box;`,
+    glyph: '1',
+  },
+  enemy_grid_block_1x1_fast: {
+    bg: '#3a0a08',
+    extraCss: `border: 2px solid rgba(220,60,40,0.8); box-sizing: border-box;`,
+    glyph: '1',
+  },
+  enemy_grid_block_2x2_slow: {
+    bg: '#1a3a3a',
+    extraCss: `border: 2px solid rgba(60,200,180,0.8); box-sizing: border-box;`,
+    glyph: '2',
+  },
+  enemy_grid_block_2x2_medium: {
+    bg: '#3a2e00',
+    extraCss: `border: 2px solid rgba(220,170,20,0.8); box-sizing: border-box;`,
+    glyph: '2',
+  },
+  enemy_grid_block_2x2_fast: {
+    bg: '#3a0a08',
+    extraCss: `border: 2px solid rgba(220,60,40,0.8); box-sizing: border-box;`,
+    glyph: '2',
+  },
+  // Bosses without sprite assets yet
+  enemy_herald: {
+    bg: '#050510',
+    extraCss: `border-radius: 50%; border: 2px solid rgba(80,40,160,0.9); box-sizing: border-box;`,
+    glyph: '◬',
+  },
+  enemy_ice_wizard: {
+    bg: '#081828',
+    extraCss: `clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); border: 2px solid rgba(140,210,255,0.9);`,
+    glyph: '❄',
   },
   firefly_jar: {
     bg: '#241c0a',
