@@ -81,6 +81,9 @@ export interface EditorSessionUIState {
   sectionExpanded: Record<string, boolean>;
   leftSidebarVisible: boolean;
   rightSidebarVisible: boolean;
+  /** Optional for backward compatibility with snapshots captured before the
+   * Swap Menu Sides control existed; missing = unswapped default. */
+  sidebarsSwapped?: boolean;
 }
 
 export interface EditorUI {

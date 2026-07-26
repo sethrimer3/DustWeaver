@@ -83,6 +83,7 @@ export type {
 export {
   enemyTypeToFlags,
   hydrateSolidsByTheme,
+  hydrateSolidsByThemeForEditor,
   isSavedRoomV2,
   hydrateV2Room,
   hydrateRoomJson,

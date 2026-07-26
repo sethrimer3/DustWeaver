@@ -121,6 +121,10 @@ test('official editor wiring preserves a connected room across playtest, reopen,
   assert.ok(session.campaignStore?.rawRoomsById.has('connected'));
   const reopened = loadPersistedCampaignRoom(session, pendingRoomEdits, 'connected', 1);
   assert.equal(reopened?.source, 'campaign-store');
+  // This "reopen" hits the still-running session's in-memory
+  // hydratedRoomsById cache (commitRoom stored the editor's own roomData
+  // directly), so the originally authored single wBlock=2 wall survives
+  // unchanged here — no compact-schema hydration occurs on this path.
   assert.equal(reopened?.roomData.interiorWalls.length, 1);
   assert.equal(reopened?.roomData.transitions[0]?.targetRoomId, 'start');
 
@@ -145,7 +149,12 @@ test('official editor wiring preserves a connected room across playtest, reopen,
   const packed = JSON.parse(fs.readFileSync(path.join(campaignDir, 'TEST_CAMPAIGN.dwcampaign.json'), 'utf8')) as SavedCampaignV1;
   const reloadedSession = createOfficialCampaignSession(packed);
   const reloaded = loadPersistedCampaignRoom(reloadedSession, new Map(), 'connected', 1);
-  assert.equal(reloaded?.roomData.interiorWalls.length, 1);
+  // A brand-new session/store has no in-memory cache, so this genuinely
+  // hydrates from the compact saved form: the authored wBlock=2/hBlock=1
+  // wall is stored via v1ByTheme (1x1-grain compression) and is correctly
+  // restored as 2 independent 1x1 EditorWalls (see Todo.md "Decouple editor
+  // block identities from compact room-schema grouping").
+  assert.equal(reloaded?.roomData.interiorWalls.length, 2);
   assert.equal(reloaded?.roomData.transitions[0]?.targetRoomId, 'start');
   assert.ok(packed.worldMap.rooms.some(room => room.id === 'connected'));
   assert.ok(packed.worldMap.rooms.some(room => room.id === 'unloaded'));

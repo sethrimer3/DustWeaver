@@ -131,70 +131,114 @@ export function enemyTypeToFlags(
  * authored as 1×1-visual tiles.  These hydrate as hBlock = 1 walls so that
  * `_buildSolid2x2Map` never promotes them to 2×2-sprite rendering.
  */
+function hydrateByThemeBulkLayer(solids: SavedSolids | undefined): RoomJsonWall[] {
+  const out: RoomJsonWall[] = [];
+  if (!solids?.byTheme) return out;
+  for (const themeKey of Object.keys(solids.byTheme).sort()) {
+    const layer = solids.byTheme[themeKey];
+    const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
+      ? undefined
+      : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
+
+    if (layer.rects) {
+      for (const [x, y, w, h] of layer.rects) {
+        const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
+        if (theme) wall.blockTheme = theme;
+        out.push(wall);
+      }
+    }
+    if (layer.runs) {
+      for (const [y, xStart, xEnd] of layer.runs) {
+        const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
+        if (theme) wall.blockTheme = theme;
+        out.push(wall);
+      }
+    }
+    if (layer.points) {
+      for (const [x, y] of layer.points) {
+        const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
+        if (theme) wall.blockTheme = theme;
+        out.push(wall);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Hydrates `solids.v1ByTheme` (runs + points only, hBlock = 1 always). Each
+ * entry returned here represents 1×1-grain compression: adjacent same-theme
+ * 1×1 walls that were coalesced into a horizontal run purely for storage
+ * compactness by `dehydrateSolidsByTheme`. Callers that need independently
+ * editable per-cell identities (the editor load path) must further split
+ * any multi-cell run this returns — see `hydrateSolidsByThemeForEditor`.
+ */
+function hydrateV1ByThemeLayer(solids: SavedSolids | undefined): RoomJsonWall[] {
+  const out: RoomJsonWall[] = [];
+  if (!solids?.v1ByTheme) return out;
+  for (const themeKey of Object.keys(solids.v1ByTheme).sort()) {
+    const layer: Saved1x1Layer = solids.v1ByTheme[themeKey];
+    const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
+      ? undefined
+      : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
+
+    if (layer.runs) {
+      for (const [y, xStart, xEnd] of layer.runs) {
+        const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
+        if (theme) wall.blockTheme = theme;
+        out.push(wall);
+      }
+    }
+    if (layer.points) {
+      for (const [x, y] of layer.points) {
+        const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
+        if (theme) wall.blockTheme = theme;
+        out.push(wall);
+      }
+    }
+  }
+  return out;
+}
+
 export function hydrateSolidsByTheme(
   solids: SavedSolids | undefined,
 ): RoomJsonWall[] {
-  const out: RoomJsonWall[] = [];
-  if (!solids) return out;
+  if (!solids) return [];
+  return [...hydrateByThemeBulkLayer(solids), ...hydrateV1ByThemeLayer(solids)];
+}
 
-  // ── byTheme: full rect/run/point layer (bulk walls, hBlock > 1 allowed) ──
-  if (solids.byTheme) {
-    for (const themeKey of Object.keys(solids.byTheme).sort()) {
-      const layer = solids.byTheme[themeKey];
-      const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
-        ? undefined
-        : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
-
-      if (layer.rects) {
-        for (const [x, y, w, h] of layer.rects) {
-          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
-          if (theme) wall.blockTheme = theme;
-          out.push(wall);
-        }
-      }
-      if (layer.runs) {
-        for (const [y, xStart, xEnd] of layer.runs) {
-          const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
-          if (theme) wall.blockTheme = theme;
-          out.push(wall);
-        }
-      }
-      if (layer.points) {
-        for (const [x, y] of layer.points) {
-          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
-          if (theme) wall.blockTheme = theme;
-          out.push(wall);
-        }
-      }
+/**
+ * Editor-only variant of `hydrateSolidsByTheme`. Behaves identically for the
+ * bulk `byTheme` layer (those walls were never 1×1-grain-compressed, so they
+ * keep their existing multi-cell editing semantics — true 2×2 sprites,
+ * platforms, stairs, ramps, half-width pillars, etc. never pass through
+ * here). For `v1ByTheme`, every run is additionally split into independent
+ * 1×1 `RoomJsonWall` entries — one per occupied cell — so each becomes its
+ * own `EditorWall` with its own UID after `jsonToEditorRoomData` runs.
+ *
+ * This must only be used on the editor load path (see `hydrateV2Room`'s
+ * `forEditor` option). The runtime hydration fast path keeps using
+ * `hydrateSolidsByTheme` unchanged for performance.
+ */
+export function hydrateSolidsByThemeForEditor(
+  solids: SavedSolids | undefined,
+): RoomJsonWall[] {
+  if (!solids) return [];
+  const bulk = hydrateByThemeBulkLayer(solids);
+  const v1 = hydrateV1ByThemeLayer(solids);
+  const splitV1: RoomJsonWall[] = [];
+  for (const wall of v1) {
+    if (wall.wBlock <= 1) {
+      splitV1.push(wall);
+      continue;
+    }
+    for (let i = 0; i < wall.wBlock; i++) {
+      const cell: RoomJsonWall = { xBlock: wall.xBlock + i, yBlock: wall.yBlock, wBlock: 1, hBlock: 1 };
+      if (wall.blockTheme) cell.blockTheme = wall.blockTheme;
+      splitV1.push(cell);
     }
   }
-
-  // ── v1ByTheme: runs + points only (1×1-visual walls, hBlock = 1 always) ──
-  if (solids.v1ByTheme) {
-    for (const themeKey of Object.keys(solids.v1ByTheme).sort()) {
-      const layer: Saved1x1Layer = solids.v1ByTheme[themeKey];
-      const theme: BlockTheme | undefined = themeKey === DEFAULT_THEME_KEY
-        ? undefined
-        : blockThemeRefToTheme(themeKey as BlockTheme | BlockThemeId);
-
-      if (layer.runs) {
-        for (const [y, xStart, xEnd] of layer.runs) {
-          const wall: RoomJsonWall = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
-          if (theme) wall.blockTheme = theme;
-          out.push(wall);
-        }
-      }
-      if (layer.points) {
-        for (const [x, y] of layer.points) {
-          const wall: RoomJsonWall = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
-          if (theme) wall.blockTheme = theme;
-          out.push(wall);
-        }
-      }
-    }
-  }
-
-  return out;
+  return [...bulk, ...splitV1];
 }
 
 // ── SavedRoomV2 type guard ────────────────────────────────────────────────────
@@ -212,11 +256,21 @@ export function isSavedRoomV2(data: unknown): data is SavedRoomV2 {
  * Expand a SavedRoomV2 back into a RoomJsonDef (the verbose format the rest
  * of the engine already understands).  The downstream pipeline converts that
  * into either a RoomDef (runtime) or an EditorRoomData (editor).
+ *
+ * Pass `{ forEditor: true }` on the editor load path only (before editor UID
+ * allocation in `jsonToEditorRoomData`): this expands compact-storage-only
+ * groupings of `solids.v1ByTheme` walls back into independent per-cell
+ * `RoomJsonWall` entries so each becomes its own selectable/movable/
+ * deletable `EditorWall`, without changing occupied cells, theme, rendering,
+ * collision, or the runtime hydration fast path (which never passes this
+ * option and is therefore completely unaffected).
  */
-export function hydrateV2Room(saved: SavedRoomV2): RoomJsonDef {
+export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }): RoomJsonDef {
   const [widthBlocks, heightBlocks] = saved.size;
 
-  const uniformWalls = hydrateSolidsByTheme(saved.solids);
+  const uniformWalls = opts?.forEditor
+    ? hydrateSolidsByThemeForEditor(saved.solids)
+    : hydrateSolidsByTheme(saved.solids);
 
   // exactWalls: 1×1 and 2×2 walls stored verbatim (bypass tile-grid compressor).
   const exactWalls: RoomJsonWall[] = (saved.exactWalls ?? []).map(sw => {

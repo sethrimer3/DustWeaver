@@ -218,7 +218,11 @@ export function createCampaignStore(
       throw new Error(`Room "${roomId}" was not found in campaign room index.`);
     }
     const hydrateStartMs = isDev() ? performance.now() : 0;
-    const jsonDef = hydrateV2Room(raw);
+    // forEditor: true splits any solids.v1ByTheme run back into independent
+    // per-cell walls so each occupied tile gets its own EditorWall UID after
+    // jsonToEditorRoomData below, instead of inheriting the identity of a
+    // compact-storage run. See docs/Todo.md "Decouple editor block identities".
+    const jsonDef = hydrateV2Room(raw, { forEditor: true });
     const mapRoom = worldMapRoomById.get(roomId);
     if (mapRoom !== undefined) {
       jsonDef.name = mapRoom.name;
