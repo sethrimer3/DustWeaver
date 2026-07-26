@@ -552,6 +552,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   bowArrowTravelPx: number;
   /** Dust kind (ParticleKind) captured at fire time so a later switch cannot retag it. */
   bowArrowDustKind: number;
+  /** Currently active/selected dust kind (ParticleKind.Golden = 0 by default). */
+  selectedDustKind: number;
   /** 1 while the independent (Stage 3) Shield Weave crescent currently owns the player's motes. */
   shieldWeaveIndependentActiveFlag: 0 | 1;
 
@@ -868,6 +870,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     bowArrowOriginYWorld:          0,
     bowArrowTravelPx:              0,
     bowArrowDustKind:              0,
+    selectedDustKind:              0,
     bowArrowReleaseLatchedFlag:    0,
     bowArrowLatchedAimXWorld:      0,
     bowArrowLatchedAimYWorld:      0,

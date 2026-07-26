@@ -56,6 +56,7 @@ export interface CapturedPlayerParticle {
   lifetimeTicks:      number;
   /** Preserved so the particle respawns at a staggered time rather than all at once. */
   ageTicks:           number;
+  behaviorMode:       number;
   /**
    * isAliveFlag from the outgoing world.
    * Dead particles with respawnDelayTicks > 0 are still carried so the regen
@@ -109,6 +110,8 @@ export function capturePlayerTransferState(world: WorldState): PlayerTransferSna
     // Skip transient particles — they are room-local effects (stone shards,
     // lava embers, etc.) and must not be carried to the new room.
     if (world.isTransientFlag[pi] === 1) continue;
+    // Skip ordinary mode-0 orbit particles so resident swaps never preserve or recreate them.
+    if (world.behaviorMode[pi] === 0) continue;
     ownedParticles.push({
       particleKind:       world.kindBuffer[pi] as ParticleKind,
       anchorAngleRad:     world.anchorAngleRad[pi],
@@ -120,6 +123,7 @@ export function capturePlayerTransferState(world: WorldState): PlayerTransferSna
       massKg:             world.massKg[pi],
       lifetimeTicks:      world.lifetimeTicks[pi],
       ageTicks:           world.ageTicks[pi],
+      behaviorMode:       world.behaviorMode[pi],
       isAliveFlag:        world.isAliveFlag[pi] as 0 | 1,
     });
   }
@@ -246,9 +250,8 @@ export function restoreTransferredPlayerParticles(
     world.noiseTickSeed[idx]     = p.noiseTickSeed;
     world.disturbanceFactor[idx] = 0;
 
-    // Combat / behavior — always reset to orbit (0) on room entry; the previous
-    // room's attack state is meaningless in the new room.
-    world.behaviorMode[idx]        = 0;
+    // Preserve actual behaviorMode (grapples, projectiles, etc.) rather than resetting to mode 0.
+    world.behaviorMode[idx]        = p.behaviorMode;
     world.particleDurability[idx]  = p.particleDurability;
     world.respawnDelayTicks[idx]   = p.respawnDelayTicks;
     world.attackModeTicksLeft[idx] = 0;

@@ -25,6 +25,7 @@ import { WorldState, MAX_MOTE_SLOTS } from '../world';
 import { ParticleKind } from '../particles/kinds';
 import { GRAPPLE_MAX_LENGTH_WORLD } from '../clusters/grappleShared';
 import { WEAVE_STORM } from '../weaves/weaveDefinition';
+import { getPlayerMoteCapacity, getPlayerMoteCount } from '../playerMoteLife';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -134,16 +135,22 @@ export function resetMoteGrappleDisplayRadius(world: WorldState): void {
 
 /** Returns the total number of logical mote slots (including depleted ones). */
 export function getTotalMoteSlotCount(world: WorldState): number {
-  return world.moteSlotCount;
+  if (world.moteSlotCount > 0) return world.moteSlotCount;
+  const p = world.clusters[0];
+  return p && p.isPlayerFlag === 1 ? getPlayerMoteCapacity(p) : 0;
 }
 
 /** Returns the number of available (non-depleted) mote slots. */
 export function getAvailableMoteSlotCount(world: WorldState): number {
-  let count = 0;
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    if (world.moteSlotState[i] === MOTE_STATE_AVAILABLE) count++;
+  if (world.moteSlotCount > 0) {
+    let count = 0;
+    for (let i = 0; i < world.moteSlotCount; i++) {
+      if (world.moteSlotState[i] === MOTE_STATE_AVAILABLE) count++;
+    }
+    return count;
   }
-  return count;
+  const p = world.clusters[0];
+  return p && p.isPlayerFlag === 1 ? getPlayerMoteCount(p) : 0;
 }
 
 /**
@@ -152,8 +159,9 @@ export function getAvailableMoteSlotCount(world: WorldState): number {
  * containers or loadout), so grapple and sword range remain at full.
  */
 export function getAvailableMoteRatio(world: WorldState): number {
-  if (world.moteSlotCount === 0) return 1.0;
-  return getAvailableMoteSlotCount(world) / world.moteSlotCount;
+  const total = getTotalMoteSlotCount(world);
+  if (total === 0) return 1.0;
+  return getAvailableMoteSlotCount(world) / total;
 }
 
 // ── Pre-allocated scratch for getAvailableOrderedMoteSlots ─────────────────────
