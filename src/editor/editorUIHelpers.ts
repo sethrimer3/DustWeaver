@@ -122,7 +122,7 @@ export function createCollapsibleSection(
 
   const titleEl = document.createElement('div');
   titleEl.textContent = titleText;
-  titleEl.style.cssText = `font-size: 11px; color: ${ACCENT_GOLD}; font-weight: bold;`;
+  titleEl.style.cssText = `font-size: 11px; color: ${ACCENT_GOLD}; font-weight: bold; font-family: 'Cinzel', serif; letter-spacing: 0.03em;`;
   header.appendChild(titleEl);
 
   const chevron = document.createElement('span');

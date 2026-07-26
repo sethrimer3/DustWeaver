@@ -635,6 +635,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   for (const cat of categories) {
     const btn = makeBtn(PALETTE_CATEGORY_LABELS[cat], () => callbacks?.onCategoryChange(cat));
     btn.dataset.category = cat;
+    btn.style.fontFamily = "'Cinzel', serif";
     catBtns.push(btn);
     catBar.appendChild(btn);
   }
