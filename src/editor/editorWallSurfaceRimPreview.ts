@@ -36,7 +36,7 @@ function _signatureFor(walls: readonly EditorWall[], widthBlocks: number, height
   return s;
 }
 
-let _editorLayoutCache: { room: EditorRoomData | null; mutationSerial: number; signature: string; layout: CachedWallLayout } | null = null;
+let _editorLayoutCache: { room: EditorRoomData | null; wallGeometryRevision: number; signature: string; layout: CachedWallLayout } | null = null;
 
 export function resetEditorWallLayoutCache(): void {
   _editorLayoutCache = null;
@@ -100,15 +100,15 @@ export function buildEditorWallSnapshot(room: EditorRoomData): WallSnapshot {
 
 /**
  * Returns the current editor room's wall layout (rebuilding only when the
- * room or mutationSerial changed since the last call) — completely independent
+ * room or wallGeometryRevision changed since the last call) — completely independent
  * of the gameplay `blockWallLayoutCache.ts` singleton.
  */
-export function getEditorWallLayout(room: EditorRoomData, mutationSerial = -1): CachedWallLayout {
+export function getEditorWallLayout(room: EditorRoomData, wallGeometryRevision = -1): CachedWallLayout {
   if (
     _editorLayoutCache !== null &&
     _editorLayoutCache.room === room &&
-    _editorLayoutCache.mutationSerial === mutationSerial &&
-    mutationSerial >= 0
+    _editorLayoutCache.wallGeometryRevision === wallGeometryRevision &&
+    wallGeometryRevision >= 0
   ) {
     return _editorLayoutCache.layout;
   }
@@ -116,14 +116,14 @@ export function getEditorWallLayout(room: EditorRoomData, mutationSerial = -1): 
   const signature = _signatureFor(room.interiorWalls, room.widthBlocks, room.heightBlocks, room.blockTheme);
   if (_editorLayoutCache !== null && _editorLayoutCache.signature === signature) {
     _editorLayoutCache.room = room;
-    _editorLayoutCache.mutationSerial = mutationSerial;
+    _editorLayoutCache.wallGeometryRevision = wallGeometryRevision;
     return _editorLayoutCache.layout;
   }
 
   editorPerfCounters.surfaceRimLayoutRebuilds++;
   const snapshot = buildEditorWallSnapshot(room);
   const layout = buildWallLayout(snapshot, BLOCK_SIZE_SMALL, room.widthBlocks, room.heightBlocks, signature);
-  _editorLayoutCache = { room, mutationSerial, signature, layout };
+  _editorLayoutCache = { room, wallGeometryRevision, signature, layout };
   return layout;
 }
 
@@ -139,9 +139,9 @@ export function drawEditorSurfaceRimOverlay(
   offsetYPx: number,
   zoom: number,
   viewport?: EditorViewport,
-  mutationSerial = -1,
+  wallGeometryRevision = -1,
 ): void {
-  const layout = getEditorWallLayout(room, mutationSerial);
+  const layout = getEditorWallLayout(room, wallGeometryRevision);
   const filterColMinBlocks = viewport ? Math.max(0, viewport.minCol) : 0;
   const filterColMaxBlocks = viewport ? Math.min(room.widthBlocks - 1, viewport.maxCol) : room.widthBlocks - 1;
   const filterRowMinBlocks = viewport ? Math.max(0, viewport.minRow) : 0;

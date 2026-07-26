@@ -811,7 +811,7 @@ export interface EditorWallTopology {
   readonly cellOwner: Map<string, number>;
   readonly cells: readonly EditorWallCell[];
   readonly roomRef: EditorRoomData;
-  readonly mutationSerial: number;
+  readonly wallGeometryRevision: number;
 }
 
 let _wallTopologyCache: EditorWallTopology | null = null;
@@ -820,12 +820,12 @@ export function resetEditorWallTopologyCache(): void {
   _wallTopologyCache = null;
 }
 
-export function getEditorWallTopology(room: EditorRoomData, mutationSerial = -1): EditorWallTopology {
+export function getEditorWallTopology(room: EditorRoomData, wallGeometryRevision = -1): EditorWallTopology {
   if (
     _wallTopologyCache !== null &&
     _wallTopologyCache.roomRef === room &&
-    _wallTopologyCache.mutationSerial === mutationSerial &&
-    mutationSerial >= 0
+    _wallTopologyCache.wallGeometryRevision === wallGeometryRevision &&
+    wallGeometryRevision >= 0
   ) {
     return _wallTopologyCache;
   }
@@ -849,6 +849,6 @@ export function getEditorWallTopology(room: EditorRoomData, mutationSerial = -1)
     }
   }
 
-  _wallTopologyCache = { occupied, cellOwner, cells, roomRef: room, mutationSerial };
+  _wallTopologyCache = { occupied, cellOwner, cells, roomRef: room, wallGeometryRevision };
   return _wallTopologyCache;
 }

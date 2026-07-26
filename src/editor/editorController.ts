@@ -1391,18 +1391,25 @@ export function createEditorController(
    */
   function applyEdits(
     changeKind: 'placement' | 'metadata' = 'metadata',
-    options?: { continuous?: boolean },
+    options?: { continuous?: boolean; wallGeometry?: boolean },
   ): void {
     if (!state.roomData) return;
     isCurrentRoomDirty = isHistoryDirty(history) || activePaintPending !== null;
     state.pendingComplexityCheck = true;
+    const isWallGeometry = options?.wallGeometry !== undefined
+      ? options.wallGeometry
+      : changeKind === 'metadata' ||
+        state.selectedPaletteItem === null ||
+        (state.selectedPaletteItem.category === 'blocks' ||
+         state.selectedPaletteItem.category === 'specialBlocks' ||
+         state.selectedElements.some(e => e.type === 'wall'));
     // Item C: a continuous drag-paint / drag-erase stroke calls this once per
     // painted block. Working data, the campaign store, and the live preview
     // must all update per block, but `roomContentRevision` — which
     // invalidates whole-room derived summaries such as the sidebar
     // complexity analysis — is bumped only once, on release. See
     // editorContentRevision.ts.
-    noteContentMutation(state, strokeRevision, options?.continuous === true);
+    noteContentMutation(state, strokeRevision, options?.continuous === true, isWallGeometry);
     if (usesCampaignStore && campaignSession?.campaignStore !== undefined) {
       campaignSession.campaignStore.setActiveRoomId(state.roomData.id);
       campaignSession.campaignStore.markRoomDirty(state.roomData.id, state.roomData);
@@ -2537,7 +2544,7 @@ export function createEditorController(
     if (!state.isActive) return;
 
     renderEditorIndicator(ctx, canvasWidth, state);
-    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, editorEdgeExtensionCache, strokeRevision.mutationSerial);
+    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, editorEdgeExtensionCache, strokeRevision.wallGeometryRevision);
   }
 
   function getRoomDef(): RoomDef | null {

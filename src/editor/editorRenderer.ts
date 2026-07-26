@@ -65,7 +65,7 @@ export function renderEditorOverlays(
   canvasWidth: number,
   canvasHeight: number,
   edgeExtensionCache?: EdgeExtensionCache | null,
-  mutationSerial = -1,
+  wallGeometryRevision = -1,
 ): void {
   const room = state.roomData;
   if (room === null) return;
@@ -121,7 +121,7 @@ export function renderEditorOverlays(
   drawGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
   if (layerOn('backgroundBlock')) drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
-  if (layerOn('wall')) drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport, mutationSerial);
+  if (layerOn('wall')) drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport, wallGeometryRevision);
   if (layerOn('enemy')) drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('transition')) drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   drawEditorSpawnAndTombs(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom, viewport);

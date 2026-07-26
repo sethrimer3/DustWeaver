@@ -45,10 +45,16 @@ export interface StrokeRevisionState {
    * key on this instead of `roomContentRevision`.
    */
   mutationSerial: number;
+  /**
+   * Bumped only by mutations affecting wall geometry or room dimensions.
+   * Caches for wall topology and surface rim layout key on this so custom,
+   * background, and pixel-material brushwork never forces wall rebuilds.
+   */
+  wallGeometryRevision: number;
 }
 
 export function createStrokeRevisionState(): StrokeRevisionState {
-  return { pendingStrokeBump: false, mutationSerial: 0 };
+  return { pendingStrokeBump: false, mutationSerial: 0, wallGeometryRevision: 0 };
 }
 
 /**
@@ -63,8 +69,12 @@ export function noteContentMutation(
   holder: ContentRevisionHolder,
   stroke: StrokeRevisionState,
   continuous = false,
+  wallGeometry = true,
 ): void {
   stroke.mutationSerial++;
+  if (wallGeometry) {
+    stroke.wallGeometryRevision++;
+  }
   if (continuous) {
     stroke.pendingStrokeBump = true;
     return;

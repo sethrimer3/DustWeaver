@@ -80,9 +80,9 @@ export function drawEditorWalls(
   offsetYPx: number,
   zoom: number,
   viewport?: EditorViewport,
-  mutationSerial = -1,
+  wallGeometryRevision = -1,
 ): void {
-  const topology = getEditorWallTopology(room, mutationSerial);
+  const topology = getEditorWallTopology(room, wallGeometryRevision);
   const occupied = topology.occupied;
   const cellOwner = topology;
 
@@ -121,7 +121,7 @@ export function drawEditorWalls(
   // Surface Rim preview (default hard-coded exposed-edge bands, or a
   // per-block custom style) — drawn last so it sits on top, matching the
   // gameplay renderer's draw order (wall sprites, then the overlay pass).
-  drawEditorSurfaceRimOverlay(ctx, room, offsetXPx, offsetYPx, zoom, viewport, mutationSerial);
+  drawEditorSurfaceRimOverlay(ctx, room, offsetXPx, offsetYPx, zoom, viewport, wallGeometryRevision);
 }
 
 // ============================================================================
