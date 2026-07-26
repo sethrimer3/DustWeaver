@@ -92,6 +92,7 @@ function _recordTrailSample(
  * `isDustTypeSwitchInProgress` so this should never actually happen).
  */
 export function beginDustTypeSwitch(world: WorldState, targetKind: ParticleKind): void {
+  world.selectedDustKind = targetKind;
   if (world.dustSwitchActiveSlotCount > 0) return;
 
   for (let slot = 0; slot < world.moteSlotCount; slot++) {

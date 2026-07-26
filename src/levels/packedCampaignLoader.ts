@@ -15,7 +15,7 @@ import type { CampaignMeta } from './campaigns';
 import type { SavedCampaignV1 } from './campaignSchema';
 import { validateSavedCampaignTopLevel, isSavedCampaignV1 } from './campaignSchema';
 
-const BASE = import.meta.env.BASE_URL;
+const BASE = import.meta.env?.BASE_URL ?? '/';
 
 // ── Official campaign constants ───────────────────────────────────────────────
 
@@ -39,10 +39,12 @@ const OFFICIAL_CAMPAIGN_ID = 'DUSTWEAVER_CAMPAIGN' as const;
  * path like `/ASSETS/CAMPAIGNS/CUSTOM/my_campaign.dwcampaign.json`; the value
  * is a lazy loader that resolves the file's URL when called.
  */
-const DISCOVERED_PACKED_CAMPAIGN_LOADERS = import.meta.glob<string>(
-  '/ASSETS/CAMPAIGNS/CUSTOM/*.dwcampaign.json',
-  { query: '?url', import: 'default' },
-);
+const DISCOVERED_PACKED_CAMPAIGN_LOADERS = import.meta.env?.BASE_URL !== undefined
+  ? import.meta.glob<string>(
+      '/ASSETS/CAMPAIGNS/CUSTOM/*.dwcampaign.json',
+      { query: '?url', import: 'default' },
+    )
+  : {};
 
 /** All project-relative paths discovered at build time. */
 const DISCOVERED_PACKED_CAMPAIGN_PATHS = Object.keys(DISCOVERED_PACKED_CAMPAIGN_LOADERS);

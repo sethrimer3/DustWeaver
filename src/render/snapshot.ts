@@ -615,11 +615,13 @@ export function updateSnapshotInPlace(
   // fireNewBow() to capture arrowDustKind, so sword/shield/bow-preview theming
   // matches whatever dust will actually be spent.
   {
-    let dustKind = 0;
-    for (let s = 0; s < world.moteSlotCount; s++) {
-      if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) {
-        dustKind = world.moteSlotKind[s];
-        break;
+    let dustKind = world.selectedDustKind;
+    if (dustKind === 0 && world.moteSlotCount > 0) {
+      for (let s = 0; s < world.moteSlotCount; s++) {
+        if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) {
+          dustKind = world.moteSlotKind[s];
+          break;
+        }
       }
     }
     b.currentWeaveDustKind = dustKind;

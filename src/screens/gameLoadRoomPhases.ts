@@ -73,14 +73,11 @@ import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi
 import type { GraphicsQuality } from '../ui/renderSettings';
 import type { MusicManager } from '../audio/musicManager';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
-import { getTotalCapacity, getMaxParticlesForDust } from '../progression/dustCapacity';
+import { getTotalCapacity } from '../progression/dustCapacity';
 import { resolveEffectiveSelectedDustKind } from '../sim/weaves/dustWheelOptions';
 import {
-  spawnClusterParticles,
-  spawnWeaveLoadoutParticles,
   spawnBackgroundFluidParticles,
   spawnAllDustPiles,
-  PARTICLE_COUNT_PER_CLUSTER,
   BACKGROUND_FLUID_COUNT,
 } from './gameSpawn';
 import { spawnEnemyClusters } from './gameEnemySpawn';
@@ -99,7 +96,6 @@ import {
 import type { GameInterpolationBuffers } from './gameInterpolationBuffers';
 import { buildRoomDecorations } from '../render/effects/wallDecorations';
 import type { WallDecoration } from '../render/effects/wallDecorations';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
 import type { DialogueState } from '../dialogue/dialogueState';
 import type { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
@@ -670,24 +666,11 @@ export function* makeLoadRoomPhases(
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     const effectiveWeaveLoadout = resolveEffectiveWeaveLoadout(ctx);
     const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-    const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
-      || effectiveWeaveLoadout.secondary.boundDust.length > 0;
-
-    if (hasWeaveBoundDust) {
-      spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-    } else if (progress && playerCapacity > 0) {
-      const dustKind = resolveEffectiveSelectedDustKind(progress);
-      if (dustKind !== null) {
-        const particleCount = getMaxParticlesForDust(dustKind, playerCapacity);
-        if (particleCount > 0) {
-          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, dustKind, particleCount, levelRng);
-        }
-      }
+    if (progress) {
+      world.selectedDustKind = resolveEffectiveSelectedDustKind(progress) ?? 0;
     }
 
     applyPlayerWeaveWorldFields(ctx, world, effectiveWeaveLoadout);
-
-    initMoteQueueFromParticles(world, playerCluster.entityId);
     resetSwordWeaveState(world);
     FP.recordLoadPhaseStep('B:playerParticles+moteQueue', import.meta.env.DEV ? performance.now() - _t0 : 0);
 
@@ -1015,6 +998,9 @@ export function applyResidentRoomActivation(
   let particlesSkipped  = 0;
   {
     const effectiveWeaveLoadout = resolveEffectiveWeaveLoadout(ctx);
+    if (progress) {
+      world.selectedDustKind = resolveEffectiveSelectedDustKind(progress) ?? 0;
+    }
     if (playerTransfer !== undefined && playerTransfer.ownedParticles.length > 0) {
       // Restore transferred dust particles rather than spawning a fresh loadout.
       const result = restoreTransferredPlayerParticles(
@@ -1022,26 +1008,10 @@ export function applyResidentRoomActivation(
       );
       particlesRestored = result.restored;
       particlesSkipped  = result.skipped;
-    } else {
-      // Fresh spawn path: first visit or no particles to carry.
-      const playerCapacity = progress ? getTotalCapacity(progress.dustContainerCount) : 0;
-      const hasWeaveBoundDust = effectiveWeaveLoadout.primary.boundDust.length > 0
-        || effectiveWeaveLoadout.secondary.boundDust.length > 0;
-
-      const selectedDustKind = progress ? resolveEffectiveSelectedDustKind(progress) : null;
-      if (hasWeaveBoundDust) {
-        spawnWeaveLoadoutParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, effectiveWeaveLoadout, PARTICLE_COUNT_PER_CLUSTER, levelRng);
-      } else if (playerCapacity > 0 && selectedDustKind !== null) {
-        const particleCount = getMaxParticlesForDust(selectedDustKind, playerCapacity);
-        if (particleCount > 0) {
-          spawnClusterParticles(world, playerCluster.entityId, spawnXWorld, spawnYWorld, selectedDustKind, particleCount, levelRng);
-        }
-      }
     }
 
     applyPlayerWeaveWorldFields(ctx, world, effectiveWeaveLoadout);
 
-    initMoteQueueFromParticles(world, playerCluster.entityId);
     // Resident worlds are prebuilt without a player, so they do not yet have
     // the player's reserved grapple-chain slots. Allocate them after restoring
     // player dust, matching the normal Phase D room-load lifecycle.

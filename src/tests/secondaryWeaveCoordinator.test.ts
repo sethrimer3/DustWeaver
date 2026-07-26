@@ -24,6 +24,7 @@ import { BEHAVIOR_MODE_BOW_ARROW } from '../sim/particles/bowArrowBehaviorMode';
 function makeFixture(moteCount = 8) {
   const world = createWorldState(1000 / 60, 7);
   const player = createClusterState(0, 100, 100, 1, 20);
+  player.healthPoints = moteCount;
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
   initMoteQueueFromParticles(world, player.entityId);

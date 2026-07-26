@@ -372,6 +372,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
     // Independent Sword/Shield/Bow Weaves (Stage 3/5)
     currentWeaveDustKind:          (() => {
+      if (world.selectedDustKind !== 0 || world.moteSlotCount === 0) return world.selectedDustKind;
       for (let s = 0; s < world.moteSlotCount; s++) {
         if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) return world.moteSlotKind[s];
       }
