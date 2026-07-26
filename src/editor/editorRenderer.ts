@@ -11,7 +11,7 @@ import { EditorTool } from './editorState';
 import {
   drawGrid,
   drawPixelGrid,
-  getEditorViewport,
+  computeEditorViewport,
 } from './editorRendererHelpers';
 import {
   drawEditorWalls,
@@ -65,12 +65,20 @@ export function renderEditorOverlays(
   canvasWidth: number,
   canvasHeight: number,
   edgeExtensionCache?: EdgeExtensionCache | null,
+  mutationSerial = -1,
 ): void {
   const room = state.roomData;
   if (room === null) return;
 
-  const viewport = getEditorViewport(offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, room.widthBlocks, room.heightBlocks);
-  const mutationSerial = state.mutationSerial ?? -1;
+  const viewport = computeEditorViewport(
+    offsetXPx,
+    offsetYPx,
+    zoom,
+    canvasWidth,
+    canvasHeight,
+    room.widthBlocks,
+    room.heightBlocks,
+  );
 
   ctx.save();
 

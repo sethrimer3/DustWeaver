@@ -64,3 +64,4 @@ npm run desktop
 - If permissions, conflicts, failing validation, or required review prevent integration, explicitly report the branch name, commit SHA, missing integration step, and blocker. Never describe the task as complete.
 - Auto-sync or backup commits do not satisfy this integration requirement.
 - Before starting new work, check whether the current branch contains commits not merged into `main`. Preserve and integrate that work before switching branches unless the user explicitly directs otherwise.
+- The scheduled `Agent branch integration audit` is an enforcement backstop: any unmerged `agent/`, `codex/`, `claude/`, or `copilot/` branch without an open PR targeting `main` fails the workflow. Do not silence the audit by deleting unique work; merge it, open a PR, or document an explicit rejection after preserving any useful intent on `main`.

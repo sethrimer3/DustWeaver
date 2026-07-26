@@ -177,7 +177,10 @@ export function drawEditorTransitions(
   for (let tIndex = 0; tIndex < room.transitions.length; tIndex++) {
     const t = room.transitions[tIndex];
     editorPerfCounters.overlayElementsVisited++;
-    if (!isElementInViewport(viewport, t.xBlock, t.yBlock, t.wBlock, t.hBlock)) continue;
+    const isHorizontal = t.direction === 'left' || t.direction === 'right';
+    const transitionWidth = isHorizontal ? (t.gradientWidthBlocks ?? 3) : t.openingSizeBlocks;
+    const transitionHeight = isHorizontal ? t.openingSizeBlocks : (t.gradientWidthBlocks ?? 3);
+    if (!isElementInViewport(viewport, t.xBlock, t.yBlock, transitionWidth, transitionHeight)) continue;
     editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('transition', t.uid);
     const isLinkSource = state.isLinkingTransition && state.linkSourceTransitionUid === t.uid;

@@ -75,7 +75,7 @@ export function buildEditorWallSnapshot(room: EditorRoomData): WallSnapshot {
     isPlatformFlag[i] = def.isPlatformFlag === 1 ? 1 : 0;
     platformEdge[i] = def.platformEdge ?? 0;
     themeIndex[i] = def.blockTheme !== undefined ? blockThemeToIndex(def.blockTheme) : WALL_THEME_DEFAULT_INDEX;
-    isInvisibleFlag[i] = def.isInvisibleFlag === 1 ? 1 : 0;
+    isInvisibleFlag[i] = 'isInvisibleFlag' in def && def.isInvisibleFlag === 1 ? 1 : 0;
     rampOrientationIndex[i] = wallShapeOrientationIndex(def);
     isPillarHalfWidthFlag[i] = isHalfWidthPillar ? 1 : 0;
     surfaceRimStyleIndex[i] = internSurfaceRimStyle(surfaceRimStyleTable, def.surfaceRim);
