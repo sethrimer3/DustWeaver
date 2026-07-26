@@ -72,33 +72,6 @@ import { ClusterState } from './state';
 import {
   GRAPPLE_SEGMENT_COUNT,
   GRAPPLE_MIN_LENGTH_WORLD,
-  GRAPPLE_ATTACH_FX_TICKS,
-  BEHAVIOR_MODE_GRAPPLE_CHAIN,
-  GRAPPLE_CHAIN_LIFETIME_TICKS,
-  GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD,
-  raycastWalls,
-  clearLegacyGrappleMissState,
-} from './grappleShared';
-import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
-import { raycastRopeSegments } from './grappleRopeSupport';
-import { isGrappleWallHitSlimed } from './slimeSnailAi';
-import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
-
-export { updateGrappleRopeAnchor } from './grappleRopeSupport';
-export { raycastRopeSegments } from './grappleRopeSupport';
-// Re-export so existing callers (gameCommandProcessor) need not change import paths.
-export { releaseGrapple } from './grappleShared';
-// Re-export so tick.ts need not change its import path.
-export { applyGrappleClusterConstraint } from './grappleConstraint';
-
-export const GRAPPLE_FAIL_BEAM_TOTAL_TICKS = 14;
-export const GRAPPLE_FAIL_BEAM_EXTEND_TICKS = 5;
-export const GRAPPLE_FAIL_BEAM_HOVER_TICKS = 3;
-export const GRAPPLE_EMPTY_FX_TOTAL_TICKS = 12;
-
-/**
- * Damping factor applied to the remaining grapple distance when it bounces off
- * an ice surface.  0.6 = 60% of the remaining reach is shown as the reflected ray.
  */
 const ICE_GRAPPLE_BOUNCE_DAMPING = 0.6;
 

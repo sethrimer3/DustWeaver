@@ -373,5 +373,19 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
   clearLegacyGrappleMissState(world);
   // Keep debug fields so the overlay can still show the last sweep until the
   // next grapple fire; isGrappleDebugActiveFlag persists for the current frame.
-
 }
+
+/**
+ * Restores the player's grapple charge, triggering the golden recharge-ring
+ * effect only on a depleted→charged transition.
+ */
+export function rechargeGrappleCharge(world: WorldState): void {
+  const wasChargeDepleted =
+    world.prevHasGrappleChargeFlag === 0 && world.hasGrappleChargeFlag === 0;
+  world.hasGrappleChargeFlag = 1;
+  if (wasChargeDepleted) {
+    world.grappleRechargeRingTicksLeft = world.grappleRechargeRingTotalTicks;
+  }
+  world.prevHasGrappleChargeFlag = world.hasGrappleChargeFlag;
+}
+
