@@ -13,6 +13,16 @@
   ],
   "solids": {
     "byTheme": {
+      "__default__": {
+        "rects": [
+          [
+            24,
+            48,
+            4,
+            2
+          ]
+        ]
+      },
       "darkGlass": {
         "rects": [
           [
@@ -100,12 +110,6 @@
             2
           ],
           [
-            24,
-            48,
-            6,
-            2
-          ],
-          [
             36,
             48,
             2,
@@ -138,10 +142,10 @@
     {
       "dir": "down",
       "to": "mysterious_curiosity",
-      "pos": 30,
-      "size": 6,
+      "pos": 28,
+      "size": 8,
       "spawn": [
-        33,
+        60,
         3
       ],
       "depth": 48,
@@ -150,18 +154,18 @@
     {
       "dir": "left",
       "to": "dark_teleporter",
-      "pos": 32,
+      "pos": 15,
       "size": 6,
       "spawn": [
         26,
-        7
+        9
       ],
       "gw": 2
     }
   ],
   "bakedWallTemplate": {
     "schemaVersion": 2,
-    "sourceHash": "c49cce84",
+    "sourceHash": "0cdc6189",
     "wallCount": 20,
     "xWorld": [
       0,
@@ -182,8 +186,8 @@
       464,
       128,
       512,
-      192,
-      288
+      288,
+      192
     ],
     "yWorld": [
       0,
@@ -226,8 +230,8 @@
       48,
       64,
       16,
-      48,
-      16
+      16,
+      32
     ],
     "hWorld": [
       8,
@@ -315,7 +319,7 @@
       8,
       8,
       8,
-      8
+      0
     ],
     "themeNames": [
       "overgrowth",

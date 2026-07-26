@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "ffd7cfd29f25e857",
+  "campaignHash": "db4fc0c56b1d8d2d",
   "campaignVersion": 12,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-26T05:54:18.459Z",
+  "exportedAt": "2026-07-26T06:14:45.942Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -172,26 +172,32 @@
     "darkest_cave": {
       "roomId": "darkest_cave",
       "file": "darkest_cave_room.json",
-      "hash": "c7bdc411194684ae",
-      "updatedAt": "2026-07-26T05:53:32.925Z"
+      "hash": "8cb776a6ac0de873",
+      "updatedAt": "2026-07-26T06:14:45.942Z"
     },
     "mysterious_curiosity": {
       "roomId": "mysterious_curiosity",
       "file": "mysterious_curiosity_room.json",
-      "hash": "c51b34348d49c22a",
-      "updatedAt": "2026-07-26T05:25:30.507Z"
+      "hash": "15111024c6532845",
+      "updatedAt": "2026-07-26T06:14:45.942Z"
     },
     "dark_teleporter": {
       "roomId": "dark_teleporter",
       "file": "dark_teleporter_room.json",
-      "hash": "ab3d107ca7f904fc",
-      "updatedAt": "2026-07-26T05:54:18.459Z"
+      "hash": "e843b0d07cf08a1b",
+      "updatedAt": "2026-07-26T06:14:45.942Z"
     },
     "mysterious_hub": {
       "roomId": "mysterious_hub",
       "file": "mysterious_hub_room.json",
       "hash": "3371de659cf1f475",
       "updatedAt": "2026-07-26T05:54:18.459Z"
+    },
+    "dark_depths": {
+      "roomId": "dark_depths",
+      "file": "dark_depths_room.json",
+      "hash": "7f6c8fb886bf07ff",
+      "updatedAt": "2026-07-26T06:14:45.942Z"
     }
   },
   "adjacency": {
@@ -392,19 +398,28 @@
     "mysterious_curiosity": {
       "roomId": "mysterious_curiosity",
       "targets": [
-        "darkest_cave"
+        "darkest_cave",
+        "dark_depths"
       ]
     },
     "dark_teleporter": {
       "roomId": "dark_teleporter",
       "targets": [
         "darkest_cave",
-        "mysterious_hub"
+        "mysterious_hub",
+        "dark_depths"
       ]
     },
     "mysterious_hub": {
       "roomId": "mysterious_hub",
       "targets": [
+        "dark_teleporter"
+      ]
+    },
+    "dark_depths": {
+      "roomId": "dark_depths",
+      "targets": [
+        "mysterious_curiosity",
         "dark_teleporter"
       ]
     }
