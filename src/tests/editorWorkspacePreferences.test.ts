@@ -29,7 +29,7 @@ test('round-trip: save then reload produces an equal preferences object', () => 
   prefs.activeCategory = 'enemies';
   prefs.brushMode = '3x3';
   prefs.layerPanelCollapsed = true;
-  prefs.sidebarScrollTop = 240;
+  prefs.leftSidebarScrollTop = 240;
   prefs.layers.terrain = { visible: false, locked: true, selectOnly: false };
 
   saveEditorWorkspacePreferencesNow('campaign_a', prefs);
@@ -99,7 +99,7 @@ test('corrupt data: wrong-typed fields fall back to defaults per-field', () => {
   assert.equal(loaded.layerPanelCollapsed, fallback.layerPanelCollapsed);
   assert.equal(loaded.activeCategory, fallback.activeCategory);
   assert.equal(loaded.brushMode, fallback.brushMode);
-  assert.equal(loaded.sidebarScrollTop, fallback.sidebarScrollTop);
+  assert.equal(loaded.leftSidebarScrollTop, fallback.leftSidebarScrollTop);
 });
 
 test('corrupt data: unknown layer id in stored data is silently dropped', () => {
@@ -174,27 +174,27 @@ test('preference functions never touch room/campaign data — signatures are loc
 test('debounced saver: schedule() coalesces rapid calls into a single write, flush() writes immediately', async () => {
   resetStorage();
   const saver = createDebouncedWorkspacePreferencesSaver('campaign_debounce', 20);
-  const p1 = { ...defaultEditorWorkspacePreferences(), sidebarScrollTop: 1 };
-  const p2 = { ...defaultEditorWorkspacePreferences(), sidebarScrollTop: 2 };
-  const p3 = { ...defaultEditorWorkspacePreferences(), sidebarScrollTop: 3 };
+  const p1 = { ...defaultEditorWorkspacePreferences(), leftSidebarScrollTop: 1 };
+  const p2 = { ...defaultEditorWorkspacePreferences(), leftSidebarScrollTop: 2 };
+  const p3 = { ...defaultEditorWorkspacePreferences(), leftSidebarScrollTop: 3 };
   saver.schedule(p1);
   saver.schedule(p2);
   saver.schedule(p3);
   // Nothing written yet — still within the debounce window.
-  assert.equal(loadEditorWorkspacePreferences('campaign_debounce').sidebarScrollTop, 0);
+  assert.equal(loadEditorWorkspacePreferences('campaign_debounce').leftSidebarScrollTop, 0);
 
   await new Promise(resolve => setTimeout(resolve, 40));
-  assert.equal(loadEditorWorkspacePreferences('campaign_debounce').sidebarScrollTop, 3,
+  assert.equal(loadEditorWorkspacePreferences('campaign_debounce').leftSidebarScrollTop, 3,
     'expected only the last scheduled value to be written');
 });
 
 test('debounced saver: flush() writes immediately without waiting for the debounce window', () => {
   resetStorage();
   const saver = createDebouncedWorkspacePreferencesSaver('campaign_flush', 10_000);
-  const p = { ...defaultEditorWorkspacePreferences(), sidebarScrollTop: 42 };
+  const p = { ...defaultEditorWorkspacePreferences(), leftSidebarScrollTop: 42 };
   saver.schedule(p);
   saver.flush();
-  assert.equal(loadEditorWorkspacePreferences('campaign_flush').sidebarScrollTop, 42);
+  assert.equal(loadEditorWorkspacePreferences('campaign_flush').leftSidebarScrollTop, 42);
   saver.cancel();
 });
 
@@ -261,10 +261,10 @@ test('collapse state and scroll position round-trip through save/load', () => {
   resetStorage();
   const prefs = defaultEditorWorkspacePreferences();
   prefs.layerPanelCollapsed = true;
-  prefs.sidebarScrollTop = 512;
+  prefs.leftSidebarScrollTop = 512;
   saveEditorWorkspacePreferencesNow('campaign_scroll', prefs);
 
   const loaded = loadEditorWorkspacePreferences('campaign_scroll');
   assert.equal(loaded.layerPanelCollapsed, true);
-  assert.equal(loaded.sidebarScrollTop, 512);
+  assert.equal(loaded.leftSidebarScrollTop, 512);
 });

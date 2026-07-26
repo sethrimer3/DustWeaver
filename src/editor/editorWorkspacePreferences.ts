@@ -19,8 +19,21 @@
 import { LAYER_IDS, type LayerId, type EditorLayersState, createDefaultEditorLayers } from './editorLayers';
 import type { PaletteCategory } from './editorPaletteItems';
 import type { BrushMode } from './editorDropdownData';
+import {
+  defaultPanelLayout, normalizePanelLayout, type EditorPanelLayout,
+} from './editorPanelLayout';
 
-export const EDITOR_WORKSPACE_PREFS_VERSION = 1;
+/**
+ * Schema version.
+ *
+ * v1 → v2 added the dockable-panel `panelLayout` and split the single
+ * `sidebarScrollTop` into independent `leftSidebarScrollTop` /
+ * `rightSidebarScrollTop`. Migration is handled inside `sanitize()` rather
+ * than by changing the storage key, so an existing v1 record keeps every
+ * preference it already had (layers, category, brush, layer-panel collapse,
+ * and its scroll position, which is reinterpreted as the LEFT sidebar's).
+ */
+export const EDITOR_WORKSPACE_PREFS_VERSION = 2;
 
 /** Stable storage key for the built-in (non-custom) campaign. */
 export const BUILTIN_CAMPAIGN_WORKSPACE_KEY = 'DUSTWEAVER_CAMPAIGN';
@@ -48,8 +61,16 @@ export interface EditorWorkspacePreferences {
   layerPanelCollapsed: boolean;
   activeCategory: PaletteCategory;
   brushMode: BrushMode;
-  /** Editor sidebar's scrollTop, in pixels. */
-  sidebarScrollTop: number;
+  /** Left editor sidebar's scrollTop, in pixels. (v1's `sidebarScrollTop`.) */
+  leftSidebarScrollTop: number;
+  /** Right editor sidebar's scrollTop, in pixels. Added in v2; v1 records default it to 0. */
+  rightSidebarScrollTop: number;
+  /**
+   * Dockable-panel arrangement: which panels are in each sidebar (and in what
+   * order) plus any floating panel windows. Always a complete, normalized
+   * layout — see normalizePanelLayout's invariants.
+   */
+  panelLayout: EditorPanelLayout;
 }
 
 export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences {
@@ -59,7 +80,9 @@ export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences 
     layerPanelCollapsed: false,
     activeCategory: 'blocks',
     brushMode: 'single',
-    sidebarScrollTop: 0,
+    leftSidebarScrollTop: 0,
+    rightSidebarScrollTop: 0,
+    panelLayout: defaultPanelLayout(),
   };
 }
 
@@ -107,10 +130,22 @@ function sanitize(raw: unknown): EditorWorkspacePreferences {
     layerPanelCollapsed: typeof o.layerPanelCollapsed === 'boolean' ? o.layerPanelCollapsed : fallback.layerPanelCollapsed,
     activeCategory: typeof o.activeCategory === 'string' ? (o.activeCategory as PaletteCategory) : fallback.activeCategory,
     brushMode: VALID_BRUSH_MODES.includes(o.brushMode as BrushMode) ? (o.brushMode as BrushMode) : fallback.brushMode,
-    sidebarScrollTop: typeof o.sidebarScrollTop === 'number' && Number.isFinite(o.sidebarScrollTop) && o.sidebarScrollTop >= 0
-      ? o.sidebarScrollTop
-      : fallback.sidebarScrollTop,
+    // v1 → v2: the single `sidebarScrollTop` becomes the LEFT sidebar's, and
+    // the right sidebar defaults to 0. A v2 record's own
+    // `leftSidebarScrollTop` takes precedence when present.
+    leftSidebarScrollTop: sanitizeScrollTop(o.leftSidebarScrollTop)
+      ?? sanitizeScrollTop(o.sidebarScrollTop)
+      ?? fallback.leftSidebarScrollTop,
+    rightSidebarScrollTop: sanitizeScrollTop(o.rightSidebarScrollTop) ?? fallback.rightSidebarScrollTop,
+    // Absent (v1), malformed, or partial layouts all normalize to a complete
+    // layout with every registered panel in exactly one location.
+    panelLayout: normalizePanelLayout(o.panelLayout),
   };
+}
+
+function sanitizeScrollTop(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+  return v;
 }
 
 /**
@@ -293,4 +328,14 @@ export function applyLayerPreset(layers: EditorLayersState, presetId: LayerPrese
 /** "Reset Workspace" — restores every workspace default (layers, category, brush, collapse, scroll). */
 export function resetWorkspaceLayers(): EditorLayersState {
   return createDefaultEditorLayers();
+}
+
+/**
+ * "Reset Workspace" — the default dockable-panel arrangement (both sidebars'
+ * panel sets and order restored, every floating window redocked). This is the
+ * escape hatch when a user has dragged panels into an unusable arrangement,
+ * so it must clear floating state too, not just reorder the sidebars.
+ */
+export function resetWorkspacePanelLayout(): EditorPanelLayout {
+  return defaultPanelLayout();
 }

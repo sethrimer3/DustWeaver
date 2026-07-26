@@ -47,12 +47,22 @@ import {
   computeBlockModifierSig, computePaletteStructureSig,
   computeInspectorIdentitySig, inspectorIdentitySigEquals, type InspectorIdentitySig,
 } from './editorUISignatures';
+import {
+  createEditorPanelDocking, type EditorDockablePanelRegistration,
+} from './editorPanelDocking';
+import { defaultPanelLayout, type EditorPanelLayout } from './editorPanelLayout';
+import { clampAllFloatingPanels, type EditorUIRect } from './editorFloatingGeometry';
 
 // ── UI container ─────────────────────────────────────────────────────────────
 
 export interface EditorWorkspaceUIPrefs {
   layerPanelCollapsed: boolean;
-  sidebarScrollTop: number;
+  /** Left sidebar shell's scrollTop. */
+  leftSidebarScrollTop: number;
+  /** Right sidebar shell's scrollTop. */
+  rightSidebarScrollTop: number;
+  /** Dockable panel arrangement (sidebar membership/order + floating windows). */
+  panelLayout: EditorPanelLayout;
 }
 
 /**
@@ -92,6 +102,17 @@ export interface EditorUI {
   getWorkspaceUIPrefsSnapshot: () => EditorWorkspaceUIPrefs;
   /** Current sidebar visibility, read once per frame by the controller to build hit-region params. */
   getSidebarVisibility: () => { left: boolean; right: boolean };
+  /**
+   * Screen-space rectangles of visible floating panel windows, read once per
+   * frame by the controller and passed through the pure hit-region functions
+   * so every canvas gesture is blocked beneath a floating panel. Deliberately
+   * a per-frame snapshot rather than a per-operation DOM query.
+   */
+  getFloatingPanelRects: () => EditorUIRect[];
+  /** True while a panel is being dragged — the controller must not start/continue a canvas gesture. */
+  isPanelDragActive: () => boolean;
+  /** Notified after any completed panel layout change so the controller can persist it. */
+  setPanelLayoutChangeHandler: (handler: (layout: EditorPanelLayout) => void) => void;
   /** Reads the current live section-collapse + sidebar-visibility state, for the controller's in-memory session snapshot. */
   getSessionUIStateSnapshot: () => EditorSessionUIState;
   /** Applies a restored in-memory session snapshot (no-op for keys not present, e.g. first-ever open). */
@@ -404,7 +425,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const toolsSection = createCollapsibleSection('Tools', { key: 'tools' });
   toolsSection.body.appendChild(toolBar);
-  rightContentGroup.appendChild(toolsSection.wrapper);
 
   // ── Brush mode selector ──────────────────────────────────────────────────
   const brushRow = document.createElement('div');
@@ -433,7 +453,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
   brushSection.body.appendChild(brushRow);
-  rightContentGroup.appendChild(brushSection.wrapper);
   const roomDimDiv = document.createElement('div');
 
   // Edge resize buttons (add/remove row/column from each edge)
@@ -474,7 +493,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const roomDimSection = createCollapsibleSection('Room Dimensions', { key: 'roomDimensions' });
   roomDimSection.body.appendChild(roomDimDiv);
-  leftContentGroup.appendChild(roomDimSection.wrapper);
 
   // ── Background picker ────────────────────────────────────────────────────
   const bgDiv = document.createElement('div');
@@ -641,7 +659,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const bgSection = createCollapsibleSection('Background', { key: 'background' });
   bgSection.body.appendChild(bgDiv);
-  leftContentGroup.appendChild(bgSection.wrapper);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
   const songDiv = document.createElement('div');
@@ -664,11 +681,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   songDiv.appendChild(songSelect);
   const songSection = createCollapsibleSection('Room Song', { key: 'roomSong' });
   songSection.body.appendChild(songDiv);
-  leftContentGroup.appendChild(songSection.wrapper);
 
   // ── Layers panel (always visible — editor-only visibility/lock/solo/target) ──
   const layersPanel = createEditorLayersPanel(() => callbacks);
-  leftContentGroup.appendChild(layersPanel.div);
 
   // ── Category tabs ────────────────────────────────────────────────────────
   let lastRenderedRoomId = '';
@@ -691,14 +706,12 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   }
   const categoriesSection = createCollapsibleSection('Categories', { key: 'categories' });
   categoriesSection.body.appendChild(catBar);
-  rightContentGroup.appendChild(categoriesSection.wrapper);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
   const paletteSection = createCollapsibleSection('Palette', { key: 'palette' });
   paletteSection.body.appendChild(paletteDiv);
-  rightContentGroup.appendChild(paletteSection.wrapper);
 
   // Track rendered palette state to avoid recreating buttons every frame.
   // Single structural signature (computePaletteStructureSig) replaces the old
@@ -853,7 +866,6 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
 
   const inspectorSection = createCollapsibleSection('Inspector', { key: 'inspector' });
   inspectorSection.body.appendChild(inspectorDiv);
-  leftContentGroup.appendChild(inspectorSection.wrapper);
 
   // ── Export button ────────────────────────────────────────────────────────
   const exportBtn = makeBtn('📥 Export Room JSON', () => callbacks?.onExport());
@@ -863,12 +875,61 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   const exportSection = createCollapsibleSection('Export', { key: 'export' });
   exportSection.body.appendChild(exportBtn);
-  leftContentGroup.appendChild(exportSection.wrapper);
 
   root.appendChild(container);
   root.appendChild(rightSidebar);
   root.appendChild(leftRevealTab);
   root.appendChild(rightRevealTab);
+
+  // ── Dockable panel system ────────────────────────────────────────────────
+  // Every top-level menu above is registered here rather than being appended
+  // to a hardcoded sidebar; the docking controller owns placement from now
+  // on and reflects whatever layout the workspace preferences restored.
+  // Fixed chrome (title, save/confirm bar, campaign export, map row, density
+  // indicator, dev checks, hide arrows, reveal tabs) is deliberately NOT
+  // registered — it stays put in the left shell.
+  const dockablePanelRegistrations: EditorDockablePanelRegistration[] = [
+    { id: 'tools', element: toolsSection.wrapper },
+    { id: 'brush', element: brushSection.wrapper },
+    { id: 'categories', element: categoriesSection.wrapper },
+    { id: 'palette', element: paletteSection.wrapper },
+    { id: 'roomDimensions', element: roomDimSection.wrapper },
+    { id: 'background', element: bgSection.wrapper },
+    { id: 'roomSong', element: songSection.wrapper },
+    // The layers panel participates through the same registration path as
+    // every other panel — it deliberately does not carry a second drag
+    // implementation of its own.
+    { id: 'layers', element: layersPanel.div },
+    { id: 'inspector', element: inspectorSection.wrapper },
+    { id: 'export', element: exportSection.wrapper },
+  ];
+
+  /** True when the named content group currently sits in the physical left shell. */
+  function isGroupInLeftShell(group: 'left' | 'right'): boolean {
+    return group === 'left' ? !sidebarsSwapped : sidebarsSwapped;
+  }
+
+  let onPanelLayoutChanged: ((layout: EditorPanelLayout) => void) | null = null;
+  const docking = createEditorPanelDocking(
+    root,
+    leftContentGroup,
+    rightContentGroup,
+    dockablePanelRegistrations,
+    {
+      onLayoutChanged: (next) => { onPanelLayoutChanged?.(next); },
+      // The docking system's 'left'/'right' name the two *content groups*,
+      // while sidebar visibility is a property of the two *physical shells*.
+      // Swap Menu Sides can put the left group in the right shell, so both
+      // callbacks resolve the group to whichever shell currently hosts it
+      // rather than assuming they line up.
+      onRequestRevealSidebar: (side) => {
+        if (isGroupInLeftShell(side)) setLeftSidebarVisible(true);
+        else setRightSidebarVisible(true);
+      },
+      isSidebarVisible: (side) => (isGroupInLeftShell(side) ? leftSidebarVisible : rightSidebarVisible),
+    },
+    defaultPanelLayout(),
+  );
 
   // ── Session UI state registry ───────────────────────────────────────────
   // Every top-level collapsible section built above, keyed by its stable
@@ -1331,13 +1392,26 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     setCallbacks: (cbs: EditorUICallbacks) => { callbacks = cbs; },
     applyWorkspaceUIPrefs: (prefs: EditorWorkspaceUIPrefs) => {
       layersPanel.setCollapsed(prefs.layerPanelCollapsed);
-      container.scrollTop = prefs.sidebarScrollTop;
+      // Restore the panel arrangement, re-clamped against the current
+      // viewport so a layout saved on a larger window can never leave a
+      // floating panel's header off-screen and unreachable.
+      const rootRect = root.getBoundingClientRect();
+      docking.applyLayout(
+        clampAllFloatingPanels(prefs.panelLayout, rootRect.width, rootRect.height).layout,
+      );
+      container.scrollTop = prefs.leftSidebarScrollTop;
+      rightSidebar.scrollTop = prefs.rightSidebarScrollTop;
     },
     getWorkspaceUIPrefsSnapshot: () => ({
       layerPanelCollapsed: layersPanel.isCollapsed(),
-      sidebarScrollTop: container.scrollTop,
+      leftSidebarScrollTop: container.scrollTop,
+      rightSidebarScrollTop: rightSidebar.scrollTop,
+      panelLayout: docking.getLayout(),
     }),
     getSidebarVisibility: () => ({ left: leftSidebarVisible, right: rightSidebarVisible }),
+    getFloatingPanelRects: () => docking.getFloatingPanelRects(),
+    isPanelDragActive: () => docking.isDragging(),
+    setPanelLayoutChangeHandler: (handler) => { onPanelLayoutChanged = handler; },
     getSessionUIStateSnapshot: (): EditorSessionUIState => {
       const sectionExpanded: Record<string, boolean> = {};
       for (const section of collapsibleSections) {
@@ -1388,6 +1462,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
         animatedBackgroundPreviewFrame = null;
       }
       animatedBackgroundPreviewCanvases = [];
+      // Removes the floating layer plus every window/pointer listener and any
+      // in-flight pointer capture the docking system installed.
+      onPanelLayoutChanged = null;
+      docking.destroy();
       if (container.parentElement) container.parentElement.removeChild(container);
       if (rightSidebar.parentElement) rightSidebar.parentElement.removeChild(rightSidebar);
       if (leftRevealTab.parentElement) leftRevealTab.parentElement.removeChild(leftRevealTab);

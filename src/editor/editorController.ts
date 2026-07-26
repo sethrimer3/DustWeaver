@@ -14,9 +14,11 @@ import { openCustomBlockDialog } from './editorCustomBlockDialog';
 import {
   loadEditorWorkspacePreferences, createDebouncedWorkspacePreferencesSaver,
   applyWorkspacePreferencesToLayers, extractWorkspaceLayerPrefs,
-  applyLayerPreset, resetWorkspaceLayers, defaultEditorWorkspacePreferences,
+  applyLayerPreset, resetWorkspaceLayers, resetWorkspacePanelLayout,
+  defaultEditorWorkspacePreferences,
   type EditorWorkspacePreferences,
 } from './editorWorkspacePreferences';
+import { defaultPanelLayout, type EditorPanelLayout } from './editorPanelLayout';
 import type { CameraState } from '../render/camera';
 import { CAMERA_DEFAULT_ZOOM, getCameraOffset } from '../render/camera';
 import { buildEdgeExtensionCache } from '../render/transitions/edgeExtensionCache';
@@ -474,13 +476,18 @@ export function createEditorController(
 
   /** Snapshots the live, persistable slice of workspace state and schedules a debounced write. */
   function scheduleWorkspaceSave(): void {
+    const uiSnapshot = ui?.getWorkspaceUIPrefsSnapshot();
     const prefs: EditorWorkspacePreferences = {
       ...defaultEditorWorkspacePreferences(),
       layers: extractWorkspaceLayerPrefs(state.layers),
       activeCategory: state.activeCategory,
       brushMode: state.brushMode,
-      layerPanelCollapsed: ui?.getWorkspaceUIPrefsSnapshot().layerPanelCollapsed ?? false,
-      sidebarScrollTop: ui?.getWorkspaceUIPrefsSnapshot().sidebarScrollTop ?? 0,
+      layerPanelCollapsed: uiSnapshot?.layerPanelCollapsed ?? false,
+      leftSidebarScrollTop: uiSnapshot?.leftSidebarScrollTop ?? 0,
+      rightSidebarScrollTop: uiSnapshot?.rightSidebarScrollTop ?? 0,
+      // Panel arrangement is workspace state only: never campaign JSON, never
+      // room-dirty, never an undo/history entry.
+      panelLayout: uiSnapshot?.panelLayout ?? defaultPanelLayout(),
     };
     workspaceSaver.schedule(prefs);
   }
@@ -881,8 +888,14 @@ export function createEditorController(
       ui = createEditorUI(uiRoot, campaignTitle);
       ui.applyWorkspaceUIPrefs({
         layerPanelCollapsed: workspacePrefs.layerPanelCollapsed,
-        sidebarScrollTop: workspacePrefs.sidebarScrollTop,
+        leftSidebarScrollTop: workspacePrefs.leftSidebarScrollTop,
+        rightSidebarScrollTop: workspacePrefs.rightSidebarScrollTop,
+        panelLayout: workspacePrefs.panelLayout,
       });
+      // Persist (debounced) after any completed reorder, cross-sidebar move,
+      // float, redock, or floating-window move. The docking system only fires
+      // this on gesture completion, never per pointermove.
+      ui.setPanelLayoutChangeHandler((_layout: EditorPanelLayout) => { scheduleWorkspaceSave(); });
       // Restore this session's collapsed-section / sidebar-visibility state,
       // if the editor has been closed at least once already this session.
       // First-ever open leaves the UI's own all-collapsed/both-visible
@@ -1303,7 +1316,15 @@ export function createEditorController(
           state.layers = resetWorkspaceLayers();
           state.activeCategory = 'blocks';
           state.brushMode = 'single';
-          ui?.applyWorkspaceUIPrefs({ layerPanelCollapsed: false, sidebarScrollTop: 0 });
+          // Also restores default panel sides/order, redocks every floating
+          // window, and resets both sidebars' scroll — the recovery path for
+          // an unusable self-inflicted layout.
+          ui?.applyWorkspaceUIPrefs({
+            layerPanelCollapsed: false,
+            leftSidebarScrollTop: 0,
+            rightSidebarScrollTop: 0,
+            panelLayout: resetWorkspacePanelLayout(),
+          });
           ui?.update(state);
           scheduleWorkspaceSave();
         },
@@ -1824,12 +1845,19 @@ export function createEditorController(
     // sidebar visibility, so a hidden sidebar's old screen region becomes
     // fully interactive again (minus only its small reveal tab).
     const sidebarVisibility = ui?.getSidebarVisibility() ?? { left: true, right: true };
+    // Floating panel rectangles are measured ONCE per frame here and reused by
+    // every gesture below, rather than re-queried per editor operation.
     const uiHitRegionParams: EditorUIHitRegionParams = {
       viewportWidthPx: cssWidthPx,
       isLeftSidebarVisible: sidebarVisibility.left,
       isRightSidebarVisible: sidebarVisibility.right,
+      floatingPanelRects: ui?.getFloatingPanelRects() ?? [],
     };
-    const isOverEditorCanvas = (xPx: number): boolean => isPointOverEditorCanvas(xPx, uiHitRegionParams);
+    // An active panel drag owns the pointer outright: no canvas gesture may
+    // start or continue while a panel is being dragged across the workspace.
+    const isPanelDragActive = ui?.isPanelDragActive() ?? false;
+    const isOverEditorCanvas = (xPx: number, yPx: number): boolean =>
+      !isPanelDragActive && isPointOverEditorCanvas(xPx, yPx, uiHitRegionParams);
 
     // Zoom (mouse wheel restricted to the Select tool AND to the canvas area;
     // +/- keys work in any tool regardless of cursor position). Cursor-
@@ -1837,7 +1865,7 @@ export function createEditorController(
     // rotation over a sidebar (or a reveal tab) must not zoom the canvas.
     applyEditorZoomInput(
       camera,
-      isOverEditorCanvas(inputState.mouseScreenXPx) ? inputState.wheelDelta : 0,
+      isOverEditorCanvas(inputState.mouseScreenXPx, inputState.mouseScreenYPx) ? inputState.wheelDelta : 0,
       state.activeTool === EditorTool.Select,
       inputState.isZoomInPressed,
       inputState.isZoomOutPressed,
@@ -1867,7 +1895,7 @@ export function createEditorController(
     // Click handling (one-shot on press)
     if (inputState.isClickFired && state.roomData !== null) {
       // Ignore clicks on the UI panel area (CSS pixel comparison)
-      if (isOverEditorCanvas(inputState.clickScreenXPx)) {
+      if (isOverEditorCanvas(inputState.clickScreenXPx, inputState.clickScreenYPx)) {
         // Width-mismatch warning icon click: takes priority over normal
         // selection so the popup can be summoned without first selecting
         // the transition.
@@ -2227,7 +2255,7 @@ export function createEditorController(
     // respects the active brush mode (single/3x3/5x5/rect/fill) the same way
     // left-click placement does, so brush tools can also be used to erase.
     if (inputState.isRightClickFired && state.roomData !== null) {
-      if (isOverEditorCanvas(inputState.rightClickScreenXPx)) {
+      if (isOverEditorCanvas(inputState.rightClickScreenXPx, inputState.rightClickScreenYPx)) {
         if (activePaintPending === null) {
           const campaign = activeCampaignSession.campaign.campaign;
           activePaintPending = beginPaintTransaction(
@@ -2448,7 +2476,7 @@ export function createEditorController(
       !state.isDragging &&
       !state.isSelectionBoxActive &&
       state.brushMode !== 'rect' &&
-      isOverEditorCanvas(inputState.mouseScreenXPx) &&
+      isOverEditorCanvas(inputState.mouseScreenXPx, inputState.mouseScreenYPx) &&
       (state.activeTool === EditorTool.Place || state.activeTool === EditorTool.Delete);
 
     if (canDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
@@ -2498,7 +2526,7 @@ export function createEditorController(
       !state.isDragging &&
       !state.isSelectionBoxActive &&
       state.brushMode !== 'rect' &&
-      isOverEditorCanvas(inputState.mouseScreenXPx);
+      isOverEditorCanvas(inputState.mouseScreenXPx, inputState.mouseScreenYPx);
 
     if (canRightDragPaint && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
       const px = pixelFromCursor(state);
@@ -2545,7 +2573,7 @@ export function createEditorController(
       if (shouldScanHover({
         ...ownership,
         isSelectTool: state.activeTool === EditorTool.Select,
-        isOverCanvas: isOverEditorCanvas(inputState.mouseScreenXPx),
+        isOverCanvas: isOverEditorCanvas(inputState.mouseScreenXPx, inputState.mouseScreenYPx),
       })) {
         state.hoverElement = resolveHoverAtCursor(state, strokeRevision.mutationSerial);
       } else {
