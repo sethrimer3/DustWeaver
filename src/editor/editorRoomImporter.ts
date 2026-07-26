@@ -135,6 +135,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
             rampOrientation: undefined,
             stairsOrientation: undefined,
             isPillarHalfWidthFlag: 0,
+            surfaceRim: w.surfaceRim,
           });
         }
       }
@@ -151,6 +152,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
         rampOrientation: w.rampOrientation,
         stairsOrientation: w.stairsOrientation,
         isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
+        surfaceRim: w.surfaceRim,
       });
     }
   }
@@ -161,6 +163,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     yBlock: e.yBlock,
     kinds: e.kinds.map(k => particleKindToString(k)),
     particleCount: e.particleCount,
+    countsTowardRoomCompletionFlag: (e.countsTowardRoomCompletionFlag ?? 1) as 0 | 1,
     isBossFlag: e.isBossFlag,
     isFlyingEyeFlag: (e.isFlyingEyeFlag ?? 0) as 0 | 1,
     isRollingEnemyFlag: (e.isRollingEnemyFlag ?? 0) as 0 | 1,
@@ -170,6 +173,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     isRadiantWebFlag: (e.isRadiantWebFlag ?? 0) as 0 | 1,
     isCrimsonWizardFlag: (e.isCrimsonWizardFlag ?? 0) as 0 | 1,
     isHeraldFlag: (e.isHeraldFlag ?? 0) as 0 | 1,
+    isIceWizardFlag: (e.isIceWizardFlag ?? 0) as 0 | 1,
     isGrappleHunterFlag: (e.isGrappleHunterFlag ?? 0) as 0 | 1,
     isSlimeFlag: (e.isSlimeFlag ?? 0) as 0 | 1,
     isLargeSlimeFlag: (e.isLargeSlimeFlag ?? 0) as 0 | 1,
@@ -185,6 +189,24 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     slimeSnailClockwiseFlag: (e.slimeSnailClockwiseFlag ?? 1) as 0 | 1,
     isGoldenMimicFlag: (e.isGoldenMimicFlag ?? 0) as 0 | 1,
     isGoldenMimicYFlippedFlag: (e.isGoldenMimicYFlippedFlag ?? 0) as 0 | 1,
+    isBeeSwarmFlag: (e.isBeeSwarmFlag ?? 0) as 0 | 1,
+    isWebSpiderFlag: (e.isWebSpiderFlag ?? 0) as 0 | 1,
+    isDustConstellationFlag: (e.isDustConstellationFlag ?? 0) as 0 | 1,
+    isDustConstellationLargeFlag: (e.isDustConstellationLargeFlag ?? 0) as 0 | 1,
+    isOrbitalDustCoreFlag: (e.isOrbitalDustCoreFlag ?? 0) as 0 | 1,
+    isOrbitalDustCoreLargeFlag: (e.isOrbitalDustCoreLargeFlag ?? 0) as 0 | 1,
+    isDustBlockMimicFlag: (e.isDustBlockMimicFlag ?? 0) as 0 | 1,
+    isDustBlockMimicLargeFlag: (e.isDustBlockMimicLargeFlag ?? 0) as 0 | 1,
+    isDustWeaverArchitectFlag: (e.isDustWeaverArchitectFlag ?? 0) as 0 | 1,
+    isDustWeaverArchitectLargeFlag: (e.isDustWeaverArchitectLargeFlag ?? 0) as 0 | 1,
+    isVoidSingularityFlag: (e.isVoidSingularityFlag ?? 0) as 0 | 1,
+    isVoidSingularityPairFlag: (e.isVoidSingularityPairFlag ?? 0) as 0 | 1,
+    isDustLeechFlag: (e.isDustLeechFlag ?? 0) as 0 | 1,
+    isGridBlockEnemyFlag: (e.isGridBlockEnemyFlag ?? 0) as 0 | 1,
+    gridBlockSizeIndex: (e.gridBlockSizeIndex ?? 0) as 0 | 1,
+    gridBlockSpeedIndex: (e.gridBlockSpeedIndex ?? 0) as 0 | 1 | 2,
+    isMomentumTurretFlag: (e.isMomentumTurretFlag ?? 0) as 0 | 1,
+    momentumTurretFacingIndex: (e.momentumTurretFacingIndex ?? 0) as 0 | 1 | 2 | 3,
     isGridSnakeEnemyFlag: (e.isGridSnakeEnemyFlag ?? 0) as 0 | 1,
     gridSnakeLength: e.gridSnakeLength ?? 4,
   }));
