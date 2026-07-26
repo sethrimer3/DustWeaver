@@ -131,10 +131,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         const activeLoadout = loadout ?? progress.loadout;
         const savedRoomId = progress.lastSaveRoomId ?? null;
         // If the player has no saved room, start at the campaign spawn if one is defined.
-        const officialSpawn = savedRoomId === null ? getLoadedOfficialCampaignSpawn() : null;
+        const officialSpawn = getLoadedOfficialCampaignSpawn();
         let startRoomId = savedRoomId ?? officialSpawn?.roomId ?? null;
         const campaignSpawnOverride: readonly [number, number] | null =
-          officialSpawn !== null ? [officialSpawn.xBlock, officialSpawn.yBlock] : null;
+          (savedRoomId === null && officialSpawn !== null) ? [officialSpawn.xBlock, officialSpawn.yBlock] : null;
 
         // In Electron lazy-load mode the saved room may not yet be in
         // ROOM_REGISTRY.  Attempt to load it from the file cache so that
@@ -389,7 +389,15 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           // For folder-based campaigns, set the active campaign then reload the registry.
           setActiveCampaignId(source.id);
           await initRoomRegistry();
-          startRoomId = source.initialRoomId;
+          const folderSpawn = getLoadedOfficialCampaignSpawn();
+          if (folderSpawn !== null) {
+            startRoomId = folderSpawn.roomId;
+            customSpawnOverride = [folderSpawn.xBlock, folderSpawn.yBlock];
+            campaignStartProgress = createDefaultProgress();
+            applyCampaignStartingOptions(campaignStartProgress, folderSpawn, 'fresh');
+          } else {
+            startRoomId = source.initialRoomId;
+          }
         } else {
           console.error('[game] Campaign source has no loader:', source.id);
           navigate('mainMenu');

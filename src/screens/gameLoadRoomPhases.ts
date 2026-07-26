@@ -136,7 +136,7 @@ import {
 import * as FP from '../debug/perfFreezeProfiler';
 import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
 import { getStormweaveMoteCount } from '../sim/stormweave/lifeMotes';
-import { getPlayerMoteCapacityForContainerCount } from '../sim/playerMoteLife';
+import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { resetTimeStopFieldPlayerState } from '../sim/timeStopField/timeStopFieldPlayerState';
 
@@ -635,7 +635,7 @@ export function* makeLoadRoomPhases(
   const { blockerKeys, darkBlockerKeys, roomWidthWorld, roomHeightWorld } =
     applyRoomPresentationState(ctx, room, { logLabel: 'loadRoom', recordPhaseSteps: true });
 
-  const playerMoteCapacity = getPlayerMoteCapacityForContainerCount(progress?.dustContainerCount ?? 0);
+  const playerMoteCapacity = getPlayerMoteCapacityFromProgress(progress);
   let carryHealthPoints = playerMoteCapacity;
   if (
     world.clusters.length > 0 &&
@@ -643,9 +643,6 @@ export function* makeLoadRoomPhases(
     world.clusters[0].isAliveFlag === 1
   ) {
     carryHealthPoints = world.clusters[0].healthPoints;
-  } else if (world.clusters.length === 0 && progress?.startingHealth !== undefined) {
-    // First room load of a new campaign session — use campaign spawn's starting health.
-    carryHealthPoints = Math.max(1, Math.min(progress.startingHealth, playerMoteCapacity));
   }
 
   world.tick = 0;
@@ -1002,9 +999,10 @@ export function applyResidentRoomActivation(
   // ── Phase B equivalent: insert player at clusters[0] ─────────────────────
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const playerMoteCapacity = getPlayerMoteCapacityForContainerCount(progress?.dustContainerCount ?? 0);
+  const playerMoteCapacity = getPlayerMoteCapacityFromProgress(progress);
   const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, playerMoteCapacity);
-  playerCluster.healthPoints = Math.min(carryHealthPoints, playerMoteCapacity);
+  const effectiveHealth = playerTransfer !== undefined ? carryHealthPoints : playerMoteCapacity;
+  playerCluster.healthPoints = Math.min(effectiveHealth, playerMoteCapacity);
   // Preserve sprite facing direction from the outgoing room so the player
   // does not snap to the default (right-facing) on entry.
   if (playerTransfer !== undefined) {

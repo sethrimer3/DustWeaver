@@ -12,6 +12,12 @@ test('editorPerfCounters: resetEditorPerfCounters zeroes every counter', () => {
   editorPerfCounters.selectionCacheRebuilds = 2;
   editorPerfCounters.dragDeltaNoops = 9;
   editorPerfCounters.dragDeltaApplied = 1;
+  editorPerfCounters.wallTopologyRebuilds = 4;
+  editorPerfCounters.wallTopologyCellsScanned = 100;
+  editorPerfCounters.overlayElementsVisited = 50;
+  editorPerfCounters.overlayElementsDrawn = 20;
+  editorPerfCounters.surfaceRimLayoutRebuilds = 3;
+  editorPerfCounters.hoverScans = 4;
   resetEditorPerfCounters();
   assert.deepEqual(editorPerfCounters, {
     roomDefConversions: 0,
@@ -20,6 +26,12 @@ test('editorPerfCounters: resetEditorPerfCounters zeroes every counter', () => {
     selectionCacheRebuilds: 0,
     dragDeltaNoops: 0,
     dragDeltaApplied: 0,
+    wallTopologyRebuilds: 0,
+    wallTopologyCellsScanned: 0,
+    overlayElementsVisited: 0,
+    overlayElementsDrawn: 0,
+    surfaceRimLayoutRebuilds: 0,
+    hoverScans: 0,
   });
 });
 

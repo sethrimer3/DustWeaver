@@ -18,8 +18,14 @@ import { backgroundIdToImageUrl, backgroundIdToBlurUrl } from './backgroundCatal
 /** Parallax factor: 0 = fully fixed, 1 = moves with foreground. */
 const PARALLAX_FACTOR = 0.2;
 
+/** Standard tile size in world units (8×8 virtual px at zoom 1). */
+const TILE_SIZE_WORLD = 8;
+
+/** Room dimension threshold above which parallax factor is damped (100 tiles). */
+const LARGE_ROOM_WORLD_THRESHOLD = 100 * TILE_SIZE_WORLD; // 800 world units
+
 /** Vite base URL for public assets. */
-const BASE = import.meta.env.BASE_URL;
+const BASE = import.meta.env?.BASE_URL ?? '/';
 
 /** Path for world background images (relative to publicDir). */
 function worldBgImagePath(worldNumber: number): string {
@@ -107,12 +113,102 @@ function _getBgImageByUrl(url: string): HTMLImageElement | null {
   return null;
 }
 
+export interface BackgroundParallaxLayout {
+  effectiveParallaxX: number;
+  effectiveParallaxY: number;
+  requiredOverscanX: number;
+  requiredOverscanY: number;
+  targetWidthPx: number;
+  targetHeightPx: number;
+  coverScale: number;
+  bgWidthPx: number;
+  bgHeightPx: number;
+  drawX: number;
+  drawY: number;
+}
+
 /**
- * Wraps an offset into the range [-tileSize, 0) so that tiling starts
- * just off-screen to the left/top and seamlessly covers the viewport.
+ * Computes viewport-cover scaling and parallax offsets for a static background image.
+ *
+ * Sizing rules:
+ *  - Sized primarily to cover the viewport with only modest overscan for parallax displacement.
+ *  - Never scales to cover the entire room at once.
+ *  - Preserves the aspect ratio of the loaded texture via uniform "cover" scaling (cropped at edges, never stretched or distorted).
+ *  - For rooms over 100 tiles wide or tall, scales down the parallax factor inversely with room dimensions so movement remains subtle and overscan is bounded.
  */
-function wrapToTileStart(offset: number, tileSize: number): number {
-  return -((((-offset) % tileSize) + tileSize) % tileSize);
+export function computeBackgroundParallaxLayout(
+  viewportWidthPx: number,
+  viewportHeightPx: number,
+  cameraOffsetXPx: number,
+  cameraOffsetYPx: number,
+  roomWidthWorld: number,
+  roomHeightWorld: number,
+  zoom: number,
+  imgWidthPx: number,
+  imgHeightPx: number,
+): BackgroundParallaxLayout {
+  const safeRoomW = Math.max(1, roomWidthWorld);
+  const safeRoomH = Math.max(1, roomHeightWorld);
+
+  // Damp parallax factor in very large rooms (> 100 tiles) to prevent rapid sliding or massive overscan.
+  const effectiveParallaxX = PARALLAX_FACTOR * Math.min(1.0, LARGE_ROOM_WORLD_THRESHOLD / safeRoomW);
+  const effectiveParallaxY = PARALLAX_FACTOR * Math.min(1.0, LARGE_ROOM_WORLD_THRESHOLD / safeRoomH);
+
+  // Maximum camera offset displacement from room center across all valid positions (edges/corners).
+  const maxCamDispX = Math.max(0, safeRoomW * 0.5 * zoom);
+  const maxCamDispY = Math.max(0, safeRoomH * 0.5 * zoom);
+
+  // Maximum parallax shift in screen pixels in either direction.
+  const maxParallaxShiftX = maxCamDispX * effectiveParallaxX;
+  const maxParallaxShiftY = maxCamDispY * effectiveParallaxY;
+
+  // Required overscan to cover extreme displacements in both directions without revealing empty edges.
+  const requiredOverscanX = 2 * maxParallaxShiftX;
+  const requiredOverscanY = 2 * maxParallaxShiftY;
+
+  const targetWidthPx = viewportWidthPx + requiredOverscanX;
+  const targetHeightPx = viewportHeightPx + requiredOverscanY;
+
+  // Uniform "cover" scaling to preserve aspect ratio without stretching or distorting.
+  const scaleX = targetWidthPx / Math.max(1, imgWidthPx);
+  const scaleY = targetHeightPx / Math.max(1, imgHeightPx);
+  const coverScale = Math.max(scaleX, scaleY);
+
+  const bgWidthPx = imgWidthPx * coverScale;
+  const bgHeightPx = imgHeightPx * coverScale;
+
+  // Relative camera offset from room center.
+  const roomCenterOffsetXPx = viewportWidthPx * 0.5 - safeRoomW * 0.5 * zoom;
+  const roomCenterOffsetYPx = viewportHeightPx * 0.5 - safeRoomH * 0.5 * zoom;
+  const relCameraOffsetXPx = cameraOffsetXPx - roomCenterOffsetXPx;
+  const relCameraOffsetYPx = cameraOffsetYPx - roomCenterOffsetYPx;
+
+  const centeredOriginXPx = (viewportWidthPx - bgWidthPx) * 0.5;
+  const centeredOriginYPx = (viewportHeightPx - bgHeightPx) * 0.5;
+
+  const rawShiftX = relCameraOffsetXPx * effectiveParallaxX;
+  const rawShiftY = relCameraOffsetYPx * effectiveParallaxY;
+
+  // Clamp shift so out-of-bounds panning or transitions never reveal empty edges.
+  const shiftX = Math.max(-maxParallaxShiftX, Math.min(maxParallaxShiftX, rawShiftX));
+  const shiftY = Math.max(-maxParallaxShiftY, Math.min(maxParallaxShiftY, rawShiftY));
+
+  const drawX = centeredOriginXPx + shiftX;
+  const drawY = centeredOriginYPx + shiftY;
+
+  return {
+    effectiveParallaxX,
+    effectiveParallaxY,
+    requiredOverscanX,
+    requiredOverscanY,
+    targetWidthPx,
+    targetHeightPx,
+    coverScale,
+    bgWidthPx,
+    bgHeightPx,
+    drawX,
+    drawY,
+  };
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -266,33 +362,22 @@ export function renderWorldBackground(
     return;
   }
 
-  // Safe fallback fill behind the tiled image: if the tiling loop below ever
-  // leaves a sub-pixel seam (float rounding) or the room is far taller/wider
-  // than the loaded texture, this guarantees no gap ever shows raw black.
+  // Safe fallback fill behind the image: in case of sub-pixel rendering seams
+  // from float rounding on some browsers, guarantees no gap ever shows raw black.
   ctx.fillStyle = worldFallbackColor(worldNumber);
   ctx.fillRect(0, 0, viewportWidthPx, viewportHeightPx);
 
-  // Anchor background to room centre, then apply relative camera parallax.
-  const roomCenterOffsetXPx = viewportWidthPx * 0.5 - (roomWidthWorld * 0.5 * zoom);
-  const roomCenterOffsetYPx = viewportHeightPx * 0.5 - (roomHeightWorld * 0.5 * zoom);
-  const relCameraOffsetXPx = cameraOffsetXPx - roomCenterOffsetXPx;
-  const relCameraOffsetYPx = cameraOffsetYPx - roomCenterOffsetYPx;
+  const layout = computeBackgroundParallaxLayout(
+    viewportWidthPx,
+    viewportHeightPx,
+    cameraOffsetXPx,
+    cameraOffsetYPx,
+    roomWidthWorld,
+    roomHeightWorld,
+    zoom,
+    tw,
+    th,
+  );
 
-  // Keep a centred tiled origin so the room centre maps to image centre.
-  const centeredOriginXPx = (viewportWidthPx - tw) * 0.5;
-  const centeredOriginYPx = (viewportHeightPx - th) * 0.5;
-  const pxOff = centeredOriginXPx + relCameraOffsetXPx * PARALLAX_FACTOR;
-  const pyOff = centeredOriginYPx + relCameraOffsetYPx * PARALLAX_FACTOR;
-
-  // Compute starting tile position so tiles seamlessly cover the viewport.
-  const startX = wrapToTileStart(pxOff, tw);
-  const startY = wrapToTileStart(pyOff, th);
-
-  ctx.save();
-  for (let y = startY; y < viewportHeightPx; y += th) {
-    for (let x = startX; x < viewportWidthPx; x += tw) {
-      ctx.drawImage(img, x, y);
-    }
-  }
-  ctx.restore();
+  ctx.drawImage(img, layout.drawX, layout.drawY, layout.bgWidthPx, layout.bgHeightPx);
 }

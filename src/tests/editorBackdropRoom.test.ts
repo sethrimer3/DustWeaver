@@ -107,8 +107,8 @@ test('the backdrop view stays live mid-stroke (one cheap rebuild per painted blo
 test('the full conversion path is what increments roomDefConversions (guards the test itself)', () => {
   resetEditorPerfCounters();
   editorRoomDataToRoomDef(makeRoomData());
-  assert.equal(editorPerfCounters.roomDefConversions, 0,
-    'editorRoomDataToRoomDef itself is not the counter site');
+  assert.equal(editorPerfCounters.roomDefConversions, 1,
+    'editorRoomDataToRoomDef directly increments the conversion counter');
 });
 
 // ── The view must carry exactly what the backdrop renderer reads ──────────

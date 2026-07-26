@@ -123,11 +123,11 @@ export interface PlayerProgress {
   /** Permanently opened gates keyed by campaign, room, and stable gate UID. */
   permanentlyOpenGateKeys: string[];
   /**
-   * Optional starting health override applied only on the very first room load
-   * of a new campaign session (when no existing player cluster exists).
-   * Campaigns may set this via CampaignSpawnData.startingHealth.
-   * Valid range: [1, PLAYER_INITIAL_HEALTH]. Undefined means use the default
-   * PLAYER_INITIAL_HEALTH. Values outside the range are clamped when applied.
+   * Optional starting dust-mote count for the campaign. This configured value also
+   * defines the campaign's baseline mote capacity (with PLAYER_INITIAL_HEALTH / 10 as
+   * the default fallback when undefined). Respawns after death restore the player to
+   * full maximum capacity derived from this baseline plus any owned dust containers.
+   * Note: The wire field name `startingHealth` is preserved for save compatibility.
    */
   startingHealth?: number;
 }

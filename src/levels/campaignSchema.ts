@@ -58,9 +58,9 @@ export interface CampaignSpawnData {
   /** Block Y coordinate within that room. */
   yBlock: number;
   /**
-   * Optional starting health for the player at campaign start.
-   * Applied only on the very first room load (not on subsequent respawns).
-   * Should be clamped to [1, PLAYER_INITIAL_HEALTH] when applied.
+   * Optional starting dust-mote count for the player at campaign start.
+   * Defines both the initial mote count and the campaign's baseline mote capacity,
+   * without upper clamping (0 is a legal value). Undefined defaults to standard capacity (10).
    */
   startingHealth?: number;
   /**

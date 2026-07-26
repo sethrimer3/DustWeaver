@@ -26,7 +26,10 @@ import {
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
   GUIDE_DUST_PATH_COLOR, GUIDE_DUST_PATH_SELECTED, GUIDE_DUST_POINT_COLOR,
   drawMarker,
+  isElementInViewport,
+  type EditorViewport,
 } from './editorRendererHelpers';
+import { editorPerfCounters } from './editorPerfCounters';
 
 /** Helper type: function that returns whether a room element is selected. */
 export type IsElementSelected = (type: string, uid: number) => boolean;
@@ -34,8 +37,12 @@ export type IsElementSelected = (type: string, uid: number) => boolean;
 export function drawEditorZipMoveBlocks(
   ctx: CanvasRenderingContext2D, room: EditorRoomData, isSelected: IsElementSelected,
   offsetXPx: number, offsetYPx: number, zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const block of room.zipMoveBlocks ?? []) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, block.xBlock, block.yBlock, block.wBlock, block.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const selected = isSelected('zipMoveBlock', block.uid);
     const x = block.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const y = block.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -61,9 +68,13 @@ export function drawEditorLiquidZones(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Water zones
   for (const z of (room.waterZones ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, z.xBlock, z.yBlock, z.wBlock, z.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('waterZone', z.uid);
     const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -83,6 +94,9 @@ export function drawEditorLiquidZones(
 
   // Lava zones
   for (const z of (room.lavaZones ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, z.xBlock, z.yBlock, z.wBlock, z.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('lavaZone', z.uid);
     const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -107,10 +121,7 @@ export function drawEditorLiquidZones(
 
 /**
  * Draws all TimeStop Field tiles as one seamlessly-merged, rounded,
- * translucent region per connected group. Rebuilt fresh every call — editor
- * rooms are small enough (tens to low hundreds of tiles) that this is cheap,
- * so no caching is needed here (unlike the runtime renderer, which caches
- * per room-load/edit via `sim/timeStopField/timeStopFieldCache.ts`).
+ * translucent region per connected group.
  */
 export function drawEditorTimeStopFields(
   ctx: CanvasRenderingContext2D,
@@ -119,23 +130,30 @@ export function drawEditorTimeStopFields(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const zones = room.timeStopFields ?? [];
   if (zones.length === 0) return;
 
   const cells: { gx: number; gy: number }[] = [];
+  let anyVisible = false;
   for (const z of zones) {
-    for (let dy = 0; dy < z.hBlock; dy++) {
-      for (let dx = 0; dx < z.wBlock; dx++) {
-        cells.push({ gx: z.xBlock + dx, gy: z.yBlock + dy });
+    editorPerfCounters.overlayElementsVisited++;
+    const visible = isElementInViewport(viewport, z.xBlock, z.yBlock, z.wBlock, z.hBlock);
+    if (visible) {
+      editorPerfCounters.overlayElementsDrawn++;
+      anyVisible = true;
+      for (let dy = 0; dy < z.hBlock; dy++) {
+        for (let dx = 0; dx < z.wBlock; dx++) {
+          cells.push({ gx: z.xBlock + dx, gy: z.yBlock + dy });
+        }
       }
     }
   }
+  if (!anyVisible) return;
+
   const isOccupied = occupiedQueryFromCellList(cells);
   const cellSizePx = BLOCK_SIZE_SMALL * zoom;
-  // Corner radius fraction is shared with the gameplay renderer
-  // (timeStopFieldRenderer.ts) so the editor preview never silently drifts
-  // out of sync with the actual in-game field geometry.
   const path = buildRoundedRegionPath(
     cells, isOccupied, offsetXPx, offsetYPx, cellSizePx, cellSizePx * TIME_STOP_FIELD_CORNER_RADIUS_FRACTION,
   );
@@ -150,10 +168,9 @@ export function drawEditorTimeStopFields(
   ctx.stroke(path);
   ctx.restore();
 
-  // Selection outlines drawn per authored rect (not merged) so the exact
-  // selected placement stays legible even inside a larger merged region.
   for (const z of zones) {
     if (!isSelected('timeStopField', z.uid)) continue;
+    if (!isElementInViewport(viewport, z.xBlock, z.yBlock, z.wBlock, z.hBlock)) continue;
     const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
@@ -178,11 +195,15 @@ export function drawEditorCrumbleBlocks(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const b of (room.crumbleBlocks ?? [])) {
-    const sel = isSelected('crumbleBlock', b.uid);
     const wBlocks = b.wBlock ?? 1;
     const hBlocks = b.hBlock ?? 1;
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, b.xBlock, b.yBlock, wBlocks, hBlocks)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('crumbleBlock', b.uid);
     const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const wPx = wBlocks * BLOCK_SIZE_SMALL * zoom;
@@ -239,10 +260,14 @@ export function drawEditorSpikes(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const sp of (room.spikes ?? [])) {
-    const sel = isSelected('spike', sp.uid);
     const sizeBlocks = sp.size === '2x2' ? 2 : 1;
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, sp.xBlock, sp.yBlock, sizeBlocks, sizeBlocks)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('spike', sp.uid);
     const xPx = sp.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = sp.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
     const wPx = sizeBlocks * BLOCK_SIZE_SMALL * zoom;
@@ -295,8 +320,12 @@ export function drawEditorBouncePads(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const b of (room.bouncePads ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, b.xBlock, b.yBlock, b.wBlock, b.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('bouncePad', b.uid);
     const xPx = b.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = b.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -352,8 +381,12 @@ export function drawEditorKineticBlocks(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const kb of (room.kineticBlocks ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, kb.xBlock, kb.yBlock, kb.wBlock, kb.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('kineticBlock', kb.uid);
     const xPx = kb.xBlock * BLOCK_SIZE_MEDIUM * zoom + offsetXPx;
     const yPx = kb.yBlock * BLOCK_SIZE_MEDIUM * zoom + offsetYPx;
@@ -387,9 +420,13 @@ export function drawEditorGrappleCarryBlocks(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const bs = BLOCK_SIZE_SMALL * zoom;
   for (const block of (room.grappleCarryBlocks ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, block.xBlock, block.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('grappleCarryBlock', block.uid);
     const xPx = block.xBlock * bs + offsetXPx;
     const yPx = block.yBlock * bs + offsetYPx;
@@ -415,9 +452,13 @@ export function drawEditorPhantasmalTiles(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const bs = BLOCK_SIZE_SMALL * zoom;
   for (const tile of (room.phantasmalTiles ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, tile.xBlock, tile.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('phantasmalTile', tile.uid);
     const xPx = tile.xBlock * bs + offsetXPx;
     const yPx = tile.yBlock * bs + offsetYPx;
@@ -445,11 +486,18 @@ export function drawEditorPixelMaterials(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const cellPx = Math.max(1, zoom);
   for (const p of (room.pixelMaterials ?? [])) {
-    const sel = isSelected('pixelMaterial', p.uid);
     const footprint = getMaterialFootprintSize(p.material);
+    const bx = Math.floor(p.xPixel / BLOCK_SIZE_SMALL);
+    const by = Math.floor(p.yPixel / BLOCK_SIZE_SMALL);
+    const fw = Math.max(1, Math.ceil(footprint / BLOCK_SIZE_SMALL));
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, bx, by, fw, fw)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('pixelMaterial', p.uid);
     const xPx = p.xPixel * zoom + offsetXPx;
     const yPx = p.yPixel * zoom + offsetYPx;
     const visual = MATERIAL_VISUALS[p.material];
@@ -471,9 +519,13 @@ export function drawEditorEnvironmentItems(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Decorations (mushroom, glowGrass, vine) — Foreground layer
   if (isTypeVisible('decoration')) for (const d of (room.decorations ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, d.xBlock, d.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('decoration', d.uid);
     const emoji = d.kind === 'mushroom' ? '🍄' : d.kind === 'glowGrass' ? '🌿' : '🌱';
     const color = sel ? 'rgba(80,220,130,0.9)' : 'rgba(60,170,90,0.55)';
@@ -483,6 +535,9 @@ export function drawEditorEnvironmentItems(
   // Falling block tiles (standard, tough, sensitive) — Dynamic Geometry layer
   if (!isTypeVisible('fallingBlock')) return;
   for (const fb of (room.fallingBlocks ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, fb.xBlock, fb.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('fallingBlock', fb.uid);
     const xPx = fb.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = fb.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -525,9 +580,17 @@ export function drawEditorRopes(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Placed ropes
   for (const r of (room.ropes ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    const minX = Math.min(r.anchorAXBlock, r.anchorBXBlock);
+    const minY = Math.min(r.anchorAYBlock, r.anchorBYBlock);
+    const w = Math.max(1, Math.abs(r.anchorAXBlock - r.anchorBXBlock) + 1);
+    const h = Math.max(1, Math.abs(r.anchorAYBlock - r.anchorBYBlock) + 1);
+    if (!isElementInViewport(viewport, minX, minY, w, h)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('rope', r.uid);
     const lineColor = sel ? ROPE_SELECTED : ROPE_COLOR;
     const ax = r.anchorAXBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
@@ -597,11 +660,15 @@ export function drawEditorDialogueTriggers(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const triggers = room.dialogueTriggers ?? [];
   if (triggers.length === 0) return;
   const bs = BLOCK_SIZE_SMALL * zoom;
   for (const dt of triggers) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, dt.xBlock, dt.yBlock, dt.wBlock, dt.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dialogueTrigger', dt.uid);
     const color = sel ? DIALOGUE_TRIGGER_SELECTED : DIALOGUE_TRIGGER_COLOR;
     const x = dt.xBlock * bs + offsetXPx;
@@ -647,12 +714,16 @@ export function drawEditorBackgroundBlocks(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const blocks = room.backgroundBlocks ?? [];
   if (blocks.length === 0) return;
   const bs = BLOCK_SIZE_SMALL * zoom;
   const seed = 0;
   for (const b of blocks) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, b.xBlock, b.yBlock, b.wBlock, b.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('backgroundBlock', b.uid);
     const isLightBlocking = b.isLightBlockingFlag === 1;
     const theme = (b.blockTheme ?? room.blockTheme ?? null) as string | null;
@@ -720,6 +791,7 @@ export function drawEditorGuideDustPaths(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const paths = room.guideDustPaths ?? [];
   if (paths.length === 0) return;
@@ -729,6 +801,18 @@ export function drawEditorGuideDustPaths(
   const isPathSelected = (uid: number): boolean => selKeys.has(selectionKey('guideDustPath', uid));
 
   for (const path of paths) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (viewport && path.points.length > 0) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const pt of path.points) {
+        if (pt.xBlock < minX) minX = pt.xBlock;
+        if (pt.yBlock < minY) minY = pt.yBlock;
+        if (pt.xBlock > maxX) maxX = pt.xBlock;
+        if (pt.yBlock > maxY) maxY = pt.yBlock;
+      }
+      if (!isElementInViewport(viewport, minX, minY, Math.max(1, maxX - minX + 1), Math.max(1, maxY - minY + 1))) continue;
+    }
+    editorPerfCounters.overlayElementsDrawn++;
     const pts = path.points;
     const bs = BLOCK_SIZE_SMALL;
     if (pts.length < 2) {

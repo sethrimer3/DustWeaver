@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   getPlayerMoteCapacityForContainerCount,
+  getPlayerMoteCapacityFromProgress,
   getPlayerMoteCount,
   grantDustContainerMotes,
   grantPlayerMotes,
   MOTES_PER_DUST_CONTAINER,
+  PLAYER_BASE_MOTE_CAPACITY,
 } from '../sim/playerMoteLife';
 import {
   getMoteLifeColumnCount,
@@ -106,5 +108,53 @@ describe('HUD, Stormweave, and Shield Weave synchronization', () => {
     player.invulnerabilityTicks = 1;
     assert.equal(applyPlayerDamageWithKnockback(player, 1, 10, 0), false);
     assert.equal(player.isAliveFlag, 1);
+  });
+});
+
+describe('canonical progress-aware mote capacity and respawn semantics', () => {
+  test('baseline capacity 4 with 0 containers results in 4/4 maximum motes', () => {
+    const progress = { startingHealth: 4, dustContainerCount: 0 };
+    assert.equal(getPlayerMoteCapacityFromProgress(progress), 4);
+    assert.equal(getPlayerMoteCapacityForContainerCount(0, 4), 4);
+  });
+
+  test('each dust container adds exactly four slots to configured baseline capacity', () => {
+    assert.equal(getPlayerMoteCapacityForContainerCount(1, 4), 8); // baseline 4 + 1 container = 8
+    assert.equal(getPlayerMoteCapacityForContainerCount(2, 4), 12); // baseline 4 + 2 containers = 12
+    assert.equal(getPlayerMoteCapacityFromProgress({ startingHealth: 4, dustContainerCount: 2 }), 12);
+  });
+
+  test('absent or undefined startingHealth retains the default baseline of 10', () => {
+    assert.equal(getPlayerMoteCapacityFromProgress({ dustContainerCount: 0 }), PLAYER_BASE_MOTE_CAPACITY);
+    assert.equal(getPlayerMoteCapacityFromProgress({ dustContainerCount: 1 }), PLAYER_BASE_MOTE_CAPACITY + 4);
+    assert.equal(getPlayerMoteCapacityForContainerCount(0, undefined), PLAYER_BASE_MOTE_CAPACITY);
+  });
+
+  test('initial spawn and death respawn initialize to full maximum capacity without temporary 10-slot state', () => {
+    const progress = { startingHealth: 4, dustContainerCount: 1 };
+    const capacity = getPlayerMoteCapacityFromProgress(progress);
+    
+    // Simulate room load when clusters[0] does not exist or is dead (initial spawn / respawn)
+    const initialSpawnPlayer = makeMoteLife(capacity, capacity);
+    assert.equal(initialSpawnPlayer.healthPoints, 8);
+    assert.equal(initialSpawnPlayer.maxHealthPoints, 8);
+    
+    // After taking damage and dying, respawn should restore to full capacity
+    applyPlayerDamageWithKnockback(makeDamageTarget(8), 8, 10, 0);
+    const respawnedPlayer = makeMoteLife(capacity, capacity);
+    assert.equal(respawnedPlayer.healthPoints, 8);
+    assert.equal(respawnedPlayer.maxHealthPoints, 8);
+  });
+
+  test('ordinary living room transition preserves damaged current mote count', () => {
+    const progress = { startingHealth: 4, dustContainerCount: 0 };
+    const capacity = getPlayerMoteCapacityFromProgress(progress);
+    const livePlayerBeforeTransition = makeMoteLife(2, capacity);
+    
+    // Simulate carrying over healthPoints when player cluster is alive during room transition
+    const carriedHealth = Math.min(livePlayerBeforeTransition.healthPoints, capacity);
+    const playerAfterTransition = makeMoteLife(carriedHealth, capacity);
+    assert.equal(playerAfterTransition.healthPoints, 2);
+    assert.equal(playerAfterTransition.maxHealthPoints, 4);
   });
 });

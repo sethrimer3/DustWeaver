@@ -41,9 +41,11 @@ import {
   drawMergedWallOutline, drawWallTileGrid, drawRampTriangle, drawStairsShape,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
+  isElementInViewport, getEditorWallTopology, type EditorViewport,
 } from './editorRendererHelpers';
 import type { IsElementSelected } from './editorZoneDrawers';
 import { drawEditorSurfaceRimOverlay } from './editorWallSurfaceRimPreview';
+import { editorPerfCounters } from './editorPerfCounters';
 
 // Re-export zone/environment draw helpers and the shared IsElementSelected type
 // so callers can import everything from this single file.
@@ -77,27 +79,17 @@ export function drawEditorWalls(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
+  mutationSerial = -1,
 ): void {
-  // Precompute which cells are covered by a solid (non-shaped, non-platform,
-  // non-half-pillar) wall so adjacent solid blocks can share a single merged
-  // outline instead of each drawing its own per-cell border. Also track which
-  // wall instance (uid) owns each cell so the per-tile grid can distinguish
-  // real instance boundaries (e.g. a 2×2 block next to separate 1×1 blocks)
-  // from cells that merely belong to the same multi-cell instance.
-  const occupied = new Set<string>();
-  const cellOwner = new Map<string, number>();
-  for (const w of room.interiorWalls) {
-    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
-    for (let dy = 0; dy < w.hBlock; dy++) {
-      for (let dx = 0; dx < w.wBlock; dx++) {
-        const key = `${w.xBlock + dx},${w.yBlock + dy}`;
-        occupied.add(key);
-        cellOwner.set(key, w.uid);
-      }
-    }
-  }
+  const topology = getEditorWallTopology(room, mutationSerial);
+  const occupied = topology.occupied;
+  const cellOwner = topology;
 
   for (const w of room.interiorWalls) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, w.xBlock, w.yBlock, w.wBlock, w.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
     const isStairs = w.stairsOrientation !== undefined;
@@ -124,12 +116,12 @@ export function drawEditorWalls(
 
   // Subtle per-tile grid on top of the fills/outlines so individual tile
   // boundaries stay visible inside merged blocks (a decorating aid).
-  drawWallTileGrid(ctx, cellOwner, offsetXPx, offsetYPx, zoom);
+  drawWallTileGrid(ctx, cellOwner, offsetXPx, offsetYPx, zoom, viewport);
 
   // Surface Rim preview (default hard-coded exposed-edge bands, or a
   // per-block custom style) — drawn last so it sits on top, matching the
   // gameplay renderer's draw order (wall sprites, then the overlay pass).
-  drawEditorSurfaceRimOverlay(ctx, room, offsetXPx, offsetYPx, zoom);
+  drawEditorSurfaceRimOverlay(ctx, room, offsetXPx, offsetYPx, zoom, viewport, mutationSerial);
 }
 
 // ============================================================================
@@ -144,10 +136,16 @@ export function drawEditorEnemies(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (const e of room.enemies) {
-    const sel = isSelected('enemy', e.uid);
+    editorPerfCounters.overlayElementsVisited++;
     const enemyFootprint = getEnemyFootprintBlocks(e);
+    const w = enemyFootprint !== null ? enemyFootprint.wBlock : 1;
+    const h = enemyFootprint !== null ? enemyFootprint.hBlock : 1;
+    if (!isElementInViewport(viewport, e.xBlock, e.yBlock, w, h)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('enemy', e.uid);
     if (enemyFootprint !== null) {
       const isHovered = state.hoverElement !== null &&
         state.hoverElement.type === 'enemy' && state.hoverElement.uid === e.uid;
@@ -174,9 +172,13 @@ export function drawEditorTransitions(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   for (let tIndex = 0; tIndex < room.transitions.length; tIndex++) {
     const t = room.transitions[tIndex];
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, t.xBlock, t.yBlock, t.wBlock, t.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('transition', t.uid);
     const isLinkSource = state.isLinkingTransition && state.linkSourceTransitionUid === t.uid;
     const isLinkCandidate = state.isLinkingTransition && state.linkSourceTransitionUid !== t.uid;
@@ -208,40 +210,52 @@ export function drawEditorSpawnAndTombs(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Campaign spawn marker — drawn first so room spawn overlaps it slightly (clear priority)
   if (isTypeVisible('campaignSpawn') && state.campaignSpawnBlock !== null) {
     const [csx, csy] = state.campaignSpawnBlock;
-    const sel = isSelected('campaignSpawn', 0);
-    const color = sel ? CAMPAIGN_SPAWN_SELECTED : CAMPAIGN_SPAWN_COLOR;
-    // Draw a slightly larger footprint to distinguish from room spawn
-    drawObjectFootprint(ctx, csx, csy, 1, 1, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
-    drawMarker(ctx, csx, csy, offsetXPx, offsetYPx, zoom, color, '⭐');
-    // Label "CSPAWN" below the star when selected or hovered
-    const isHovered = state.hoverElement !== null && state.hoverElement.type === 'campaignSpawn';
-    if (sel || isHovered) {
-      const bs = BLOCK_SIZE_SMALL;
-      const px = Math.round(csx * bs * zoom + offsetXPx + bs * zoom * 0.5);
-      const py = Math.round((csy + 1) * bs * zoom + offsetYPx + 2);
-      ctx.save();
-      ctx.font = `bold ${Math.max(7, Math.round(7 * zoom))}px monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillStyle = CAMPAIGN_SPAWN_SELECTED;
-      ctx.fillText('CAMPAIGN SPAWN', px, py);
-      ctx.restore();
+    editorPerfCounters.overlayElementsVisited++;
+    if (isElementInViewport(viewport, csx, csy, 1, 1)) {
+      editorPerfCounters.overlayElementsDrawn++;
+      const sel = isSelected('campaignSpawn', 0);
+      const color = sel ? CAMPAIGN_SPAWN_SELECTED : CAMPAIGN_SPAWN_COLOR;
+      // Draw a slightly larger footprint to distinguish from room spawn
+      drawObjectFootprint(ctx, csx, csy, 1, 1, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+      drawMarker(ctx, csx, csy, offsetXPx, offsetYPx, zoom, color, '⭐');
+      // Label "CSPAWN" below the star when selected or hovered
+      const isHovered = state.hoverElement !== null && state.hoverElement.type === 'campaignSpawn';
+      if (sel || isHovered) {
+        const bs = BLOCK_SIZE_SMALL;
+        const px = Math.round(csx * bs * zoom + offsetXPx + bs * zoom * 0.5);
+        const py = Math.round((csy + 1) * bs * zoom + offsetYPx + 2);
+        ctx.save();
+        ctx.font = `bold ${Math.max(7, Math.round(7 * zoom))}px monospace`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = CAMPAIGN_SPAWN_SELECTED;
+        ctx.fillText('CAMPAIGN SPAWN', px, py);
+        ctx.restore();
+      }
     }
   }
 
   // Player spawn marker (room-local fallback)
   if (isTypeVisible('playerSpawn')) {
-    const sel = isSelected('playerSpawn', 0);
-    drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,
-      sel ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
+    editorPerfCounters.overlayElementsVisited++;
+    if (isElementInViewport(viewport, room.playerSpawnBlock[0], room.playerSpawnBlock[1], 1, 1)) {
+      editorPerfCounters.overlayElementsDrawn++;
+      const sel = isSelected('playerSpawn', 0);
+      drawMarker(ctx, room.playerSpawnBlock[0], room.playerSpawnBlock[1], offsetXPx, offsetYPx, zoom,
+        sel ? SPAWN_SELECTED : SPAWN_COLOR, '🏠');
+    }
   }
 
   // Save tombs
   if (isTypeVisible('saveTomb')) for (const s of room.saveTombs) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, s.xBlock, s.yBlock, SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('saveTomb', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'saveTomb' && state.hoverElement.uid === s.uid;
@@ -254,6 +268,9 @@ export function drawEditorSpawnAndTombs(
 
   // Skill tombs (dust skill unlocks)
   if (isTypeVisible('skillTomb')) for (const s of room.skillTombs) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, s.xBlock, s.yBlock, SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('skillTomb', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'skillTomb' && state.hoverElement.uid === s.uid;
@@ -269,6 +286,9 @@ export function drawEditorSpawnAndTombs(
   ] as const) {
     if (!isTypeVisible(kind)) continue;
     for (const element of elements) {
+      editorPerfCounters.overlayElementsVisited++;
+      if (!isElementInViewport(viewport, element.xBlock, element.yBlock, element.wBlock, element.hBlock)) continue;
+      editorPerfCounters.overlayElementsDrawn++;
       const selected = isSelected(kind, element.uid);
       const x = element.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
       const y = element.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -286,6 +306,9 @@ export function drawEditorSpawnAndTombs(
     }
   }
   if (isTypeVisible('challengeTotem')) for (const totem of room.challengeTotems ?? []) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, totem.xBlock, totem.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const selected = isSelected('challengeTotem', totem.uid);
     drawMarker(ctx, totem.xBlock, totem.yBlock, offsetXPx, offsetYPx, zoom, selected ? '#ffd85a' : '#b85cff', 'C');
   }
@@ -294,6 +317,9 @@ export function drawEditorSpawnAndTombs(
     heart: ['rgba(227,174,186,0.78)', 'H'], speed: ['rgba(151,207,220,0.78)', '>'],
   } as const;
   if (isTypeVisible('gate')) for (const gate of room.gates ?? []) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, gate.xBlock, gate.yBlock, gate.wBlock, gate.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const selected = isSelected('gate', gate.uid);
     const [fill, label] = gatePreview[gate.kind];
     const x = gate.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
@@ -336,9 +362,13 @@ export function drawEditorCollectibles(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Dust containers (+4 capacity each)
   if (isTypeVisible('dustContainer')) for (const c of (room.dustContainers ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, c.xBlock, c.yBlock, DUST_CONTAINER_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_FOOTPRINT_H_BLOCKS)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dustContainer', c.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainer' && state.hoverElement.uid === c.uid;
@@ -351,6 +381,9 @@ export function drawEditorCollectibles(
 
   // Dust container pieces (accumulate toward a full container)
   if (isTypeVisible('dustContainerPiece')) for (const c of (room.dustContainerPieces ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, c.xBlock, c.yBlock, DUST_CONTAINER_SHARD_FOOTPRINT_W_BLOCKS, DUST_CONTAINER_SHARD_FOOTPRINT_H_BLOCKS)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dustContainerPiece', c.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustContainerPiece' && state.hoverElement.uid === c.uid;
@@ -363,6 +396,9 @@ export function drawEditorCollectibles(
 
   // Dust boost jars (grant temporary dust of specific kind)
   if (isTypeVisible('dustBoostJar')) for (const j of (room.dustBoostJars ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, j.xBlock, j.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dustBoostJar', j.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustBoostJar' && state.hoverElement.uid === j.uid;
@@ -374,6 +410,9 @@ export function drawEditorCollectibles(
 
   // Dust swarms (collectible sandstorms — press F to collect)
   if (isTypeVisible('dustSwarm')) for (const s of (room.dustSwarms ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, s.xBlock, s.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dustSwarm', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'dustSwarm' && state.hoverElement.uid === s.uid;
@@ -387,6 +426,9 @@ export function drawEditorCollectibles(
   const LAMBDA_ANCHOR_COLOR    = 'rgba(255, 215, 0, 0.55)';
   const LAMBDA_ANCHOR_SELECTED = 'rgba(255, 235, 80, 0.95)';
   if (isTypeVisible('lambdaAnchor')) for (const a of (room.lambdaAnchors ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, a.xBlock, a.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('lambdaAnchor', a.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'lambdaAnchor' && state.hoverElement.uid === a.uid;
@@ -400,6 +442,9 @@ export function drawEditorCollectibles(
   const FIREFLY_JAR_COLOR    = 'rgba(255, 200, 60, 0.55)';
   const FIREFLY_JAR_SELECTED = 'rgba(255, 225, 120, 0.95)';
   if (isTypeVisible('fireflyJar')) for (const j of (room.fireflyJars ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, j.xBlock, j.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('fireflyJar', j.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'fireflyJar' && state.hoverElement.uid === j.uid;
@@ -413,6 +458,9 @@ export function drawEditorCollectibles(
   const SPRINGBOARD_COLOR    = 'rgba(90, 220, 140, 0.55)';
   const SPRINGBOARD_SELECTED = 'rgba(130, 255, 180, 0.95)';
   if (isTypeVisible('springboard')) for (const s of (room.springboards ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, s.xBlock, s.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('springboard', s.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'springboard' && state.hoverElement.uid === s.uid;
@@ -426,6 +474,9 @@ export function drawEditorCollectibles(
   const BREAKABLE_COLOR    = 'rgba(210, 150, 90, 0.55)';
   const BREAKABLE_SELECTED = 'rgba(240, 190, 130, 0.95)';
   if (isTypeVisible('breakableBlock')) for (const b of (room.breakableBlocks ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, b.xBlock, b.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('breakableBlock', b.uid);
     const isHovered = state.hoverElement !== null &&
       state.hoverElement.type === 'breakableBlock' && state.hoverElement.uid === b.uid;
@@ -437,6 +488,9 @@ export function drawEditorCollectibles(
 
   // Dust piles (unowned Gold Dust for Storm Weave attraction)
   if (isTypeVisible('dustPile')) for (const p of room.dustPiles) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, p.xBlock, p.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('dustPile', p.uid);
     drawMarker(ctx, p.xBlock, p.yBlock, offsetXPx, offsetYPx, zoom,
       sel ? 'rgba(255,215,0,0.8)' : 'rgba(255,215,0,0.4)', '✦');
@@ -455,9 +509,13 @@ export function drawEditorCritterAreas(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Grasshopper areas (Enemies layer — critter spawners)
   if (isTypeVisible('grasshopperArea')) for (const a of room.grasshopperAreas) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, a.xBlock, a.yBlock, a.wBlock, a.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('grasshopperArea', a.uid);
     const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -477,6 +535,9 @@ export function drawEditorCritterAreas(
 
   // Firefly areas (Lighting/VFX layer — decorative, not enemy spawners)
   if (isTypeVisible('fireflyArea')) for (const a of (room.fireflyAreas ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, a.xBlock, a.yBlock, a.wBlock, a.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('fireflyArea', a.uid);
     const xPx = a.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const yPx = a.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -506,9 +567,13 @@ export function drawEditorLightingOverlays(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   // Ambient light blockers
   for (const b of (room.ambientLightBlockers ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, b.xBlock, b.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('ambientLightBlocker', b.uid);
     const isDark = b.isDarkFlag === 1;
     ctx.fillStyle = isDark ? 'rgba(0, 0, 0, 0.65)' : 'rgba(120, 60, 200, 0.35)';
@@ -525,6 +590,9 @@ export function drawEditorLightingOverlays(
 
   // Light sources (range circle + center marker)
   for (const l of (room.lightSources ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, l.xBlock - l.radiusBlocks, l.yBlock - l.radiusBlocks, l.radiusBlocks * 2 + 1, l.radiusBlocks * 2 + 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const sel = isSelected('lightSource', l.uid);
     const centerXPx = (l.xBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetXPx;
     const centerYPx = (l.yBlock + 0.5) * BLOCK_SIZE_SMALL * zoom + offsetYPx;
@@ -565,6 +633,7 @@ export function drawEditorCustomBlocks(
   offsetXPx: number,
   offsetYPx: number,
   zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const placements = room.customBlockPlacements ?? [];
   if (placements.length === 0) return;
@@ -572,6 +641,9 @@ export function drawEditorCustomBlocks(
   const tileSize = BLOCK_SIZE_SMALL * zoom;
 
   for (const p of placements) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, p.xBlock, p.yBlock, p.tileWidth, p.tileHeight)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
     const rawId = rawIdFromNamespaced(p.blockId);
     if (rawId === null) continue;
     const sprite = getOrFallbackSprite(rawId, p.tileWidth, p.tileHeight);

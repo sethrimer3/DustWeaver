@@ -21,7 +21,10 @@ import {
   MOTE_LIFE_SLOT_GAP_PX,
   MOTE_LIFE_SLOT_ROWS,
   MOTE_LIFE_SLOT_SIZE_PX,
+  MOTE_LIFE_SLOT_WIDTH_PX,
+  MOTE_LIFE_SLOT_HEIGHT_PX,
 } from '../render/hud/moteLifeSlots';
+import { drawAnimatedDustContainer } from '../render/hud/dustContainerAnimation';
 import {
   MOTE_STATE_AVAILABLE,
   BASE_MOTE_REGENERATION_TICKS,
@@ -247,31 +250,22 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   const currentMoteCount = playerForMoteLife ? getPlayerMoteCount(playerForMoteLife) : 0;
   const maxMoteCapacity = playerForMoteLife ? getPlayerMoteCapacity(playerForMoteLife) : 0;
   const dustSquareSize = MOTE_LIFE_SLOT_SIZE_PX;
+  const dustSquareWidth = MOTE_LIFE_SLOT_WIDTH_PX;
+  const dustSquareHeight = MOTE_LIFE_SLOT_HEIGHT_PX;
   const dustStartX = 8;
   const dustStartY = MOTE_LIFE_ORIGIN_Y_PX
-    + MOTE_LIFE_SLOT_ROWS * MOTE_LIFE_SLOT_SIZE_PX
+    + MOTE_LIFE_SLOT_ROWS * dustSquareHeight
     + (MOTE_LIFE_SLOT_ROWS - 1) * MOTE_LIFE_SLOT_GAP_PX;
 
   ctx.save();
   for (let moteIndex = 0; moteIndex < maxMoteCapacity; moteIndex++) {
     const slot = getMoteLifeSlotPosition(moteIndex);
     const isFilled = moteIndex < currentMoteCount;
-    // Determine how many quadrants (0–4) to fill for this slot from live particles.
-    ctx.fillStyle = isFilled ? 'rgba(92,65,8,0.96)' : 'rgba(12,10,7,0.88)';
-    ctx.fillRect(slot.xPx, slot.yPx, dustSquareSize, dustSquareSize);
-    ctx.strokeStyle = isFilled ? '#d4a84b' : 'rgba(105,82,35,0.7)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(slot.xPx + 0.5, slot.yPx + 0.5, dustSquareSize - 1, dustSquareSize - 1);
-    if (isFilled) {
-      ctx.fillStyle = '#ffd85a';
-      ctx.fillRect(slot.xPx + 2, slot.yPx + 2, 2, 2);
-      ctx.fillStyle = '#fff2ad';
-      ctx.fillRect(slot.xPx + 2, slot.yPx + 1, 2, 1);
-    }
+    drawAnimatedDustContainer(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, isFilled, moteIndex, nowMs);
   }
   const moteLifeColumnCount = getMoteLifeColumnCount(maxMoteCapacity);
   if (r.isChallengeModeActive && moteLifeColumnCount > 0) {
-    drawChallengeHudShield(ctx, dustStartX + moteLifeColumnCount * 8 + 4, MOTE_LIFE_ORIGIN_Y_PX + 6);
+    drawChallengeHudShield(ctx, dustStartX + moteLifeColumnCount * (dustSquareWidth + MOTE_LIFE_SLOT_GAP_PX) + 4, MOTE_LIFE_ORIGIN_Y_PX + 6);
   }
   ctx.restore();
 

@@ -127,8 +127,8 @@
     }
   ],
   "bakedWallTemplate": {
-    "schemaVersion": 1,
-    "sourceHash": "718c7cbd",
+    "schemaVersion": 2,
+    "sourceHash": "c1c5aec9",
     "wallCount": 12,
     "xWorld": [
       0,
@@ -314,6 +314,21 @@
       0,
       0,
       0
-    ]
+    ],
+    "rimStyleIndex": [
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535
+    ],
+    "rimStyles": []
   }
 }

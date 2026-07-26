@@ -5,6 +5,7 @@ import { createDefaultProgress } from '../progression/playerProgress';
 import { CampaignSpawnData } from '../levels/campaignSchema';
 import { PLAYER_INITIAL_HEALTH } from '../screens/gameSpawn';
 import { ParticleKind } from '../sim/particles/kinds';
+import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 
 // ---- Health normalization ---------------------------------------------------
 
@@ -53,6 +54,20 @@ describe('applyCampaignStartingOptions — health', () => {
     const p = createDefaultProgress();
     applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 7.9 }, 'fresh');
     assert.strictEqual(p.startingHealth, 7);
+  });
+
+  it('applied startingHealth correctly sets canonical capacity via getPlayerMoteCapacityFromProgress', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 4, startingDustContainerCount: 1 }, 'fresh');
+    assert.strictEqual(p.startingHealth, 4);
+    assert.strictEqual(p.dustContainerCount, 1);
+    assert.strictEqual(getPlayerMoteCapacityFromProgress(p), 8); // baseline 4 + 1 container * 4 = 8
+  });
+
+  it('zero starting dust motes sets baseline capacity to zero (0 + container capacity)', () => {
+    const p = createDefaultProgress();
+    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingHealth: 0, startingDustContainerCount: 2 }, 'fresh');
+    assert.strictEqual(getPlayerMoteCapacityFromProgress(p), 8); // 0 + 2 * 4 = 8
   });
 });
 

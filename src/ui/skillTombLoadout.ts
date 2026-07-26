@@ -21,6 +21,7 @@ import {
 } from '../sim/weaves/weaveDefinition';
 import { PlayerProgress } from '../progression/playerProgress';
 import { GOLD } from './skillTombShared';
+import { startDustContainerCanvasAnimation, getShardContainerImg } from '../render/hud/dustContainerAnimation';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -76,6 +77,7 @@ function buildStatsBar(
   playerMaxHp: number,
   dustContainerCount: number,
   dustContainerPieces: number,
+  cleanups: Array<() => void>,
 ): HTMLElement {
   const bar = document.createElement('div');
   bar.style.cssText = `
@@ -134,11 +136,13 @@ function buildStatsBar(
   containerRow.style.cssText = 'display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 6px;';
 
   for (let i = 0; i < dustContainerCount; i++) {
-    const icon = document.createElement('span');
-    icon.textContent = '◆';
-    icon.style.cssText = `color: ${GOLD}; font-size: 1.1rem; line-height: 1;`;
-    icon.title = `Container ${i + 1}`;
-    containerRow.appendChild(icon);
+    const canvas = document.createElement('canvas');
+    canvas.width = 30;
+    canvas.height = 33;
+    canvas.style.cssText = 'width: 20px; height: 22px; image-rendering: pixelated; margin-right: 4px;';
+    canvas.title = `Container ${i + 1} (+4 Mote Slots)`;
+    containerRow.appendChild(canvas);
+    cleanups.push(startDustContainerCanvasAnimation(canvas, true, i));
   }
 
   if (dustContainerCount === 0 && dustContainerPieces === 0) {
@@ -156,17 +160,13 @@ function buildStatsBar(
 
   const piecesLabel = document.createElement('span');
   piecesLabel.style.cssText = 'color: #888; font-size: 0.72rem; font-family: \'Cinzel\', serif; margin-right: 4px;';
-  piecesLabel.textContent = 'Pieces:';
+  piecesLabel.textContent = 'Shards:';
   piecesRow.appendChild(piecesLabel);
 
-  for (let i = 0; i < PIECES_PER_CONTAINER; i++) {
-    const piece = document.createElement('span');
-    piece.textContent = '◇';
-    piece.style.cssText = `color: ${i < dustContainerPieces ? GOLD : '#333'};
-      font-size: 0.85rem; line-height: 1;`;
-    piece.title = i < dustContainerPieces ? 'Piece collected' : 'Piece needed';
-    piecesRow.appendChild(piece);
-  }
+  const shardImg = getShardContainerImg(dustContainerPieces).cloneNode() as HTMLImageElement;
+  shardImg.style.cssText = 'width: 20px; height: 22px; image-rendering: pixelated; margin-right: 4px;';
+  shardImg.title = `${dustContainerPieces} / ${PIECES_PER_CONTAINER} Shards collected`;
+  piecesRow.appendChild(shardImg);
 
   const piecesCount = document.createElement('span');
   piecesCount.style.cssText = 'color: #888; font-size: 0.7rem; font-family: \'Cinzel\', serif; margin-left: 4px;';
@@ -472,12 +472,19 @@ function buildMoteTypesColumn(progress: PlayerProgress): HTMLElement {
       border: 2px solid ${dustDef.colorHex}44; width: 70px;
     `;
 
-    const colorSquare = document.createElement('div');
-    colorSquare.style.cssText = `
-      width: 36px; height: 36px; border-radius: 4px;
-      background: ${dustDef.colorHex}; flex-shrink: 0;
-    `;
-    tile.appendChild(colorSquare);
+    if (dustDef.spriteUrl !== undefined && dustDef.spriteUrl.length > 0) {
+      const img = document.createElement('img');
+      img.src = dustDef.spriteUrl;
+      img.style.cssText = 'width: 36px; height: 39.6px; image-rendering: pixelated; flex-shrink: 0; margin-bottom: 2px;';
+      tile.appendChild(img);
+    } else {
+      const colorSquare = document.createElement('div');
+      colorSquare.style.cssText = `
+        width: 36px; height: 36px; border-radius: 4px;
+        background: ${dustDef.colorHex}; flex-shrink: 0;
+      `;
+      tile.appendChild(colorSquare);
+    }
 
     const nameLbl = document.createElement('div');
     nameLbl.style.cssText = `color: ${dustDef.colorHex}; font-size: 0.65rem;
@@ -497,35 +504,80 @@ function buildMoteTypesColumn(progress: PlayerProgress): HTMLElement {
   return box;
 }
 
-// ── Inventory column (stub) ─────────────────────────────────────────────────
+// ── Inventory column ────────────────────────────────────────────────────────
 
-function buildInventoryColumn(): HTMLElement {
+function buildInventoryColumn(progress: PlayerProgress, cleanups: Array<() => void>): HTMLElement {
   const { box, body } = createColBox('Inventory');
 
-  const inner = document.createElement('div');
-  inner.style.cssText = `
-    border: 2px dashed #333; border-radius: 6px; padding: 16px;
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 8px; flex: 1; min-height: 80px;
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display: flex; flex-direction: column; gap: 10px; align-items: center; width: 100%;';
+  body.appendChild(grid);
+
+  const containerCount = progress.dustContainerCount ?? 0;
+  const shardCount = progress.dustContainerPieces ?? 0;
+
+  if (containerCount === 0 && shardCount === 0) {
+    const emptyMsg = document.createElement('div');
+    emptyMsg.style.cssText = `color: #555; font-size: 0.75rem; font-style: italic;
+      text-align: center; font-family: 'Cinzel', serif; font-weight: 400; margin: 16px 0;`;
+    emptyMsg.textContent = 'No dust containers collected yet.';
+    grid.appendChild(emptyMsg);
+    return box;
+  }
+
+  // Shard Container item card
+  const shardCard = document.createElement('div');
+  shardCard.style.cssText = `
+    display: flex; align-items: center; gap: 12px; width: 100%; max-width: 260px;
+    padding: 10px 14px; border-radius: 6px; background: ${CARD_BG};
+    border: ${BOX_BORDER}; box-sizing: border-box;
   `;
+  const shardImg = getShardContainerImg(shardCount).cloneNode() as HTMLImageElement;
+  shardImg.style.cssText = 'width: 30px; height: 33px; image-rendering: pixelated; flex-shrink: 0;';
+  shardCard.appendChild(shardImg);
 
-  const stubSlot = document.createElement('div');
-  stubSlot.style.cssText = `
-    width: 44px; height: 44px; background: #1a1a2e;
-    border: 1px solid #333; border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-    color: #555; font-size: 1.2rem; font-family: 'Cinzel', serif;
-  `;
-  stubSlot.textContent = '?';
-  inner.appendChild(stubSlot);
+  const shardInfo = document.createElement('div');
+  shardInfo.style.cssText = 'flex: 1;';
+  const shardTitle = document.createElement('div');
+  shardTitle.style.cssText = `color: ${GOLD}; font-size: 0.82rem; font-family: 'Cinzel', serif; font-weight: bold; margin-bottom: 2px;`;
+  shardTitle.textContent = 'Shard Container';
+  const shardSubtitle = document.createElement('div');
+  shardSubtitle.style.cssText = 'color: #aaa; font-size: 0.72rem; font-family: ' + "'Cinzel', serif;";
+  shardSubtitle.textContent = `${shardCount} / ${PIECES_PER_CONTAINER} Shards`;
+  shardInfo.appendChild(shardTitle);
+  shardInfo.appendChild(shardSubtitle);
+  shardCard.appendChild(shardInfo);
+  grid.appendChild(shardCard);
 
-  const comingSoon = document.createElement('p');
-  comingSoon.style.cssText = `color: #555; font-size: 0.72rem; font-style: italic;
-    text-align: center; font-family: 'Cinzel', serif; font-weight: 400; margin: 0;`;
-  comingSoon.textContent = 'Coming soon';
-  inner.appendChild(comingSoon);
+  // Owned Dust Container cards with animated crossfading canvas
+  for (let i = 0; i < containerCount; i++) {
+    const containerCard = document.createElement('div');
+    containerCard.style.cssText = `
+      display: flex; align-items: center; gap: 12px; width: 100%; max-width: 260px;
+      padding: 10px 14px; border-radius: 6px; background: ${CARD_BG};
+      border: 1px solid rgba(212,168,75,0.4); box-sizing: border-box;
+    `;
+    const canvas = document.createElement('canvas');
+    canvas.width = 30;
+    canvas.height = 33;
+    canvas.style.cssText = 'width: 30px; height: 33px; image-rendering: pixelated; flex-shrink: 0;';
+    containerCard.appendChild(canvas);
+    cleanups.push(startDustContainerCanvasAnimation(canvas, true, i + 100));
 
-  body.appendChild(inner);
+    const info = document.createElement('div');
+    info.style.cssText = 'flex: 1;';
+    const title = document.createElement('div');
+    title.style.cssText = `color: #ffd700; font-size: 0.82rem; font-family: 'Cinzel', serif; font-weight: bold; margin-bottom: 2px;`;
+    title.textContent = `Dust Container ${containerCount > 1 ? `#${i + 1}` : ''}`;
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'color: #7fbf7f; font-size: 0.72rem; font-family: ' + "'Cinzel', serif;";
+    subtitle.textContent = '+4 Mote Slots';
+    info.appendChild(title);
+    info.appendChild(subtitle);
+    containerCard.appendChild(info);
+    grid.appendChild(containerCard);
+  }
+
   return box;
 }
 
@@ -547,6 +599,7 @@ export function buildLoadoutTab(
     playerMaxHp,
     progress.dustContainerCount,
     progress.dustContainerPieces,
+    cleanups,
   );
   contentArea.appendChild(statsBar);
 
@@ -568,7 +621,7 @@ export function buildLoadoutTab(
 
   grid.appendChild(buildWeavesColumn(weaveLoadout, progress, cleanups));
   grid.appendChild(buildMoteTypesColumn(progress));
-  grid.appendChild(buildInventoryColumn());
+  grid.appendChild(buildInventoryColumn(progress, cleanups));
 
   contentArea.appendChild(grid);
 

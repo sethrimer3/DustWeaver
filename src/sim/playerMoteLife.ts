@@ -24,9 +24,22 @@ export function getPlayerMoteCapacity(player: Pick<PlayerMoteLifeState, 'maxHeal
   return normalizeMoteCount(player.maxHealthPoints);
 }
 
-export function getPlayerMoteCapacityForContainerCount(containerCount: number): number {
-  return PLAYER_BASE_MOTE_CAPACITY
-    + normalizeMoteCount(containerCount) * MOTES_PER_DUST_CONTAINER;
+export function getPlayerMoteCapacityForContainerCount(containerCount: number, baselineCapacity?: number): number {
+  const base = baselineCapacity !== undefined ? normalizeMoteCount(baselineCapacity) : PLAYER_BASE_MOTE_CAPACITY;
+  return base + normalizeMoteCount(containerCount) * MOTES_PER_DUST_CONTAINER;
+}
+
+/**
+ * Derives maximum mote capacity from player progress, using the campaign's starting dust motes
+ * (`startingHealth`) as the baseline if configured, falling back to `PLAYER_BASE_MOTE_CAPACITY` (10) otherwise.
+ */
+export function getPlayerMoteCapacityFromProgress(
+  progress?: { dustContainerCount?: number; startingHealth?: number } | null,
+): number {
+  return getPlayerMoteCapacityForContainerCount(
+    progress?.dustContainerCount ?? 0,
+    progress?.startingHealth,
+  );
 }
 
 /** Grants restorative motes without exceeding the player's canonical capacity. */

@@ -30,6 +30,8 @@ export interface DustDefinition {
   colorHex: string;
   /** Short flavor description for the loadout UI. */
   description: string;
+  /** Relative sprite URL under ASSETS for UI iconography. */
+  spriteUrl?: string;
 }
 
 // ---- Dust Registry ---------------------------------------------------------
@@ -39,11 +41,11 @@ export interface DustDefinition {
  * Internal particle kinds intentionally have no entry here.
  */
 export const DUST_DEFINITIONS: ReadonlyMap<ParticleKind, DustDefinition> = new Map([
-  [ParticleKind.Golden, { id: ParticleKind.Golden, displayName: 'Golden Dust', slotCost: 1, colorHex: '#ffd700', description: 'Versatile, foundational golden motes used for weaving.' }],
-  [ParticleKind.Ice, { id: ParticleKind.Ice, displayName: 'Ice Dust', nickname: 'Frost Dust', slotCost: 1, colorHex: '#88ccff', description: 'Cold crystalline motes associated with freezing.' }],
-  [ParticleKind.Nature, { id: ParticleKind.Nature, displayName: 'Nature Dust', nickname: 'Verdant Dust', slotCost: 1, colorHex: '#44cc44', description: 'Living green motes associated with growth and organic energy.' }],
-  [ParticleKind.Void, { id: ParticleKind.Void, displayName: 'Void Dust', slotCost: 1, colorHex: '#220044', description: 'Unstable dark motes associated with absence, distortion, and the beyond.' }],
-  [ParticleKind.Light, { id: ParticleKind.Light, displayName: 'Light Dust', nickname: 'Luminant Dust', slotCost: 1, colorHex: '#fff4b0', description: 'Radiant motes that emit illumination and push back darkness.' }],
+  [ParticleKind.Golden, { id: ParticleKind.Golden, displayName: 'Golden Dust', slotCost: 1, colorHex: '#ffd700', description: 'Versatile, foundational golden motes used for weaving.', spriteUrl: 'SPRITES/DUST/DustTypes/GoldenMote.png' }],
+  [ParticleKind.Ice, { id: ParticleKind.Ice, displayName: 'Ice Dust', nickname: 'Frost Dust', slotCost: 1, colorHex: '#88ccff', description: 'Cold crystalline motes associated with freezing.', spriteUrl: 'SPRITES/DUST/DustTypes/IceMote.png' }],
+  [ParticleKind.Nature, { id: ParticleKind.Nature, displayName: 'Nature Dust', nickname: 'Verdant Dust', slotCost: 1, colorHex: '#44cc44', description: 'Living green motes associated with growth and organic energy.', spriteUrl: 'SPRITES/DUST/DustTypes/VerdantMote.png' }],
+  [ParticleKind.Void, { id: ParticleKind.Void, displayName: 'Void Dust', slotCost: 1, colorHex: '#220044', description: 'Unstable dark motes associated with absence, distortion, and the beyond.', spriteUrl: 'SPRITES/DUST/DustTypes/VoidMote.png' }],
+  [ParticleKind.Light, { id: ParticleKind.Light, displayName: 'Light Dust', nickname: 'Luminant Dust', slotCost: 1, colorHex: '#fff4b0', description: 'Radiant motes that emit illumination and push back darkness.', spriteUrl: 'SPRITES/DUST/DustTypes/LuminantMote.png' }],
 ]);
 
 /**

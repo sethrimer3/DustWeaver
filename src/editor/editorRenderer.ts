@@ -11,6 +11,7 @@ import { EditorTool } from './editorState';
 import {
   drawGrid,
   drawPixelGrid,
+  getEditorViewport,
 } from './editorRendererHelpers';
 import {
   drawEditorWalls,
@@ -68,6 +69,9 @@ export function renderEditorOverlays(
   const room = state.roomData;
   if (room === null) return;
 
+  const viewport = getEditorViewport(offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, room.widthBlocks, room.heightBlocks);
+  const mutationSerial = state.mutationSerial ?? -1;
+
   ctx.save();
 
   // ── Edge extension ghost tiles ────────────────────────────────────────────
@@ -75,7 +79,7 @@ export function renderEditorOverlays(
   if (edgeExtensionCache !== null && edgeExtensionCache !== undefined) {
     const tileSizePx = BLOCK_SIZE_SMALL * zoom;
     const tiles = edgeExtensionCache.tiles;
-    ctx.fillStyle = 'rgba(60,120,255,0.30)';
+    ctx.fillStyle = 'rgba(100, 150, 255, 0.3)';
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i];
       if (!tile.isSolid) continue;
@@ -108,32 +112,32 @@ export function renderEditorOverlays(
   // ── Grid ─────────────────────────────────────────────────────────────────
   drawGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
 
-  if (layerOn('backgroundBlock')) drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('wall')) drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('enemy')) drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('transition')) drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  drawEditorSpawnAndTombs(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
-  drawEditorCollectibles(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
-  drawEditorCritterAreas(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
-  if (layerOn('lightSource')) drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('waterZone')) drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('bouncePad')) drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('kineticBlock')) drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('phantasmalTile')) drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('grappleCarryBlock')) drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('zipMoveBlock')) drawEditorZipMoveBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('pixelMaterial')) drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  if (layerOn('backgroundBlock')) drawEditorBackgroundBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('wall')) drawEditorWalls(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport, mutationSerial);
+  if (layerOn('enemy')) drawEditorEnemies(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('transition')) drawEditorTransitions(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  drawEditorSpawnAndTombs(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom, viewport);
+  drawEditorCollectibles(ctx, room, state, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom, viewport);
+  drawEditorCritterAreas(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('lightSource')) drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('waterZone')) drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('bouncePad')) drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('kineticBlock')) drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('phantasmalTile')) drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('grappleCarryBlock')) drawEditorGrappleCarryBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('zipMoveBlock')) drawEditorZipMoveBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('pixelMaterial')) drawEditorPixelMaterials(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (state.activeTool === EditorTool.Place && state.selectedPaletteItem?.isPixelMaterialItem === 1) {
     drawPixelGrid(ctx, room, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight);
   }
-  drawEditorEnvironmentItems(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom);
-  if (layerOn('rope')) drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('dialogueTrigger')) drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
-  if (layerOn('guideDustPath')) drawEditorGuideDustPaths(ctx, room, state, offsetXPx, offsetYPx, zoom);
-  if (layerOn('customBlock')) drawEditorCustomBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom);
+  drawEditorEnvironmentItems(ctx, room, isElementSelected, isTypeVisible, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('rope')) drawEditorRopes(ctx, room, state, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('dialogueTrigger')) drawEditorDialogueTriggers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('guideDustPath')) drawEditorGuideDustPaths(ctx, room, state, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('customBlock')) drawEditorCustomBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   drawPlacementPreview(ctx, room, state, offsetXPx, offsetYPx, zoom);
   drawEditorUIOverlays(ctx, room, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, mask);
 

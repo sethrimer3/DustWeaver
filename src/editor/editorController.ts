@@ -31,7 +31,6 @@ import { EditorState, createEditorState, EditorTool,
   assignBlockThemeSlot,
 } from './editorState';
 import { roomDefToEditorRoomData, editorRoomDataToRoomDef } from './editorRoomBuilder';
-import { editorPerfCounters } from './editorPerfCounters';
 import { bumpSelectionRevision } from './editorSelectionCache';
 import {
   createEditorBackdropRoomCache, resolveEditorBackdropRoom, resetEditorBackdropRoomCache,
@@ -51,7 +50,7 @@ import {
   createEditorInputState,
   attachEditorInputListeners, clearEditorOneShots,
 } from './editorInput';
-import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect } from './editorTools';
+import { selectAtCursor, deleteAtCursorBrushed, getAllElementsInRect, resolveHoverAtCursor } from './editorTools';
 import { hitTestTransitionResizeEdge } from './editorHitTest';
 import { hitTestRectResizeEdge, resizeBlockRect, type RectResizeEdge } from './editorRectResize';
 import { placeAtCursor, evaluateBrushOperation } from './editorPlaceTool';
@@ -795,7 +794,6 @@ export function createEditorController(
       return null;
     }
     liveEditorRoomDef = editorRoomDataToRoomDef(state.roomData);
-    editorPerfCounters.roomDefConversions++;
     return liveEditorRoomDef;
   }
 
@@ -2478,7 +2476,7 @@ export function createEditorController(
         isSelectTool: state.activeTool === EditorTool.Select,
         isOverCanvas: isOverEditorCanvas(inputState.mouseScreenXPx),
       })) {
-        state.hoverElement = selectAtCursor(state);
+        state.hoverElement = resolveHoverAtCursor(state, strokeRevision.mutationSerial);
       } else {
         state.hoverElement = null;
       }
@@ -2539,7 +2537,7 @@ export function createEditorController(
     if (!state.isActive) return;
 
     renderEditorIndicator(ctx, canvasWidth, state);
-    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, editorEdgeExtensionCache);
+    renderEditorOverlays(ctx, state, offsetXPx, offsetYPx, zoom, canvasWidth, canvasHeight, editorEdgeExtensionCache, strokeRevision.mutationSerial);
   }
 
   function getRoomDef(): RoomDef | null {

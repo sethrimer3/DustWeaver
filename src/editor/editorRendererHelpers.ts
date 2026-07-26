@@ -14,6 +14,7 @@ import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { getStairsSolidRects } from '../levels/stairsGeometry';
 import type { CrumbleVariant, EditorRoomData, EditorTransition, EditorWall, AmbientLightDirection, EditorEnemy } from './editorState';
 import { getTransitionEditorHitbox } from './editorHitTest';
+import { editorPerfCounters } from './editorPerfCounters';
 
 export { buildElementTooltipId, buildElementTypeName, drawHoverTooltip } from './editorElementLabels';
 
@@ -224,31 +225,52 @@ export const WALL_TILE_GRID_COLOR = 'rgba(140,210,255,0.25)';
  */
 export function drawWallTileGrid(
   ctx: CanvasRenderingContext2D,
-  cellOwner: Map<string, number>,
+  cellOwner: Map<string, number> | EditorWallTopology,
   ox: number, oy: number, zoom: number,
+  viewport?: EditorViewport,
 ): void {
   const tile = BLOCK_SIZE_SMALL * zoom;
   ctx.strokeStyle = WALL_TILE_GRID_COLOR;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (const [cellKey, uid] of cellOwner) {
-    const [gx, gy] = cellKey.split(',').map(Number);
-    const cellX = gx * tile + ox;
-    const cellY = gy * tile + oy;
 
-    // Only draw an edge when the neighbor cell is occupied by a *different*
-    // wall instance — a missing neighbor (open air) is already handled by
-    // the merged outer outline, and a same-instance neighbor shares this
-    // block and should show no seam at all.
-    const rightOwner = cellOwner.get(`${gx + 1},${gy}`);
-    if (rightOwner !== undefined && rightOwner !== uid) {
-      ctx.moveTo(cellX + tile, cellY);
-      ctx.lineTo(cellX + tile, cellY + tile);
+  const isTopology = 'cells' in cellOwner;
+  const ownerMap = isTopology ? cellOwner.cellOwner : cellOwner;
+
+  if (isTopology) {
+    for (const { gx, gy, uid } of cellOwner.cells) {
+      if (!isElementInViewport(viewport, gx, gy, 1, 1)) continue;
+      editorPerfCounters.wallTopologyCellsScanned++;
+      const cellX = gx * tile + ox;
+      const cellY = gy * tile + oy;
+      const rightOwner = ownerMap.get(`${gx + 1},${gy}`);
+      if (rightOwner !== undefined && rightOwner !== uid) {
+        ctx.moveTo(cellX + tile, cellY);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
+      const downOwner = ownerMap.get(`${gx},${gy + 1}`);
+      if (downOwner !== undefined && downOwner !== uid) {
+        ctx.moveTo(cellX, cellY + tile);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
     }
-    const downOwner = cellOwner.get(`${gx},${gy + 1}`);
-    if (downOwner !== undefined && downOwner !== uid) {
-      ctx.moveTo(cellX, cellY + tile);
-      ctx.lineTo(cellX + tile, cellY + tile);
+  } else {
+    for (const [cellKey, uid] of ownerMap) {
+      const [gx, gy] = cellKey.split(',').map(Number);
+      if (!isElementInViewport(viewport, gx, gy, 1, 1)) continue;
+      editorPerfCounters.wallTopologyCellsScanned++;
+      const cellX = gx * tile + ox;
+      const cellY = gy * tile + oy;
+      const rightOwner = ownerMap.get(`${gx + 1},${gy}`);
+      if (rightOwner !== undefined && rightOwner !== uid) {
+        ctx.moveTo(cellX + tile, cellY);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
+      const downOwner = ownerMap.get(`${gx},${gy + 1}`);
+      if (downOwner !== undefined && downOwner !== uid) {
+        ctx.moveTo(cellX, cellY + tile);
+        ctx.lineTo(cellX + tile, cellY + tile);
+      }
     }
   }
   ctx.stroke();
@@ -725,3 +747,108 @@ function _drawTransitionResizeHandles(
 export const GUIDE_DUST_PATH_COLOR    = 'rgba(255, 200, 60, 0.7)';
 export const GUIDE_DUST_PATH_SELECTED = 'rgba(255, 220, 80, 1.0)';
 export const GUIDE_DUST_POINT_COLOR   = 'rgba(255, 240, 100, 0.9)';
+
+// ── Viewport Culling Helpers ──────────────────────────────────────────────────
+
+export interface EditorViewport {
+  minCol: number;
+  maxCol: number;
+  minRow: number;
+  maxRow: number;
+  canvasWidth: number;
+  canvasHeight: number;
+}
+
+/**
+ * Computes visible block bounds once per frame, adding a generous margin (default 5 blocks)
+ * so outlines, handles, markers, and ranged visuals don't pop when crossing screen boundaries.
+ */
+export function computeEditorViewport(
+  ox: number,
+  oy: number,
+  zoom: number,
+  canvasW: number,
+  canvasH: number,
+  roomW: number,
+  roomH: number,
+  marginBlocks = 5,
+): EditorViewport {
+  const tileSize = BLOCK_SIZE_SMALL * zoom;
+  const minCol = Math.max(-marginBlocks, Math.floor(-ox / tileSize) - marginBlocks);
+  const maxCol = Math.min(roomW + marginBlocks, Math.ceil((canvasW - ox) / tileSize) + marginBlocks);
+  const minRow = Math.max(-marginBlocks, Math.floor(-oy / tileSize) - marginBlocks);
+  const maxRow = Math.min(roomH + marginBlocks, Math.ceil((canvasH - oy) / tileSize) + marginBlocks);
+  return { minCol, maxCol, minRow, maxRow, canvasWidth: canvasW, canvasHeight: canvasH };
+}
+
+/** Returns whether an authored element rectangle intersects the current visible viewport bounds. */
+export function isElementInViewport(
+  viewport: EditorViewport | undefined,
+  xBlock: number,
+  yBlock: number,
+  wBlock = 1,
+  hBlock = 1,
+): boolean {
+  if (viewport === undefined) return true;
+  return (
+    xBlock + wBlock >= viewport.minCol &&
+    xBlock <= viewport.maxCol &&
+    yBlock + hBlock >= viewport.minRow &&
+    yBlock <= viewport.maxRow
+  );
+}
+
+// ── Wall Topology Cache ───────────────────────────────────────────────────────
+
+export interface EditorWallCell {
+  readonly gx: number;
+  readonly gy: number;
+  readonly uid: number;
+}
+
+export interface EditorWallTopology {
+  readonly occupied: Set<string>;
+  readonly cellOwner: Map<string, number>;
+  readonly cells: readonly EditorWallCell[];
+  readonly roomRef: EditorRoomData;
+  readonly mutationSerial: number;
+}
+
+let _wallTopologyCache: EditorWallTopology | null = null;
+
+export function resetEditorWallTopologyCache(): void {
+  _wallTopologyCache = null;
+}
+
+export function getEditorWallTopology(room: EditorRoomData, mutationSerial = -1): EditorWallTopology {
+  if (
+    _wallTopologyCache !== null &&
+    _wallTopologyCache.roomRef === room &&
+    _wallTopologyCache.mutationSerial === mutationSerial &&
+    mutationSerial >= 0
+  ) {
+    return _wallTopologyCache;
+  }
+
+  editorPerfCounters.wallTopologyRebuilds++;
+  const occupied = new Set<string>();
+  const cellOwner = new Map<string, number>();
+  const cells: EditorWallCell[] = [];
+
+  for (const w of room.interiorWalls) {
+    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
+    for (let dy = 0; dy < w.hBlock; dy++) {
+      for (let dx = 0; dx < w.wBlock; dx++) {
+        const gx = w.xBlock + dx;
+        const gy = w.yBlock + dy;
+        const key = `${gx},${gy}`;
+        occupied.add(key);
+        cellOwner.set(key, w.uid);
+        cells.push({ gx, gy, uid: w.uid });
+      }
+    }
+  }
+
+  _wallTopologyCache = { occupied, cellOwner, cells, roomRef: room, mutationSerial };
+  return _wallTopologyCache;
+}

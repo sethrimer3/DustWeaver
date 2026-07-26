@@ -29,6 +29,7 @@ import {
   isEligibleForLiquidInteraction,
   isEligibleForWindVent,
 } from '../levels/customBlockProperties';
+import { editorPerfCounters } from './editorPerfCounters';
 
 // Re-export the reverse direction (RoomDef → EditorRoomData) from its own module
 // so existing callers that import from editorRoomBuilder are unaffected.
@@ -42,6 +43,7 @@ export { roomDefToEditorRoomData } from './editorRoomImporter';
  * See `roomBoundaryWalls.ts` for the design rationale.
  */
 export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
+  editorPerfCounters.roomDefConversions++;
   const boundaryWalls = buildCompleteBoundaryWalls(data.widthBlocks, data.heightBlocks);
 
   const interiorWalls: RoomWallDef[] = data.interiorWalls.map(w => ({

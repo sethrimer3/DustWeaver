@@ -10,8 +10,9 @@ import {
   EditorState, EditorRoomData, SelectedElement, SelectedElementType, EditorTransition,
 } from './editorState';
 import type { TransitionDirection } from '../levels/roomDef';
-import { canSelectElementType, canMutateElement } from './editorLayers';
+import { canSelectElementType, canMutateElement, LAYER_IDS } from './editorLayers';
 import { ELEMENT_ADAPTERS, ALL_ELEMENT_TYPES, type MarqueeRect } from './editorElementRegistry';
+import { editorPerfCounters } from './editorPerfCounters';
 export { deleteAtCursor, deleteAtCursorBrushed } from './editorDeleteTool';
 
 // ── Select tool ──────────────────────────────────────────────────────────────
@@ -201,6 +202,72 @@ export function selectAtCursor(state: EditorState): SelectedElement | null {
     state.guideDustPathSelectedPointIndex = top.guideDustPathPointIndex;
   }
   return top.element;
+}
+
+let _hoverCache: {
+  room: EditorRoomData | null;
+  cursorBlockX: number;
+  cursorBlockY: number;
+  mutationSerial: number;
+  layerSig: string;
+  result: SelectedElement | null;
+  guideDustPathPointIndex?: number;
+} | null = null;
+
+export function resetHoverResolutionCache(): void {
+  _hoverCache = null;
+}
+
+function _layerSelectabilitySignature(state: EditorState): string {
+  let s = '';
+  for (const id of LAYER_IDS) {
+    const l = state.layers[id];
+    if (l) {
+      const bits = (l.visible ? 8 : 0) | (l.locked ? 4 : 0) | (l.solo ? 2 : 0) | (l.selectOnly ? 1 : 0);
+      s += bits.toString(16);
+    } else {
+      s += '0';
+    }
+  }
+  return s;
+}
+
+/**
+ * Resolves hover element at cursor with change-gating to avoid repeating the
+ * full multi-collection hit test every idle frame when coordinates and state have
+ * not mutated.
+ */
+export function resolveHoverAtCursor(state: EditorState, mutationSerial = -1): SelectedElement | null {
+  const room = state.roomData;
+  const layerSig = _layerSelectabilitySignature(state);
+
+  if (
+    _hoverCache !== null &&
+    _hoverCache.room === room &&
+    _hoverCache.cursorBlockX === state.cursorBlockX &&
+    _hoverCache.cursorBlockY === state.cursorBlockY &&
+    _hoverCache.mutationSerial === mutationSerial &&
+    mutationSerial >= 0 &&
+    _hoverCache.layerSig === layerSig
+  ) {
+    if (_hoverCache.guideDustPathPointIndex !== undefined) {
+      state.guideDustPathSelectedPointIndex = _hoverCache.guideDustPathPointIndex;
+    }
+    return _hoverCache.result;
+  }
+
+  editorPerfCounters.hoverScans++;
+  const result = selectAtCursor(state);
+  _hoverCache = {
+    room,
+    cursorBlockX: state.cursorBlockX,
+    cursorBlockY: state.cursorBlockY,
+    mutationSerial,
+    layerSig,
+    result,
+    guideDustPathPointIndex: result?.type === 'guideDustPath' ? (state.guideDustPathSelectedPointIndex ?? undefined) : undefined,
+  };
+  return result;
 }
 
 // ── Rotate selected element ──────────────────────────────────────────────────

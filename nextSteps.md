@@ -8,6 +8,43 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 525 — Editor Phase 4: Hover Resolution Change-Gating
+
+**Why:** The editor's idle hover resolution (`selectAtCursor`) was scanning every element collection on every frame even when the cursor, room content, and layer state hadn't changed. On large rooms this is a measurable per-frame cost.
+
+**What was done:**
+1. Added `resolveHoverAtCursor(state, mutationSerial)` in `src/editor/editorTools.ts` — caches the hover hit-test result by `(room, cursorBlockX, cursorBlockY, mutationSerial, layerSelectabilitySignature)`. Returns the cached result when all inputs match; only runs `selectAtCursor` (the full walk-all-collections scan) when something actually changed. Includes `resetHoverResolutionCache()` for tests.
+2. Wired `resolveHoverAtCursor` into `src/editor/editorController.ts` at the hover-resolution site (line ~2480), passing `strokeRevision.mutationSerial`.
+3. Added `hoverScans` counter to `src/editor/editorPerfCounters.ts` (interface, initial value, reset function).
+4. Created `src/tests/editorPerfPhase4.test.ts` with three focused tests:
+   - Hover cache: static frame reuses result, cursor move / mutationSerial bump / layer toggle each invalidate.
+   - Wall topology cache: verifies `getEditorWallTopology` caching by mutationSerial.
+   - Overlay viewport culling: verifies `isElementInViewport` rejects off-screen walls and `overlayElementsDrawn` counter confirms the cull.
+5. Fixed pre-existing lint error: removed unused `editorPerfCounters` import from `editorController.ts`.
+6. Fixed `surfaceExposureMap` test in `editorWallSurfaceRimPreview.test.ts` — replaced broken `sortMap` (called `.entries()` on a non-Map) with `Array.from`.
+
+**Remaining Phase 4 work (not done):**
+- Cull high-volume collections (custom blocks, background blocks, pixel materials, crumble/falling/phantasmal blocks, zones, decorations) by viewport before drawing.
+- Cache wall occupancy/ownership topology per `wallGeometryRevision` (currently uses `mutationSerial` — every paint stroke invalidates, even non-wall mutations).
+- Make Surface Rim preview build its snapshot directly from `EditorRoomData` without `editorRoomDataToRoomDef` + `buildRoomWallTemplate`.
+- Capture before/after large-room counter and frame-time measurements.
+- Dedicated `wallGeometryRevision` that changes only on wall geometry/room-dimension mutations (not every mutation).
+
+**Validation:** `npm run lint` clean, `npm test` 2301/2301 pass, editor tests 510/510 pass. `npm run build` has pre-existing TS errors in `editorRenderer.ts`, `editorOverlayDrawers.ts`, and `editorWallSurfaceRimPreview.ts` from prior sessions (not introduced here).
+
+---
+
+## BUILD 523 — Regenerate Baked Wall Templates (Schema v2 + Surface Rim Styles)
+
+**Why:** Runtime loads of several official campaign rooms (lobby, bend, seal_chamber, the_fall, tall_shaft, chasm, etc.) were logging `[wallTemplate] roomId=… source=fallback reason=stale_hash` and dropping out of the baked wall fast path into the incremental merge fallback. Previously, `scripts/bake-room-wall-templates.mjs` was using legacy schema version 1 without surface rim style tables.
+
+**What was done:**
+1. Updated `scripts/bake-room-wall-templates.mjs` to target `BAKED_WALL_SCHEMA_VERSION = 2` and support surface rim styles (`rimStyleIndex`, `rimStyles`), matching `src/levels/roomWallTemplateHash.ts` and `src/editor/roomJsonSerializer.ts`.
+2. Re-baked all 23 official campaign rooms (`ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/*_room.json`) so their `bakedWallTemplate` hash matches runtime calculations exactly.
+3. Verified idempotency: re-running the script skips all rooms as already valid.
+
+---
+
 ## BUILD 428 — Per-Transition Profiler + computeRenderStateKey Memoization
 
 **Why:** The audit pass (problem statement: "DustWeaver ultimate room loading and rendering optimization") confirmed that the major architectural fixes (resident hot-swap, baked walls, trigger strips, chunk prewarm, schema v3, zone loader, incremental wall merge, entry warm) are already in place. To choose the next genuine bottleneck instead of speculating, we need per-transition measurements.

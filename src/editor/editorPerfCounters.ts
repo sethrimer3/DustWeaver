@@ -12,7 +12,7 @@
  * call this between cases so counts don't leak across assertions).
  */
 export interface EditorPerfCounters {
-  /** Number of times editorRoomDataToRoomDef() ran to rebuild the cached liveEditorRoomDef. */
+  /** Number of times editorRoomDataToRoomDef() ran to rebuild the cached liveEditorRoomDef or in hidden conversion paths. */
   roomDefConversions: number;
   /** Number of times analyzeEditorRoomComplexity() actually ran (not served from cache). */
   complexityAnalyses: number;
@@ -24,6 +24,18 @@ export interface EditorPerfCounters {
   dragDeltaNoops: number;
   /** Number of drag-move frames that actually applied a movement. */
   dragDeltaApplied: number;
+  /** Number of times wall occupancy/ownership topology was rebuilt in the editor. */
+  wallTopologyRebuilds: number;
+  /** Number of cell candidates visited during wall seam/grid rendering. */
+  wallTopologyCellsScanned: number;
+  /** Total overlay elements iterated during editor overlay draw passes. */
+  overlayElementsVisited: number;
+  /** Total overlay elements that passed culling and were drawn in overlay draw passes. */
+  overlayElementsDrawn: number;
+  /** Number of times Surface Rim layout was rebuilt in the editor. */
+  surfaceRimLayoutRebuilds: number;
+  /** Number of times an idle hover hit-test actually scanned elements (not served from cache). */
+  hoverScans: number;
 }
 
 export const editorPerfCounters: EditorPerfCounters = {
@@ -33,6 +45,12 @@ export const editorPerfCounters: EditorPerfCounters = {
   selectionCacheRebuilds: 0,
   dragDeltaNoops: 0,
   dragDeltaApplied: 0,
+  wallTopologyRebuilds: 0,
+  wallTopologyCellsScanned: 0,
+  overlayElementsVisited: 0,
+  overlayElementsDrawn: 0,
+  surfaceRimLayoutRebuilds: 0,
+  hoverScans: 0,
 };
 
 export function resetEditorPerfCounters(): void {
@@ -42,4 +60,10 @@ export function resetEditorPerfCounters(): void {
   editorPerfCounters.selectionCacheRebuilds = 0;
   editorPerfCounters.dragDeltaNoops = 0;
   editorPerfCounters.dragDeltaApplied = 0;
+  editorPerfCounters.wallTopologyRebuilds = 0;
+  editorPerfCounters.wallTopologyCellsScanned = 0;
+  editorPerfCounters.overlayElementsVisited = 0;
+  editorPerfCounters.overlayElementsDrawn = 0;
+  editorPerfCounters.surfaceRimLayoutRebuilds = 0;
+  editorPerfCounters.hoverScans = 0;
 }

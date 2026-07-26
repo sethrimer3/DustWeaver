@@ -33,12 +33,13 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const FORCE   = process.argv.includes('--force');
 
 // ── Constants (must match TypeScript sources) ─────────────────────────────────
-// roomDef.ts / roomWallTemplateHash.ts
-const BAKED_WALL_SCHEMA_VERSION = 1;
+// roomDef.ts / roomWallTemplateHash.ts / surfaceRimStyle.ts
+const BAKED_WALL_SCHEMA_VERSION = 2;
 const BLOCK_SIZE_MEDIUM         = 8;   // virtual px per block
 const WALL_THEME_DEFAULT_INDEX  = 255; // no per-wall theme override
 const MAX_WALLS                 = 6000;
 const WALL_MERGE_EPSILON        = 0.001;
+const SURFACE_RIM_STYLE_INDEX_DEFAULT = 0xFFFF;
 // roomSavedTypes.ts
 const DEFAULT_THEME_KEY = '__default__';
 
@@ -200,6 +201,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
   const ph  = []; // isPillarHalfWidthFlag
   const ic  = []; // isIceFlag
   const uic = []; // isUltraIceFlag
+  const rs  = []; // rimStyleIndex (SURFACE_RIM_STYLE_INDEX_DEFAULT = default)
 
   const rawCount = Math.min(allWalls.length, MAX_WALLS);
   for (let wi = 0; wi < rawCount; wi++) {
@@ -234,6 +236,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
       : indexToTheme(themeIdx);
     ic.push(resolvedTheme === 'ice' || resolvedTheme === 'iceBlock' ? 1 : 0);
     uic.push(resolvedTheme === 'ultraIceBlock' ? 1 : 0);
+    rs.push(def.r !== undefined ? def.r : SURFACE_RIM_STYLE_INDEX_DEFAULT);
   }
 
   // Iterative merge pass — identical to the TypeScript generator implementation.
@@ -246,6 +249,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
     outer: for (let i = 0; i < xs.length; i++) {
       for (let j = i + 1; j < xs.length; j++) {
         if (fs[i] !== fs[j] || ts[i] !== ts[j] || sh[i] !== sh[j] || iv[i] !== iv[j]) continue;
+        if (rs[i] !== rs[j]) continue;
         if (ro[i] !== 255 || ro[j] !== 255) continue;
         if (ph[i] !== 0  || ph[j] !== 0)  continue;
         // Horizontal merge: same Y and H, contiguous/overlapping on X axis
@@ -263,7 +267,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
             hs[i] = hs[i] > hs[j] ? hs[i] : hs[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1); rs.splice(j, 1);
             merged = true;
             break outer;
           }
@@ -283,7 +287,7 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
             ws[i] = ws[i] > ws[j] ? ws[i] : ws[j];
             xs.splice(j, 1); ys.splice(j, 1); ws.splice(j, 1); hs.splice(j, 1);
             fs.splice(j, 1); pe.splice(j, 1); ts.splice(j, 1); sh.splice(j, 1); iv.splice(j, 1);
-            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1);
+            ro.splice(j, 1); ph.splice(j, 1); ic.splice(j, 1); uic.splice(j, 1); rs.splice(j, 1);
             merged = true;
             break outer;
           }
@@ -308,6 +312,8 @@ function buildWallTemplate(allWalls, roomBlockTheme, roomSoundHardness, themeToI
     isPillarHalfWidthFlag: ph.slice(0, finalCount),
     isIceFlag:            ic.slice(0, finalCount),
     isUltraIceFlag:       uic.slice(0, finalCount),
+    rimStyleIndex:        rs.slice(0, finalCount),
+    rimStyles:            [],
   };
 }
 
@@ -320,6 +326,7 @@ function computeWallTemplateSourceHash(
   widthBlocks, heightBlocks,
   blockTheme, blockThemeId, soundHardness,
   interiorWalls,
+  rimStyles,
 ) {
   let h = 5381;
   function mix(n)     { h = (((h << 5) + h) ^ n) | 0; }
@@ -347,7 +354,9 @@ function computeWallTemplateSourceHash(
     hashStr(String(w.rampOrientation ?? ''));
     hashStr(String(w.stairsOrientation ?? ''));
     hashBool(w.isPillarHalfWidth);
+    hashStr(String(w.r ?? ''));
   }
+  hashStr(JSON.stringify(rimStyles ?? []));
   return ((h >>> 0)).toString(16).padStart(8, '0');
 }
 
@@ -377,7 +386,7 @@ function bakeRoom(filePath) {
   // Source hash uses the same inputs as computeWallTemplateSourceHash in TS.
   // blockThemeId is not stored at room level in SavedRoomV2, so it is undefined.
   const sourceHash = computeWallTemplateSourceHash(
-    widthBlocks, heightBlocks, blockTheme, undefined, soundHardness, interiorWalls,
+    widthBlocks, heightBlocks, blockTheme, undefined, soundHardness, interiorWalls, room.rimStyles,
   );
 
   // Skip if already valid (unless --force)
@@ -388,7 +397,10 @@ function bakeRoom(filePath) {
       b.sourceHash    === sourceHash &&
       typeof b.wallCount === 'number' &&
       Array.isArray(b.themeIndex) &&
-      b.themeIndex.length === b.wallCount
+      b.themeIndex.length === b.wallCount &&
+      Array.isArray(b.rimStyleIndex) &&
+      b.rimStyleIndex.length === b.wallCount &&
+      Array.isArray(b.rimStyles)
     ) {
       return { status: 'skip', reason: 'already valid', wallCount: b.wallCount, sourceHash };
     }
@@ -444,6 +456,8 @@ function bakeRoom(filePath) {
     isPillarHalfWidthFlag: tpl.isPillarHalfWidthFlag,
     isIceFlag:             tpl.isIceFlag,
     isUltraIceFlag:        tpl.isUltraIceFlag,
+    rimStyleIndex:         tpl.rimStyleIndex,
+    rimStyles:             tpl.rimStyles,
   };
 
   const updated = { ...room, bakedWallTemplate: baked };

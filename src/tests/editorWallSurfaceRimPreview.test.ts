@@ -1,17 +1,14 @@
-/**
- * editorWallSurfaceRimPreview.test.ts — Coverage for the editor's own live
- * Surface Rim preview: it must resolve custom styles from live EditorWall
- * data (no explicit "confirm"/room-load step), rebuild when the rim style
- * changes, and never touch the gameplay `blockWallLayoutCache.ts` singleton.
- */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { EditorRoomData, EditorWall } from '../editor/editorElementTypes';
 import { getEditorWallLayout, drawEditorSurfaceRimOverlay } from '../editor/editorWallSurfaceRimPreview';
 import { normalizeSurfaceRimStyle } from '../render/walls/surfaceRimStyle';
-import { setPrebuiltWallLayout, getCurrentWallLayout } from '../render/walls/blockWallLayoutCache';
+import { setPrebuiltWallLayout, getCurrentWallLayout, buildWallLayout } from '../render/walls/blockWallLayoutCache';
 import { editorRoomDataToRoomDef } from '../editor/editorRoomBuilder';
 import { buildRoomWallTemplate } from '../screens/gameRoomWalls';
+import type { WallSnapshot } from '../render/snapshotTypes';
+import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { editorPerfCounters, resetEditorPerfCounters } from '../editor/editorPerfCounters';
 
 function makeWall(uid: number, overrides: Partial<EditorWall> = {}): EditorWall {
   return {
@@ -106,7 +103,7 @@ test('editor preview building/rebuilding never touches the gameplay blockWallLay
   assert.equal(getCurrentWallLayout(), sentinelLayout, 'the gameplay singleton must be untouched by editor-preview calls');
 });
 
-test('editor preview uses the runtime merge result for identical/different styles, themes, platforms, and shapes', () => {
+test('editor preview without O(n²) merge produces identical surface exposure and custom rim pixel layouts to runtime merge result', () => {
   const same = normalizeSurfaceRimStyle({ mode: 'solid', color: 'ff0000' });
   const other = normalizeSurfaceRimStyle({ mode: 'solid', color: '00ff00' });
   const cases: EditorWall[][] = [
@@ -139,10 +136,40 @@ test('editor preview uses the runtime merge result for identical/different style
   for (const walls of cases) {
     const room = makeRoom(walls);
     const runtimeTemplate = buildRoomWallTemplate(editorRoomDataToRoomDef(room));
+    const runtimeSnapshot: WallSnapshot = {
+      count: runtimeTemplate.wallCount,
+      xWorld: runtimeTemplate.xWorld,
+      yWorld: runtimeTemplate.yWorld,
+      wWorld: runtimeTemplate.wWorld,
+      hWorld: runtimeTemplate.hWorld,
+      isPlatformFlag: runtimeTemplate.isPlatformFlag,
+      platformEdge: runtimeTemplate.platformEdge,
+      themeIndex: runtimeTemplate.themeIndex,
+      isInvisibleFlag: runtimeTemplate.isInvisibleFlag,
+      rampOrientationIndex: runtimeTemplate.rampOrientationIndex,
+      isPillarHalfWidthFlag: runtimeTemplate.isPillarHalfWidthFlag,
+      surfaceRimStyleIndex: runtimeTemplate.rimStyleIndex,
+      surfaceRimStyleTable: runtimeTemplate.rimStyleTable,
+    };
+    const runtimeLayout = buildWallLayout(runtimeSnapshot, BLOCK_SIZE_SMALL, room.widthBlocks, room.heightBlocks, 'test');
     const preview = getEditorWallLayout(room);
-    assert.equal(preview.wallCount, runtimeTemplate.wallCount);
-    assert.deepEqual(Array.from(preview.customSurfaceRimPixels), Array.from(
-      getEditorWallLayout(room).customSurfaceRimPixels,
-    ));
+    const sortPixels = (pixels: readonly { xWorldPx: number; yWorldPx: number; renderDataIndex: number; distancePx: number }[]) =>
+      Array.from(pixels).sort((a, b) => (a.yWorldPx - b.yWorldPx) || (a.xWorldPx - b.xWorldPx) || (a.renderDataIndex - b.renderDataIndex) || (a.distancePx - b.distancePx));
+
+    assert.deepEqual(Array.from(preview.surfaceExposureMap), Array.from(runtimeLayout.surfaceExposureMap));
+    assert.deepEqual(sortPixels(preview.customSurfaceRimPixels), sortPixels(runtimeLayout.customSurfaceRimPixels));
+    assert.deepEqual(Array.from(preview.customSurfaceRimRenderData), Array.from(runtimeLayout.customSurfaceRimRenderData));
   }
+});
+
+test('getEditorWallLayout caches by room and mutationSerial without redundant builds or conversions', () => {
+  resetEditorPerfCounters();
+  const room = makeRoom([makeWall(100)]);
+  const l1 = getEditorWallLayout(room, 5);
+  assert.equal(editorPerfCounters.surfaceRimLayoutRebuilds, 1);
+  assert.equal(editorPerfCounters.roomDefConversions, 0, 'must not run editorRoomDataToRoomDef');
+
+  const l2 = getEditorWallLayout(room, 5);
+  assert.equal(l2, l1);
+  assert.equal(editorPerfCounters.surfaceRimLayoutRebuilds, 1, 'matching mutationSerial avoids rebuild');
 });

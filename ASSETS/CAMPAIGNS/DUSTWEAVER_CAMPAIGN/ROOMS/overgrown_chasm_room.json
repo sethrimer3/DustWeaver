@@ -315,8 +315,8 @@
     }
   ],
   "bakedWallTemplate": {
-    "schemaVersion": 1,
-    "sourceHash": "52ad0e1a",
+    "schemaVersion": 2,
+    "sourceHash": "4fd66e88",
     "wallCount": 9,
     "xWorld": [
       0,
@@ -391,12 +391,11 @@
       255,
       255,
       255,
-      4,
-      4,
-      4
+      3,
+      3,
+      3
     ],
     "themeNames": [
-      "darkStone",
       "overgrowth"
     ],
     "soundHardnessIndex": [
@@ -464,6 +463,18 @@
       0,
       0,
       0
-    ]
+    ],
+    "rimStyleIndex": [
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535,
+      65535
+    ],
+    "rimStyles": []
   }
 }
