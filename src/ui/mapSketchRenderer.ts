@@ -10,11 +10,11 @@
  *  - Contours are computed once per room and cached; they never regenerate
  *    per frame.
  *  - Sketch outlines are generated from exposed solid-tile boundaries:
- *    for every solid tile, each neighbor that is empty OR out-of-bounds
- *    contributes an edge segment.  Out-of-bounds neighbors are treated as
- *    air so that the full room silhouette (including outer walls) is traced.
- *    These segments are chained into closed polylines, so the outer room
- *    boundary, interior islands, platforms, and holes all produce their own
+ *    for every solid tile, each neighbor that is strictly inside the room
+ *    and empty contributes an edge segment. Outer room boundary edges
+ *    (where neighbors are out-of-bounds) are deliberately suppressed to
+ *    prevent room-edge map artifacts (e.g. unwanted box outlines).
+ *    Interior islands, platforms, cavities, and holes each produce their own
  *    outline.
  *  - Multiple contours per room are fully supported; the single-contour
  *    scanline-envelope approach has been replaced.
@@ -99,10 +99,10 @@ function deterministicNoise(seed: number, pointIndex: number, channel: number): 
  * Immutable contours for a single room, cached after first build.
  *
  * Each contour is one polyline tracing the boundary between solid and
- * empty tiles.  Since boundary-facing edges are emitted (out-of-bounds
- * treated as air), all contours in well-formed rooms are closed loops.
- * Open chains can occur only in degenerate room data; `isClosedFlags[i]`
- * marks which case applies so drawContour handles them safely.
+ * empty tiles. Because boundary-facing edges are deliberately suppressed
+ * to prevent outside room-edge artifacts, contours that touch the outer
+ * boundary become open chains while strictly interior loops remain closed;
+ * `isClosedFlags[i]` marks which case applies so drawContour handles them safely.
  *
  * Open contours MUST NOT be drawn with ctx.closePath() — doing so would
  * connect the last point back to the first with a spurious diagonal line.
@@ -252,8 +252,7 @@ function buildRoomContour(room: RoomDef): ContourData {
   // Array.shift() to keep each edge access O(1).
   //
   // `isClosed` is tracked per-contour: a chain that returns to its startVertex
-  // is closed; one that hits a dead-end is open (rare in well-formed rooms
-  // now that boundary edges are emitted).
+  // is closed; one that terminates at a suppressed boundary edge or dead-end is open.
   // Open chains must NOT be drawn with closePath — see drawContour.
   interface RawContour { pts: number[]; isClosed: boolean; }
   const rawContours: RawContour[] = [];
