@@ -70,7 +70,7 @@ import {
 import { surfaceRimSuppressesBakedEdge } from './surfaceRimStyle';
 
 // Dev-mode set of theme keys that have already triggered a missing-sprite warning.
-const _warnedMissingThemes: Set<string> = import.meta.env.DEV ? new Set() : (null as unknown as Set<string>);
+const _warnedMissingThemes: Set<string> = import.meta.env?.DEV ? new Set() : (null as unknown as Set<string>);
 
 // ── DEV-only open-air side diagnostic overlay ─────────────────────────────────
 //

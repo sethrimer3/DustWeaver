@@ -53,7 +53,7 @@ export function setSpriteAtlasUseSetting(enabled: boolean): void {
 
 export function isSpriteAtlasEnabled(): boolean {
   if (FORCE_DISABLE_SPRITE_ATLASES) return false;
-  if (!import.meta.env.DEV) return USE_SPRITE_ATLASES;
+  if (!import.meta.env?.DEV) return USE_SPRITE_ATLASES;
   if (typeof window === 'undefined') return USE_SPRITE_ATLASES;
   if (typeof window.__DW_USE_SPRITE_ATLASES === 'boolean') {
     return window.__DW_USE_SPRITE_ATLASES;
@@ -92,7 +92,7 @@ export function getSpriteAtlasConfigState(): SpriteAtlasConfigState {
 }
 
 export function installSpriteAtlasDevGlobals(): void {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return;
+  if (!import.meta.env?.DEV || typeof window === 'undefined') return;
   window.__dwSetSpriteAtlasesEnabled = (enabled: boolean) => {
     setSpriteAtlasUseSetting(enabled);
     return getSpriteAtlasConfigState();

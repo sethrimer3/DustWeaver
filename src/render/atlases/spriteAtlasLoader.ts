@@ -114,7 +114,7 @@ function _isMetadata(value: SpriteAtlasMetadata): boolean {
 }
 
 function _warnOnce(key: string, message: string): void {
-  if (!import.meta.env.DEV || _warned.has(key)) return;
+  if (!import.meta.env?.DEV || _warned.has(key)) return;
   _warned.add(key);
   console.warn(message);
 }
@@ -350,7 +350,7 @@ export function getSpriteAtlasDebugInfo(): SpriteAtlasDebugInfo {
 }
 
 export function installSpriteAtlasDiagnostics(): void {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return;
+  if (!import.meta.env?.DEV || typeof window === 'undefined') return;
   type DwWindow = Window & {
     __dwSpriteAtlasStats?: () => SpriteAtlasStats;
     __dwSetSpriteAtlasesEnabled?: (enabled: boolean) => SpriteAtlasConfigState;

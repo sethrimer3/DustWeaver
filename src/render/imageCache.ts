@@ -42,7 +42,7 @@ export function hasImageFailed(src: string): boolean {
 export function loadImg(src: string): HTMLImageElement {
   const cached = _imgCache.get(src);
   if (cached !== undefined) return cached;
-  const img = new Image();
+  const img = typeof Image !== 'undefined' ? new Image() : ({ src: '', complete: false, naturalWidth: 0 } as unknown as HTMLImageElement);
   img.src = src;
   _imgCache.set(src, img);
   return img;
