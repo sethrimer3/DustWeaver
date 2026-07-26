@@ -195,6 +195,7 @@ export function getIceMoteAuraDebugInfo(): IceMoteAuraDebugInfo {
 
 /** Returns true if any Ice Mote slot is in the AVAILABLE (equipped) state. */
 function _hasIceMoteEquipped(world: WorldState): boolean {
+  if (world.selectedDustKind === ParticleKind.Ice) return true;
   for (let i = 0; i < world.moteSlotCount; i++) {
     if (
       world.moteSlotKind[i]  === ParticleKind.Ice &&

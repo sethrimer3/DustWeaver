@@ -117,8 +117,14 @@ export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayCo
     const displayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
 
     let slotBar = '';
-    for (let i = 0; i < world.moteSlotCount; i++) {
-      slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+    if (world.moteSlotCount > 0) {
+      for (let i = 0; i < world.moteSlotCount; i++) {
+        slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
+      }
+    } else {
+      for (let i = 0; i < totalSlots; i++) {
+        slotBar += i < availableSlots ? '●' : '○';
+      }
     }
 
     const moteLines = [
