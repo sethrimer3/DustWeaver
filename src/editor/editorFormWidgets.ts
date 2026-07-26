@@ -16,7 +16,7 @@ export function addField(
   onChange: (v: string) => void,
 ): void {
   const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px; min-width: 0;';
 
   const lbl = document.createElement('span');
   lbl.textContent = label;
@@ -26,9 +26,9 @@ export function addField(
   input.type = 'text';
   input.value = value;
   input.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    flex: 1; min-width: 0; width: 0; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
+    border-radius: 2px; box-sizing: border-box;
   `;
   input.addEventListener('change', () => onChange(input.value));
   input.addEventListener('click', (e) => e.stopPropagation());
@@ -45,7 +45,7 @@ export function addSelect(
   onChange: (v: string) => void,
 ): void {
   const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px; min-width: 0;';
 
   const lbl = document.createElement('span');
   lbl.textContent = label;
@@ -53,8 +53,8 @@ export function addSelect(
 
   const sel = document.createElement('select');
   sel.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
-    color: ${TEXT_COLOR}; padding: 3px; font-size: 11px; font-family: monospace;
+    flex: 1; min-width: 0; width: 0; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    color: ${TEXT_COLOR}; padding: 3px; font-size: 11px; font-family: monospace; box-sizing: border-box;
   `;
   for (const opt of options) {
     const o = document.createElement('option');
@@ -131,7 +131,7 @@ export function addNumberField(
   onChange: (v: number) => void,
 ): void {
   const row = document.createElement('div');
-  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px;';
+  row.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px; gap: 6px; min-width: 0;';
 
   const lbl = document.createElement('span');
   lbl.textContent = label;
@@ -144,9 +144,9 @@ export function addNumberField(
   input.max = String(max);
   input.step = '1';
   input.style.cssText = `
-    flex: 1; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
+    flex: 1; min-width: 0; width: 0; background: rgba(0,0,0,0.4); border: 1px solid ${PANEL_BORDER};
     color: ${TEXT_COLOR}; padding: 3px 5px; font-size: 11px; font-family: monospace;
-    border-radius: 2px;
+    border-radius: 2px; box-sizing: border-box;
   `;
   input.addEventListener('change', () => {
     const v = parseInt(input.value, 10);
