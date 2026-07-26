@@ -8,6 +8,7 @@ import {
   createEditorHistory,
   isHistoryDirty,
   markHistorySaved,
+  pushSnapshot,
   redo,
   undo,
 } from '../editor/editorHistory';
@@ -82,6 +83,21 @@ test('Phase 7.1: campaign-spawn no-op preserves redo', () => {
   assert.equal(commitPendingSnapshot(history, pending, { ...spawn }, 'r'), 'noop');
   assert.equal(history.redoStack.length, redoCount);
   assert.ok(redo(history, data));
+});
+
+test('Phase 7.1: legacy live snapshot captures campaign-spawn redo state', () => {
+  const data = room();
+  const history = createEditorHistory();
+  const before = { roomId: 'r', xBlock: 1, yBlock: 1 };
+  const after = { roomId: 'r', xBlock: 8, yBlock: 9 };
+  pushSnapshot(history, data, before, 'r', true);
+  data.name = 'changed';
+
+  const undone = undo(history, data, after, 'r', true)!;
+  assert.deepEqual(undone.campaignSpawn, before);
+  const redone = redo(history, undone.roomData, before, 'r', true)!;
+  assert.deepEqual(redone.campaignSpawn, after);
+  assert.equal(redone.roomData.name, 'changed');
 });
 
 test('Phase 7.1: pixel-material drag is one entry and undo restores the whole stroke', () => {

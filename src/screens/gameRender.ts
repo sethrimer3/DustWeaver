@@ -413,11 +413,6 @@ export function renderFrame(r: RenderFrameContext): void {
     });
   }
 
-  // ── Transition passage gradients (drawn BEFORE room clip) ────────────────
-  // Fills transition opening passages with the authored fade gradient so the
-  // black void in the passage is replaced by a proper depth-darkness effect.
-  renderTransitionPassageGradients(ctx, currentRoom, ox, oy, zoom);
-
   // ── Clip rect: room bounds ────────────────────────────────────────────────
   // Always clip to the current room bounds (instant room transitions only).
   const clipXWorld = 0;
