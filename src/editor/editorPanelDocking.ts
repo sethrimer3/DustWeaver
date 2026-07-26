@@ -119,6 +119,11 @@ export function createEditorPanelDocking(
   floatingLayer.style.cssText = `
     position: absolute; inset: 0; pointer-events: none; z-index: ${FLOATING_LAYER_Z_INDEX};
   `;
+  floatingLayer.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+  floatingLayer.addEventListener('pointerdown', (e) => {
+    if (e.button === 1) e.preventDefault(); // block browser auto-scroll
+    e.stopPropagation();
+  });
   root.appendChild(floatingLayer);
 
   // ── Drop placeholder / insertion indicator ────────────────────────────────

@@ -1,11 +1,11 @@
 {
   "campaignId": "DUSTWEAVER_CAMPAIGN",
   "campaignName": "DustWeaver",
-  "campaignHash": "db4fc0c56b1d8d2d",
-  "campaignVersion": 12,
+  "campaignHash": "4d1350e011e1fdc7",
+  "campaignVersion": 13,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-26T06:14:45.942Z",
+  "exportedAt": "2026-07-26T18:59:32.810Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -184,8 +184,8 @@
     "dark_teleporter": {
       "roomId": "dark_teleporter",
       "file": "dark_teleporter_room.json",
-      "hash": "e843b0d07cf08a1b",
-      "updatedAt": "2026-07-26T06:14:45.942Z"
+      "hash": "f433cdaa95df556d",
+      "updatedAt": "2026-07-26T18:59:32.810Z"
     },
     "mysterious_hub": {
       "roomId": "mysterious_hub",

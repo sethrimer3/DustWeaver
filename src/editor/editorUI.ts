@@ -147,6 +147,18 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     pointer-events: auto;
   `;
 
+  // Prevent UI interaction from leaking to global window/canvas listeners
+  function isolateUIEvents(el: HTMLElement): void {
+    el.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button === 1) e.preventDefault(); // block browser auto-scroll
+      e.stopPropagation();
+    });
+  }
+  isolateUIEvents(container);
+  isolateUIEvents(rightSidebar);
+
+
   // ── Sidebar hide/reveal — each sidebar operates fully independently ────────
   // Hiding a sidebar leaves a small reveal tab at that screen edge (its arrow
   // pointing inward, toward the canvas) which re-shows it when clicked.
