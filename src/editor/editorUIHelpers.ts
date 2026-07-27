@@ -376,6 +376,18 @@ export function makeBlockPreviewShapeCss(item: PaletteItem, theme: string): { sh
     };
   }
 
+  // Laser emitter: a glowing orange/white beam swatch.
+  if (item.isLaserItem === 1) {
+    return {
+      containerCss,
+      shapeCss: `
+        ${boxPosCss} background: linear-gradient(90deg,
+          rgba(180,20,0,0.85) 0%, rgba(255,240,210,0.95) 50%, rgba(180,20,0,0.85) 100%);
+        border: 1px solid rgba(255,140,30,0.9); box-sizing: border-box;
+      `,
+    };
+  }
+
   switch (itemId) {
     case 'block_1x1':
     case 'block_2x2':

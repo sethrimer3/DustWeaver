@@ -16,6 +16,7 @@ import type { BlockTheme } from '../levels/roomDef';
 export const PALETTE_CATEGORIES = [
   'blocks',
   'specialBlocks',
+  'hazards',
   'enemies',
   'triggers',
   'gates',
@@ -36,6 +37,7 @@ export type PaletteCategory = typeof PALETTE_CATEGORIES[number];
 export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> = {
   blocks: 'Blocks',
   specialBlocks: 'Special Blocks',
+  hazards: 'Hazards',
   enemies: 'Enemies',
   triggers: 'Triggers',
   gates: 'Gates',
@@ -124,6 +126,10 @@ export interface PaletteItem {
   isSpikeItem?: 1;
   /** Which spike footprint size this item places. Only meaningful when isSpikeItem === 1. */
   spikeSize?: import('../levels/roomElementDefs').SpikeSize;
+  /** 1 if this palette item places a laser emitter hazard. */
+  isLaserItem?: 1;
+  /** Direction the placed laser fires in. Only meaningful when isLaserItem === 1. */
+  laserDirection?: import('../levels/roomElementDefs').SpikeDirection;
   /**
    * 1 if this palette item paints individual 1x1 pixel-material particles
    * (native-pixel granularity, not block-grid — see docs/pixelMaterials.md).
@@ -156,6 +162,9 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'pillar_half_width', label: 'Half-width Pillar', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPillarHalfWidthItem: 1 },
   { id: 'spike_1x1', label: '1×1 Spike',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSpikeItem: 1, spikeSize: '1x1' },
   { id: 'spike_2x2', label: '2×2 Spike',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSpikeItem: 1, spikeSize: '2x2' },
+
+  // Hazards
+  { id: 'laser_emitter', label: 'Laser Emitter', category: 'hazards', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLaserItem: 1, laserDirection: 'right' },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },

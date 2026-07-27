@@ -157,6 +157,10 @@ export function buildElementTypeName(
     }
     return 'Spike';
   }
+  if (type === 'laser') {
+    const l = (room.lasers ?? []).find(x => x.uid === uid);
+    return l ? `Laser (${l.direction})` : 'Laser';
+  }
   if (type === 'bouncePad') {
     const b = (room.bouncePads ?? []).find(x => x.uid === uid);
     if (b) {

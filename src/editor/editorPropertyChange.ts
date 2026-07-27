@@ -29,6 +29,7 @@ import type {
   EditorCrumbleBlock,
   EditorBouncePad,
   EditorSpike,
+  EditorLaser,
   EditorDustContainer,
   EditorDustContainerPiece,
   EditorDustBoostJar,
@@ -274,6 +275,15 @@ export function applyPropertyToElement(
         sp.blockTheme = value as BlockTheme;
       }
     }
+  } else if (el.type === 'laser') {
+    const l = (room.lasers ?? []).find((x: EditorLaser) => x.uid === el.uid);
+    if (l) {
+      if (prop === 'laser.xBlock' && !isNaN(numVal)) l.xBlock = numVal;
+      if (prop === 'laser.yBlock' && !isNaN(numVal)) l.yBlock = numVal;
+      if (prop === 'laser.direction' && typeof value === 'string') {
+        l.direction = value as EditorLaser['direction'];
+      }
+    }
   } else if (el.type === 'dustContainer') {
     const container = (room.dustContainers ?? []).find((c: EditorDustContainer) => c.uid === el.uid);
     if (container) {
@@ -482,6 +492,7 @@ function findElementRef(room: EditorRoomData, el: SelectedElement): unknown {
     case 'crumbleBlock': return (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
     case 'bouncePad': return (room.bouncePads ?? []).find(b => b.uid === el.uid);
     case 'spike': return (room.spikes ?? []).find(s => s.uid === el.uid);
+    case 'laser': return (room.lasers ?? []).find(l => l.uid === el.uid);
     case 'dustContainer': return (room.dustContainers ?? []).find(c => c.uid === el.uid);
     case 'dustContainerPiece': return (room.dustContainerPieces ?? []).find(c => c.uid === el.uid);
     case 'dustBoostJar': return (room.dustBoostJars ?? []).find(j => j.uid === el.uid);

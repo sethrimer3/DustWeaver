@@ -25,6 +25,7 @@ import {
   drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
+  drawEditorLasers,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
@@ -132,6 +133,7 @@ export function renderEditorOverlays(
   if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('laser')) drawEditorLasers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('bouncePad')) drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('kineticBlock')) drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('phantasmalTile')) drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);

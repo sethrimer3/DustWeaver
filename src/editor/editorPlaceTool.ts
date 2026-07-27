@@ -400,6 +400,15 @@ export function wouldPlacementSucceedAt(
       return true;
     }
 
+    if (item.isLaserItem === 1) {
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return false;
+      const lasers = room.lasers ?? [];
+      const overlapsLaser = lasers.some(l => l.xBlock === bx && l.yBlock === by);
+      if (overlapsLaser) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return 'occupied';
+      return true;
+    }
+
     if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
@@ -822,6 +831,28 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         direction: spikeDirection,
         size: spikeSize,
         blockTheme: placementBlockTheme,
+      });
+      return;
+    }
+
+    if (item.isLaserItem === 1) {
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      const lasers = room.lasers ?? [];
+      const overlapsLaser = lasers.some(l => l.xBlock === bx && l.yBlock === by);
+      if (overlapsLaser) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return;
+
+      // Direction follows the same 90°-CW rotation steps used for spikes/ramps:
+      // 0=up, 1=right, 2=down, 3=left.
+      const laserDirections: readonly ('up' | 'right' | 'down' | 'left')[] = ['up', 'right', 'down', 'left'];
+      const laserDirection = laserDirections[state.placementRotationSteps % 4];
+
+      if (!room.lasers) room.lasers = [];
+      room.lasers.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        direction: laserDirection,
       });
       return;
     }

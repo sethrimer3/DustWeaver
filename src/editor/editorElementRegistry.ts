@@ -175,7 +175,7 @@ import type {
   EditorKineticBlock, EditorGrappleCarryBlock, EditorZipMoveBlock, EditorPhantasmalTile,
   EditorPixelMaterial, EditorRope, EditorSunbeam, EditorSceneLight, EditorFallingBlock,
   EditorDialogueTrigger, EditorBackgroundBlock, EditorGuideDustPath, EditorCustomBlockPlacement,
-  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
+  EditorFireflyJar, EditorSpringboard, EditorBreakableBlock, EditorLaser,
 } from './editorElementTypes';
 
 const wallAdapter: EditorElementAdapter<EditorWall> = {
@@ -251,6 +251,8 @@ const spikeAdapter: EditorElementAdapter<EditorSpike> = {
     return rectIntersectsMarquee(sp.xBlock, sp.yBlock, size, size, r);
   },
 };
+
+const laserAdapter = pointAdapter<EditorLaser>('laser', getLayerForElementType('laser'), (_s, room) => room.lasers ?? []);
 
 const bouncePadAdapter = zoneAdapter<EditorBouncePad>('bouncePad', getLayerForElementType('bouncePad'), (_s, room) => room.bouncePads ?? []);
 const kineticBlockAdapter = zoneAdapter<EditorKineticBlock>('kineticBlock', getLayerForElementType('kineticBlock'), (_s, room) => room.kineticBlocks ?? []);
@@ -435,6 +437,7 @@ export const ELEMENT_ADAPTERS: { readonly [K in SelectedElementType]: EditorElem
   timeStopField: timeStopFieldAdapter,
   crumbleBlock: crumbleBlockAdapter,
   spike: spikeAdapter,
+  laser: laserAdapter,
   bouncePad: bouncePadAdapter,
   kineticBlock: kineticBlockAdapter,
   grappleCarryBlock: grappleCarryBlockAdapter,
