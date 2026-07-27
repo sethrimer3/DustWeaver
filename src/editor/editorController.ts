@@ -1007,7 +1007,11 @@ export function createEditorController(
           runRoomFieldMutation(dimProp, room => applyRoomDimensionChange(room, dimProp, value));
         },
         onEdgeResize: (edge: RoomEdge, delta: -5 | -1 | 1 | 5) => {
-          if (state.roomData) applyEdgeResize(state.roomData, history, edge, delta);
+          if (state.roomData) {
+            const campaignSpawn = activeCampaignSession?.campaign.campaign.campaignSpawn;
+            applyEdgeResize(state.roomData, history, edge, delta, campaignSpawn);
+            syncCampaignSpawnBlockFromSession(campaignSpawnCtx);
+          }
           applyEdits('metadata');
         },
         onBlockThemeChange: (theme: BlockTheme) => {

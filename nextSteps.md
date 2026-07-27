@@ -8,6 +8,26 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 546 — Side-Anchored, Coordinate-Complete Room Dimensions Edge-Resize
+
+**Why:** `applyEdgeResize` in `src/editor/editorRoomResize.ts` shifted only an incomplete subset of `EditorRoomData` on top/left resizes (no ambient light blockers, scene lights, sunbeams, ropes, guide-dust paths, pixel materials, campaign spawn, etc.), never moved the map origin (`mapX`/`mapY`) inversely so the opposite edge would stay fixed in map-world space, and relied on `applyRoomDimensionChange`'s "slide into bounds" clamp for anything intersecting a shrink strip — silently piling geometry onto the new edge instead of clipping/removing it per element type. The undo/redo snapshot was also committed right after the width/height field change, before the shift logic ran, so a single undo step did not actually restore the shift.
+
+**What was done:**
+
+1. Rewrote `applyEdgeResize` with generic `shiftAndKeepPoint`/`shiftAndClipRect` helpers, applied across every collection in `editorHistory.ts::COLLECTIONS` plus non-block-unit geometry (scene lights in world units via `BLOCK_SIZE_MEDIUM`, pixel materials in native-pixel units via `BLOCK_SIZE_SMALL`, ropes' two independent anchors, guide-dust-path point arrays). Point-like elements are removed if their footprint leaves the new bounds after shifting; rect-like elements are clipped in place (never removed unless fully degenerate).
+2. Top/left resizes now shift `mapX`/`mapY` inversely (`mapX -= clampedDelta` / `mapY -= clampedDelta`) so the far edge's absolute map-world position is unchanged; bottom/right resizes never touch the map origin or existing content.
+3. Campaign spawn (owned by the campaign session, not `EditorRoomData`) is now passed into `applyEdgeResize` from `editorController.ts`'s `onEdgeResize` handler and shifted/clamped like the mandatory player spawn point, only when its `roomId` matches the room being resized; `syncCampaignSpawnBlockFromSession` is called afterward so the inspector reflects the new position.
+4. Transition opening/gradient-depth shift semantics were already correct (content-relative axis shifts with its edge; boundary-pinned axis doesn't) and are preserved, with opening size/position re-clamped to the new bounds afterward.
+5. Fixed the undo/redo history-commit-order bug: `commitPendingSnapshot` now runs only after every shift/clip/map-origin mutation completes, so one undo/redo step restores dimensions, `mapX`/`mapY`, campaign spawn, and every shifted/clipped element atomically.
+6. `applyRoomDimensionChange` (the separate direct width/height property-edit flow with no "which edge" concept) is unchanged — its slide-into-bounds clamp remains correct for that flow, which has no map-origin/shift semantics to preserve.
+7. Added `src/tests/editorRoomResizeCoordinateComplete.test.ts` (20 tests): opposite-edge mapX/mapY stability on grow/shrink, bottom/right non-shift, ambient-light-blocker shift and strip-removal, scene-light/pixel-material unit-scaled shifts, rope dual-anchor shift/removal, guide-dust-path shift/removal, interior-wall clip-vs-remove, transition axis-specific shift (including the boundary-pinned non-shift case), campaign-spawn shift-if-owned/leave-if-not, and one-step atomic undo/redo.
+
+**Not done / follow-up:** No live-editor manual verification was performed (no browser/DOM harness available in this environment). A manual smoke test — resize each of the four edges on a room containing transitions, ambient darkness, ropes, a guide-dust path, and a campaign spawn, then check Zone Map/Itemized Map agreement and undo/redo — is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2538/2538 tests pass (2518 pre-existing + 20 new), `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 545 — Decouple Editor Block Identities From Compact Room-Schema Grouping
 
 **Why:** `dehydrateSolidsByTheme` coalesces same-theme 1x1 walls into runs/rects purely for save-file compactness. `hydrateSolidsByTheme` reconstructed each run/rect as a single `RoomJsonWall`, so `jsonToEditorRoomData` assigned the whole aggregate one `EditorWall` UID — reopening a room with several adjacent 1x1 walls of the same theme made the editor treat them as one block for select/move/copy/delete.
