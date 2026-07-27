@@ -8,6 +8,26 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 557 — Grapple-Release Gold Motes: Natural Wall Collision + Rapid-Regrapple Persistence
+
+**Why:** `releaseGrapple` converted the 10 active chain slots into free-flying unowned `ParticleKind.Gold` motes on release, but two bugs undercut the intended "gold motes scatter and settle" feel: (1) `applyWallForces` only exempted unowned `ParticleKind.Golden` from the soft 18-world-unit pre-contact repulsion field, so released Gold motes got pushed around before ever touching a wall; (2) the very next `fireGrapple()` call reinitializes the same fixed chain-slot indices, so a quick re-grapple immediately erased the previous release burst mid-flight.
+
+**What was done:**
+1. Added a dedicated released-mote pool: `GRAPPLE_RELEASE_POOL_GROUPS = 3` and `GRAPPLE_RELEASE_POOL_CAPACITY = GRAPPLE_SEGMENT_COUNT * 3 = 30` in `src/sim/clusters/grappleShared.ts`. `initGrappleChainParticles` (`src/sim/clusters/grapple.ts`) allocates these 30 slots contiguously right after the 10 active chain slots, starting fully dead (`isAliveFlag = 0`), and records the pool's start index.
+2. New `GrappleWorldState` fields (`src/sim/worldGrappleState.ts`): `grappleReleaseStartIndex` (pool start, -1 until allocated) and `grappleReleaseBurstCounter` (increments once per actual release; `% GRAPPLE_RELEASE_POOL_GROUPS` picks which of the 3 fixed 10-slot groups the next burst writes into — deterministic round-robin, so a 4th overlapping release evicts the oldest group).
+3. `releaseGrapple` now kills the active chain slots (`isAliveFlag = 0`) instead of turning them into the visible burst, and writes the burst (position copied from the chain slot, same deterministic spread/speed/jump-off-bias math as before) into the current round-robin group of the release pool. Firing a new grapple only reinitializes the 10 active chain slots — it never touches the release pool, so up to 3 overlapping release bursts persist and animate simultaneously.
+4. `src/sim/particles/walls.ts::applyWallForces`: added a second unowned-particle exemption for `ParticleKind.Gold` (alongside the pre-existing `Golden` exemption), so released motes get zero pre-contact wall force and travel freely until actual surface contact.
+5. `src/sim/particles/walls.ts::applyWallBounce`: added `GRAPPLE_RELEASE_BOUNCE_DAMPING = 0.50`, applied only when the bouncing particle is unowned `ParticleKind.Gold`; all other particles keep the existing `WALL_BOUNCE_DAMPING = 0.60`.
+6. Verified by code audit (no changes needed) that released motes were already correctly excluded from binding (`binding.ts` only binds particles owned by the player entity ID), dust/mote counts, and resident-room transfer capture (`playerTransfer.ts` skips `ownerEntityId === -1` and `isTransientFlag === 1` particles) — the pre-existing `ownerEntityId = -1` / `isTransientFlag = 1` values on released motes already satisfied this.
+7. Added release-pool field resets to the existing grapple-state reset points in `src/screens/gameLoadRoomPhases.ts` (room load) and `src/screens/gameRoomChallenge.ts` (challenge return), alongside the pre-existing `grappleParticleStartIndex = -1` reset.
+8. Added `src/tests/grappleReleaseMotes.test.ts` (7 tests): dedicated-pool allocation distinct from chain slots; chain-slot death + correct unowned/transient/Gold burst spawn on release; simultaneous persistence of 3 overlapping release bursts; deterministic 4th-burst round-robin eviction; zero wall-force while near-but-not-touching a wall; exact 50% reflected speed on wall contact; unaffected 60% damping for an ordinary (non-Gold or owned) particle.
+
+**Not done / follow-up:** No live-browser manual verification was performed (no DOM/canvas harness in this environment) — validated at the simulation/physics layer only. A manual smoke test (fire a grapple near a wall, release mid-swing to confirm motes fly freely and bounce naturally on contact, then rapidly re-grapple 2-3 times in quick succession to confirm each release's motes keep animating independently rather than vanishing) is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2628/2628 tests pass (2621 pre-existing + 7 new), `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 553 — Migrate Bow and Sword Weaves to Canonical Mote Ownership and Remove Legacy Ordered Mote Queue
 
 **Why:** Bow Weave and Sword Weave are active gameplay abilities that were historically coupled to the obsolete ordered combat-mote queue (`orderedMoteQueue.ts`) and physical orbit particles (`world.moteSlotParticleIndex`, `world.behaviorMode`). The intended goal is to eliminate the legacy ordered combat-mote queue while preserving Bow, Sword, and Shield Weaves as authoritative gameplay abilities built on canonical player health.
