@@ -8,6 +8,27 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 549 — Repository Documentation Reorganization
+
+**Why:** A deferred Todo item asked to move most root-level Markdown files under `docs/` into coherent locations without breaking agent workflows, since root had accumulated 16+ ad-hoc planning/decision/archive files alongside the human/agent entry points.
+
+**What was done:**
+1. Moved into `docs/decisions/`: `DECISIONS.md`, `REFACTORING_PLAN.md`, `performanceOptimizationDecisions.md`, `combatDustPolishDecisions.md`, `MajorDustUpgradePlan.md`.
+2. Moved into `docs/systems/`: `movement.md`, `CustomBlockSpriteSystem.md`, `RoomLoadingOptimizations.md`, `PERFORMANCE_DIAGNOSIS.md`, `manual_test_checklist.md`, and root `ARCHITECTURE.md` (renamed to `render-pipeline.md` since `docs/ARCHITECTURE.md` already existed as the canonical compact AI-facing guide — the two files had different scope/content and were not duplicates).
+3. Moved into `docs/archive/`: `RefactorPlan.md`, `RoomLoadingOptimizations.local.md`, `DUST_TYPES_ARCHIVE.md`, `ENEMY_COMBAT_ARCHIVE.md`, `legacy.md` (working logs / superseded content).
+4. Removed duplicate root `agents.md` (byte-identical to `AGENTS.md`). **Gotcha discovered:** this repo's Windows checkout has a case-insensitive filesystem, so `git rm agents.md` deleted the single underlying file that both `agents.md` and `AGENTS.md` pointed to on disk, even though git tracks them as two distinct index entries. Recovered `AGENTS.md`'s content via `git show HEAD:AGENTS.md` before committing. Future agents on case-insensitive filesystems should be aware that removing a case-variant duplicate can silently delete the file the other casing needs too — verify the "kept" file still has content immediately after removing its twin.
+5. Kept `README.md`, `AGENTS.md`, and `nextSteps.md` at root deliberately — `nextSteps.md` is read every task cycle per `AGENTS.md` and is cross-referenced from 7+ source files; moving it would only add reference-update churn with no discoverability benefit.
+6. Added `docs/README.md` as a canonical/archive index.
+7. Updated every reference to a moved path: `AGENTS.md`, `README.md`, `docs/AI_REPO_MAP.md`, `docs/CURRENT_STATUS.md`, internal cross-links inside the moved docs, and source comments in 13 `.ts` files (`src/render/lavaSparkSystem.ts`, `liquidRenderer.ts`, `playerRocketChargeParticles.ts`, `playerWaterSkipSpray.ts`, `skidDebrisRenderer.ts`, `src/sim/pixelMaterials/pixelMaterialTypes.ts`, `pixelMaterialTick.ts`, `src/sim/physics/collision.ts`, `src/sim/motes/orderedMoteQueue.ts`, `src/sim/particles/combat.ts`, `src/sim/clusters/grappleMiss.ts`, `enemyAi.ts`, `src/levels/customBlockProperties.ts`, `src/editor/editorRoomBuilder.ts`). Left frozen historical self-references inside `docs/archive/RefactorPlan.md` and `docs/systems/CustomBlockSpriteSystem.md` untouched (changelog content describing what those docs referenced at the time, not live navigation).
+8. Fixed an unrelated stale claim found while auditing an adjacent Todo item: `docs/CURRENT_STATUS.md` said `evictStalePrewarmedChunks` was "a no-op stub," but `src/screens/roomRenderChunkWarmScheduler.ts` already implements full radius/size-ordered per-quality-budget eviction with existing passing tests (`src/tests/roomRenderChunkWarmScheduler.test.ts`) — corrected the doc instead of re-implementing already-done work.
+9. Bumped `BUILD_NUMBER` to 549 because source `.ts` comments changed (not purely Markdown), per `AGENTS.md`'s rule that any coherent codebase change requires a bump — even though the original Todo item's acceptance text anticipated a pure zero-source-diff move. Treated the repo-wide `AGENTS.md` policy as authoritative when the two expectations conflicted.
+
+**Not done / follow-up:** None — this was path-only, no logic changed, so no new automated tests were needed. Not manually verified in a live editor/browser session since this is documentation-and-comments only and has no runtime surface to check.
+
+**Validation:** 2552/2552 tests pass, `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 548 — Decouple Editor Background-Block Identities From Compact Schema Grouping
 
 **Why:** BUILD 545 fixed this for walls (`solids.byTheme` vs `solids.v1ByTheme`) but explicitly deferred background blocks: `dehydrateBgLayers` grouped only by `(theme, isLightBlocking)` and rasterized every footprint — 1x1 or deliberately larger — through one rect/run/point compressor with no way to recover which cells were independently authored. Adjacent same-theme 1x1 background blocks still merged into one `EditorBackgroundBlock` on reopen, losing independent select/move/delete.
