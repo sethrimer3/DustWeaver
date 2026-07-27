@@ -84,6 +84,7 @@ export function resetSecondaryWeaveCoordinatorState(world: WorldState): void {
   resetBowArrowState(world);
   world.shieldWeaveIndependentActiveFlag = 0;
   world.secondaryWeaveHandledCancellationId = world.secondaryWeaveGesture.cancellationId;
+  world.canonicalMoteOwnership.fill(MoteOwnershipState.Resting);
 }
 
 /**

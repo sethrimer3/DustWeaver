@@ -15,7 +15,7 @@ import {
 import { startNewSwordSwipe, tickNewSwordSwipe, NEW_SWORD_SLASH_TICKS } from '../sim/weaves/swordWeave';
 import { resetSecondaryWeaveCoordinatorState } from '../sim/weaves/secondaryWeaveCoordinator';
 import { MoteOwnershipState } from '../sim/weaves/moteOwnership';
-import { beginDustTypeSwitch, tickDustTypeSwitch } from '../sim/weaves/dustTypeSwitch';
+import { setSelectedDustKind } from '../sim/weaves/selectedDust';
 
 const DT_MS = 1000 / 60;
 
@@ -173,14 +173,14 @@ test('dust switching during outbound flight does not corrupt bow-arrow ownership
   const arrowPidx = [world.bowArrowParticleIndex[0], world.bowArrowParticleIndex[1], world.bowArrowParticleIndex[2]];
 
   // Attempt a dust-type switch mid-flight — must not hijack the arrow motes'
-  // behaviorMode out from under the Bow Weave.
-  beginDustTypeSwitch(world, ParticleKind.Ice);
+  // ownership out from under the Bow Weave.
+  setSelectedDustKind(world, ParticleKind.Ice);
   for (const pidx of arrowPidx) {
     assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.BowOutbound, 'arrow mote ownership must survive a concurrent dust-type switch');
   }
-  tickDustTypeSwitch(world);
+  world.tick++;
   for (const pidx of arrowPidx) {
-    assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.BowOutbound, 'still owned by the Bow after a dust-switch tick');
+    assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.BowOutbound, 'still owned by the Bow after a tick');
   }
 
   // The arrow itself continues to resolve normally afterward.
@@ -199,7 +199,7 @@ test('dust switching mid sword-swipe does not corrupt sword-mote ownership', () 
   tickNewSwordSwipe(world);
   const swordPidx = [world.newSwordMoteParticleIndex[0], world.newSwordMoteParticleIndex[1]];
 
-  beginDustTypeSwitch(world, ParticleKind.Void);
+  setSelectedDustKind(world, ParticleKind.Void);
   for (const pidx of swordPidx) {
     assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.Sword, 'sword mote ownership must survive a concurrent dust-type switch');
   }

@@ -15,6 +15,7 @@ import {
   createTimeStopFieldPlayerState,
   type TimeStopFieldPlayerState,
 } from './timeStopField/timeStopFieldPlayerState';
+import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -392,6 +393,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   hasShieldWeaveUnlockedFlag: 0 | 1;
   hasBowWeaveUnlockedFlag: 0 | 1;
   shieldWeaveIndependentActiveFlag: 0 | 1;
+  secondaryWeaveGesture: SecondaryWeaveGestureState;
+  secondaryWeaveHandledCancellationId: number;
 
   // ── Canonical Mote Ownership & Ability State ────────────────────────────────
   /** Authoritative ownership state per canonical mote (0..MAX_CANONICAL_MOTES-1). */
@@ -645,6 +648,8 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     hasShieldWeaveUnlockedFlag:    0,
     hasBowWeaveUnlockedFlag:       0,
     shieldWeaveIndependentActiveFlag: 0,
+    secondaryWeaveGesture:         createSecondaryWeaveGestureState(),
+    secondaryWeaveHandledCancellationId: 0,
     canonicalMoteOwnership:        new Uint8Array(MAX_CANONICAL_MOTES),
     canonicalMoteXWorld:           new Float32Array(MAX_CANONICAL_MOTES),
     canonicalMoteYWorld:           new Float32Array(MAX_CANONICAL_MOTES),
