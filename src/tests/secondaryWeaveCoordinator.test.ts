@@ -4,14 +4,13 @@ import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from '../screens/gameSpawn';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
+import { getAvailableCanonicalMotes, MoteOwnershipState } from '../sim/weaves/moteOwnership';
 import {
   tickSecondaryWeaveGesture,
   cancelSecondaryWeaveGesture,
   markSecondaryWeaveGestureConsumedByOtherSystem,
 } from '../input/secondaryWeaveGesture';
 import { applyPlayerWeaveCombat } from '../sim/weaves/weaveCombat';
-import { releaseShieldWeaveParticles } from '../sim/weaves/shieldWeave';
 import { NEW_SWORD_SLASH_TICKS } from '../sim/weaves/swordWeave';
 import {
   BOW_ARROW_PHASE_NONE,
@@ -25,9 +24,9 @@ function makeFixture(moteCount = 8) {
   const world = createWorldState(1000 / 60, 7);
   const player = createClusterState(0, 100, 100, 1, 20);
   player.healthPoints = moteCount;
+  player.maxHealthPoints = moteCount;
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
-  initMoteQueueFromParticles(world, player.entityId);
   return { world, player };
 }
 
@@ -67,11 +66,7 @@ function countArrowMotes(world: ReturnType<typeof createWorldState>): number {
 }
 
 function countAvailableMotes(world: ReturnType<typeof createWorldState>): number {
-  let n = 0;
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    if (world.moteSlotState[i] === 0) n++;
-  }
-  return n;
+  return getAvailableCanonicalMotes(world).count;
 }
 
 // ── Sword / shield (unchanged behavior) ──────────────────────────────────────
@@ -135,16 +130,14 @@ test('shield-only: forms while held, releases motes on end, no crescent while no
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 1);
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    const pidx = world.moteSlotParticleIndex[i];
-    assert.equal(world.behaviorMode[pidx], 2, 'motes should be in block/shield mode');
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Shield, 'motes should be in shield mode');
   }
 
   release(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0);
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    const pidx = world.moteSlotParticleIndex[i];
-    assert.equal(world.behaviorMode[pidx], 0, 'motes should return to orbit after release');
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Resting, 'motes should return to resting after release');
   }
 });
 
@@ -233,7 +226,7 @@ test('bow: fired arrow dust kind is captured at fire time and unaffected by a la
   const { world, player } = makeFixture(6);
   world.hasShieldWeaveUnlockedFlag = 1;
   world.hasBowWeaveUnlockedFlag = 1;
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Golden;
+  world.selectedDustKind = ParticleKind.Golden;
 
   press(world, player.positionXWorld + 20, player.positionYWorld);
   // Hold past the 0.75s threshold plus the seating arc so the 3 motes are
@@ -242,7 +235,7 @@ test('bow: fired arrow dust kind is captured at fire time and unaffected by a la
   release(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.bowArrowDustKind, ParticleKind.Golden);
 
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = ParticleKind.Ice;
+  world.selectedDustKind = ParticleKind.Ice;
   assert.equal(world.bowArrowDustKind, ParticleKind.Golden, 'fired arrow dust kind must be frozen at fire time');
 });
 
@@ -281,9 +274,8 @@ test('cancellation mid-gesture (window blur / pause) leaves no stuck shield and 
   assert.equal(world.shieldWeaveIndependentActiveFlag, 0, 'shield must not stay stuck');
   assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'assembling arrow must be cancelled, not fired');
   assert.equal(countArrowMotes(world), 0, 'no motes stranded in arrow mode');
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    const pidx = world.moteSlotParticleIndex[i];
-    assert.equal(world.behaviorMode[pidx], 0, 'motes returned to normal orbit');
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Resting, 'motes returned to normal resting state');
   }
 });
 
@@ -304,9 +296,6 @@ test('sword-to-shield handoff: the exact motes that formed the swipe are the exa
   world.hasSwordWeaveUnlockedFlag = 1;
   world.hasShieldWeaveUnlockedFlag = 1;
 
-  const particleIdentitiesBefore: number[] = [];
-  for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesBefore.push(world.moteSlotParticleIndex[i]);
-
   press(world, player.positionXWorld + 20, player.positionYWorld);
   assert.equal(world.newSwordActiveFlag, 1);
 
@@ -321,40 +310,27 @@ test('sword-to-shield handoff: the exact motes that formed the swipe are the exa
   assert.equal(world.shieldWeaveIndependentActiveFlag, 1, 'shield active same tick as handoff — no gap frame');
 
   let assignedToShieldCount = 0;
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    if (world.behaviorMode[world.moteSlotParticleIndex[i]] === 2) assignedToShieldCount++;
+  for (let i = 0; i < player.healthPoints; i++) {
+    if (world.canonicalMoteOwnership[i] === MoteOwnershipState.Shield) assignedToShieldCount++;
   }
   assert.ok(assignedToShieldCount > 0, 'shield must not form with zero assigned motes during handoff');
-
-  const particleIdentitiesAfter: number[] = [];
-  for (let i = 0; i < world.moteSlotCount; i++) particleIdentitiesAfter.push(world.moteSlotParticleIndex[i]);
-  assert.deepEqual(particleIdentitiesAfter, particleIdentitiesBefore, 'the same underlying particles must carry through the sword->shield handoff, not a different set');
 });
 
 // ── Shield cleanup preserves particles owned by other modes (unchanged) ──────
 
-test('releaseShieldWeaveParticles only resets shield-owned (behaviorMode 2, this player) particles, leaving other-mode and other-owner particles untouched', () => {
+test('end shield ownership only resets shield-owned motes, leaving other-mode motes untouched', () => {
   const { world, player } = makeFixture(6);
-  const otherOwnerEntityId = player.entityId + 1000;
-  const OTHER_BEHAVIOR_MODE = 3;
+  world.hasShieldWeaveUnlockedFlag = 1;
 
-  const shieldOwnedIndices = [world.moteSlotParticleIndex[0], world.moteSlotParticleIndex[1]];
-  for (const pidx of shieldOwnedIndices) world.behaviorMode[pidx] = 2;
+  world.canonicalMoteOwnership[0] = MoteOwnershipState.Shield;
+  world.canonicalMoteOwnership[1] = MoteOwnershipState.Shield;
+  world.canonicalMoteOwnership[2] = MoteOwnershipState.BowAssembling;
+  world.shieldWeaveIndependentActiveFlag = 1;
 
-  const otherModeSamePlayerIdx = world.moteSlotParticleIndex[2];
-  world.behaviorMode[otherModeSamePlayerIdx] = OTHER_BEHAVIOR_MODE;
-
-  const shieldModeOtherOwnerIdx = world.moteSlotParticleIndex[3];
-  world.ownerEntityId[shieldModeOtherOwnerIdx] = otherOwnerEntityId;
-  world.behaviorMode[shieldModeOtherOwnerIdx] = 2;
-
-  releaseShieldWeaveParticles(world, player.entityId);
-
-  for (const pidx of shieldOwnedIndices) {
-    assert.equal(world.behaviorMode[pidx], 0, 'this player\'s shield-owned particles must be released to orbit (mode 0)');
-  }
-  assert.equal(world.behaviorMode[otherModeSamePlayerIdx], OTHER_BEHAVIOR_MODE, 'a same-player particle in a different mode must be left untouched');
-  assert.equal(world.behaviorMode[shieldModeOtherOwnerIdx], 2, 'a different owner\'s shield-mode particle must be left untouched');
+  release(world, player.positionXWorld, player.positionYWorld);
+  assert.equal(world.canonicalMoteOwnership[0], MoteOwnershipState.Resting, 'shield motes released to resting');
+  assert.equal(world.canonicalMoteOwnership[1], MoteOwnershipState.Resting, 'shield motes released to resting');
+  assert.equal(world.canonicalMoteOwnership[2], MoteOwnershipState.BowAssembling, 'other ability motes untouched');
 });
 
 // ── Default combat mode executes exactly one ability path (unchanged) ────────

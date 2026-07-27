@@ -4,36 +4,36 @@ import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from '../screens/gameSpawn';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import {
   startNewSwordSwipe,
   tickNewSwordSwipe,
   resetNewSwordState,
   NEW_SWORD_SLASH_TICKS,
 } from '../sim/weaves/swordWeave';
-import { BEHAVIOR_MODE_SWORD_SLASH } from '../sim/particles/swordSlashBehaviorMode';
+import { MoteOwnershipState } from '../sim/weaves/moteOwnership';
 
 const DT_MS = 1000 / 60;
 
 function makeFixture(moteCount = 6) {
   const world = createWorldState(DT_MS, 5);
   const player = createClusterState(0, 100, 100, 1, 20);
+  player.healthPoints = moteCount;
+  player.maxHealthPoints = moteCount;
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
-  initMoteQueueFromParticles(world, player.entityId);
   return { world, player };
 }
 
 function angleAround(world: ReturnType<typeof createWorldState>, pidx: number): number {
   return Math.atan2(
-    world.positionYWorld[pidx] - world.newSwordHandAnchorYWorld,
-    world.positionXWorld[pidx] - world.newSwordHandAnchorXWorld,
+    world.canonicalMoteYWorld[pidx] - world.newSwordHandAnchorYWorld,
+    world.canonicalMoteXWorld[pidx] - world.newSwordHandAnchorXWorld,
   );
 }
 function radiusAround(world: ReturnType<typeof createWorldState>, pidx: number): number {
   return Math.hypot(
-    world.positionXWorld[pidx] - world.newSwordHandAnchorXWorld,
-    world.positionYWorld[pidx] - world.newSwordHandAnchorYWorld,
+    world.canonicalMoteXWorld[pidx] - world.newSwordHandAnchorXWorld,
+    world.canonicalMoteYWorld[pidx] - world.newSwordHandAnchorYWorld,
   );
 }
 
@@ -45,13 +45,13 @@ function shortestDelta(a: number, b: number): number {
   return d;
 }
 
-test('sword reserves the actual player motes as the blade (BEHAVIOR_MODE_SWORD_SLASH)', () => {
+test('sword reserves the actual player motes as the blade (MoteOwnershipState.Sword)', () => {
   const { world, player } = makeFixture(6);
   startNewSwordSwipe(world, player, 1, player.positionXWorld + 20, player.positionYWorld);
   assert.ok(world.newSwordMoteCount > 0, 'motes reserved');
   let inSlashMode = 0;
-  for (let i = 0; i < world.particleCount; i++) {
-    if (world.behaviorMode[i] === BEHAVIOR_MODE_SWORD_SLASH) inSlashMode++;
+  for (let i = 0; i < player.healthPoints; i++) {
+    if (world.canonicalMoteOwnership[i] === MoteOwnershipState.Sword) inSlashMode++;
   }
   assert.equal(inSlashMode, world.newSwordMoteCount, 'exactly the reserved motes are in slash mode');
 });
@@ -106,8 +106,8 @@ test('sword motes exit cleanly to Storm following after the swipe finishes', () 
   assert.ok(done, 'swipe completes');
   assert.equal(world.newSwordActiveFlag, 0);
   assert.equal(world.newSwordMoteCount, 0, 'no motes left under sword control');
-  for (let i = 0; i < world.particleCount; i++) {
-    assert.notEqual(world.behaviorMode[i], BEHAVIOR_MODE_SWORD_SLASH, 'no stale sword-slash control persists');
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Resting, 'no stale sword-slash control persists');
   }
 });
 
@@ -135,7 +135,7 @@ test('resetNewSwordState releases reserved motes back to orbit (cancel safety)',
   assert.ok(world.newSwordMoteCount > 0);
   resetNewSwordState(world);
   assert.equal(world.newSwordMoteCount, 0);
-  for (let i = 0; i < world.particleCount; i++) {
-    assert.notEqual(world.behaviorMode[i], BEHAVIOR_MODE_SWORD_SLASH, 'cancel returns motes to orbit');
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Resting, 'cancel returns motes to orbit');
   }
 });

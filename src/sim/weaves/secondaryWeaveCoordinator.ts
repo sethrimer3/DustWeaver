@@ -32,8 +32,9 @@ import {
   startNewSwordSwipe,
   tickNewSwordSwipe,
   resetNewSwordState,
-} from './swordWeave';
-import { applyShieldWeaveCrescent, releaseShieldWeaveParticles } from './shieldWeave';
+import { updateShieldWeaveState, deactivateShieldWeave } from '../stormweave/shieldWeave';
+import { getAvailableCanonicalMotes, MoteOwnershipState } from './moteOwnership';
+import { MAX_CANONICAL_MOTES } from '../world';
 import {
   beginBowArrowAssembly,
   tickBowArrowAssembly,
@@ -163,7 +164,24 @@ export function tickSecondaryWeaveCoordinator(world: WorldState): void {
     if (world.bowArrowPhase === BOW_ARROW_PHASE_ASSEMBLING) {
       tickBowArrowAssembly(world, aimDirX, aimDirY, /* isHeld */ true);
     }
-    applyShieldWeaveCrescent(world, player.positionXWorld, player.positionYWorld, aimDirX, aimDirY);
+    const avail = getAvailableCanonicalMotes(world);
+    world.shieldWeave.isHeldRequested = true;
+    updateShieldWeaveState(
+      world.shieldWeave,
+      1 / 60,
+      avail.count,
+      player.positionXWorld,
+      player.positionYWorld,
+      player.halfHeightWorld * 2,
+      aimDirX,
+      aimDirY,
+    );
+    for (let i = 0; i < avail.count; i++) {
+      const idx = avail.indices[i];
+      if (idx < MAX_CANONICAL_MOTES) {
+        world.canonicalMoteOwnership[idx] = MoteOwnershipState.Shield;
+      }
+    }
   } else {
     if (world.shieldWeaveIndependentActiveFlag === 1) {
       endShieldOwnership(world);
@@ -215,8 +233,12 @@ function onSwordSwipeCompleted(world: WorldState): void {
 
 function endShieldOwnership(world: WorldState): void {
   world.shieldWeaveIndependentActiveFlag = 0;
-  const playerEntityId = _findPlayerEntityId(world);
-  if (playerEntityId !== -1) releaseShieldWeaveParticles(world, playerEntityId);
+  deactivateShieldWeave(world.shieldWeave);
+  for (let i = 0; i < MAX_CANONICAL_MOTES; i++) {
+    if (world.canonicalMoteOwnership[i] === MoteOwnershipState.Shield) {
+      world.canonicalMoteOwnership[i] = MoteOwnershipState.Resting;
+    }
+  }
 }
 
 function _findPlayerEntityId(world: WorldState): number {
