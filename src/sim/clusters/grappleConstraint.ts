@@ -18,7 +18,6 @@ import {
   GRAPPLE_MIN_LENGTH_WORLD,
   raycastWalls,
   releaseGrapple,
-  getEffectiveGrappleRangeWorld,
 } from './grappleShared';
 import { tickGrappleWrapping } from './grappleWrapping';
 import { tickGrappleZip } from './grappleZip';
@@ -52,23 +51,6 @@ const GRAPPLE_PULL_IN_SPEED_WORLD_PER_SEC = 162.0;
  * Prevents an instantaneous velocity spike when the player starts retracting.
  */
 const GRAPPLE_PULL_IN_RAMP_TICKS = 21;
-
-/**
- * Ticks of out-of-range rope before grapple breaks automatically.
- * Each tick the attached rope length exceeds the current effective grapple
- * range increments the counter; when the counter reaches this value the
- * grapple is released.  At 60 fps this is 0.75 seconds.
- *
- * Gives the player a short grace window when motes are depleted mid-swing
- * without instantly punishing them, while still enforcing the mote economy.
- */
-const GRAPPLE_OUT_OF_RANGE_BREAK_TICKS = 45;
-
-/**
- * Visual tension ramp denominator.  Tension starts becoming visible after
- * this many out-of-range ticks so the player gets a warning before the break.
- */
-const GRAPPLE_RANGE_SHRINK_GRACE_TICKS = 20;
 
 /**
  * Maximum total rope that can be pulled in before the grapple breaks (world units).
@@ -364,30 +346,6 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
     if (velDotN > 0) {
       player.velocityXWorld -= velDotN * nx;
       player.velocityYWorld -= velDotN * ny;
-    }
-  }
-
-  // ── Phase 9: Out-of-range tension break ──────────────────────────────────
-  // While attached, if motes are depleted mid-swing the effective grapple range
-  // can shrink below the current rope length.  Give the player a grace window
-  // before snapping the rope so they are not instantly punished.
-  {
-    const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
-    if (world.grappleLengthWorld > effectiveRangeWorld) {
-      world.grappleOutOfRangeTicks++;
-      // Tension ramps from 0 → 1 starting after the grace window
-      const ticksPastGrace = world.grappleOutOfRangeTicks - GRAPPLE_RANGE_SHRINK_GRACE_TICKS;
-      const tensionWindow = GRAPPLE_OUT_OF_RANGE_BREAK_TICKS - GRAPPLE_RANGE_SHRINK_GRACE_TICKS;
-      world.grappleTensionFactor = Math.max(0, Math.min(1.0, ticksPastGrace / tensionWindow));
-
-      if (world.grappleOutOfRangeTicks >= GRAPPLE_OUT_OF_RANGE_BREAK_TICKS) {
-        releaseGrapple(world);
-        return;
-      }
-    } else {
-      // Rope back within range — drain tension
-      world.grappleOutOfRangeTicks = 0;
-      world.grappleTensionFactor   = 0;
     }
   }
 

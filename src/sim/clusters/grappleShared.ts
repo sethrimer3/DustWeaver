@@ -12,7 +12,6 @@
  */
 
 import { WorldState } from '../world';
-import { getPlayerMoteCount, getPlayerMoteCapacity } from '../playerMoteLife';
 import { forEachWallSolidRect } from '../stairsWorldGeometry';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
 import { COYOTE_TIME_TICKS } from './movementConstants';
@@ -397,24 +396,15 @@ export function rechargeGrappleCharge(world: WorldState): void {
 const GRAPPLE_RANGE_VISUAL_LERP_FACTOR = 0.08;
 
 /**
- * Computes effective grapple range derived from canonical player mote health points.
+ * Returns the grapple's configured range. This is intentionally independent of
+ * player health/mote count/damage state — the legacy mechanic that shrank
+ * grapple range as the player took damage or lost motes has been removed.
+ * Legitimate range configuration (upgrades, editor settings, room modifiers)
+ * should adjust `GRAPPLE_MAX_LENGTH_WORLD` or wrap this function, not couple
+ * to damage state.
  */
-export function getEffectiveGrappleRangeWorld(world: WorldState): number {
-  let player = null;
-  for (let ci = 0; ci < world.clusters.length; ci++) {
-    const c = world.clusters[ci];
-    if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
-      player = c;
-      break;
-    }
-  }
-  if (player === null) return GRAPPLE_MAX_LENGTH_WORLD;
-  const capacity = getPlayerMoteCapacity(player);
-  const ratio = capacity > 0
-    ? getPlayerMoteCount(player) / capacity
-    : 1;
-
-  return GRAPPLE_MAX_LENGTH_WORLD * Math.max(0.30, ratio);
+export function getEffectiveGrappleRangeWorld(_world: WorldState): number {
+  return GRAPPLE_MAX_LENGTH_WORLD;
 }
 
 /** Alias for circle of influence radius. */
