@@ -86,7 +86,7 @@ export class NewSwordWeaveRenderer {
     if (snapshot.newSwordActiveFlag === 1 && this._prevActiveFlag === 0) {
       this._smoothedTransition01 = 0;
     }
-    this._prevActiveFlag = snapshot.newSwordActiveFlag;
+    this._prevActiveFlag = snapshot.newSwordActiveFlag === 1 ? 1 : 0;
 
     this._smoothedTransition01 = advanceSwordShieldTransitionSmoothing(
       this._smoothedTransition01,
