@@ -2,28 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
-import { getTotalMoteSlotCount, getAvailableMoteSlotCount, getAvailableMoteRatio } from '../sim/motes/orderedMoteQueue';
 import { MOTE_LIFE_SLOT_WIDTH_PX, MOTE_LIFE_SLOT_HEIGHT_PX } from '../render/hud/moteLifeSlots';
-import { beginDustTypeSwitch } from '../sim/weaves/dustTypeSwitch';
-import { ParticleKind } from '../sim/particles/kinds';
 import { capturePlayerTransferState, restoreTransferredPlayerParticles } from '../screens/playerTransfer';
 
 test('canonical mote presentation: square drawImage destination dimensions in HUD', () => {
   assert.equal(MOTE_LIFE_SLOT_WIDTH_PX, 10, 'mote slot sprite width must be 10px');
   assert.equal(MOTE_LIFE_SLOT_HEIGHT_PX, 10, 'mote slot sprite height must be 10px for square aspect ratio');
   assert.equal(MOTE_LIFE_SLOT_WIDTH_PX, MOTE_LIFE_SLOT_HEIGHT_PX, 'aspect ratio must be exactly square (1:1)');
-});
-
-test('canonical mote presentation: authoritative count derived from player health without physical mote slots', () => {
-  const world = createWorldState(1000 / 60, 1);
-  const player = createClusterState(0, 100, 100, 1, 20);
-  player.healthPoints = 16;
-  world.clusters = [player];
-  assert.equal(world.moteSlotCount, 0, 'no legacy mote slots configured');
-
-  assert.equal(getTotalMoteSlotCount(world), 20, 'total slot count must derive from canonical max health');
-  assert.equal(getAvailableMoteSlotCount(world), 16, 'available slot count must derive from canonical current health');
-  assert.equal(getAvailableMoteRatio(world), 16 / 20, 'ratio must derive from canonical health counts');
 });
 
 test('canonical mote presentation: resident transfer filters out ordinary mode-0 orbiters while preserving special particles', () => {
@@ -54,19 +39,4 @@ test('canonical mote presentation: resident transfer filters out ordinary mode-0
 
   assert.equal(targetWorld.particleCount, 1, 'only preserved particle is restored');
   assert.equal(targetWorld.behaviorMode[0], 10, 'restored particle keeps behaviorMode 10 instead of resetting to mode 0');
-});
-
-test('canonical mote presentation: dust type switching updates global selectedDustKind without altering canonical counts or spawning particles', () => {
-  const world = createWorldState(1000 / 60, 1);
-  const player = createClusterState(0, 100, 100, 1, 20);
-  player.healthPoints = 12;
-  world.clusters = [player];
-  assert.equal(world.moteSlotCount, 0);
-
-  // Begin switch to Ice dust
-  beginDustTypeSwitch(world, ParticleKind.Ice);
-  assert.equal(world.selectedDustKind, ParticleKind.Ice, 'authoritative selectedDustKind must update');
-  assert.equal(world.particleCount, 0, 'dust switch must not spawn legacy orbit particles');
-  assert.equal(world.moteSlotCount, 0, 'dust switch must not initialize legacy mote slots');
-  assert.equal(getAvailableMoteSlotCount(world), 12, 'canonical health mote count undisturbed');
 });

@@ -576,6 +576,79 @@ export function renderHazards(
     ctx.stroke();
   }
 
+  // ── Lasers (pulsating red/orange/white glowing beam) ────────────────────
+  for (let i = 0; i < world.laserCount; i++) {
+    const lx = world.laserXWorld[i];
+    const ly = world.laserYWorld[i];
+    const length = world.laserLengthWorld[i];
+    const dir = world.laserDirection[i];
+
+    let beamX0World: number, beamY0World: number, beamX1World: number, beamY1World: number;
+    switch (dir) {
+      case SPIKE_DIR_UP:    beamX0World = lx; beamY0World = ly - length; beamX1World = lx; beamY1World = ly; break;
+      case SPIKE_DIR_DOWN:  beamX0World = lx; beamY0World = ly; beamX1World = lx; beamY1World = ly + length; break;
+      case SPIKE_DIR_LEFT:  beamX0World = lx - length; beamY0World = ly; beamX1World = lx; beamY1World = ly; break;
+      default:              beamX0World = lx; beamY0World = ly; beamX1World = lx + length; beamY1World = ly; break; // SPIKE_DIR_RIGHT
+    }
+
+    const sx0 = beamX0World * zoom + offsetXPx;
+    const sy0 = beamY0World * zoom + offsetYPx;
+    const sx1 = beamX1World * zoom + offsetXPx;
+    const sy1 = beamY1World * zoom + offsetYPx;
+    const rectX = Math.min(sx0, sx1);
+    const rectY = Math.min(sy0, sy1);
+    const rectW = Math.max(Math.abs(sx1 - sx0), 1);
+    const rectH = Math.max(Math.abs(sy1 - sy0), 1);
+    const glowPad = 8 * zoom;
+    if (!isScreenRectVisible(rectX - glowPad, rectY - glowPad, rectW + glowPad * 2, rectH + glowPad * 2, vpW, vpH)) continue;
+
+    // Slow overall pulse (breathing brightness) plus a per-beam phase offset so
+    // multiple lasers in a room don't all pulse in lockstep.
+    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.09 + i * 2.4);
+    const isHorizontal = dir === SPIKE_DIR_LEFT || dir === SPIKE_DIR_RIGHT;
+    const midXPx = (sx0 + sx1) * 0.5;
+    const midYPx = (sy0 + sy1) * 0.5;
+    const halfLenPx = Math.max(rectW, rectH) * 0.5;
+    const halfThickPx = 3 * zoom;
+
+    ctx.save();
+    ctx.translate(midXPx, midYPx);
+
+    // Outer soft glow, widest and dimmest.
+    const outerHalfThickPx = halfThickPx * (2.2 + pulse * 0.6);
+    const glowGradient = isHorizontal
+      ? ctx.createLinearGradient(0, -outerHalfThickPx, 0, outerHalfThickPx)
+      : ctx.createLinearGradient(-outerHalfThickPx, 0, outerHalfThickPx, 0);
+    glowGradient.addColorStop(0,   `rgba(255,70,20,0)`);
+    glowGradient.addColorStop(0.5, `rgba(255,120,30,${(0.35 + pulse * 0.25).toFixed(2)})`);
+    glowGradient.addColorStop(1,   `rgba(255,70,20,0)`);
+    ctx.fillStyle = glowGradient;
+    if (isHorizontal) {
+      ctx.fillRect(-halfLenPx, -outerHalfThickPx, halfLenPx * 2, outerHalfThickPx * 2);
+    } else {
+      ctx.fillRect(-outerHalfThickPx, -halfLenPx, outerHalfThickPx * 2, halfLenPx * 2);
+    }
+
+    // Core beam: white-hot center fading to orange/red at the edges.
+    const coreHalfThickPx = halfThickPx * (0.85 + pulse * 0.3);
+    const coreGradient = isHorizontal
+      ? ctx.createLinearGradient(0, -coreHalfThickPx, 0, coreHalfThickPx)
+      : ctx.createLinearGradient(-coreHalfThickPx, 0, coreHalfThickPx, 0);
+    coreGradient.addColorStop(0,    `rgba(180,20,0,${(0.7 + pulse * 0.2).toFixed(2)})`);
+    coreGradient.addColorStop(0.35, `rgba(255,90,0,${(0.85 + pulse * 0.15).toFixed(2)})`);
+    coreGradient.addColorStop(0.5,  `rgba(255,240,210,${(0.9 + pulse * 0.1).toFixed(2)})`);
+    coreGradient.addColorStop(0.65, `rgba(255,90,0,${(0.85 + pulse * 0.15).toFixed(2)})`);
+    coreGradient.addColorStop(1,    `rgba(180,20,0,${(0.7 + pulse * 0.2).toFixed(2)})`);
+    ctx.fillStyle = coreGradient;
+    if (isHorizontal) {
+      ctx.fillRect(-halfLenPx, -coreHalfThickPx, halfLenPx * 2, coreHalfThickPx * 2);
+    } else {
+      ctx.fillRect(-coreHalfThickPx, -halfLenPx, coreHalfThickPx * 2, halfLenPx * 2);
+    }
+
+    ctx.restore();
+  }
+
   // ── Dust boost jars ────────────────────────────────────────────────────
   for (let i = 0; i < world.dustBoostJarCount; i++) {
     if (world.isDustBoostJarActiveFlag[i] === 0) continue;

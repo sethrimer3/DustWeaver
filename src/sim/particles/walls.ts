@@ -51,7 +51,7 @@ export function applyWallForces(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     forceX, forceY,
-    isAliveFlag, ownerEntityId, kindBuffer, behaviorMode, particleCount,
+    isAliveFlag, ownerEntityId, kindBuffer, particleCount,
     wallXWorld, wallYWorld, wallWWorld, wallHWorld, wallCount,
   } = world;
 
@@ -128,7 +128,7 @@ export function applyWallBounce(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     velocityXWorld, velocityYWorld,
-    isAliveFlag, kindBuffer, ownerEntityId, behaviorMode,
+    isAliveFlag, kindBuffer, ownerEntityId,
     particleCount, particleDurability, respawnDelayTicks,
     isTransientFlag,
     wallXWorld, wallYWorld, wallWWorld, wallHWorld, wallCount,

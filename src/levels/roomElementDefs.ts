@@ -31,6 +31,21 @@ export interface RoomSpikeDef {
   blockTheme?: BlockTheme;
 }
 
+/**
+ * A laser emitter tile. At room-load time the engine fires a ray from this
+ * tile in `direction` and extends the beam until it hits the nearest solid
+ * wall, so the beam's length is derived from room geometry rather than
+ * authored explicitly. The resulting beam is solid (impassable, like a
+ * spike's underlying wall) along its entire length and damages the player
+ * on contact.
+ */
+export interface RoomLaserDef {
+  xBlock: number;
+  yBlock: number;
+  /** Direction the beam fires in. */
+  direction: SpikeDirection;
+}
+
 /** A springboard tile that bounces the player upward. */
 export interface RoomSpringboardDef {
   xBlock: number;

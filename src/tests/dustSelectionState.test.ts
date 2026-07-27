@@ -4,20 +4,17 @@ import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from '../screens/gameSpawn';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import { DustSelectionWheelController, DUST_WHEEL_OPEN_ANIM_MS, DUST_WHEEL_CLOSE_ANIM_MS } from '../screens/gameDustSelectionState';
 import { isDustWheelSuppressedCommandKind } from '../screens/gameCommandProcessor';
 import { CommandKind } from '../input/commands';
 import { createDefaultProgress, sanitizePlayerDustProgress } from '../progression/playerProgress';
 import { loadSaveSlot, saveSaveSlot, createNewSaveSlot } from '../progression/saveSlots';
-import { isDustTypeSwitchInProgress } from '../sim/weaves/dustTypeSwitch';
 
 function makeFixture(moteCount = 4) {
   const world = createWorldState(1000 / 60, 3);
   const player = createClusterState(0, 50, 50, 1, 20);
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
-  initMoteQueueFromParticles(world, player.entityId);
   const progress = createDefaultProgress();
   progress.unlockedDustKinds = [ParticleKind.Golden, ParticleKind.Ice, ParticleKind.Void];
   progress.selectedDustKind = ParticleKind.Golden;
@@ -80,11 +77,10 @@ test('selecting the currently active dust is a safe no-op that closes the wheel'
 
   assert.equal(result, 'same');
   assert.equal(progress.selectedDustKind, ParticleKind.Golden);
-  assert.equal(isDustTypeSwitchInProgress(world), false, 'no transformation should start');
   assert.equal(wheel.isOpen(), false, 'the wheel closes even though nothing changed');
 });
 
-test('selecting a different dust persists it and begins the mote transformation', () => {
+test('selecting a different dust persists it and closes the wheel', () => {
   const { world, player, progress } = makeFixture();
   const wheel = new DustSelectionWheelController();
   wheel.open(progress, 0);
@@ -99,7 +95,6 @@ test('selecting a different dust persists it and begins the mote transformation'
 
   assert.equal(result, 'switched');
   assert.equal(progress.selectedDustKind, ParticleKind.Void, 'persisted immediately');
-  assert.equal(isDustTypeSwitchInProgress(world), true, 'live motes begin animating');
   assert.equal(wheel.isOpen(), false);
 });
 

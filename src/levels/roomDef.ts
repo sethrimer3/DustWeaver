@@ -31,6 +31,7 @@ import type { BlockTheme, BlockSoundHardness } from './blockTheme';
 import type { SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 import type {
   RoomSpikeDef,
+  RoomLaserDef,
   RoomSpringboardDef,
   RoomZoneDef,
   RoomBreakableBlockDef,
@@ -535,6 +536,7 @@ export type {
   SpikeDirection,
   SpikeSize,
   RoomSpikeDef,
+  RoomLaserDef,
   RoomSpringboardDef,
   RoomZoneDef,
   RoomBreakableBlockDef,
@@ -779,6 +781,8 @@ export interface RoomDef {
   // ── Environmental hazards ────────────────────────────────────────────────
   /** Spike tiles that damage the player on contact. */
   spikes?: readonly RoomSpikeDef[];
+  /** Laser emitters that fire a solid, damaging beam until it hits a wall. */
+  lasers?: readonly RoomLaserDef[];
   /** Springboard tiles that bounce the player upward. */
   springboards?: readonly RoomSpringboardDef[];
   /** Water zones where the player floats (buoyancy). */

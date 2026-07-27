@@ -1,5 +1,4 @@
 import { WorldState } from '../sim/world';
-import { MAX_PARTICLES } from '../sim/particles/state';
 import { _MutableCluster, _makeEmptyCluster, _fillCluster } from './snapshotClusterInit';
 
 // Re-export public snapshot interfaces from their dedicated types module so

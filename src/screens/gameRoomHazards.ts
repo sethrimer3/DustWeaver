@@ -38,6 +38,18 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { resolveWallSoundHardnessIndex } from './gameRoomWalls';
+import { raycastToWallWithNormal } from '../sim/clusters/radiantWebBeams';
+
+/**
+ * Half-thickness of a laser beam's solid/damaging cross-section (world
+ * units). Must match LASER_HALF_THICKNESS_WORLD in sim/hazards.ts — kept as a
+ * separate constant here since this module owns wall-shape authoring while
+ * hazards.ts owns damage detection, and the two must agree on the beam's
+ * physical footprint.
+ */
+const LASER_HALF_THICKNESS_WORLD = 3.0;
+/** Upper bound for a laser's wall raycast — generously larger than any room. */
+const LASER_MAX_RANGE_WORLD = 8192;
 
 const FIREFLY_AREA_SPAWN_SPEED_WORLD = 30.0;
 
@@ -66,6 +78,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   // ── Reset all hazard state ────────────────────────────────────────────────
   world.spikeCount = 0;
   world.spikeInvulnTicks = 0;
+  world.laserCount = 0;
+  world.laserInvulnTicks = 0;
   world.springboardCount = 0;
   world.waterZoneCount = 0;
   world.lavaZoneCount = 0;
@@ -166,6 +180,74 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.spikeBlockThemeIndex[si] = s.blockTheme !== undefined
       ? blockThemeToIndex(s.blockTheme)
       : WALL_THEME_DEFAULT_INDEX;
+  }
+
+  // ── Lasers ────────────────────────────────────────────────────────────────
+  // Each laser fires from its emitter tile toward the first solid wall found
+  // by a raycast (reusing the same ray-march used for the Radiant Web boss's
+  // beam attacks), then registers that span as BOTH an invisible solid wall
+  // (so the beam is impassable, exactly like a breakable block's wall) and a
+  // laser hazard record (so sim/hazards.ts can apply beam damage + render the
+  // pulsating glow). The wall is added even if it ends up degenerate (no wall
+  // found within LASER_MAX_RANGE_WORLD is not expected in a bounded room, but
+  // is guarded against below by skipping the def entirely).
+  const laserDefs = room.lasers ?? [];
+  for (let i = 0; i < laserDefs.length && world.laserCount < world.laserXWorld.length; i++) {
+    const l = laserDefs[i];
+    const originXWorld = (l.xBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+    const originYWorld = (l.yBlock + 0.5) * BLOCK_SIZE_MEDIUM;
+
+    let dirXWorld = 0, dirYWorld = 0, laserDir = SPIKE_DIR_UP;
+    switch (l.direction) {
+      case 'up':    dirXWorld = 0;  dirYWorld = -1; laserDir = SPIKE_DIR_UP;    break;
+      case 'down':  dirXWorld = 0;  dirYWorld = 1;  laserDir = SPIKE_DIR_DOWN;  break;
+      case 'left':  dirXWorld = -1; dirYWorld = 0;  laserDir = SPIKE_DIR_LEFT;  break;
+      case 'right': dirXWorld = 1;  dirYWorld = 0;  laserDir = SPIKE_DIR_RIGHT; break;
+    }
+
+    const hit = raycastToWallWithNormal(world, originXWorld, originYWorld, dirXWorld, dirYWorld, LASER_MAX_RANGE_WORLD);
+    if (hit === null) continue; // no wall found within range — skip rather than fire an unbounded beam
+
+    const lengthWorld = laserDir === SPIKE_DIR_UP || laserDir === SPIKE_DIR_DOWN
+      ? Math.abs(hit.yWorld - originYWorld)
+      : Math.abs(hit.xWorld - originXWorld);
+    if (lengthWorld < 1) continue; // emitter is already flush against a wall
+
+    if (world.wallCount < MAX_WALLS) {
+      const wallIdx = world.wallCount++;
+      const halfT = LASER_HALF_THICKNESS_WORLD;
+      if (laserDir === SPIKE_DIR_UP || laserDir === SPIKE_DIR_DOWN) {
+        world.wallXWorld[wallIdx] = originXWorld - halfT;
+        world.wallYWorld[wallIdx] = laserDir === SPIKE_DIR_UP ? originYWorld - lengthWorld : originYWorld;
+        world.wallWWorld[wallIdx] = halfT * 2;
+        world.wallHWorld[wallIdx] = lengthWorld;
+      } else {
+        world.wallXWorld[wallIdx] = laserDir === SPIKE_DIR_LEFT ? originXWorld - lengthWorld : originXWorld;
+        world.wallYWorld[wallIdx] = originYWorld - halfT;
+        world.wallWWorld[wallIdx] = lengthWorld;
+        world.wallHWorld[wallIdx] = halfT * 2;
+      }
+      world.wallThemeIndex[wallIdx] = WALL_THEME_DEFAULT_INDEX;
+      world.wallSurfaceRimStyleIndex[wallIdx] = SURFACE_RIM_STYLE_INDEX_DEFAULT;
+      world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, undefined);
+      world.wallIsInvisibleFlag[wallIdx] = 1; // custom pulsating beam is drawn by renderHazards instead
+      world.wallIsPlatformFlag[wallIdx] = 0;
+      world.wallPlatformEdge[wallIdx] = 0;
+      world.wallRampOrientationIndex[wallIdx] = 255;
+      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
+      world.wallIsBouncePadFlag[wallIdx] = 0;
+      world.wallBouncePadSpeedFactorIndex[wallIdx] = 0;
+      world.wallIsKineticBlockFlag[wallIdx] = 0;
+      world.wallKineticBlockIndex[wallIdx] = -1;
+      world.wallIsIceFlag[wallIdx] = 0;
+      world.wallIsUltraIceFlag[wallIdx] = 0;
+    }
+
+    const li = world.laserCount++;
+    world.laserXWorld[li] = originXWorld;
+    world.laserYWorld[li] = originYWorld;
+    world.laserDirection[li] = laserDir;
+    world.laserLengthWorld[li] = lengthWorld;
   }
 
   // ── Springboards ──────────────────────────────────────────────────────────

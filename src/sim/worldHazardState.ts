@@ -14,6 +14,8 @@
 export const MAX_SPIKES = 32;
 /** Maximum number of springboards per room. */
 export const MAX_SPRINGBOARDS = 16;
+/** Maximum number of laser emitters per room. */
+export const MAX_LASERS = 16;
 /** Maximum number of water zones per room (raised to 6000 to support large liquid pools). */
 export const MAX_WATER_ZONES = 6000;
 /** Maximum number of lava zones per room (raised to 6000 to support large liquid pools). */
@@ -212,6 +214,28 @@ export interface HazardWorldState {
   spikeBlockThemeIndex: Uint8Array;
   /** Invulnerability cooldown ticks after spike damage. */
   spikeInvulnTicks: number;
+
+  // ── Lasers ─────────────────────────────────────────────────────────────────
+  /** Number of active laser emitters. */
+  laserCount: number;
+  /** Emitter origin X of each laser beam (world units) — the base, not the tip. */
+  laserXWorld: Float32Array;
+  /** Emitter origin Y of each laser beam (world units). */
+  laserYWorld: Float32Array;
+  /**
+   * Direction each beam fires: 0=up, 1=down, 2=left, 3=right. Reuses the
+   * spike direction encoding (SPIKE_DIR_UP/DOWN/LEFT/RIGHT).
+   */
+  laserDirection: Uint8Array;
+  /**
+   * Length of the beam (world units), from the emitter origin to the wall it
+   * struck. Resolved once at room-load time via a wall raycast (see
+   * loadRoomHazards in gameRoomHazards.ts) — never recomputed at runtime, since
+   * room geometry is static for the lifetime of a loaded room.
+   */
+  laserLengthWorld: Float32Array;
+  /** Invulnerability cooldown ticks after laser damage. */
+  laserInvulnTicks: number;
 
   // ── Springboards ───────────────────────────────────────────────────────────
   /** Number of active springboards. */
@@ -940,6 +964,12 @@ export function createHazardWorldState(): HazardWorldState {
     spikeSizeBlocks:               new Uint8Array(MAX_SPIKES),
     spikeBlockThemeIndex:          new Uint8Array(MAX_SPIKES),
     spikeInvulnTicks:              0,
+    laserCount:                    0,
+    laserXWorld:                   new Float32Array(MAX_LASERS),
+    laserYWorld:                   new Float32Array(MAX_LASERS),
+    laserDirection:                new Uint8Array(MAX_LASERS),
+    laserLengthWorld:              new Float32Array(MAX_LASERS),
+    laserInvulnTicks:              0,
     springboardCount:              0,
     springboardXWorld:             new Float32Array(MAX_SPRINGBOARDS),
     springboardYWorld:             new Float32Array(MAX_SPRINGBOARDS),

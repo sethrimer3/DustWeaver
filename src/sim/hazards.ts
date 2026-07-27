@@ -49,6 +49,13 @@ const SPIKE_DAMAGE = 2;
 /** Invulnerability ticks after taking spike damage (60 ticks ≈ 1 second). */
 const SPIKE_INVULN_TICKS = 60;
 
+/** Damage dealt by a laser beam per contact (with invulnerability cooldown). Matches spike damage. */
+const LASER_DAMAGE = 2;
+/** Invulnerability ticks after taking laser damage (60 ticks ≈ 1 second). Matches spike invuln. */
+const LASER_INVULN_TICKS = 60;
+/** Half-thickness of a laser beam's damaging/solid cross-section (world units). */
+const LASER_HALF_THICKNESS_WORLD = 3.0;
+
 /**
  * Minimum total speed (wu/s) required for a shallow water impact to skip off
  * the surface instead of submerging. Reuses the momentum-combat "invulnerability
@@ -422,6 +429,7 @@ export function applyHazards(world: WorldState): void {
 
   // ── Tick down invulnerability timers ──────────────────────────────────────
   if (world.spikeInvulnTicks > 0) world.spikeInvulnTicks -= 1;
+  if (world.laserInvulnTicks > 0) world.laserInvulnTicks -= 1;
   if (world.lavaInvulnTicks > 0) world.lavaInvulnTicks -= 1;
 
   // ── Springboard anim countdowns ──────────────────────────────────────────
@@ -466,6 +474,46 @@ export function applyHazards(world: WorldState): void {
         applyPlayerDamageWithKnockback(player, SPIKE_DAMAGE, sourceXWorld, sourceYWorld);
         world.spikeInvulnTicks = SPIKE_INVULN_TICKS;
         break; // one spike hit per tick
+      }
+    }
+  }
+
+  // ── Lasers ───────────────────────────────────────────────────────────────
+  // The entire beam length is solid (collision comes from the wall added at
+  // load time — see loadRoomHazards) and damaging, unlike a spike's tip/base
+  // split, since a laser has no "safe" side.
+  if (world.laserInvulnTicks === 0) {
+    for (let i = 0; i < world.laserCount; i++) {
+      const lx = world.laserXWorld[i];
+      const ly = world.laserYWorld[i];
+      const length = world.laserLengthWorld[i];
+
+      let hazLeft: number, hazRight: number, hazTop: number, hazBottom: number;
+      switch (world.laserDirection[i]) {
+        case SPIKE_DIR_UP:
+          hazLeft = lx - LASER_HALF_THICKNESS_WORLD; hazRight = lx + LASER_HALF_THICKNESS_WORLD;
+          hazTop = ly - length; hazBottom = ly;
+          break;
+        case SPIKE_DIR_DOWN:
+          hazLeft = lx - LASER_HALF_THICKNESS_WORLD; hazRight = lx + LASER_HALF_THICKNESS_WORLD;
+          hazTop = ly; hazBottom = ly + length;
+          break;
+        case SPIKE_DIR_LEFT:
+          hazTop = ly - LASER_HALF_THICKNESS_WORLD; hazBottom = ly + LASER_HALF_THICKNESS_WORLD;
+          hazLeft = lx - length; hazRight = lx;
+          break;
+        default: // SPIKE_DIR_RIGHT
+          hazTop = ly - LASER_HALF_THICKNESS_WORLD; hazBottom = ly + LASER_HALF_THICKNESS_WORLD;
+          hazLeft = lx; hazRight = lx + length;
+          break;
+      }
+
+      if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
+        const sourceXWorld = Math.max(hazLeft, Math.min(px, hazRight));
+        const sourceYWorld = Math.max(hazTop, Math.min(py, hazBottom));
+        applyPlayerDamageWithKnockback(player, LASER_DAMAGE, sourceXWorld, sourceYWorld);
+        world.laserInvulnTicks = LASER_INVULN_TICKS;
+        break; // one laser hit per tick
       }
     }
   }
@@ -571,7 +619,8 @@ export function applyHazards(world: WorldState): void {
       // Latch clears when the player's AABB no longer overlaps the zone at all
       // (player has escaped). Using AABB overlap (not arc-band proximity) avoids
       // false-separation when the arc is submerged past the surface band.
-      const stillInZone = isPlayerOverlappingLiquidZoneAabb(
+      // Additionally, the latch clears immediately if the shield deactivates.
+      const stillInZone = shieldIsActive && isPlayerOverlappingLiquidZoneAabb(
         player.positionXWorld, player.halfWidthWorld,
         player.positionYWorld, player.halfHeightWorld,
         wLeft, wTop, wRight, wTop + world.waterZoneHWorld[wzi],
@@ -700,7 +749,6 @@ export function applyHazards(world: WorldState): void {
   // interior does not provide lava immunity.
   {
     const shieldIsActive = world.shieldWeave.isActive && world.shieldWeave.moteCount >= 1;
-    let lavaShieldSkipFired = false;
 
     // Latch-separation: if latched to a lava zone, check whether the shield
     // is still touching. If not, clear the latch.
@@ -715,7 +763,7 @@ export function applyHazards(world: WorldState): void {
         const lTop = world.lavaZoneYWorld[lzi];
         const lRight = lLeft + world.lavaZoneWWorld[lzi];
         const lBottom = lTop + world.lavaZoneHWorld[lzi];
-        stillInZone = isPlayerOverlappingLiquidZoneAabb(
+        stillInZone = shieldIsActive && isPlayerOverlappingLiquidZoneAabb(
           player.positionXWorld, player.halfWidthWorld,
           player.positionYWorld, player.halfHeightWorld,
           lLeft, lTop, lRight, lBottom,
@@ -797,12 +845,11 @@ export function applyHazards(world: WorldState): void {
           world.shieldLiquidContactLatchKind = 2;
 
           // Lava damage is suppressed for this qualifying shield contact.
-          lavaShieldSkipFired = true;
           break;
         }
       }
 
-      if (!lavaShieldSkipFired && world.lavaInvulnTicks === 0) {
+      if (world.lavaInvulnTicks === 0) {
         // Shield did not qualify — apply ordinary lava damage.
         const sourceXWorld = Math.max(lLeft, Math.min(px, lRight));
         const sourceYWorld = Math.max(lTop, Math.min(py, lBottom));

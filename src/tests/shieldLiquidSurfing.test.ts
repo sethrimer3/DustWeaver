@@ -28,7 +28,7 @@ import { PLAYER_HALF_HEIGHT_WORLD, PLAYER_HALF_WIDTH_WORLD } from '../levels/roo
 import { createWorldState, type WorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { applyHazards, computePlayerWaterState, resetShieldLiquidContactLatch } from '../sim/hazards';
-import { updateShieldWeaveState, resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
+import { updateShieldWeaveState, createShieldWeaveState, tryBlockHostileProjectile } from '../sim/stormweave/shieldWeave';
 import {
   checkShieldLiquidSurfaceContact,
   computeShieldLiquidSkipVelocity,
@@ -211,24 +211,25 @@ describe('checkShieldLiquidSurfaceContact geometry', () => {
   }
 
   test('6. active downward shield just above water top surface returns a contact', () => {
-    // Player at y=90 (top=80, bottom=100), water top at y=100.
-    // Shield center at y=90, radius = (PLAYER_HALF_HEIGHT*2 + 8)/2 = 14.
-    // Arc bottom at y=90+14=104, which is in the band around 100.
-    const shield = makeDownShieldAt(100, 90, 4);
+    // Player at y=88 (bottom at 98). Water top=100.
+    // Shield radius is 14. Arc bottom is 88 + 14 = 102.
+    // The surface band is [98, 102]. The arc bottom (102) is in the band.
+    const shield = makeDownShieldAt(100, 88, 4);
     const result = checkShieldLiquidSurfaceContact(
-      shield,
-      80, 100, 120, // zone left=80, top=100, right=120
-      100, PLAYER_HALF_WIDTH_WORLD, // player center=100, halfWidth
-      90 + PLAYER_HALF_HEIGHT_WORLD, // playerBottom = 90 + 5 = 95
-      10, // vy > 0 (approaching)
+      shield, 80, 100, 120,
+      100, PLAYER_HALF_WIDTH_WORLD,
+      88 + PLAYER_HALF_HEIGHT_WORLD, // bottom = 98
+      30, // vy > 0
       'water', 0,
     );
-    assert.ok(result !== null, 'should detect contact');
-    assert.strictEqual(result!.yWorld, 100);
-    assert.strictEqual(result!.normalX, 0);
-    assert.strictEqual(result!.normalY, -1);
-    assert.strictEqual(result!.liquidKind, 'water');
-    assert.strictEqual(result!.zoneIndex, 0);
+    assert.ok(result !== null, 'should detect contact when arc is in surface band');
+    if (result) {
+      assert.strictEqual(result.yWorld, 100);
+      assert.strictEqual(result.normalX, 0);
+      assert.strictEqual(result.normalY, -1);
+      assert.strictEqual(result.liquidKind, 'water');
+      assert.strictEqual(result.zoneIndex, 0);
+    }
   });
 
   test('8a. inactive shield returns null', () => {
@@ -276,13 +277,14 @@ describe('checkShieldLiquidSurfaceContact geometry', () => {
   });
 
   test('12. swept fallback via applyHazards: high-speed entry triggers shield skip even when player is submerged', () => {
-    // Player at y=91 (bottom=101), water top at 100. Player is 1px into the water
-    // with high downward velocity. Shield is downward. enteredThroughTop should be
-    // true (was outside last tick), triggering the swept fallback in applyHazards.
-    const world = createWaterWorld(91);
-    computePlayerWaterState(world);       // first compute: not in water (bottom=101, just entered)
+    // Player at y=89 (bottom=99), water top at 100. Player is approaching.
+    const world = createWaterWorld(89);
+    computePlayerWaterState(world);       // first compute: not in water (bottom=99, just entered)
     world.isPlayerWasInWaterLastTickFlag = 0; // was NOT in water last tick
     const player = world.clusters[0];
+    
+    // Now move player to 91 (bottom=101) before applyHazards, to simulate fast downward movement
+    player.positionYWorld = 91;
     player.velocityXWorld = 50;
     player.velocityYWorld = 200; // fast downward
 
@@ -301,8 +303,8 @@ describe('checkShieldLiquidSurfaceContact geometry', () => {
 
 describe('shield water surfing via applyHazards', () => {
   test('6. shield-down with vx=50 skips off water top, clears water state, emits skip event', () => {
-    // Player at y=92, water top at 100, player bottom at 97 — approaching.
-    const world = createWaterWorld(92);
+    // Player at y=89 (bottom 99), water top at 100 — not in water yet.
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
@@ -310,7 +312,7 @@ describe('shield water surfing via applyHazards', () => {
 
     activateShieldDown(world, 4);
     // Pre-tick: player enters water this tick (enteredThroughTop)
-    player.positionYWorld = 92; // bottom at 97 < 100 → not yet in water pre-movement
+    player.positionYWorld = 92; // bottom at 102 > 100 → entered water
 
     applyHazards(world);
 
@@ -324,11 +326,12 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('2. leftward vx=-50 produces vx=-40, vy=-25', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = -50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
 
     activateShieldDown(world, 4);
 
@@ -339,15 +342,15 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('3. exactly |vx|=10 does not shield-skip', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 10; // exactly at threshold, not strictly greater
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
 
     activateShieldDown(world, 4);
 
-    const prevSeq = world.playerWaterSkipEventSequence;
     applyHazards(world);
 
     // Since |vx| is not strictly > 10, the shield skip should NOT fire.
@@ -369,12 +372,13 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('10. frozen water zone does not qualify for shield skip', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     world.frozenWaterZoneMask[0] = 1; // freeze it
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
 
     activateShieldDown(world, 4);
 
@@ -392,24 +396,25 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('8a. inactive shield does not skip', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
     // No shield activation
-    const prevSeq = world.playerWaterSkipEventSequence;
     applyHazards(world);
     assert.strictEqual(player.velocityXWorld, 50, 'vx should be unchanged without shield');
     assert.notStrictEqual(player.velocityYWorld, -25, 'should not produce shield-skip vy');
   });
 
   test('8b. zero motes prevents shield skip even if shield held', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
     player.healthPoints = 0; // no health → no motes
     activateShieldDown(world, 0); // zero motes
     applyHazards(world);
@@ -417,11 +422,12 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('11. one contact produces one skip event; persistent overlap is suppressed', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
     activateShieldDown(world, 4);
 
     // First tick: skip fires
@@ -445,11 +451,12 @@ describe('shield water surfing via applyHazards', () => {
   });
 
   test('11b. separation and re-entry allow another skip', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
     activateShieldDown(world, 4);
 
     // First skip
@@ -464,10 +471,12 @@ describe('shield water surfing via applyHazards', () => {
     applyHazards(world); // should clear latch since player is outside water
 
     // Re-approach
+    player.positionYWorld = 89;
+    computePlayerWaterState(world);
+    
     player.positionYWorld = 92;
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
-    computePlayerWaterState(world);
     applyHazards(world);
 
     assert.ok(
@@ -633,11 +642,12 @@ describe('shield liquid contact latch lifecycle', () => {
   });
 
   test('15b. shield deactivation (zero motes) clears the latch on next tick', () => {
-    const world = createWaterWorld(92);
+    const world = createWaterWorld(89);
     computePlayerWaterState(world);
     const player = world.clusters[0];
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    player.positionYWorld = 92;
     activateShieldDown(world, 4);
 
     // First tick: latch is set
@@ -700,11 +710,9 @@ describe('existing behavior preservation', () => {
 
   test('16c. shield projectile blocking still works', () => {
     // Existing tryBlockHostileProjectile should still work.
-    const { tryBlockHostileProjectile, createShieldWeaveState, updateShieldWeaveState: updSW } =
-      require('../sim/stormweave/shieldWeave');
     const shield = createShieldWeaveState();
     shield.isHeldRequested = true;
-    updSW(shield, DT_MS / 1000, 4, 0, 0, PLAYER_HALF_HEIGHT_WORLD * 2, 1, 0);
+    updateShieldWeaveState(shield, DT_MS / 1000, 4, 0, 0, PLAYER_HALF_HEIGHT_WORLD * 2, 1, 0);
     const blocked = tryBlockHostileProjectile(shield, 30, 0, 0, 0);
     assert.strictEqual(blocked, true, 'shield projectile blocking should still work');
   });

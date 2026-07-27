@@ -238,7 +238,7 @@ export function renderPixelLockedDust(
     const normAge = lt > 0 ? Math.min(1.0, ageTicks[i] / lt) : 0.0;
     const ageFade = 1.0 - normAge;
 
-    let alpha = ageFade;
+    const alpha = ageFade;
 
     // Disturbed-only check reused from fallback renderer (non-Fluid always
     // uses ageFade; Fluid is excluded above).

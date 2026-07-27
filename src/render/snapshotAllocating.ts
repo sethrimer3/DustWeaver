@@ -14,7 +14,6 @@ import { WorldState } from '../sim/world';
 import { ClusterState } from '../sim/clusters/state';
 import { INFLUENCE_RADIUS_WORLD } from '../sim/clusters/binding';
 import { DASH_COOLDOWN_TICKS } from '../sim/clusters/dashConstants';
-import { MAX_PARTICLES } from '../sim/particles/state';
 import type { WorldSnapshot, ClusterSnapshot } from './snapshotTypes';
 
 /**
