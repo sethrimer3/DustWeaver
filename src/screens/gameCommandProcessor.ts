@@ -35,11 +35,6 @@ import { stringToParticleKind } from '../editor/roomJsonSchema';
 import { spawnClusterParticles } from './gameSpawn';
 import { getDustDefinition } from '../sim/weaves/dustDefinition';
 import type { DustSelectionWheelController } from './gameDustSelectionState';
-import {
-  tickSecondaryWeaveGesture,
-  cancelSecondaryWeaveGesture,
-  markSecondaryWeaveGestureConsumedByOtherSystem,
-} from '../input/secondaryWeaveGesture';
 
 /** Radius within which the player can collect a dust swarm by pressing F. */
 const DUST_SWARM_COLLECT_RADIUS_WORLD = BLOCK_SIZE_MEDIUM * 2;
@@ -218,27 +213,6 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     }
   }
 
-  // ── Secondary weave gesture coordinator ───────────────────────────────────
-  // Advances press/hold/release detection for the secondary action button
-  // once per frame, ahead of the sim tick (which runs applyPlayerWeaveCombat).
-  // While the dust wheel is capturing secondary-button input for its own
-  // selection gesture, the physical press must never also start a weave
-  // gesture, so the coordinator is cancelled every frame instead of ticked.
-  if (ctx.dustWheel.shouldCaptureGrappleWeaveInput()) {
-    cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
-  } else {
-    const secondaryAim = screenToWorld(
-      inputState.mouseXPx, inputState.mouseYPx,
-      offsetXPx, offsetYPx, zoom, canvas.width, canvas.height, virtualWidthPx, virtualHeightPx,
-    );
-    tickSecondaryWeaveGesture(
-      world.secondaryWeaveGesture,
-      inputState.isRightMouseDownFlag === 1,
-      secondaryAim.xWorld,
-      secondaryAim.yWorld,
-    );
-  }
-
   for (let ci = 0; ci < commands.length; ci++) {
     const cmd = commands[ci];
 
@@ -326,10 +300,6 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
         if (world.isGrappleZipActiveFlag === 0) {
           world.isGrappleZipTriggeredFlag = 1;
         }
-        // Grapple has exclusive claim on this physical press — the secondary
-        // weave gesture coordinator must not also treat it as a weave press,
-        // and must not fire a spurious release when this same press lifts.
-        markSecondaryWeaveGestureConsumedByOtherSystem(world.secondaryWeaveGesture);
       }
     } else if (cmd.kind === CommandKind.ShieldWeaveHold) {
       const player = world.clusters[0];
@@ -400,9 +370,6 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
           if (world.isGrappleActiveFlag === 1 && world.isGrappleZipActiveFlag === 0
               && ctx.inputState.isRightMouseDownFlag === 1) {
             world.isGrappleZipTriggeredFlag = 1;
-            // The already-held RMB press retroactively belongs to grapple —
-            // void any weave gesture the coordinator may have started on it.
-            markSecondaryWeaveGestureConsumedByOtherSystem(world.secondaryWeaveGesture);
           }
         }
       }

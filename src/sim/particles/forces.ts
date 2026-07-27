@@ -46,7 +46,6 @@ import {
   ODC_LARGE_RING_RADII,
 } from '../clusters/orbitalDustCoreConfig';
 import { DWA_HIT_FLASH_TICKS } from '../clusters/dustWeaverArchitectConfig';
-import { isDustSwitchBehaviorMode } from './dustSwitchBehaviorMode';
 
 // Particle half-size: 1/6th of the player's full width (8 world units) divided by 2.
 // Square hitbox side = 8/6 ≈ 1.333 wu; radius = side/2 ≈ 0.667 wu.
@@ -141,10 +140,6 @@ export function applyInterParticleForces(world: WorldState): void {
   // ---- Per-particle neighbour pass ------------------------------------
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
-    // Dust-switch motes (recalling or just-transformed) never damage enemies,
-    // intercept attacks, or get pushed around by boid forces during their
-    // brief transition — skip them from the neighbor pass entirely.
-    if (isDustSwitchBehaviorMode(behaviorMode[i])) continue;
 
     const px = positionXWorld[i];
     const py = positionYWorld[i];
@@ -157,7 +152,6 @@ export function applyInterParticleForces(world: WorldState): void {
       const j = sharedSpatialGrid.queryResult[ni];
       if (j <= i) continue;
       if (isAliveFlag[j] === 0) continue;
-      if (isDustSwitchBehaviorMode(behaviorMode[j])) continue;
 
       const ownerJ = ownerEntityId[j];
       const dx = positionXWorld[j] - px;

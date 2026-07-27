@@ -27,7 +27,6 @@ import {
   findNearestDustWheelOption,
 } from '../sim/weaves/dustWheelOptions';
 import { computeDustWheelAim } from '../input/dustWheelInput';
-import { beginDustTypeSwitch, isDustTypeSwitchInProgress } from '../sim/weaves/dustTypeSwitch';
 
 /** Duration (ms) of the outward expansion animation when the wheel opens. */
 export const DUST_WHEEL_OPEN_ANIM_MS = 160;
@@ -46,8 +45,8 @@ function easeOutCubic(t: number): number {
  * dust-switch transition is already running. The wheel becomes available
  * again automatically once every participating mote resolves.
  */
-export function isDustWheelAvailable(world: WorldState, progress: PlayerProgress | undefined): boolean {
-  return isDustWheelEligible(progress) && !isDustTypeSwitchInProgress(world);
+export function isDustWheelAvailable(_world: WorldState, progress: PlayerProgress | undefined): boolean {
+  return isDustWheelEligible(progress);
 }
 
 export class DustSelectionWheelController {
@@ -196,7 +195,6 @@ export class DustSelectionWheelController {
     if (progress !== undefined) {
       progress.selectedDustKind = nearest.kind;
     }
-    beginDustTypeSwitch(world, nearest.kind);
     this.cancel(nowMs);
     return 'switched';
   }

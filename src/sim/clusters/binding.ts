@@ -40,7 +40,6 @@
 
 import { WorldState } from '../world';
 import { getElementProfile } from '../particles/elementProfiles';
-import { BEHAVIOR_MODE_DUST_SWITCH_RETURN } from '../particles/dustSwitchBehaviorMode';
 
 /**
  * Radius (world units) within which a cluster can control its particles.
@@ -245,11 +244,8 @@ export function applyBindingForces(world: WorldState): void {
   // ── Main loop ─────────────────────────────────────────────────────────────
   for (let particleIndex = 0; particleIndex < particleCount; particleIndex++) {
     if (isAliveFlag[particleIndex] === 0) continue;
-    // Normal orbit (0) always binds; a mote that just transformed at the
-    // player center (BEHAVIOR_MODE_DUST_SWITCH_RETURN) also binds so it eases
-    // back out to its anchor organically. All other non-zero modes (attack,
-    // block, grapple chain, dust-switch recall) manage their own motion.
-    if (behaviorMode[particleIndex] !== 0 && behaviorMode[particleIndex] !== BEHAVIOR_MODE_DUST_SWITCH_RETURN) continue;
+    // Normal orbit (0) always binds. All non-zero modes manage their own motion.
+    if (behaviorMode[particleIndex] !== 0) continue;
 
     // Find the owning cluster
     const ownerId = ownerEntityId[particleIndex];

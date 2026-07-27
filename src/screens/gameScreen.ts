@@ -125,9 +125,7 @@ import {
 } from './gameCameraState';
 import { createGameOverlayController } from './gameOverlayController';
 import { DustSelectionWheelController, isDustWheelAvailable } from './gameDustSelectionState';
-import { cancelSecondaryWeaveGesture } from '../input/secondaryWeaveGesture';
 import { createDustWheelGestureState, updateDustWheelGesture } from '../input/dustWheelInput';
-import { cancelAllDustTypeSwitches } from '../sim/weaves/dustTypeSwitch';
 import {
   PlayerDeathDustEffect,
   triggerPlayerDeathDustFromSprite,
@@ -991,7 +989,6 @@ export function startGameScreen(
   const dustWheelGestureState = createDustWheelGestureState();
   const onDustWheelBlur = (): void => {
     dustWheelController.cancel(performance.now());
-    cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
   };
   window.addEventListener('blur', onDustWheelBlur);
 
@@ -1528,7 +1525,6 @@ export function startGameScreen(
       || gameOverlayController.state.isMapOnlyOpen) {
       playerSfx.stopWind();
       dustWheelController.cancel(timestampMs);
-      cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
@@ -1546,7 +1542,6 @@ export function startGameScreen(
     if (gameOverlayController.state.isPlayerDead) {
       playerSfx.stopWind();
       dustWheelController.cancel(timestampMs);
-      cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
       playerDeathDust.update(elapsedMs);
       if (lastRenderFrameArgs !== null) {
@@ -1602,7 +1597,6 @@ export function startGameScreen(
         // A room transition beginning always closes the wheel safely — the
         // new room's mote queue is rebuilt from scratch on load anyway.
         dustWheelController.cancel(timestampMs);
-        cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
         transitionCoordinator.submitTransition(room, spawnXBlock, spawnYBlock, vx, vy, dir);
       },
       resolveSpawnBlock,
@@ -1641,7 +1635,6 @@ export function startGameScreen(
       // Dialogue opening (via trigger or otherwise) closes an open wheel safely.
       if (dialogueState.isDialogueActiveFlag) {
         dustWheelController.cancel(timestampMs);
-        cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       }
     }
 
@@ -1799,9 +1792,6 @@ export function startGameScreen(
       );
       gameOverlayController.showPlayerDeathScreen();
       dustWheelController.cancel(timestampMs);
-      // Resolve any in-progress mote transformation immediately rather than
-      // leaving particles frozen mid-recall behind the death screen.
-      cancelAllDustTypeSwitches(world);
     }
 
     // ── Update skill tomb renderer ──────────────────────────────────────────

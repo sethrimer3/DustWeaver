@@ -12,7 +12,6 @@
 
 import { WorldState } from '../world';
 import { getElementProfile } from './elementProfiles';
-import { BEHAVIOR_MODE_DUST_SWITCH_RECALL } from './dustSwitchBehaviorMode';
 
 // ---- Deterministic noise hash -------------------------------------------
 
@@ -77,15 +76,12 @@ export function applyElementForces(world: WorldState): void {
   const {
     positionXWorld, positionYWorld,
     forceX, forceY,
-    isAliveFlag, kindBuffer, noiseTickSeed, behaviorMode,
+    isAliveFlag, kindBuffer, noiseTickSeed,
     particleCount, tick,
   } = world;
 
   for (let i = 0; i < particleCount; i++) {
     if (isAliveFlag[i] === 0) continue;
-    // Recalling motes are fully custom-steered; ambient forces would just be
-    // discarded (integration skips them) — skip the wasted computation.
-    if (behaviorMode[i] === BEHAVIOR_MODE_DUST_SWITCH_RECALL) continue;
 
     const profile = getElementProfile(kindBuffer[i]);
     const px = positionXWorld[i];
