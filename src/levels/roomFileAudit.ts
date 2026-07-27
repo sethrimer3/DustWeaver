@@ -135,7 +135,7 @@ export function auditRoomJson(rawJson: string): RoomFileAuditEntry | null {
   let bgLayerGroups = 0, bgLayerPrimitives = 0;
   if (saved.bgLayers) {
     bgLayerGroups = saved.bgLayers.length;
-    for (const group of saved.bgLayers) bgLayerPrimitives += countSolidLayer(group.layer);
+    for (const group of saved.bgLayers) bgLayerPrimitives += countSolidLayer(group.layer) + count1x1Layer(group.v1);
   }
   const bgBlockLegacy = saved.bgBlocks?.length ?? 0;
 

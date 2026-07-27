@@ -8,6 +8,23 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 548 — Decouple Editor Background-Block Identities From Compact Schema Grouping
+
+**Why:** BUILD 545 fixed this for walls (`solids.byTheme` vs `solids.v1ByTheme`) but explicitly deferred background blocks: `dehydrateBgLayers` grouped only by `(theme, isLightBlocking)` and rasterized every footprint — 1x1 or deliberately larger — through one rect/run/point compressor with no way to recover which cells were independently authored. Adjacent same-theme 1x1 background blocks still merged into one `EditorBackgroundBlock` on reopen, losing independent select/move/delete.
+
+**What was done:**
+1. `src/levels/roomSavedTypes.ts::SavedBgLayer` — made `layer` optional and added `v1?: Saved1x1Layer`, mirroring `SavedSolids.byTheme`/`v1ByTheme`.
+2. `src/levels/roomSchemaV2.ts::dehydrateBgLayers` — within each `(themeKey, lb)` group, partitions members by `wBlock === 1 && hBlock === 1`. 1x1-authored blocks compress into `v1` via `extract1x1LayerFromGrid` (runs+points only); bulk blocks keep the existing `extractLayerFromGrid` compressor in `layer`. A group entry may carry either field, both, or is omitted if both are empty.
+3. `src/levels/roomSchemaHydrator.ts` — added `hydrateBgBulkGroup`/`hydrateBgV1Group` helpers, `hydrateBgLayers` (runtime fast path: expands both `layer` and `v1`, `v1` runs stay merged — exactly matching `hydrateSolidsByTheme`'s wall semantics) and `hydrateBgLayersForEditor` (editor path: additionally splits every `v1` run into independent 1x1 `RoomJsonBackgroundBlock` entries, mirroring `hydrateSolidsByThemeForEditor`). Both are wired into the existing `hydrateV2Room(saved, opts)` `forEditor` boundary — no new call site was needed since `campaignStore.ts::getRoom` already passes `{ forEditor: true }` from BUILD 545.
+4. `src/levels/roomFileAudit.ts` — bg-layer primitive counter now also counts `v1` primitives via `count1x1Layer`.
+5. Updated `src/tests/editorBlockIdentityDecoupling.test.ts`: the previous test documenting merged-on-reopen background blocks as an intentionally deferred gap now asserts the split (runtime stays merged, editor splits with distinct UIDs); added 2 new tests for bulk-footprint atomicity and theme/lb-group isolation with deterministic re-save (`compactSecond.bgLayers` byte-identical to `compactFirst.bgLayers`).
+
+**Not done / follow-up:** No live-editor manual verification was performed (no DOM/jsdom harness in this environment) — validated at the data-transformation layer (`hydrateV2Room`/`jsonToEditorRoomData` output) only, same boundary already proven correct for walls in BUILD 545. A manual smoke test (paint 3+ adjacent same-theme 1x1 background blocks, save, reopen, verify independent click-select/drag/delete, then verify a large deliberately-authored background rect still reopens as one block) is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2552/2552 tests pass, `tsc --noEmit` clean, `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 547 — Render-Only Player-Death Disintegration Dust
 
 **Why:** Todo item requested a player-death effect that blows the player apart into ~80 warm-gold dust motes, but a prior partial attempt (`src/sim/clusters/playerDeathDisintegration.ts`, already on `main`) spawned real `WorldState` Golden particles instead of a render-only effect. Since `gameScreen.ts` freezes `world.tick` entirely on the alive→dead transition (the dead-frame branch returned before ever reaching `renderFrame` again), those particles never actually animated — the burst rendered for exactly one frame at the death position with its randomized velocities, then the canvas simply stopped updating, so the "cloud blows away" effect never visually happened.

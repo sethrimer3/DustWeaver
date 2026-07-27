@@ -42,6 +42,7 @@ import type {
   Saved1x1Layer,
   SavedEnemyType,
   SavedRoomV2,
+  SavedBgLayer,
 } from './roomSavedTypes';
 import { DEFAULT_THEME_KEY, SAVED_ENEMY_TYPES } from './roomSavedTypes';
 import { expandLayerToRects, expandBlockerLayerToCells } from './tileGridCompressor';
@@ -239,6 +240,109 @@ export function hydrateSolidsByThemeForEditor(
     }
   }
   return [...bulk, ...splitV1];
+}
+
+// ── Background-block hydration ────────────────────────────────────────────────
+
+/**
+ * Expands one `SavedBgLayer` group's bulk `layer` (if present) into
+ * `RoomJsonBackgroundBlock` rects, applying the group's theme/lb.
+ */
+function hydrateBgBulkGroup(group: SavedBgLayer): RoomJsonBackgroundBlock[] {
+  if (!group.layer) return [];
+  // themeKey is DEFAULT_THEME_KEY (empty string sentinel) or a BlockThemeId string.
+  // blockThemeRefToTheme handles both BlockTheme and BlockThemeId inputs; casting here
+  // is safe because themeKey originates from blockThemeToId() in the dehydrator.
+  const theme = group.themeKey !== DEFAULT_THEME_KEY
+    ? blockThemeRefToTheme(group.themeKey as BlockTheme | BlockThemeId)
+    : undefined;
+  const isLightBlocking = group.lb === 1;
+  const out: RoomJsonBackgroundBlock[] = [];
+  for (const [x, y, w, h] of expandLayerToRects(group.layer)) {
+    const entry: RoomJsonBackgroundBlock = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
+    if (theme) entry.blockTheme = theme;
+    if (isLightBlocking) entry.isLightBlocking = true;
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * Expands one `SavedBgLayer` group's `v1` layer (1×1-authored blocks, runs +
+ * points only) into `RoomJsonBackgroundBlock` entries. Runs are returned
+ * merged (one wide entry per run) — callers needing independent per-cell
+ * editor identity must further split via `splitBgV1Run`.
+ */
+function hydrateBgV1Group(group: SavedBgLayer): RoomJsonBackgroundBlock[] {
+  if (!group.v1) return [];
+  const theme = group.themeKey !== DEFAULT_THEME_KEY
+    ? blockThemeRefToTheme(group.themeKey as BlockTheme | BlockThemeId)
+    : undefined;
+  const isLightBlocking = group.lb === 1;
+  const out: RoomJsonBackgroundBlock[] = [];
+  if (group.v1.runs) {
+    for (const [y, xStart, xEnd] of group.v1.runs) {
+      const entry: RoomJsonBackgroundBlock = { xBlock: xStart, yBlock: y, wBlock: xEnd - xStart, hBlock: 1 };
+      if (theme) entry.blockTheme = theme;
+      if (isLightBlocking) entry.isLightBlocking = true;
+      out.push(entry);
+    }
+  }
+  if (group.v1.points) {
+    for (const [x, y] of group.v1.points) {
+      const entry: RoomJsonBackgroundBlock = { xBlock: x, yBlock: y, wBlock: 1, hBlock: 1 };
+      if (theme) entry.blockTheme = theme;
+      if (isLightBlocking) entry.isLightBlocking = true;
+      out.push(entry);
+    }
+  }
+  return out;
+}
+
+/**
+ * Runtime hydration: `SavedBgLayer[]` → flat `RoomJsonBackgroundBlock[]`.
+ * Bulk and 1×1-authored blocks are both expanded as-is (1×1 runs stay merged
+ * into one wide entry) — fast path, no per-cell identity needed at runtime.
+ */
+function hydrateBgLayers(bgLayers: readonly SavedBgLayer[]): RoomJsonBackgroundBlock[] {
+  const out: RoomJsonBackgroundBlock[] = [];
+  for (const group of bgLayers) {
+    out.push(...hydrateBgBulkGroup(group), ...hydrateBgV1Group(group));
+  }
+  return out;
+}
+
+/**
+ * Editor-only variant of `hydrateBgLayers`, mirroring
+ * `hydrateSolidsByThemeForEditor`. Bulk blocks are expanded unchanged (they
+ * were never 1×1-grain-compressed, so they keep their existing multi-cell
+ * editing semantics). Every 1×1-authored `v1` run is additionally split into
+ * independent 1×1 `RoomJsonBackgroundBlock` entries — one per occupied cell —
+ * so each becomes its own `EditorBackgroundBlock` with its own UID after
+ * hydration reaches `jsonToEditorRoomData`.
+ *
+ * Must only be used on the editor load path (see `hydrateV2Room`'s
+ * `forEditor` option). The runtime hydration fast path keeps using
+ * `hydrateBgLayers` unchanged for performance.
+ */
+function hydrateBgLayersForEditor(bgLayers: readonly SavedBgLayer[]): RoomJsonBackgroundBlock[] {
+  const out: RoomJsonBackgroundBlock[] = [];
+  for (const group of bgLayers) {
+    out.push(...hydrateBgBulkGroup(group));
+    for (const wall of hydrateBgV1Group(group)) {
+      if (wall.wBlock <= 1) {
+        out.push(wall);
+        continue;
+      }
+      for (let i = 0; i < wall.wBlock; i++) {
+        const cell: RoomJsonBackgroundBlock = { xBlock: wall.xBlock + i, yBlock: wall.yBlock, wBlock: 1, hBlock: 1 };
+        if (wall.blockTheme) cell.blockTheme = wall.blockTheme;
+        if (wall.isLightBlocking) cell.isLightBlocking = true;
+        out.push(cell);
+      }
+    }
+  }
+  return out;
 }
 
 // ── SavedRoomV2 type guard ────────────────────────────────────────────────────
@@ -541,22 +645,7 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
 
   // Background blocks: prefer compact `bgLayers` (v3+); fall back to legacy `bgBlocks`.
   if (saved.bgLayers && saved.bgLayers.length > 0) {
-    const bgBlocks: RoomJsonBackgroundBlock[] = [];
-    for (const group of saved.bgLayers) {
-      // themeKey is DEFAULT_THEME_KEY (empty string sentinel) or a BlockThemeId string.
-      // blockThemeRefToTheme handles both BlockTheme and BlockThemeId inputs; casting here
-      // is safe because themeKey originates from blockThemeToId() in the dehydrator.
-      const theme = group.themeKey !== DEFAULT_THEME_KEY
-        ? blockThemeRefToTheme(group.themeKey as BlockTheme | BlockThemeId)
-        : undefined;
-      const isLightBlocking = group.lb === 1;
-      for (const [x, y, w, h] of expandLayerToRects(group.layer)) {
-        const entry: RoomJsonBackgroundBlock = { xBlock: x, yBlock: y, wBlock: w, hBlock: h };
-        if (theme) entry.blockTheme = theme;
-        if (isLightBlocking) entry.isLightBlocking = true;
-        bgBlocks.push(entry);
-      }
-    }
+    const bgBlocks = opts?.forEditor ? hydrateBgLayersForEditor(saved.bgLayers) : hydrateBgLayers(saved.bgLayers);
     if (bgBlocks.length > 0) json.backgroundBlocks = bgBlocks;
   } else if (saved.bgBlocks && saved.bgBlocks.length > 0) {
     json.backgroundBlocks = saved.bgBlocks.map(b => {

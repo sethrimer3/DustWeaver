@@ -253,12 +253,19 @@ function dehydrateBlockerLayer(
  * Compresses a list of background blocks into SavedBgLayer groups.
  *
  * Background blocks are grouped by (themeKey, lb) so that only blocks with
- * identical visual and lighting properties are merged together.  The full
- * greedy rect algorithm is applied to each group independently.
+ * identical visual and lighting properties are merged together. Within each
+ * group, blocks are further partitioned by authored footprint:
+ *   • bulk blocks (`wBlock > 1 || hBlock > 1`) go through the full greedy
+ *     rect/run/point compressor (`layer`) — merging across these is fine
+ *     because their footprint is already a deliberate multi-cell rectangle.
+ *   • 1×1-authored blocks go through the runs+points-only compressor (`v1`)
+ *     so their per-cell authoring identity survives the round trip (see
+ *     `hydrateBgLayersForEditor`), mirroring `solids.v1ByTheme` for walls.
  *
  * Never merge:
  *   • blocks with different block themes
  *   • light-blocking blocks with non-light-blocking blocks
+ *   • bulk blocks with 1×1-authored blocks (they use different primitives)
  */
 function dehydrateBgLayers(
   bgBlocks: readonly { xBlock: number; yBlock: number; wBlock: number; hBlock: number; blockTheme?: BlockTheme | undefined; isLightBlocking?: boolean | undefined }[],
@@ -284,11 +291,23 @@ function dehydrateBgLayers(
   // Deterministic order: sort group keys.
   for (const [key, members] of [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const [themeKey, lbStr] = key.split('\0');
-    const grid = createTileGrid(widthBlocks, heightBlocks);
-    for (const b of members) paintRect(grid, b.xBlock, b.yBlock, b.wBlock, b.hBlock);
-    const layer = extractLayerFromGrid(grid);
-    if (!layer.rects && !layer.runs && !layer.points) continue;
-    const entry: SavedBgLayer = { themeKey, layer };
+    const bulkMembers = members.filter(b => b.wBlock > 1 || b.hBlock > 1);
+    const v1Members = members.filter(b => b.wBlock === 1 && b.hBlock === 1);
+
+    const entry: SavedBgLayer = { themeKey };
+    if (bulkMembers.length > 0) {
+      const grid = createTileGrid(widthBlocks, heightBlocks);
+      for (const b of bulkMembers) paintRect(grid, b.xBlock, b.yBlock, b.wBlock, b.hBlock);
+      const layer = extractLayerFromGrid(grid);
+      if (layer.rects || layer.runs || layer.points) entry.layer = layer;
+    }
+    if (v1Members.length > 0) {
+      const grid = createTileGrid(widthBlocks, heightBlocks);
+      for (const b of v1Members) paintRect(grid, b.xBlock, b.yBlock, 1, 1);
+      const layer = extract1x1LayerFromGrid(grid);
+      if (layer.runs || layer.points) entry.v1 = layer;
+    }
+    if (!entry.layer && !entry.v1) continue;
     if (lbStr === '1') entry.lb = 1;
     layers.push(entry);
   }

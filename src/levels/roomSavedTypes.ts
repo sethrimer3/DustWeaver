@@ -66,8 +66,21 @@ export interface SavedBgLayer {
   themeKey: string;
   /** 1 if every block in this layer blocks ambient light. Omit if none do. */
   lb?: 1;
-  /** Compressed tile coverage for this (theme, lb) group. */
-  layer: SavedSolidLayer;
+  /**
+   * Compressed tile coverage for bulk background blocks in this (theme, lb)
+   * group — any block with `wBlock > 1 || hBlock > 1`. Compressed with the
+   * full rect/run/point greedy algorithm. Absent if this group has no bulk
+   * blocks.
+   */
+  layer?: SavedSolidLayer;
+  /**
+   * 1×1-authored background blocks in this (theme, lb) group, compressed as
+   * runs + points only (no 2D rects) so per-cell authoring provenance is
+   * preserved. Absent in files written before this split (those blocks live
+   * in `layer` instead, merged with any bulk blocks). Absent if this group
+   * has no 1×1 blocks.
+   */
+  v1?: Saved1x1Layer;
 }
 
 /** Encoded solids, grouped by block theme. */

@@ -196,7 +196,7 @@ test('deterministic overlapping coverage and unchanged compact output on save', 
   assert.deepEqual(compactSecond.solids, compactFirst.solids);
 });
 
-test('background blocks: compact bgLayers hydration is unaffected by the editor wall split', () => {
+test('background blocks: compact bgLayers 1x1-authored blocks split independently on editor reopen', () => {
   const sourceJson: RoomJsonDef = {
     id: 'bg_room',
     name: 'Bg Room',
@@ -218,15 +218,87 @@ test('background blocks: compact bgLayers hydration is unaffected by the editor 
   const original = jsonToEditorRoomData(sourceJson, 1000).data;
   const compact = dehydrateRoom(editorRoomDataToJson(original));
   assert.ok(compact.bgLayers && compact.bgLayers.length > 0);
+  assert.ok(compact.bgLayers![0].v1, '1x1-authored background blocks are stored via the v1 layer');
 
+  // Runtime hydration (no forEditor) merges the adjacent run into one wide
+  // background block — fine for rendering, which never needs per-cell identity.
+  const runtimeJson = hydrateV2Room(compact);
+  assert.equal(runtimeJson.backgroundBlocks?.length, 1);
+  assert.equal(runtimeJson.backgroundBlocks?.[0].wBlock, 2);
+
+  // Editor reopen must restore two independent 1x1 background blocks, each
+  // with its own UID.
   const reopenedJson = hydrateV2Room(compact, { forEditor: true });
+  assert.equal(reopenedJson.backgroundBlocks?.length, 2);
   const reopened = jsonToEditorRoomData(reopenedJson, 5000).data;
-  // Background blocks: still hydrate to the same total occupied-cell coverage
-  // (this schema has no v1/bulk provenance split like walls do, so the
-  // editor-split boundary intentionally leaves them unchanged for now — see
-  // nextSteps.md for the follow-up needed to fully decouple them too).
-  assert.equal(reopened.backgroundBlocks?.length, 1);
-  assert.equal(reopened.backgroundBlocks?.[0].wBlock, 2);
+  assert.equal(reopened.backgroundBlocks?.length, 2);
+  const uids = reopened.backgroundBlocks!.map(b => b.uid);
+  assert.equal(new Set(uids).size, 2, 'every reopened background block has a distinct UID');
+  const cells = reopened.backgroundBlocks!.map(b => `${b.xBlock},${b.yBlock}`).sort();
+  assert.deepEqual(cells, ['6,6', '7,6']);
+  for (const b of reopened.backgroundBlocks!) {
+    assert.equal(b.wBlock, 1);
+    assert.equal(b.hBlock, 1);
+  }
+});
+
+test('background blocks: bulk footprints (wBlock/hBlock > 1) are never split', () => {
+  const sourceJson: RoomJsonDef = {
+    id: 'bg_bulk_room',
+    name: 'Bg Bulk Room',
+    worldNumber: 1,
+    mapX: 0,
+    mapY: 0,
+    widthBlocks: 20,
+    heightBlocks: 20,
+    playerSpawnBlock: [1, 1],
+    interiorWalls: [],
+    enemies: [],
+    transitions: [],
+    skillTombs: [],
+    backgroundBlocks: [
+      { xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 4 },
+      { xBlock: 10, yBlock: 10, wBlock: 1, hBlock: 1, isLightBlocking: true },
+    ],
+  };
+  const original = jsonToEditorRoomData(sourceJson, 1000).data;
+  const compact = dehydrateRoom(editorRoomDataToJson(original));
+  const reopenedJson = hydrateV2Room(compact, { forEditor: true });
+  assert.equal(reopenedJson.backgroundBlocks?.length, 2);
+  const bulk = reopenedJson.backgroundBlocks!.find(b => b.wBlock === 3);
+  assert.deepEqual(bulk, { xBlock: 2, yBlock: 2, wBlock: 3, hBlock: 4 });
+  const v1 = reopenedJson.backgroundBlocks!.find(b => b.wBlock === 1);
+  assert.equal(v1?.isLightBlocking, true);
+});
+
+test('background blocks: distinct (theme, isLightBlocking) groups never merge, and re-save is deterministic', () => {
+  const sourceJson: RoomJsonDef = {
+    id: 'bg_theme_room',
+    name: 'Bg Theme Room',
+    worldNumber: 1,
+    mapX: 0,
+    mapY: 0,
+    widthBlocks: 20,
+    heightBlocks: 20,
+    playerSpawnBlock: [1, 1],
+    blockTheme: 'blackRock',
+    interiorWalls: [],
+    enemies: [],
+    transitions: [],
+    skillTombs: [],
+    backgroundBlocks: [
+      { xBlock: 1, yBlock: 1, wBlock: 1, hBlock: 1, blockTheme: 'blueCrystal' },
+      { xBlock: 2, yBlock: 1, wBlock: 1, hBlock: 1, blockTheme: 'blueCrystal', isLightBlocking: true },
+    ],
+  };
+  const original = jsonToEditorRoomData(sourceJson, 1000).data;
+  const compactFirst = dehydrateRoom(editorRoomDataToJson(original));
+  const reopenedJson = hydrateV2Room(compactFirst, { forEditor: true });
+  assert.equal(reopenedJson.backgroundBlocks?.length, 2, 'theme+lb difference keeps blocks in separate groups');
+
+  const reopened = jsonToEditorRoomData(reopenedJson, 5000).data;
+  const compactSecond = dehydrateRoom(editorRoomDataToJson(reopened));
+  assert.deepEqual(compactSecond.bgLayers, compactFirst.bgLayers);
 });
 
 test('room round trip validation: editor split changes editor UIDs, not geometry or theme', () => {
