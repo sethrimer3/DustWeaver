@@ -8,6 +8,26 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 558 — Consolidate Challenge Field / TimeStop Field into a Canonical "Fields" Palette Category
+
+**Why:** Two editor palette bugs: `challenge_field` lived under the `triggers` category (not a field-like grouping), and the dedicated `timeStop` category rendered a completely empty palette despite `timestop_field` existing in `PALETTE_ITEMS`.
+
+**Root cause of the empty TimeStop palette:** `editorUI.ts`'s palette-rendering code gated its generic 2-column preview grid behind a hand-maintained allowlist of category names (`usePreviewGrid`). `'timeStop'` had simply been left off that list, so the category tab existed and had one item, but nothing was ever appended to the DOM for it — a silent, structurally-undetectable omission.
+
+**What was done:**
+1. Added a canonical `fields` entry to `PALETTE_CATEGORIES`/`PALETTE_CATEGORY_LABELS` (label "Fields") in `src/editor/editorPaletteItems.ts`, positioned right after `triggers`.
+2. Moved both `challenge_field` and `timestop_field` palette items to `category: 'fields'`. Removed the `timeStop` category entirely (id, label, and its `CATEGORY_DEFAULT_LAYER` entry in `src/editor/editorLayers.ts`, which now maps `fields: 'fields'`).
+3. Since `challenge_field` and `timestop_field` now share one category, every `item.category === 'timeStop'` brush/preview/placement check (in `editorPlaceTool.ts`, `editorDragDimensionOverlay.ts`, `editorPlacementPreviewDrawer.ts`) was changed to key off `item.isTimeStopFieldItem === 1` instead, so TimeStop-Field-specific brush/fill behavior doesn't leak onto Challenge Field placement. `FillKind`'s unrelated `'timeStop'` string literal (`editorBrush.ts`) was left untouched.
+4. Replaced `editorUI.ts`'s `usePreviewGrid` allowlist with a default-on/opt-out check (`state.activeCategory !== 'customBlocks'`) — every category renders the generic preview grid now except `customBlocks` (dynamic registry-driven UI with no `PALETTE_ITEMS` entries; `blocks` never reaches this code path at all, having its own earlier branch). This structurally prevents a future category from ever silently rendering empty the way `timeStop` did.
+5. Added `src/editor/editorWorkspacePreferences.ts::sanitizeActiveCategory` with a `LEGACY_CATEGORY_ALIASES` table (`timeStop → fields`) so a persisted pre-refactor `activeCategory` normalizes cleanly instead of producing a blank palette or an invalid state; any other unknown/garbage stored category also now safely falls back to the default rather than being blindly cast.
+6. Added `src/tests/editorFieldsPaletteCategory.test.ts` (10 tests): canonical category existence/label, retirement of `timeStop`, both field items' category, legacy/garbage `activeCategory` normalization on load, valid-category round-trip, live placement of both field types post-move, and a regression guard that no `PALETTE_ITEMS` category can silently require special-case rendering treatment beyond `blocks`/`customBlocks`.
+
+**Not done / follow-up:** No live-browser manual verification was performed (no DOM/canvas harness available in this pass) — validated at the data/state layer only (palette construction, layer mapping, placement, persistence). A manual smoke test (open the editor, select the Fields category tab, confirm both Challenge Field and TimeStop Field cards render and are placeable) is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2637/2637 tests pass (includes the new `editorFieldsPaletteCategory.test.ts` suite), `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 557 — Grapple-Release Gold Motes: Natural Wall Collision + Rapid-Regrapple Persistence
 
 **Why:** `releaseGrapple` converted the 10 active chain slots into free-flying unowned `ParticleKind.Gold` motes on release, but two bugs undercut the intended "gold motes scatter and settle" feel: (1) `applyWallForces` only exempted unowned `ParticleKind.Golden` from the soft 18-world-unit pre-contact repulsion field, so released Gold motes got pushed around before ever touching a wall; (2) the very next `fireGrapple()` call reinitializes the same fixed chain-slot indices, so a quick re-grapple immediately erased the previous release burst mid-flight.
