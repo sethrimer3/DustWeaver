@@ -185,19 +185,16 @@ export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
   [WEAVE_NONE,         NONE_DEF],
 ]);
 
-/** Ordered list of weave IDs for UI display. */
+/** Ordered list of weave IDs for UI display (only actively supported techniques). */
 export const WEAVE_LIST: readonly WeaveId[] = [
-  WEAVE_STORM,
   WEAVE_SHIELD,
-  WEAVE_ARROW,
-  WEAVE_SHIELD_SWORD,
-  WEAVE_SWORD,
 ];
 
 /**
  * Returns the WeaveDefinition for a given weave ID.
- * Falls back to Storm if the ID is not found.
+ * Falls back to None if the ID is not found or invalid.
  */
 export function getWeaveDefinition(id: WeaveId): WeaveDefinition {
-  return WEAVE_REGISTRY.get(id) ?? STORM_DEF;
+  return WEAVE_REGISTRY.get(id) ?? NONE_DEF;
 }
+
