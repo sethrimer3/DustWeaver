@@ -3,8 +3,10 @@ import {
   getStormweaveTrailSizing,
   type StormweaveLifeMotes,
 } from '../sim/stormweave/lifeMotes';
-import type { ShieldWeaveState } from '../sim/stormweave/shieldWeave';
+import { getEffectiveShieldArcLengthWorld, type ShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import type { GraphicsQuality } from '../ui/renderSettings';
+
+const FULL_CIRCLE_EPSILON = 1e-6;
 
 function renderRibbonPass(
   ctx: CanvasRenderingContext2D,
@@ -83,13 +85,20 @@ export function renderStormweaveLifeMotes(
     }
   }
   if (shield.isActive) {
-    const samples = Math.max(2, Math.ceil(shield.arcLengthWorld * scalePx * 0.75));
-    const startAngle = shield.isFullCircle
+    // The visible crescent grows as motes lock into their slots, not merely
+    // from their existence following the player - it lags the gameplay arc
+    // (which sizes/blocks immediately from the full mote count) until each
+    // mote has actually settled into place.
+    const visualArcLengthWorld = getEffectiveShieldArcLengthWorld(motes.lockedShieldMoteCount, shield.radiusWorld);
+    const visualAngularSpanRad = shield.radiusWorld > 0 ? visualArcLengthWorld / shield.radiusWorld : 0;
+    const visualIsFullCircle = visualAngularSpanRad >= Math.PI * 2 - FULL_CIRCLE_EPSILON;
+    const samples = Math.max(2, Math.ceil(visualArcLengthWorld * scalePx * 0.75));
+    const startAngle = visualIsFullCircle
       ? shield.directionAngleRad
-      : shield.directionAngleRad - shield.angularSpanRad * 0.5;
+      : shield.directionAngleRad - visualAngularSpanRad * 0.5;
     for (let i = 0; i <= samples; i++) {
-      if (shield.isFullCircle && i === samples) break;
-      const angle = startAngle + shield.angularSpanRad * (i / samples);
+      if (visualIsFullCircle && i === samples) break;
+      const angle = startAngle + visualAngularSpanRad * (i / samples);
       const x = Math.round((shield.centerXWorld + Math.cos(angle) * shield.radiusWorld) * scalePx + offsetXPx);
       const y = Math.round((shield.centerYWorld + Math.sin(angle) * shield.radiusWorld) * scalePx + offsetYPx);
       ctx.globalAlpha = 0.34;

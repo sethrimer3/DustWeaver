@@ -26,6 +26,11 @@ const VELOCITY_DAMPING_PER_SEC = 4.8;
 const MAX_CATCH_UP_SPEED_WORLD_PER_SEC = 155;
 const SEPARATION_RADIUS_WORLD = 7;
 const SEPARATION_ACCEL_PER_SEC2 = 72;
+// Once a shield mote's spring-chase brings it within this distance of its
+// slot on the arc, it "locks in": from then on it snaps rigidly to the slot
+// every frame instead of continuing to spring-chase it, so it never lags
+// behind a fast shield turn once seated.
+const SHIELD_MOTE_LOCK_DISTANCE_WORLD = 0.6;
 // World-space distance the recent player-path vector must span before the
 // perpendicular wobble direction is treated as reliable. Below this the
 // direction is numerically unstable (near-zero-length vector), so its
@@ -120,6 +125,7 @@ export class StormweaveLifeMotes {
   private readonly velocityYWorld = new Float32Array(MAX_LIFE_MOTES);
   private readonly separationX = new Float32Array(MAX_LIFE_MOTES);
   private readonly separationY = new Float32Array(MAX_LIFE_MOTES);
+  private readonly locked = new Uint8Array(MAX_LIFE_MOTES);
   private readonly preferredOffsetX = new Float32Array(MAX_LIFE_MOTES);
   private readonly preferredOffsetY = new Float32Array(MAX_LIFE_MOTES);
   private readonly phase = new Float32Array(MAX_LIFE_MOTES);
@@ -174,6 +180,15 @@ export class StormweaveLifeMotes {
     return total;
   }
   get isTrailEmitting(): boolean { return this.trailsHighQuality && this.count > 0; }
+  /** Count of motes currently locked into their shield slot (see SHIELD_MOTE_LOCK_DISTANCE_WORLD). */
+  get lockedShieldMoteCount(): number {
+    let locked = 0;
+    for (let i = 0; i < this.count; i++) if (this.locked[i]) locked++;
+    return locked;
+  }
+  isMoteLocked(index: number): boolean {
+    return index >= 0 && index < this.count && this.locked[index] === 1;
+  }
   get trailCapacity(): number { return MAX_LIFE_MOTES * STORMWEAVE_TRAIL_SAMPLES_PER_MOTE; }
   get trailIntensity(): number { return this.visualIntensity; }
 
@@ -249,6 +264,7 @@ export class StormweaveLifeMotes {
     const targetCount = Math.max(0, Math.min(MAX_LIFE_MOTES, Math.floor(fullContainerCount)));
     while (this.count < targetCount) {
       const i = this.count++;
+      this.locked[i] = 0;
       this.trailCountByMote[i] = 0;
       this.trailWriteByMote[i] = 0;
       this.lastTrailSampleTimeSec[i] = this.elapsedSec;
@@ -337,6 +353,7 @@ export class StormweaveLifeMotes {
     this.separationY.fill(0, 0, this.count);
 
     const isShieldActive = shieldGeometry?.isActive === true && shieldGeometry.moteCount === this.count;
+    if (!isShieldActive) this.locked.fill(0, 0, this.count);
     const separationRadiusSq = SEPARATION_RADIUS_WORLD * SEPARATION_RADIUS_WORLD;
     if (!isShieldActive) for (let i = 0; i < this.count; i++) {
       for (let j = i + 1; j < this.count; j++) {
@@ -439,6 +456,23 @@ export class StormweaveLifeMotes {
       const dx = targetX - this.xWorld[i];
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
+
+      if (isShieldActive) {
+        if (!this.locked[i] && distance <= SHIELD_MOTE_LOCK_DISTANCE_WORLD) {
+          this.locked[i] = 1;
+        }
+        if (this.locked[i]) {
+          // Rigidly attached: snap straight to the slot every frame instead
+          // of spring-chasing it, so a locked mote never lags behind even
+          // when the shield rotates quickly to follow the player's aim.
+          this.velocityXWorld[i] = dt > 0 ? dx / dt : 0;
+          this.velocityYWorld[i] = dt > 0 ? dy / dt : 0;
+          this.xWorld[i] = targetX;
+          this.yWorld[i] = targetY;
+          continue;
+        }
+      }
+
       const attraction = isShieldActive
         ? distance * 28
         : getStormweaveAttractionAcceleration(distance) * this.followResponseScale[i];
