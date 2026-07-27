@@ -25,7 +25,6 @@ import {
   drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
-  drawEditorLasers,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
@@ -133,7 +132,6 @@ export function renderEditorOverlays(
   if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
-  if (layerOn('laser')) drawEditorLasers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('bouncePad')) drawEditorBouncePads(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('kineticBlock')) drawEditorKineticBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('phantasmalTile')) drawEditorPhantasmalTiles(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
@@ -181,7 +179,7 @@ export function renderEditorIndicator(
       const base = state.placementRotationSteps % 4;
       const ori = state.placementFlipH ? (base ^ 1) : base;
       rotHint = `Stairs:${rampLabels[ori]}`;
-    } else if (item.isRampItem === 1) {
+    } else if (item.isRampItem === 1 || item.isSmoothRampItem === 1) {
       const base = state.placementRotationSteps % 4;
       const ori = state.placementFlipH ? (base ^ 1) : base;
       rotHint = `Ramp:${rampLabels[ori]}`;

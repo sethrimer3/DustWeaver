@@ -115,6 +115,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     const shouldExpand =
       w.rampOrientation == null &&
       w.stairsOrientation == null &&
+      w.smoothRampOrientation == null &&
       (w.isPillarHalfWidthFlag ?? 0) === 0 &&
       (w.isPlatformFlag ?? 0) === 0 &&
       (w.wBlock > 1 || w.hBlock > 1);
@@ -134,6 +135,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
             blockTheme: w.blockTheme,
             rampOrientation: undefined,
             stairsOrientation: undefined,
+            smoothRampOrientation: undefined,
             isPillarHalfWidthFlag: 0,
             surfaceRim: w.surfaceRim,
           });
@@ -151,6 +153,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
         blockTheme: w.blockTheme,
         rampOrientation: w.rampOrientation,
         stairsOrientation: w.stairsOrientation,
+        smoothRampOrientation: w.smoothRampOrientation,
         isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
         surfaceRim: w.surfaceRim,
       });

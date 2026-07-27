@@ -16,7 +16,6 @@ import type { BlockTheme } from '../levels/roomDef';
 export const PALETTE_CATEGORIES = [
   'blocks',
   'specialBlocks',
-  'hazards',
   'enemies',
   'triggers',
   'gates',
@@ -37,7 +36,6 @@ export type PaletteCategory = typeof PALETTE_CATEGORIES[number];
 export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> = {
   blocks: 'Blocks',
   specialBlocks: 'Special Blocks',
-  hazards: 'Hazards',
   enemies: 'Enemies',
   triggers: 'Triggers',
   gates: 'Gates',
@@ -70,6 +68,11 @@ export interface PaletteItem {
   isRampItem?: 1;
   /** 1 if this palette item places stairs (stepped, mask-defined shape). */
   isStairsItem?: 1;
+  /**
+   * 1 if this palette item places a smooth ramp: identical stairs-style
+   * stepped collision, but rendered as a smooth diagonal triangle.
+   */
+  isSmoothRampItem?: 1;
   /** 1 if this palette item places a half-width pillar (4 px wide). */
   isPillarHalfWidthItem?: 1;
   /** 1 if this palette item paints ambient-light blocker tiles. */
@@ -126,10 +129,6 @@ export interface PaletteItem {
   isSpikeItem?: 1;
   /** Which spike footprint size this item places. Only meaningful when isSpikeItem === 1. */
   spikeSize?: import('../levels/roomElementDefs').SpikeSize;
-  /** 1 if this palette item places a laser emitter hazard. */
-  isLaserItem?: 1;
-  /** Direction the placed laser fires in. Only meaningful when isLaserItem === 1. */
-  laserDirection?: import('../levels/roomElementDefs').SpikeDirection;
   /**
    * 1 if this palette item paints individual 1x1 pixel-material particles
    * (native-pixel granularity, not block-grid — see docs/pixelMaterials.md).
@@ -153,18 +152,19 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'block_1x1', label: '1×1 Block',   category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1 },
   { id: 'block_2x2', label: '2×2 Block',   category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2 },
   { id: 'platform',  label: 'Platform',     category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPlatformItem: 1 },
-  // Stairs replaced plain ramps.  The `ramp_1x1` / `ramp_1x2` / `ramp_2x2`
-  // palette items are intentionally absent: existing rooms containing ramps
-  // still load and render, but ramps are no longer offered for new placement.
   { id: 'stairs_1x1', label: '1×1 Stairs', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isStairsItem: 1 },
   { id: 'stairs_1x2', label: '1×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isStairsItem: 1 },
   { id: 'stairs_2x2', label: '2×2 Stairs', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isStairsItem: 1 },
+  // Smooth ramps: identical stairs collision (`smoothRampOrientation`), but
+  // rendered as a smooth diagonal triangle instead of jagged steps. Distinct
+  // from the legacy diagonal-physics `bounce_pad_ramp_*` items, which still
+  // use `isRampItem`/`rampOrientation`.
+  { id: 'ramp_1x1', label: '1×1 Ramp', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSmoothRampItem: 1 },
+  { id: 'ramp_1x2', label: '1×2 Ramp', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 1, isSmoothRampItem: 1 },
+  { id: 'ramp_2x2', label: '2×2 Ramp', category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSmoothRampItem: 1 },
   { id: 'pillar_half_width', label: 'Half-width Pillar', category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isPillarHalfWidthItem: 1 },
   { id: 'spike_1x1', label: '1×1 Spike',  category: 'blocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isSpikeItem: 1, spikeSize: '1x1' },
   { id: 'spike_2x2', label: '2×2 Spike',  category: 'blocks', defaultWidthBlocks: 2, defaultHeightBlocks: 2, isSpikeItem: 1, spikeSize: '2x2' },
-
-  // Hazards
-  { id: 'laser_emitter', label: 'Laser Emitter', category: 'hazards', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isLaserItem: 1, laserDirection: 'right' },
   // Enemies
   { id: 'enemy_rolling', label: 'Rolling Enemy', category: 'enemies' },
   { id: 'enemy_flying_eye', label: 'Flying Eye', category: 'enemies' },

@@ -16,8 +16,10 @@ import * as FP from '../../debug/perfFreezeProfiler';
 import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid } from '../../sim/world/surfaceExposure';
 import {
   decodeStairsOrientationIndex,
+  decodeSmoothRampOrientationIndex,
   isPlainRectOrientationIndex,
   isRampOrientationIndex,
+  isSmoothRampOrientationIndex,
   isStairsOrientationIndex,
   isStairsSolidAtLocalPx,
 } from '../../levels/stairsGeometry';
@@ -300,10 +302,11 @@ function _wallContainsVisiblePixel(walls: WallSnapshot, wi: number, x: number, y
       decodeStairsOrientationIndex(orientation), width, height, lx, ly,
     );
   }
-  if (isRampOrientationIndex(orientation)) {
+  if (isRampOrientationIndex(orientation) || isSmoothRampOrientationIndex(orientation)) {
+    const ori = isSmoothRampOrientationIndex(orientation) ? decodeSmoothRampOrientationIndex(orientation) : orientation;
     const nx = (lx + 0.5) / Math.max(1, width);
     const ny = (ly + 0.5) / Math.max(1, height);
-    switch (orientation) {
+    switch (ori) {
       case 0: return ny >= 1 - nx;
       case 1: return ny >= nx;
       case 2: return ny <= nx;

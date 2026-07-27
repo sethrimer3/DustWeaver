@@ -399,13 +399,6 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       return entry;
     });
   }
-  if ((data.lasers ?? []).length > 0) {
-    json.lasers = (data.lasers ?? []).map(l => ({
-      xBlock: l.xBlock,
-      yBlock: l.yBlock,
-      direction: l.direction,
-    }));
-  }
   if ((data.bouncePads ?? []).length > 0) {
     json.bouncePads = (data.bouncePads ?? []).map(b => {
       const entry: RoomJsonBouncePad = {

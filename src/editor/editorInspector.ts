@@ -932,23 +932,6 @@ export function updateInspector(
         sp.blockTheme ?? room.blockTheme,
         v => callbacks?.onPropertyChange('spike.blockTheme', v));
     }
-  } else if (el.type === 'laser') {
-    const l = (room.lasers ?? []).find(x => x.uid === el.uid);
-    if (l) {
-      addField(div, 'xBlock', String(l.xBlock),
-        v => callbacks?.onPropertyChange('laser.xBlock', parseInt(v)));
-      addField(div, 'yBlock', String(l.yBlock),
-        v => callbacks?.onPropertyChange('laser.yBlock', parseInt(v)));
-      addSelect(div, 'direction',
-        [
-          { label: 'Up',    value: 'up' },
-          { label: 'Right', value: 'right' },
-          { label: 'Down',  value: 'down' },
-          { label: 'Left',  value: 'left' },
-        ],
-        l.direction,
-        v => callbacks?.onPropertyChange('laser.direction', v));
-    }
   } else if (el.type === 'rope') {
     const ropes = room.ropes ?? [];
     const rope = ropes.find(r => r.uid === el.uid);

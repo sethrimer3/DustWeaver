@@ -399,7 +399,7 @@ export function drawRampTriangle(
   const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
   const ww = w.wBlock * BLOCK_SIZE_SMALL * zoom;
   const wh = w.hBlock * BLOCK_SIZE_SMALL * zoom;
-  const ori = w.rampOrientation ?? 0;
+  const ori = w.rampOrientation ?? w.smoothRampOrientation ?? 0;
 
   // Corners: TL, TR, BL, BR
   const tlx = x;    const tly = y;
@@ -882,7 +882,7 @@ export function getEditorWallTopology(room: EditorRoomData, wallGeometryRevision
   const cells: EditorWallCell[] = [];
 
   for (const w of room.interiorWalls) {
-    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
+    if (w.isPlatformFlag === 1 || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.smoothRampOrientation !== undefined || w.isPillarHalfWidthFlag === 1) continue;
     for (let dy = 0; dy < w.hBlock; dy++) {
       for (let dx = 0; dx < w.wBlock; dx++) {
         const gx = w.xBlock + dx;

@@ -51,7 +51,12 @@ import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isWallOccupied } from './blockWallLayoutCache';
 import type { CachedTileCoord, ShapedWallInfo, HalfPillarWallInfo } from './blockWallLayoutCache';
 import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceExposure';
-import { decodeStairsOrientationIndex, isStairsOrientationIndex } from '../../levels/stairsGeometry';
+import {
+  decodeSmoothRampOrientationIndex,
+  decodeStairsOrientationIndex,
+  isSmoothRampOrientationIndex,
+  isStairsOrientationIndex,
+} from '../../levels/stairsGeometry';
 import { renderSurfaceEdgeOverlayPass as _renderSurfaceEdgeOverlayPass } from './surfaceEdgeOverlay';
 import {
   TILE_MASK_N,
@@ -682,8 +687,11 @@ export function renderShapedWallPass(
     const wi = shapedList[ri].wallIndex;
     const oriIndex = walls.rampOrientationIndex[wi];
     const isStairs = isStairsOrientationIndex(oriIndex);
+    const isSmoothRamp = isSmoothRampOrientationIndex(oriIndex);
     // Stairs and ramps share the flip convention, so both reduce to 0-3 here.
-    const ori = isStairs ? decodeStairsOrientationIndex(oriIndex) : oriIndex;
+    const ori = isStairs ? decodeStairsOrientationIndex(oriIndex)
+      : isSmoothRamp ? decodeSmoothRampOrientationIndex(oriIndex)
+      : oriIndex;
 
     const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
     const wyPx = walls.yWorld[wi] * scalePx + offsetYPx;

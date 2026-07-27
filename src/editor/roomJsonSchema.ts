@@ -210,12 +210,6 @@ export interface RoomJsonSpike {
   blockTheme?: BlockTheme;
 }
 
-export interface RoomJsonLaser {
-  xBlock: number;
-  yBlock: number;
-  direction: 'up' | 'down' | 'left' | 'right';
-}
-
 export interface RoomJsonSpringboard {
   xBlock: number;
   yBlock: number;
@@ -523,7 +517,6 @@ export interface RoomJsonDef {
   dustContainerPieces?: RoomJsonSkillTomb[];
   // ── Environmental hazards (all optional) ──────────────────────────────────
   spikes?: RoomJsonSpike[];
-  lasers?: RoomJsonLaser[];
   springboards?: RoomJsonSpringboard[];
   waterZones?: RoomJsonZone[];
   lavaZones?: RoomJsonZone[];

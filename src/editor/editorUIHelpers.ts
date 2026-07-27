@@ -364,6 +364,15 @@ export function makeBlockPreviewShapeCss(item: PaletteItem, theme: string): { sh
     };
   }
 
+  // Smooth ramps: same footprint as stairs, but a plain diagonal silhouette.
+  if (item.isSmoothRampItem === 1) {
+    return {
+      containerCss,
+      shapeCss: `${baseTile} ${boxPosCss} background-size: cover;
+        clip-path: polygon(0% 100%, 0% 0%, 100% 100%);`,
+    };
+  }
+
   // Spikes: a hazard triangle in the same red used by the in-room spike overlay.
   if (item.isSpikeItem === 1) {
     return {
@@ -372,18 +381,6 @@ export function makeBlockPreviewShapeCss(item: PaletteItem, theme: string): { sh
         ${boxPosCss} background: rgba(160,20,20,0.55);
         border: 1px solid rgba(220,60,60,0.9); box-sizing: border-box;
         clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-      `,
-    };
-  }
-
-  // Laser emitter: a glowing orange/white beam swatch.
-  if (item.isLaserItem === 1) {
-    return {
-      containerCss,
-      shapeCss: `
-        ${boxPosCss} background: linear-gradient(90deg,
-          rgba(180,20,0,0.85) 0%, rgba(255,240,210,0.95) 50%, rgba(180,20,0,0.85) 100%);
-        border: 1px solid rgba(255,140,30,0.9); box-sizing: border-box;
       `,
     };
   }

@@ -55,7 +55,6 @@ export {
   drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
-  drawEditorLasers,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
@@ -94,7 +93,7 @@ export function drawEditorWalls(
     const sel = isSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
     const isStairs = w.stairsOrientation !== undefined;
-    const isRamp = w.rampOrientation !== undefined;
+    const isRamp = w.rampOrientation !== undefined || w.smoothRampOrientation !== undefined;
     const isHalfPillar = w.isPillarHalfWidthFlag === 1;
 
     if (isStairs) {

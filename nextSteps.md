@@ -8,17 +8,16 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
-## BUILD 553 — Remove Legacy Ordered Combat-Mote Queue and Secondary Weave Runtime
+## BUILD 553 — Migrate Bow and Sword Weaves to Canonical Mote Ownership and Remove Legacy Ordered Mote Queue
 
-**Why:** The game had migrated its primary defensive and offensive mechanics onto the health-derived Stormweave system (`src/sim/stormweave/`), leaving behind obsolete secondary-weave runtimes (`swordWeave`, `bowArrow`, legacy queue-backed `weaves/shieldWeave`, and `orderedMoteQueue`) that were still needlessly consuming input, snapshot, and simulation resources.
+**Why:** Bow Weave and Sword Weave are active gameplay abilities that were historically coupled to the obsolete ordered combat-mote queue (`orderedMoteQueue.ts`) and physical orbit particles (`world.moteSlotParticleIndex`, `world.behaviorMode`). The intended goal is to eliminate the legacy ordered combat-mote queue while preserving Bow, Sword, and Shield Weaves as authoritative gameplay abilities built on canonical player health.
 
-**What was done:**
-1. Purged obsolete legacy secondary-weave runtime files (`src/sim/weaves/bowArrow.ts`, `swordWeave.ts`, `secondaryWeaveCoordinator.ts`, legacy `shieldWeave.ts`) and the ordered combat-mote queue (`orderedMoteQueue.ts`, `dustTypeSwitch.ts`).
-2. Preserved canonical Stormweave shield (`src/sim/stormweave/shieldWeave.ts`) and kept its collision adapters, renderers, and input paths intact.
-3. Decoupled world snapshot and rendering systems from `particleMoteSlotState`, replacing legacy weave visual resets with `resetGrappleDisplayRadius` during room transitions.
-4. Preserved existing save file legacy weave identifiers (`shield_sword`, `arrow`, `sword`, `shield`, `storm`, `none`) exclusively within migration routines (`src/progression/playerWeaves.ts` / `src/sim/weaves/playerLoadout.ts`) to ensure existing saves load safely without re-exposing obsolete secondary combat abilities in gameplay.
-
-**Validation:** `npm run build` clean, `npm run lint` clean, `npm test` passes (2,496 passing tests).
+**What is being done:**
+1. **Canonical Mote Ownership Architecture (`src/sim/weaves/moteOwnership.ts`)**: Designed an allocation-free ownership layer for canonical mote indexes (`0..getPlayerMoteCount(player) - 1`). Mote states: `Resting = 0`, `Sword = 1`, `Shield = 2`, `BowAssembling = 3`, `BowOutbound = 4`. Replaced `getAvailableOrderedMoteSlots` with `getAvailableCanonicalMotes`.
+2. **Decoupled Secondary Weaves (`bowArrow.ts`, `swordWeave.ts`, `secondaryWeaveCoordinator.ts`)**: Replaced all references to ordinary particle buffer indices and `orderedMoteQueue.ts` with canonical mote ownership array indexing (`world.canonicalMoteXWorld`, `canonicalMoteOwnership`, etc.). Preserved exact assembly schedules (0.75s, 1.25s, 1.75s), straight-line trajectory (250px/s, 250px max travel), one-swipe Sword mechanics, and swept collisions.
+3. **Seamless Return & Shield Geometry**: On wall bounce or max distance curve-home, motes release back to `Resting` without teleportation, allowing canonical `StormweaveLifeMotes` to attract them back to the moving player. Reserved Bow motes are excluded from Shield placement, maintaining a straight center corridor.
+4. **Test Adaptation**: Updated all secondary weave behavioral and hardening unit tests to verify canonical mote ownership without requiring physical orbit particles or `orderedMoteQueue`.
+5. **Legacy Save Cleanup**: Removed obsolete queue runtime files (`orderedMoteQueue.ts`, `dustTypeSwitch.ts`, legacy crescent shield). Preserved save file compatibility identifiers exclusively within migration routines.
 
 ---
 

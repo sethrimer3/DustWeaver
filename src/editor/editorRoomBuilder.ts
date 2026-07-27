@@ -56,6 +56,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
     blockTheme: w.blockTheme,
     rampOrientation: w.rampOrientation,
     stairsOrientation: w.stairsOrientation,
+    smoothRampOrientation: w.smoothRampOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidthFlag,
     surfaceRim: w.surfaceRim,
   }));
@@ -486,11 +487,6 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       direction: sp.direction,
       size: sp.size !== '1x1' ? sp.size : undefined,
       blockTheme: sp.blockTheme,
-    })),
-    lasers: (data.lasers ?? []).map(l => ({
-      xBlock: l.xBlock,
-      yBlock: l.yBlock,
-      direction: l.direction,
     })),
     bouncePads: (data.bouncePads ?? []).map(b => ({
       xBlock: b.xBlock,

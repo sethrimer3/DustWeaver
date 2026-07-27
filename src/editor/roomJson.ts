@@ -21,7 +21,7 @@ import type {
   EditorSaveTomb, EditorSkillTomb, EditorDustPile,
   EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource, EditorSunbeam,
-  EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad, EditorKineticBlock,
+  EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
   EditorRope, RopeDestructibility,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm,
   EditorLambdaAnchor,
@@ -533,13 +533,6 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     blockTheme: resolveJsonBlockTheme(sp.blockTheme, undefined),
   }));
 
-  const lasers: EditorLaser[] = (json.lasers ?? []).map(l => ({
-    uid: uid++,
-    xBlock: l.xBlock,
-    yBlock: l.yBlock,
-    direction: l.direction,
-  }));
-
   const bouncePads: EditorBouncePad[] = (json.bouncePads ?? []).map(b => ({
     uid: uid++,
     xBlock: b.xBlock,
@@ -688,7 +681,6 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
       timeStopFields,
       crumbleBlocks,
       spikes,
-      lasers,
       bouncePads,
       kineticBlocks,
       grappleCarryBlocks,

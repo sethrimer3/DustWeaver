@@ -38,10 +38,15 @@
  *
  *   0..3   → ramp orientation      (legacy shape, see movementRampCollision.ts)
  *   4..7   → stairs orientation - 4
+ *   8..11  → smooth ramp orientation - 8 (stairs physics, smooth diagonal render)
  *   255    → no shape; the wall is a plain solid rectangle
  *
- * Always use `isRampOrientationIndex` / `isStairsOrientationIndex` to
- * discriminate; never compare against a bare literal.
+ * Always use `isRampOrientationIndex` / `isStairsOrientationIndex` /
+ * `isSmoothRampOrientationIndex` to discriminate; never compare against a bare
+ * literal. Physics code should use `isStairsPhysicsOrientationIndex` /
+ * `decodeStairsPhysicsOrientationIndex`, which treat stairs and smooth ramps
+ * identically — smooth ramps are visual sugar over the same jagged-step
+ * collision.
  */
 
 /** Sentinel stored in `rampOrientationIndex` for plain rectangular walls. */
@@ -49,6 +54,9 @@ export const SHAPE_ORIENTATION_NONE = 255;
 
 /** Added to a stairs orientation (0-3) to encode it in `rampOrientationIndex`. */
 export const STAIRS_ORIENTATION_ENCODING_OFFSET = 4;
+
+/** Added to a smooth-ramp orientation (0-3) to encode it in `rampOrientationIndex`. */
+export const SMOOTH_RAMP_ORIENTATION_ENCODING_OFFSET = 8;
 
 /** Height of a single stair riser, in world pixels. Fixed by the template art. */
 export const STAIRS_RISER_HEIGHT_PX = 2;
@@ -70,9 +78,15 @@ export function isStairsOrientationIndex(value: number): boolean {
       && value < STAIRS_ORIENTATION_ENCODING_OFFSET + 4;
 }
 
-/** True when the wall is a plain solid rectangle (neither ramp nor stairs). */
+/** True when `value` (from `rampOrientationIndex`) denotes a smooth-ramp wall. */
+export function isSmoothRampOrientationIndex(value: number): boolean {
+  return value >= SMOOTH_RAMP_ORIENTATION_ENCODING_OFFSET
+      && value < SMOOTH_RAMP_ORIENTATION_ENCODING_OFFSET + 4;
+}
+
+/** True when the wall is a plain solid rectangle (neither ramp, stairs, nor smooth ramp). */
 export function isPlainRectOrientationIndex(value: number): boolean {
-  return !isRampOrientationIndex(value) && !isStairsOrientationIndex(value);
+  return !isRampOrientationIndex(value) && !isStairsOrientationIndex(value) && !isSmoothRampOrientationIndex(value);
 }
 
 export function encodeStairsOrientationIndex(orientation: StairsOrientation): number {
@@ -83,21 +97,43 @@ export function decodeStairsOrientationIndex(value: number): StairsOrientation {
   return (value - STAIRS_ORIENTATION_ENCODING_OFFSET) as StairsOrientation;
 }
 
+export function encodeSmoothRampOrientationIndex(orientation: StairsOrientation): number {
+  return orientation + SMOOTH_RAMP_ORIENTATION_ENCODING_OFFSET;
+}
+
+export function decodeSmoothRampOrientationIndex(value: number): StairsOrientation {
+  return (value - SMOOTH_RAMP_ORIENTATION_ENCODING_OFFSET) as StairsOrientation;
+}
+
+/** True for stairs OR smooth ramps — both use identical jagged-step physics. */
+export function isStairsPhysicsOrientationIndex(value: number): boolean {
+  return isStairsOrientationIndex(value) || isSmoothRampOrientationIndex(value);
+}
+
+/** Decodes either a stairs or smooth-ramp orientation index to its 0-3 orientation. */
+export function decodeStairsPhysicsOrientationIndex(value: number): StairsOrientation {
+  return isSmoothRampOrientationIndex(value)
+    ? decodeSmoothRampOrientationIndex(value)
+    : decodeStairsOrientationIndex(value);
+}
+
 /** The shape-orientation fields a wall definition may carry. */
 export interface ShapedWallDefLike {
   readonly rampOrientation?: 0 | 1 | 2 | 3;
   readonly stairsOrientation?: 0 | 1 | 2 | 3;
+  readonly smoothRampOrientation?: 0 | 1 | 2 | 3;
 }
 
 /**
  * Packs a wall definition's shape into the single `rampOrientationIndex` slot
  * used by the runtime wall arrays.
  *
- * `stairsOrientation` wins if a hand-edited room somehow sets both, since a
- * stair is the shape the editor can still produce.
+ * `stairsOrientation` wins if a hand-edited room somehow sets multiple fields,
+ * then `smoothRampOrientation`, then `rampOrientation`.
  */
 export function wallShapeOrientationIndex(def: ShapedWallDefLike): number {
   if (def.stairsOrientation !== undefined) return encodeStairsOrientationIndex(def.stairsOrientation);
+  if (def.smoothRampOrientation !== undefined) return encodeSmoothRampOrientationIndex(def.smoothRampOrientation);
   if (def.rampOrientation !== undefined) return def.rampOrientation;
   return SHAPE_ORIENTATION_NONE;
 }

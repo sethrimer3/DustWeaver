@@ -472,6 +472,25 @@ export function drawPlacementPreview(
     return;
   }
 
+  if (item.isSmoothRampItem === 1) {
+    // Smooth ramp preview — same triangle drawer as legacy ramps, stairs-identical collision.
+    const base = state.placementRotationSteps % 4;
+    const smoothRampOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+    const previewWall: EditorWall = {
+      uid: -1,
+      xBlock: state.cursorBlockX,
+      yBlock: state.cursorBlockY,
+      wBlock: preview.wBlock,
+      hBlock: preview.hBlock,
+      isPlatformFlag: 0,
+      platformEdge: 0,
+      smoothRampOrientation: smoothRampOri,
+      isPillarHalfWidthFlag: 0,
+    };
+    drawRampTriangle(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_RAMP_COLOR, 2);
+    return;
+  }
+
   if (item.isPlatformItem === 1) {
     const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
     const platformEdge: 0 | 1 | 2 | 3 = platformEdgeMap[state.placementRotationSteps % 4];

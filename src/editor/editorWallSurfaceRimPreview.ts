@@ -29,7 +29,7 @@ function _signatureFor(walls: readonly EditorWall[], widthBlocks: number, height
   let s = `${widthBlocks}x${heightBlocks}|${roomTheme ?? ''}|${walls.length}`;
   for (const w of walls) {
     s += `|${w.xBlock},${w.yBlock},${w.wBlock},${w.hBlock},${w.isPlatformFlag},${w.platformEdge},` +
-      `${w.rampOrientation ?? ''},${w.stairsOrientation ?? ''},${w.isPillarHalfWidthFlag},` +
+      `${w.rampOrientation ?? ''},${w.stairsOrientation ?? ''},${w.smoothRampOrientation ?? ''},${w.isPillarHalfWidthFlag},` +
       `${w.blockTheme ?? ''},` +
       `${w.surfaceRim ? hashSurfaceRimStyle(normalizeSurfaceRimStyle(w.surfaceRim)) : ''}`;
   }

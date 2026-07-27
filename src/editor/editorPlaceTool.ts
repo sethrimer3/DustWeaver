@@ -55,14 +55,14 @@ function getPlacementWidth(item: PaletteItem, rotSteps: number): number {
   const h = item.defaultHeightBlocks ?? 1;
   // Stairs keep their authored bounding box: their four orientations are axis
   // mirrors of one mask, not rotations, so the box never transposes.
-  if (item.isStairsItem === 1) return w;
+  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1) return w;
   return (rotSteps % 2 === 0) ? w : h;
 }
 
 function getPlacementHeight(item: PaletteItem, rotSteps: number): number {
   const w = item.defaultWidthBlocks ?? 1;
   const h = item.defaultHeightBlocks ?? 1;
-  if (item.isStairsItem === 1) return h;
+  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1) return h;
   return (rotSteps % 2 === 0) ? h : w;
 }
 
@@ -400,15 +400,6 @@ export function wouldPlacementSucceedAt(
       return true;
     }
 
-    if (item.isLaserItem === 1) {
-      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return false;
-      const lasers = room.lasers ?? [];
-      const overlapsLaser = lasers.some(l => l.xBlock === bx && l.yBlock === by);
-      if (overlapsLaser) return 'occupied';
-      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return 'occupied';
-      return true;
-    }
-
     if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
@@ -447,6 +438,7 @@ export function wouldPlacementSucceedAt(
       item.isPlatformItem !== 1 &&
       item.isRampItem !== 1 &&
       item.isStairsItem !== 1 &&
+      item.isSmoothRampItem !== 1 &&
       state.pendingBlockPlacementModifier === 'background'
     ) {
       const bgW = getPlacementWidth(item, state.placementRotationSteps);
@@ -718,6 +710,9 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     let stairsOrientation: 0 | 1 | 2 | 3 | undefined;
     if (item.isStairsItem === 1) stairsOrientation = shapeOrientation;
 
+    let smoothRampOrientation: 0 | 1 | 2 | 3 | undefined;
+    if (item.isSmoothRampItem === 1) smoothRampOrientation = shapeOrientation;
+
     const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
     const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
       ? platformEdgeMap[state.placementRotationSteps % 4]
@@ -835,28 +830,6 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
-    if (item.isLaserItem === 1) {
-      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
-      const lasers = room.lasers ?? [];
-      const overlapsLaser = lasers.some(l => l.xBlock === bx && l.yBlock === by);
-      if (overlapsLaser) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return;
-
-      // Direction follows the same 90°-CW rotation steps used for spikes/ramps:
-      // 0=up, 1=right, 2=down, 3=left.
-      const laserDirections: readonly ('up' | 'right' | 'down' | 'left')[] = ['up', 'right', 'down', 'left'];
-      const laserDirection = laserDirections[state.placementRotationSteps % 4];
-
-      if (!room.lasers) room.lasers = [];
-      room.lasers.push({
-        uid: allocateUid(state),
-        xBlock: bx,
-        yBlock: by,
-        direction: laserDirection,
-      });
-      return;
-    }
-
     if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
@@ -942,6 +915,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       item.isPlatformItem !== 1 &&
       item.isRampItem !== 1 &&
       item.isStairsItem !== 1 &&
+      item.isSmoothRampItem !== 1 &&
       state.pendingBlockPlacementModifier === 'background'
     ) {
       const bgW = getPlacementWidth(item, state.placementRotationSteps);
@@ -997,6 +971,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       blockTheme: placementBlockTheme,
       rampOrientation,
       stairsOrientation,
+      smoothRampOrientation,
       isPillarHalfWidthFlag,
     });
   } else if (placeEnemyAtCursor(state, room, item, bx, by)) {

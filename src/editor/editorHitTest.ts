@@ -198,6 +198,7 @@ export function cellOverlapsSolidWall(room: EditorRoomData, bx: number, by: numb
     w.isPlatformFlag !== 1 &&
     w.rampOrientation === undefined &&
     w.stairsOrientation === undefined &&
+    w.smoothRampOrientation === undefined &&
     wallsOverlap(w, bx, by, 1, 1),
   );
 }
@@ -287,6 +288,11 @@ export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number
     // `buildSolidMaskFromWorld` expansion so the editor and the sand sim agree.
     if (w.stairsOrientation !== undefined
         && !isStairsSolidAtLocalPx(w.stairsOrientation, wPx, hPx, xPixel - x0, yPixel - y0)) {
+      continue;
+    }
+    // Smooth ramps collide identically to stairs — same jagged mask, smooth render only.
+    if (w.smoothRampOrientation !== undefined
+        && !isStairsSolidAtLocalPx(w.smoothRampOrientation, wPx, hPx, xPixel - x0, yPixel - y0)) {
       continue;
     }
     return true;
@@ -452,6 +458,7 @@ function isSolidWallAt(room: EditorRoomData, col: number, row: number): boolean 
     if (w.isPlatformFlag === 1) continue;
     if (w.rampOrientation !== undefined) continue;
     if (w.stairsOrientation !== undefined) continue;
+    if (w.smoothRampOrientation !== undefined) continue;
     if (col >= w.xBlock && col < w.xBlock + w.wBlock &&
         row >= w.yBlock && row < w.yBlock + w.hBlock) {
       return true;

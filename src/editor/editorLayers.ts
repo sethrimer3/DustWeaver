@@ -130,7 +130,6 @@ const ELEMENT_TYPE_LAYER: Readonly<Record<SelectedElementType, LayerId>> = {
   timeStopField: 'fields',
   crumbleBlock: 'dynamicGeometry',
   spike: 'hazards',
-  laser: 'hazards',
   bouncePad: 'dynamicGeometry',
   kineticBlock: 'dynamicGeometry',
   grappleCarryBlock: 'dynamicGeometry',
@@ -159,7 +158,6 @@ export function getLayerForElementType(type: SelectedElementType): LayerId {
 const CATEGORY_DEFAULT_LAYER: Readonly<Record<PaletteCategory, LayerId>> = {
   blocks: 'terrain',
   specialBlocks: 'dynamicGeometry',
-  hazards: 'hazards',
   enemies: 'enemies',
   triggers: 'roomStructure',
   gates: 'objects',

@@ -9,7 +9,7 @@
 import {
   EditorState,
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad,
+  EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
@@ -111,9 +111,6 @@ export function storeDragStartPositions(
     } else if (el.type === 'spike') {
       const sp = (s.roomData.spikes ?? []).find(sp2 => sp2.uid === el.uid);
       if (sp) positions.set(key, { xBlock: sp.xBlock, yBlock: sp.yBlock });
-    } else if (el.type === 'laser') {
-      const l = (s.roomData.lasers ?? []).find(l2 => l2.uid === el.uid);
-      if (l) positions.set(key, { xBlock: l.xBlock, yBlock: l.yBlock });
     } else if (el.type === 'fallingBlock') {
       const fb = (s.roomData.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) positions.set(key, { xBlock: fb.xBlock, yBlock: fb.yBlock });
@@ -248,9 +245,6 @@ export function moveSelectedElements(
     } else if (el.type === 'spike') {
       const sp = (s.roomData.spikes ?? []).find(sp2 => sp2.uid === el.uid);
       if (sp) { sp.xBlock = orig.xBlock + deltaX; sp.yBlock = orig.yBlock + deltaY; }
-    } else if (el.type === 'laser') {
-      const l = (s.roomData.lasers ?? []).find(l2 => l2.uid === el.uid);
-      if (l) { l.xBlock = orig.xBlock + deltaX; l.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'fallingBlock') {
       const fb = (s.roomData.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) { fb.xBlock = orig.xBlock + deltaX; fb.yBlock = orig.yBlock + deltaY; }
@@ -330,7 +324,6 @@ export function serializeSelectedElements(
     timeStopFields: EditorTimeStopField[];
     crumbleBlocks: EditorCrumbleBlock[];
     spikes: EditorSpike[];
-    lasers: EditorLaser[];
     bouncePads: EditorBouncePad[];
     grasshopperAreas: EditorGrasshopperArea[];
     fireflyAreas: EditorFireflyArea[];
@@ -345,7 +338,6 @@ export function serializeSelectedElements(
     dustPiles: [],
     decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], timeStopFields: [], crumbleBlocks: [],
     spikes: [],
-    lasers: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [], guideDustPaths: [],
   };
   for (const el of elements) {
@@ -430,9 +422,6 @@ export function serializeSelectedElements(
     } else if (el.type === 'spike') {
       const sp = (room.spikes ?? []).find(sp2 => sp2.uid === el.uid);
       if (sp) data.spikes.push({ ...sp });
-    } else if (el.type === 'laser') {
-      const l = (room.lasers ?? []).find(l2 => l2.uid === el.uid);
-      if (l) data.lasers.push({ ...l });
     } else if (el.type === 'fallingBlock') {
       const fb = (room.fallingBlocks ?? []).find(fb2 => fb2.uid === el.uid);
       if (fb) data.fallingBlocks.push({ ...fb });
@@ -549,7 +538,6 @@ export function pasteFromClipboard(s: EditorState): boolean {
     timeStopFields?: EditorTimeStopField[];
     crumbleBlocks?: EditorCrumbleBlock[];
     spikes?: EditorSpike[];
-    lasers?: EditorLaser[];
     bouncePads?: EditorBouncePad[];
     grasshopperAreas?: EditorGrasshopperArea[];
     fireflyAreas?: EditorFireflyArea[];
@@ -582,7 +570,6 @@ export function pasteFromClipboard(s: EditorState): boolean {
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
     ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.timeStopFields ?? []), ...(data.crumbleBlocks ?? []),
     ...(data.spikes ?? []),
-    ...(data.lasers ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
     ...(data.fallingBlocks ?? []),
     // For guide paths, collect all control points for proper bounding-box offset
@@ -870,17 +857,6 @@ export function pasteFromClipboard(s: EditorState): boolean {
       yBlock: sp.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'spike', uid: newUid });
-  }
-  for (const l of (data.lasers ?? [])) {
-    const newUid = allocateUid(s);
-    if (!s.roomData.lasers) s.roomData.lasers = [];
-    s.roomData.lasers.push({
-      ...l,
-      uid: newUid,
-      xBlock: l.xBlock - minX + offsetX,
-      yBlock: l.yBlock - minY + offsetY,
-    });
-    newElements.push({ type: 'laser', uid: newUid });
   }
   for (const a of (data.grasshopperAreas ?? [])) {
     const newUid = allocateUid(s);

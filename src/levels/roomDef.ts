@@ -440,6 +440,13 @@ export interface RoomWallDef {
    */
   stairsOrientation?: 0 | 1 | 2 | 3;
   /**
+   * Smooth-ramp orientation. Collision is byte-for-byte identical to stairs
+   * (same step rectangles via `levels/stairsGeometry.ts`), but rendering is a
+   * smooth diagonal triangle instead of jagged steps. Same 0-3 convention as
+   * `rampOrientation`/`stairsOrientation`. Omit for a normal rectangular wall.
+   */
+  smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
    * 1 if this pillar wall is rendered and collides at half-block width (4 px).
    * Only meaningful for walls that are 1×2 blocks and serve as pillars.
    */

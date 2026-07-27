@@ -323,9 +323,6 @@ function deleteResolvedCandidate(
     case 'spike':
       removed = removeByUid(room.spikes, uid);
       break;
-    case 'laser':
-      removed = removeByUid(room.lasers, uid);
-      break;
     case 'bouncePad':
       removed = removeByUid(room.bouncePads, uid);
       break;
