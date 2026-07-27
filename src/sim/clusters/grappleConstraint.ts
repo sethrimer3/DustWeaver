@@ -18,8 +18,8 @@ import {
   GRAPPLE_MIN_LENGTH_WORLD,
   raycastWalls,
   releaseGrapple,
+  getEffectiveGrappleRangeWorld,
 } from './grappleShared';
-import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { tickGrappleWrapping } from './grappleWrapping';
 import { tickGrappleZip } from './grappleZip';
 import {

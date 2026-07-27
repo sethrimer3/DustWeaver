@@ -12,6 +12,7 @@
  */
 
 import { WorldState } from '../world';
+import { getPlayerMoteCount, getPlayerMoteCapacity } from '../playerMoteLife';
 import { forEachWallSolidRect } from '../stairsWorldGeometry';
 import { INFLUENCE_RADIUS_WORLD } from './binding';
 import { COYOTE_TIME_TICKS } from './movementConstants';
@@ -389,3 +390,52 @@ export function rechargeGrappleCharge(world: WorldState): void {
   world.prevHasGrappleChargeFlag = world.hasGrappleChargeFlag;
 }
 
+// ============================================================================
+// Effective grapple range and smoothed influence radius
+// ============================================================================
+
+const GRAPPLE_RANGE_VISUAL_LERP_FACTOR = 0.08;
+
+/**
+ * Computes effective grapple range derived from canonical player mote health points.
+ */
+export function getEffectiveGrappleRangeWorld(world: WorldState): number {
+  let player = null;
+  for (let ci = 0; ci < world.clusters.length; ci++) {
+    const c = world.clusters[ci];
+    if (c.isPlayerFlag === 1 && c.isAliveFlag === 1) {
+      player = c;
+      break;
+    }
+  }
+  if (player === null) return GRAPPLE_MAX_LENGTH_WORLD;
+  const capacity = getPlayerMoteCapacity(player);
+  const ratio = capacity > 0
+    ? getPlayerMoteCount(player) / capacity
+    : 1;
+
+  return GRAPPLE_MAX_LENGTH_WORLD * Math.max(0.30, ratio);
+}
+
+/** Alias for circle of influence radius. */
+export function getCircleOfInfluenceRadiusWorld(world: WorldState): number {
+  return getEffectiveGrappleRangeWorld(world);
+}
+
+/**
+ * Snaps `grappleDisplayRadiusWorld` directly to the current effective grapple range.
+ * Must be called during world creation, room loads, respawns, and player reconstruction
+ * so it never lerps from zero or retains a stale room value.
+ */
+export function resetGrappleDisplayRadius(world: WorldState): void {
+  world.grappleDisplayRadiusWorld = getEffectiveGrappleRangeWorld(world);
+}
+
+/**
+ * Smoothly lerps `grappleDisplayRadiusWorld` toward effective range each tick.
+ */
+export function tickGrappleDisplayRadius(world: WorldState): void {
+  const targetRadiusWorld = getEffectiveGrappleRangeWorld(world);
+  world.grappleDisplayRadiusWorld +=
+    (targetRadiusWorld - world.grappleDisplayRadiusWorld) * GRAPPLE_RANGE_VISUAL_LERP_FACTOR;
+}

@@ -25,7 +25,6 @@ import { MAX_WATER_ZONES } from './worldHazardState';
 import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { markLiquidBodiesDirty } from '../render/liquidBodyCache';
 import { ParticleKind } from './particles/kinds';
-import { MOTE_STATE_AVAILABLE } from './motes/orderedMoteQueue';
 
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
@@ -103,16 +102,16 @@ export function resetIceMoteAuraForRoom(world: WorldState): void {
  * computePlayerWaterState so the frozen mask and wall slots are current.
  */
 export function tickIceMoteAura(world: WorldState): void {
-  const equipped = _hasIceMoteEquipped(world);
-  const player   = world.clusters.length > 0 ? world.clusters[0] : undefined;
-  const playerAlive = player !== undefined && player.isAliveFlag === 1;
+  const player = world.clusters.length > 0 ? world.clusters[0] : undefined;
+  const playerIsAlive = player !== undefined && player.isAliveFlag === 1;
+  const active = world.selectedDustKind === ParticleKind.Ice && playerIsAlive;
   const dt = world.dtMs;
 
-  if (equipped !== _aura.isActive) {
-    _aura.isActive = equipped;
+  if (active !== _aura.isActive) {
+    _aura.isActive = active;
   }
 
-  if (!equipped || !playerAlive) {
+  if (!active) {
     // Advance thaw timers for all currently frozen zones.
     // Iterate backwards over slotToZone so that _thawZone's slot compaction
     // (swap-with-last) never disturbs indices we haven't visited yet.
@@ -192,20 +191,6 @@ export function getIceMoteAuraDebugInfo(): IceMoteAuraDebugInfo {
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
-
-/** Returns true if any Ice Mote slot is in the AVAILABLE (equipped) state. */
-function _hasIceMoteEquipped(world: WorldState): boolean {
-  if (world.selectedDustKind === ParticleKind.Ice) return true;
-  for (let i = 0; i < world.moteSlotCount; i++) {
-    if (
-      world.moteSlotKind[i]  === ParticleKind.Ice &&
-      world.moteSlotState[i] === MOTE_STATE_AVAILABLE
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
 
 /**
  * Squared nearest-point-on-AABB distance from point (px,py) to rectangle

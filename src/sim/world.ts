@@ -50,19 +50,6 @@ export const MAX_ROPES = 16;
 /** Maximum number of Verlet segments per rope (includes anchors). */
 export const MAX_ROPE_SEGMENTS = 32;
 
-/** Maximum number of logical mote slots (equals PARTICLE_COUNT_PER_CLUSTER). */
-export const MAX_MOTE_SLOTS = 20;
-/** Fixed trail-sample history capacity per mote slot for the dust-switch trail effect. */
-export const DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT = 6;
-
-/** Maximum real motes that sweep the Sword Weave crescent slash. */
-export const MAX_SWORD_SLASH_MOTES = 8;
-
-/** Maximum real motes assembled into a single Bow Weave arrow (center + 4). */
-export const MAX_BOW_ARROW_MOTES = 5;
-/** Minimum real motes for a valid Bow Weave arrow (center + 2). */
-export const MIN_BOW_ARROW_MOTES = 3;
-
 /** Number of positions stored in the momentum trail circular buffer. */
 export const MOMENTUM_TRAIL_MAX_POINTS = 8;
 
@@ -404,229 +391,20 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   weakWallJumpCascadeWallSideX: number;
 
-  // ── Shield Sword Weave state ───────────────────────────────────────────────
-  /**
-   * Current sword state machine value.  See sim/weaves/swordWeave.ts for the
-   * SWORD_STATE_* constants.  Drives both behavior and rendering.
-   */
-  swordWeaveStateEnum: number;
-  /** Ticks elapsed in the current sword state. */
-  swordWeaveStateTicksElapsed: number;
-  /** Current sword angle (radians) in world space, measured from the hand anchor. */
-  swordWeaveAngleRad: number;
-  /**
-   * Index of the enemy cluster currently being targeted by the auto-swing,
-   * or -1 if no target is locked.
-   */
-  swordWeaveTargetClusterIndex: number;
-  /** Sword angle (radians) at the start of the current slash. */
-  swordWeaveSlashStartAngleRad: number;
-  /** Sword angle (radians) at the end of the current slash. */
-  swordWeaveSlashEndAngleRad: number;
-  /** World X of the sword's hand anchor, recomputed each tick the sword is active. */
-  swordWeaveHandAnchorXWorld: number;
-  /** World Y of the sword's hand anchor, recomputed each tick the sword is active. */
-  swordWeaveHandAnchorYWorld: number;
-  /**
-   * Current sword length ratio in [0, 1].
-   *
-   * Computed each tick as `min(MAX_SWORD_BLADE_MOTES, availableMoteCount) / MAX_SWORD_BLADE_MOTES`.
-   * 1.0 = full sword (enough motes for all blade segments).
-   * 0.5 = half sword (half the blade segments present).
-   * 0.0 = no sword (zero available motes — sword cannot attack).
-   *
-   * Propagated to WorldSnapshot for the renderer to scale the blade.
-   */
-  swordWeaveLengthRatio: number;
-
   // ── Stage 3: independent Sword/Shield/Bow Weave unlock flags ───────────────
-  // Set from PlayerProgress.unlockedActiveWeaves at room activation (see
-  // gameLoadRoomPhases.ts applyPlayerWeaveWorldFields). These are independent
-  // of `playerSecondaryWeaveId` (the legacy single-slot equip choice) — any
-  // combination may be true simultaneously.
   hasSwordWeaveUnlockedFlag: 0 | 1;
   hasShieldWeaveUnlockedFlag: 0 | 1;
   hasBowWeaveUnlockedFlag: 0 | 1;
 
-  // ── Independent Sword Weave (Stage 3) — press-driven single crescent swipe ─
-  // See sim/weaves/secondaryWeaveCoordinator.ts and sim/weaves/swordWeave.ts.
-  /** 1 while a swipe (from press through recovery) is in progress. */
-  newSwordActiveFlag: 0 | 1;
-  /** Gesture id (from secondaryWeaveGesture) this swipe belongs to; -1 = none. */
-  newSwordGestureId: number;
-  /** Ticks elapsed since the swipe started. */
-  newSwordTicksElapsed: number;
-  /** Press-time aim angle (radians); fixed for the whole swipe — no retarget. */
-  newSwordAimAngleRad: number;
-  /** Current sweep angle this tick (radians), interpolated across the swipe. */
-  newSwordCurrentAngleRad: number;
-  newSwordHandAnchorXWorld: number;
-  newSwordHandAnchorYWorld: number;
-  /** Reach (world units) computed from available motes at swipe start. */
-  newSwordReachWorld: number;
-  /**
-   * 0..1 sub-phase progress exposed for Stage 5 rendering to interpolate the
-   * sword→shield visual handoff. 0 = pure sword, 1 = fully handed off to
-   * shield ownership of the same motes (sim only exposes discrete state; the
-   * smooth interpolation itself belongs to the renderer).
-   */
-  newSwordToShieldTransition01: number;
-  /** Rear staging angle (radians) the crescent sweep starts behind the aim. */
-  newSwordStartAngleRad: number;
-  /** Front terminating angle (radians) the crescent sweep ends in front of the aim. */
-  newSwordEndAngleRad: number;
-  /** Number of actual motes participating in the crescent slash (0..MAX_SWORD_SLASH_MOTES). */
-  newSwordMoteCount: number;
-  /** Participating particle indices, ordered leading→trailing along the blade. */
-  newSwordMoteParticleIndex: Int32Array;
-  /** Per-mote pre-swipe position, so the mote can "shoot" from orbit into rear staging. */
-  newSwordMoteFromXWorld: Float32Array;
-  newSwordMoteFromYWorld: Float32Array;
-  /**
-   * Per-mote position at the START of the current tick (before this tick's
-   * `_driveSwordMotes` update), captured so swept-segment collision can test
-   * the actual path each mote traveled this tick rather than an abstract
-   * angular hitbox. Updated every tick the swipe is active.
-   */
-  newSwordMotePrevXWorld: Float32Array;
-  newSwordMotePrevYWorld: Float32Array;
-
-  // ── Independent Bow Weave (Stage 3) — actual-mote arrow assembly ───────────
-  //
-  // The bow no longer has a "draw strength" / charge tier or a separate queue
-  // of phantom motes. Instead it loads the player's ACTUAL mote particles into
-  // a straight arrow line (a center mote plus up to four additional real motes,
-  // seated at the shield's canonical center — see shieldGeometry.ts) on a
-  // fixed schedule measured from when the Shield Weave began, then fires them
-  // together as a constant-speed straight projectile that damages the first
-  // enemy it sweeps through, reflects off walls, or curves home at max
-  // distance — all three resolutions hand the motes back to Storm.
-  //
-  // Phase: 0 = none, 1 = assembling (held), 2 = outbound (fired).
-  bowArrowPhase: number;
-  /** Gesture id this arrow belongs to. */
-  bowArrowGestureId: number;
-  /** World tick the Shield Weave began — origin of the 0.75/1.25/1.75 s schedule. */
-  bowArrowShieldStartTick: number;
-  /** Number of real motes currently in the arrow (includes the center mote), 0..MAX_BOW_ARROW_MOTES. */
-  bowArrowCount: number;
-  /**
-   * Participating particle indices in center-out insertion order:
-   * [0]=center, [1]=behind, [2]=front, [3]=further behind, [4]=further front.
-   * The signed line offset for rank r is derived from this ordering.
-   */
-  bowArrowParticleIndex: Int32Array;
-  /** Per-rank tick at which that mote began arcing into the line (−1 = unused). */
-  bowArrowSlotStartTick: Int32Array;
-  /**
-   * Per-rank assembly state: 0 = unused, 1 = loading (still arcing in),
-   * 2 = seated (tracking the line exactly, ready to fire). Only SEATED ranks
-   * count toward the minimum fireable three-mote arrow — a mote is never
-   * snapped straight into a fired arrow mid-arc (task section 6).
-   */
-  bowArrowRankState: Uint8Array;
-  /**
-   * 1 when the player released while fewer than the minimum three motes were
-   * SEATED but enough are reserved (bowArrowCount >= MIN_BOW_ARROW_MOTES) that
-   * seating will eventually finish — the arrow fires automatically, using the
-   * aim captured at release time, the first tick enough motes finish seating.
-   * Never set when bowArrowCount < MIN_BOW_ARROW_MOTES (that case cancels
-   * immediately instead, since seating could never reach the minimum).
-   */
-  bowArrowReleaseLatchedFlag: 0 | 1;
-  bowArrowLatchedAimXWorld: number;
-  bowArrowLatchedAimYWorld: number;
-  /** Per-rank arc-in start position (where the mote left its shield slot). */
-  bowArrowArcFromXWorld: Float32Array;
-  bowArrowArcFromYWorld: Float32Array;
-  /** Per-rank quadratic-bezier control point (bulges away from the player, then curves back). */
-  bowArrowArcCtrlXWorld: Float32Array;
-  bowArrowArcCtrlYWorld: Float32Array;
-  /** Current straight firing direction (unit). Updated with aim while assembling. */
-  bowArrowDirXWorld: number;
-  bowArrowDirYWorld: number;
-  /** Outbound launch origin (arrow line center at fire time). */
-  bowArrowOriginXWorld: number;
-  bowArrowOriginYWorld: number;
-  /** Accumulated outbound travel distance (pixels) — tracked by displacement, not time. */
-  bowArrowTravelPx: number;
-  /** Dust kind (ParticleKind) captured at fire time so a later switch cannot retag it. */
-  bowArrowDustKind: number;
   /** Currently active/selected dust kind (ParticleKind.Golden = 0 by default). */
   selectedDustKind: number;
-  /** 1 while the independent (Stage 3) Shield Weave crescent currently owns the player's motes. */
-  shieldWeaveIndependentActiveFlag: 0 | 1;
 
-  // ── Ordered Mote Queue ─────────────────────────────────────────────────────
-  /**
-   * Number of active logical mote slots for the player.
-   * 0 when the player has no dust containers or loadout configured.
-   */
-  moteSlotCount: number;
-  /**
-   * ParticleKind per slot (MAX_MOTE_SLOTS entries).
-   * Reflects the dust kind of each mote at queue initialisation time.
-   */
-  moteSlotKind: Uint8Array;
-  /**
-   * State per slot: 0 = available, 1 = depleted (MAX_MOTE_SLOTS entries).
-   * Use MOTE_STATE_AVAILABLE / MOTE_STATE_DEPLETED from orderedMoteQueue.ts.
-   */
-  moteSlotState: Uint8Array;
-  /**
-   * Ticks remaining on the depletion cooldown (MAX_MOTE_SLOTS entries).
-   * 0 while the slot is available.
-   */
-  moteSlotCooldownTicksLeft: Uint16Array;
-  /**
-   * Index into the world particle buffer for each slot's linked particle.
-   * -1 for unlinked slots (MAX_MOTE_SLOTS entries).
-   */
-  moteSlotParticleIndex: Int16Array;
-  /**
-   * Phase 13: ticks remaining on the mote-regeneration flash animation
-   * (MAX_MOTE_SLOTS entries, Uint8 — max 255 ticks).
-   * Set to MOTE_REGEN_FLASH_TICKS when a slot transitions DEPLETED → AVAILABLE.
-   * Ticked down each tick; read by the HUD mote dot row for a brief white flash.
-   */
-  moteRegenFlashTicksLeft: Uint8Array;
   /**
    * Smoothed display radius (world units) for the grapple influence circle.
    * Lerps toward getEffectiveGrappleRangeWorld() each tick so the circle
    * grows and shrinks visually with a small lag.
    */
-  moteGrappleDisplayRadiusWorld: number;
-
-  // ── Dust Type Switch (dust selection wheel transformation) ────────────────
-  // See sim/weaves/dustTypeSwitch.ts for the state machine that drives these
-  // per-slot fields. Indexed by mote slot (MAX_MOTE_SLOTS entries), mirroring
-  // the Ordered Mote Queue arrays above.
-  /**
-   * Per-slot switch phase: 0 = normal, 1 = recalling to player center,
-   * 2 = transformed, returning to orbit. See DUST_SWITCH_PHASE_* in
-   * dustTypeSwitch.ts.
-   */
-  dustSwitchPhase: Uint8Array;
-  /** Dust kind this slot is switching to (valid while phase !== normal). */
-  dustSwitchTargetKind: Uint8Array;
-  /** Dust kind this slot switched from — used for the trail's pre-transform color. */
-  dustSwitchSourceKind: Uint8Array;
-  /** Ticks remaining in the post-transform "returning" grace period. */
-  dustSwitchReturnTicksLeft: Uint8Array;
-  /** Number of slots currently not in the normal phase — 0 means no switch in progress. */
-  dustSwitchActiveSlotCount: number;
-  /** Fixed-size per-slot trail sample history: world-space X (see dustTypeSwitch.ts). */
-  dustSwitchTrailXWorld: Float32Array;
-  /** Trail sample history: world-space Y. */
-  dustSwitchTrailYWorld: Float32Array;
-  /** Trail sample history: age in ticks since the sample was recorded. */
-  dustSwitchTrailAgeTicks: Float32Array;
-  /** Trail sample history: 0 = pre-transform (source color), 1 = post-transform (target color). */
-  dustSwitchTrailIsPostTransformFlag: Uint8Array;
-  /** Ring-buffer write cursor per slot. */
-  dustSwitchTrailWriteIndex: Uint8Array;
-  /** Number of valid trail samples currently stored per slot (≤ DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT). */
-  dustSwitchTrailActiveCount: Uint8Array;
+  grappleDisplayRadiusWorld: number;
 
   // ── Phase 8: Storm / Inventory source flag ─────────────────────────────────
   /**
@@ -819,83 +597,11 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     weakWallJumpCascadeXWorld: 0.0,
     weakWallJumpCascadeYWorld: 0.0,
     weakWallJumpCascadeWallSideX: 0,
-    // ── Shield Sword Weave ────────────────────────────────────────────
-    swordWeaveStateEnum:           0,
-    swordWeaveStateTicksElapsed:   0,
-    swordWeaveAngleRad:            0,
-    swordWeaveTargetClusterIndex:  -1,
-    swordWeaveSlashStartAngleRad:  0,
-    swordWeaveSlashEndAngleRad:    0,
-    swordWeaveHandAnchorXWorld:    0,
-    swordWeaveHandAnchorYWorld:    0,
-    swordWeaveLengthRatio:         1.0,
-    shieldWeaveIndependentActiveFlag: 0,
-    // ── Stage 3: independent Sword/Shield/Bow unlock flags ─────────────
     hasSwordWeaveUnlockedFlag:     0,
     hasShieldWeaveUnlockedFlag:    0,
     hasBowWeaveUnlockedFlag:       0,
-    // ── Independent Sword Weave ─────────────────────────────────────────
-    newSwordActiveFlag:            0,
-    newSwordGestureId:             -1,
-    newSwordTicksElapsed:          0,
-    newSwordAimAngleRad:           0,
-    newSwordCurrentAngleRad:       0,
-    newSwordHandAnchorXWorld:      0,
-    newSwordHandAnchorYWorld:      0,
-    newSwordReachWorld:            0,
-    newSwordToShieldTransition01:  0,
-    newSwordStartAngleRad:         0,
-    newSwordEndAngleRad:           0,
-    newSwordMoteCount:             0,
-    newSwordMoteParticleIndex:     new Int32Array(MAX_SWORD_SLASH_MOTES).fill(-1),
-    newSwordMoteFromXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
-    newSwordMoteFromYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
-    newSwordMotePrevXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
-    newSwordMotePrevYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
-    // ── Independent Bow Weave — actual-mote arrow ───────────────────────
-    bowArrowPhase:                 0,
-    bowArrowGestureId:             -1,
-    bowArrowShieldStartTick:       -1,
-    bowArrowCount:                 0,
-    bowArrowParticleIndex:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
-    bowArrowSlotStartTick:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
-    bowArrowRankState:             new Uint8Array(MAX_BOW_ARROW_MOTES),
-    bowArrowArcFromXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
-    bowArrowArcFromYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
-    bowArrowArcCtrlXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
-    bowArrowArcCtrlYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
-    bowArrowDirXWorld:             1,
-    bowArrowDirYWorld:             0,
-    bowArrowOriginXWorld:          0,
-    bowArrowOriginYWorld:          0,
-    bowArrowTravelPx:              0,
-    bowArrowDustKind:              0,
     selectedDustKind:              0,
-    bowArrowReleaseLatchedFlag:    0,
-    bowArrowLatchedAimXWorld:      0,
-    bowArrowLatchedAimYWorld:      0,
-    // ── Ordered Mote Queue ────────────────────────────────────────────
-    moteSlotCount:              0,
-    moteSlotKind:               new Uint8Array(MAX_MOTE_SLOTS),
-    moteSlotState:              new Uint8Array(MAX_MOTE_SLOTS),
-    moteSlotCooldownTicksLeft:  new Uint16Array(MAX_MOTE_SLOTS),
-    moteSlotParticleIndex:      new Int16Array(MAX_MOTE_SLOTS).fill(-1),
-    moteRegenFlashTicksLeft:    new Uint8Array(MAX_MOTE_SLOTS),
-    // Default to full grapple range (96 world units = INFLUENCE_RADIUS_WORLD).
-    // initMoteQueueFromParticles() will correct this on the first room load.
-    moteGrappleDisplayRadiusWorld: 96.0,
-    // ── Dust Type Switch ──────────────────────────────────────────────
-    dustSwitchPhase:              new Uint8Array(MAX_MOTE_SLOTS),
-    dustSwitchTargetKind:         new Uint8Array(MAX_MOTE_SLOTS),
-    dustSwitchSourceKind:         new Uint8Array(MAX_MOTE_SLOTS),
-    dustSwitchReturnTicksLeft:    new Uint8Array(MAX_MOTE_SLOTS),
-    dustSwitchActiveSlotCount:    0,
-    dustSwitchTrailXWorld:        new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
-    dustSwitchTrailYWorld:        new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
-    dustSwitchTrailAgeTicks:      new Float32Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
-    dustSwitchTrailIsPostTransformFlag: new Uint8Array(MAX_MOTE_SLOTS * DUST_SWITCH_TRAIL_SAMPLES_PER_SLOT),
-    dustSwitchTrailWriteIndex:    new Uint8Array(MAX_MOTE_SLOTS),
-    dustSwitchTrailActiveCount:   new Uint8Array(MAX_MOTE_SLOTS),
+    grappleDisplayRadiusWorld:     96.0,
     // Default: Storm Weave is the starting primary, so motes orbit from the start.
     isMoteSourceOrbitFlag:         1,
     // ── Falling blocks ────────────────────────────────────────────────────

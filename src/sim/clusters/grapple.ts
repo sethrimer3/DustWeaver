@@ -78,8 +78,9 @@ import {
   GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD,
   raycastWalls,
   clearLegacyGrappleMissState,
+  getEffectiveGrappleRangeWorld,
+  resetGrappleDisplayRadius,
 } from './grappleShared';
-import { getEffectiveGrappleRangeWorld } from '../motes/orderedMoteQueue';
 import { raycastRopeSegments } from './grappleRopeSupport';
 import { isGrappleWallHitSlimed } from './slimeSnailAi';
 import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
@@ -139,6 +140,7 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
   }
 
   world.grappleParticleStartIndex = startIndex;
+  resetGrappleDisplayRadius(world);
 }
 
 function getPlayerGrappleOriginWorld(player: ClusterState): { x: number; y: number } {
