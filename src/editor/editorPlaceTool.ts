@@ -128,14 +128,14 @@ export function placeAtCursor(state: EditorState): boolean {
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
-    item.category === 'timeStop' ||
+    item.isTimeStopFieldItem === 1 ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   if (isBrushable && state.brushMode === 'fill') {
     let fillKind: FillKind = 'tile';
     if (item.category === 'liquids') {
       fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
-    } else if (item.category === 'timeStop') {
+    } else if (item.isTimeStopFieldItem === 1) {
       fillKind = 'timeStop';
     }
     const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
@@ -215,7 +215,7 @@ export function evaluateBrushOperation(state: EditorState): BrushOperationResult
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
-    item.category === 'timeStop' ||
+    item.isTimeStopFieldItem === 1 ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   // Rect-brush first click: only an anchor gets recorded, nothing is placed
@@ -230,7 +230,7 @@ export function evaluateBrushOperation(state: EditorState): BrushOperationResult
     let fillKind: FillKind = 'tile';
     if (item.category === 'liquids') {
       fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
-    } else if (item.category === 'timeStop') {
+    } else if (item.isTimeStopFieldItem === 1) {
       fillKind = 'timeStop';
     }
     cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
@@ -333,7 +333,7 @@ export function wouldPlacementSucceedAt(
   }
 
   // ── TimeStop Field layer ────────────────────────────────────────────────
-  if (item.category === 'timeStop') {
+  if (item.isTimeStopFieldItem === 1) {
     const wBlock = item.defaultWidthBlocks ?? 1;
     const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return false;
@@ -672,7 +672,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
   // ── TimeStop Field layer ────────────────────────────────────────────────
   // Non-solid paintable 1×1 tiles, independent of the water/lava layer.
   // Painting the same cell twice is idempotent — no duplicates created.
-  if (item.category === 'timeStop') {
+  if (item.isTimeStopFieldItem === 1) {
     const wBlock = item.defaultWidthBlocks ?? 1;
     const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;

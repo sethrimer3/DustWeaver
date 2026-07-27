@@ -1298,20 +1298,18 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           }
         }
 
-        // Categories that get a visual 2-column preview grid
-        const usePreviewGrid = (
-          state.activeCategory === 'specialBlocks' ||
-          state.activeCategory === 'enemies' ||
-          state.activeCategory === 'triggers' ||
-          state.activeCategory === 'collectables' ||
-          state.activeCategory === 'environment' ||
-          state.activeCategory === 'dust' ||
-          state.activeCategory === 'objects' ||
-          state.activeCategory === 'lighting' ||
-          state.activeCategory === 'liquids' ||
-          state.activeCategory === 'ropes' ||
-          state.activeCategory === 'guidePaths'
-        );
+        // Every non-'blocks' category (handled separately above via its own
+        // `if` branch, so it never reaches this code) gets the generic
+        // 2-column preview grid by default. 'customBlocks' is the only
+        // opt-out: its cards come from the dynamic custom-block registry
+        // (built above), not from a `PALETTE_ITEMS` filter, so there's
+        // nothing in `items` for it to render here.
+        //
+        // This is deliberately a default-on/opt-out design (not an allowlist)
+        // so a brand new category can never silently render an empty
+        // palette just because it was left off a list — see
+        // editorPaletteItems.test.ts's coverage assertion.
+        const usePreviewGrid = state.activeCategory !== 'customBlocks';
 
         if (usePreviewGrid) {
           const grid = document.createElement('div');

@@ -18,12 +18,12 @@ export const PALETTE_CATEGORIES = [
   'specialBlocks',
   'enemies',
   'triggers',
+  'fields',
   'gates',
   'collectables',
   'environment',
   'dust',
   'liquids',
-  'timeStop',
   'objects',
   'lighting',
   'ropes',
@@ -38,12 +38,12 @@ export const PALETTE_CATEGORY_LABELS: Readonly<Record<PaletteCategory, string>> 
   specialBlocks: 'Special Blocks',
   enemies: 'Enemies',
   triggers: 'Triggers',
+  fields: 'Fields',
   gates: 'Gates',
   collectables: 'Collectables',
   environment: 'Environment',
   dust: 'Dust',
   liquids: 'Liquids',
-  timeStop: 'Time Stop',
   objects: 'Objects',
   lighting: 'Lighting',
   ropes: 'Ropes',
@@ -214,7 +214,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   { id: 'room_transition', label: 'Room Transition', category: 'triggers' },
   { id: 'save_tomb',       label: 'Save Tomb',       category: 'triggers' },
   { id: 'dialogue_trigger', label: 'Dialogue Trigger', category: 'triggers' },
-  { id: 'challenge_field', label: 'Challenge Field', category: 'triggers', defaultWidthBlocks: 4, defaultHeightBlocks: 4 },
+  { id: 'challenge_field', label: 'Challenge Field', category: 'fields', defaultWidthBlocks: 4, defaultHeightBlocks: 4 },
   { id: 'enemy_gate', label: 'Enemy Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
   { id: 'challenge_gate', label: 'Challenge Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
   { id: 'heart_gate', label: 'Heart Gate', category: 'gates', defaultWidthBlocks: 1, defaultHeightBlocks: 4 },
@@ -265,7 +265,7 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // ── TimeStop Field (experimental) ──────────────────────────────────────────
   // Non-solid, dynamic, translucent field. Adjacent tiles merge into one
   // connected gameplay region — see sim/timeStopField/.
-  { id: 'timestop_field', label: 'TimeStop Field', category: 'timeStop', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isTimeStopFieldItem: 1 },
+  { id: 'timestop_field', label: 'TimeStop Field', category: 'fields', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isTimeStopFieldItem: 1 },
   // ── Bounce pads ─────────────────────────────────────────────────────────────
   // Dim = 50 % restitution (small 2×2-pixel core)
   { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },
