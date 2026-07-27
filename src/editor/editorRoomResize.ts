@@ -14,8 +14,9 @@ import type { EditorRoomData } from './editorState';
 import type { EditorHistory } from './editorHistory';
 import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import type { RoomEdge } from './editorUI';
-import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
+import { BLOCK_SIZE_SMALL, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { getMaterialFootprintSize } from '../sim/pixelMaterials/pixelMaterialTypes';
+import type { CampaignSpawnData } from '../levels/campaignSchema';
 
 /** Clamps a zone rect (with wBlock/hBlock) to fit within the given room dimensions. */
 export function clampZoneToDimensions(
@@ -34,6 +35,12 @@ export function clampZoneToDimensions(
  * new bounds so nothing is placed outside the room.
  *
  * Minimum room size is enforced at 10 in each axis.
+ *
+ * NOTE: this "slide into bounds" clamp is intentionally kept for the direct
+ * width/height property-edit flow (`onRoomDimensionsChange`), where there is
+ * no notion of "which edge changed" and no map-origin/coordinate-translation
+ * semantics apply. Edge-driven resizes (`applyEdgeResize` below) use their
+ * own shift + clip/remove logic instead, per the side-anchored invariant.
  */
 export function applyRoomDimensionChange(
   roomData: EditorRoomData,
@@ -192,20 +199,70 @@ export function applyRoomDimensionChange(
   }
 }
 
+// ── Edge-resize: shift + clip/remove ──────────────────────────────────────────
+//
+// Invariant (see docs/Todo.md "Make Room Dimensions edge-resizing truly
+// side-anchored and coordinate-complete"): resizing changes only the
+// selected edge. Top/left operations move the map origin inversely
+// (mapX -= clampedDelta / mapY -= clampedDelta) so the OPPOSITE edge stays
+// fixed in absolute map-world space, and every surviving room-local spatial
+// coordinate is translated by the same delta so its absolute position is
+// unchanged. Bottom/right operations never shift the map origin or content.
+// In both cases, geometry intersecting a shaved-off strip is removed or
+// clipped according to its element type — never silently clamped/piled onto
+// the new edge.
+
+interface PointLike { xBlock: number; yBlock: number }
+interface RectLike { xBlock: number; yBlock: number; wBlock: number; hBlock: number }
+
+/** Shifts a point in-place by (dx, dy); returns false if it now falls (any part of its
+ * footprint) outside [0, w) x [0, h) and should be removed. */
+function shiftAndKeepPoint(p: PointLike, dx: number, dy: number, w: number, h: number, fw = 1, fh = 1): boolean {
+  p.xBlock += dx;
+  p.yBlock += dy;
+  return p.xBlock >= 0 && p.yBlock >= 0 && p.xBlock + fw <= w && p.yBlock + fh <= h;
+}
+
+/** Shifts a rect in-place by (dx, dy) and clips it to [0, w) x [0, h). Returns false if the
+ * rect is fully outside the new bounds (degenerate) and should be removed. */
+function shiftAndClipRect(r: RectLike, dx: number, dy: number, w: number, h: number): boolean {
+  r.xBlock += dx;
+  r.yBlock += dy;
+  if (r.xBlock < 0) { r.wBlock += r.xBlock; r.xBlock = 0; }
+  if (r.yBlock < 0) { r.hBlock += r.yBlock; r.yBlock = 0; }
+  if (r.xBlock + r.wBlock > w) r.wBlock = w - r.xBlock;
+  if (r.yBlock + r.hBlock > h) r.hBlock = h - r.yBlock;
+  return r.wBlock > 0 && r.hBlock > 0 && r.xBlock < w && r.yBlock < h;
+}
+
+function filterInPlace<T>(arr: T[] | undefined, keep: (item: T) => boolean): T[] {
+  return (arr ?? []).filter(keep);
+}
+
 /**
  * Adds or removes one row/column from the given edge.
  *
- * Adding to top/left shifts all content. Adding to bottom/right just extends.
- * Removing from top/left shifts content the other direction.
+ * Adding to top/left shifts all content (and the map origin). Adding to
+ * bottom/right just extends. Removing from top/left shifts content the
+ * other direction (and the map origin); removing from bottom/right clips
+ * or removes geometry that no longer fits.
  * Minimum room size is 10×10.
  *
- * Pushes an undo snapshot before making any changes.
+ * Pushes a single undo snapshot covering dimensions, map coordinates, and
+ * every shifted/clipped/removed element (committed only after all mutation
+ * is complete, so one undo/redo step restores everything atomically).
+ *
+ * `campaignSpawn`, if provided and its `roomId` matches this room, is
+ * shifted/clamped in place like any other spatial element (campaign spawn
+ * is owned by the campaign session, not `EditorRoomData`, so it must be
+ * passed in explicitly by the caller).
  */
 export function applyEdgeResize(
   roomData: EditorRoomData,
   history: EditorHistory,
   edge: RoomEdge,
   delta: -5 | -1 | 1 | 5,
+  campaignSpawn?: CampaignSpawnData,
 ): void {
   const room = roomData;
 
@@ -221,153 +278,171 @@ export function applyEdgeResize(
 
   // Enforce minimum room size of 10 (also covers the delta === 0 case)
   if (newSize < 10 || clampedDelta === 0) return;
-  const pending = capturePendingSnapshot(roomData, undefined, undefined, false, 'Room resize');
+
+  const spawnTracked = campaignSpawn !== undefined;
+  const spawnBelongsToRoom = spawnTracked && campaignSpawn!.roomId === room.id;
+  const pending = capturePendingSnapshot(roomData, campaignSpawn, campaignSpawn?.roomId, spawnTracked, 'Room resize');
 
   room[prop] = newSize;
-  const commitResult = commitPendingSnapshot(history, pending);
-  if (commitResult === 'noop') return;
+  const w = room.widthBlocks;
+  const h = room.heightBlocks;
 
-  // When adding/removing from top or left, we need to shift all content
-  const needsShift = edge === 'top' || edge === 'left';
-  if (needsShift) {
-    const shiftX = edge === 'left' ? clampedDelta : 0;
-    const shiftY = edge === 'top' ? clampedDelta : 0;
+  const isNearEdge = edge === 'top' || edge === 'left';
+  const shiftX = edge === 'left' ? clampedDelta : 0;
+  const shiftY = edge === 'top' ? clampedDelta : 0;
 
-    // Shift player spawn
-    room.playerSpawnBlock[0] += shiftX;
-    room.playerSpawnBlock[1] += shiftY;
+  if (isNearEdge) {
+    // Move the map origin inversely so the OPPOSITE edge stays fixed in
+    // absolute map-world space.
+    if (edge === 'left') room.mapX = (room.mapX ?? 0) - clampedDelta;
+    else room.mapY = (room.mapY ?? 0) - clampedDelta;
+  }
 
-    // Shift enemies
-    for (const enemy of room.enemies) {
-      enemy.xBlock += shiftX;
-      enemy.yBlock += shiftY;
-    }
+  // Player spawn: single non-deletable point — shift then clamp into bounds
+  // (there is no sensible "remove" for the mandatory spawn point).
+  room.playerSpawnBlock[0] = Math.min(Math.max(0, room.playerSpawnBlock[0] + shiftX), w - 1);
+  room.playerSpawnBlock[1] = Math.min(Math.max(0, room.playerSpawnBlock[1] + shiftY), h - 1);
 
-    // Shift save tombs
-    for (const tomb of room.saveTombs) {
-      tomb.xBlock += shiftX;
-      tomb.yBlock += shiftY;
-    }
+  // Campaign spawn (owned by the campaign session, not EditorRoomData):
+  // same non-deletable-point treatment, only if it belongs to this room.
+  if (spawnBelongsToRoom) {
+    campaignSpawn!.xBlock = Math.min(Math.max(0, campaignSpawn!.xBlock + shiftX), w - 1);
+    campaignSpawn!.yBlock = Math.min(Math.max(0, campaignSpawn!.yBlock + shiftY), h - 1);
+  }
 
-    // Shift skill tombs
-    for (const tomb of room.skillTombs) {
-      tomb.xBlock += shiftX;
-      tomb.yBlock += shiftY;
-    }
-    for (const element of [
-      ...(room.challengeFields ?? []),
-      ...(room.challengeGates ?? []),
-      ...(room.gates ?? []),
-      ...(room.challengeTotems ?? []),
-    ]) {
-      element.xBlock += shiftX;
-      element.yBlock += shiftY;
-    }
+  // ── Simple point collections (removed if shifted outside new bounds) ──────
+  for (const key of [
+    'enemies', 'saveTombs', 'skillTombs', 'challengeTotems', 'dustContainers',
+    'dustContainerPieces', 'dustBoostJars', 'dustSwarms', 'lambdaAnchors',
+    'fireflyJars', 'springboards', 'breakableBlocks', 'dustPiles', 'decorations',
+    'ambientLightBlockers', 'lightSources', 'fallingBlocks', 'phantasmalTiles',
+    'grappleCarryBlocks',
+  ] as const) {
+    (room as unknown as Record<string, unknown>)[key] = filterInPlace(
+      room[key] as unknown as PointLike[] | undefined,
+      p => shiftAndKeepPoint(p, shiftX, shiftY, w, h),
+    );
+  }
 
-    // Shift firefly jars
-    for (const jar of (room.fireflyJars ?? [])) {
-      jar.xBlock += shiftX;
-      jar.yBlock += shiftY;
-    }
+  // Spikes: footprint-aware point (1x1 or 2x2).
+  room.spikes = filterInPlace(room.spikes, sp =>
+    shiftAndKeepPoint(sp, shiftX, shiftY, w, h, sp.size === '2x2' ? 2 : 1, sp.size === '2x2' ? 2 : 1));
 
-    // Shift springboards
-    for (const sb of (room.springboards ?? [])) {
-      sb.xBlock += shiftX;
-      sb.yBlock += shiftY;
-    }
+  // ── Rect collections (clipped; removed if fully outside new bounds) ───────
+  for (const key of [
+    'interiorWalls', 'challengeFields', 'challengeGates', 'gates', 'waterZones',
+    'lavaZones', 'timeStopFields', 'crumbleBlocks', 'bouncePads', 'kineticBlocks',
+    'zipMoveBlocks', 'grasshopperAreas', 'fireflyAreas', 'backgroundBlocks',
+    'dialogueTriggers',
+  ] as const) {
+    (room as unknown as Record<string, unknown>)[key] = filterInPlace(
+      room[key] as unknown as RectLike[] | undefined,
+      r => shiftAndClipRect(r, shiftX, shiftY, w, h),
+    );
+  }
 
-    // Shift breakable blocks
-    for (const bb of (room.breakableBlocks ?? [])) {
-      bb.xBlock += shiftX;
-      bb.yBlock += shiftY;
-    }
+  // Custom block placements: rect via tileWidth/tileHeight instead of wBlock/hBlock.
+  room.customBlockPlacements = filterInPlace(room.customBlockPlacements, cb =>
+    shiftAndKeepPoint(cb, shiftX, shiftY, w, h, cb.tileWidth, cb.tileHeight));
 
-    // Shift dust piles
-    for (const pile of room.dustPiles) {
-      pile.xBlock += shiftX;
-      pile.yBlock += shiftY;
-    }
+  // Pixel materials: native-pixel units, footprint-aware, scaled by BLOCK_SIZE_SMALL.
+  if (room.pixelMaterials) {
+    const shiftXPx = shiftX * BLOCK_SIZE_SMALL;
+    const shiftYPx = shiftY * BLOCK_SIZE_SMALL;
+    const widthPx = w * BLOCK_SIZE_SMALL;
+    const heightPx = h * BLOCK_SIZE_SMALL;
+    room.pixelMaterials = room.pixelMaterials.filter(p => {
+      p.xPixel += shiftXPx;
+      p.yPixel += shiftYPx;
+      const size = getMaterialFootprintSize(p.material);
+      return p.xPixel >= 0 && p.yPixel >= 0 &&
+        p.xPixel + size <= widthPx && p.yPixel + size <= heightPx;
+    });
+  }
 
-    // Shift decorations
-    for (const deco of (room.decorations ?? [])) {
-      deco.xBlock += shiftX;
-      deco.yBlock += shiftY;
-    }
+  // Scene lights: world-unit coordinates (xWorld/yWorld = xBlock/yBlock * BLOCK_SIZE_MEDIUM).
+  if (room.sceneLights) {
+    const shiftXWorld = shiftX * BLOCK_SIZE_MEDIUM;
+    const shiftYWorld = shiftY * BLOCK_SIZE_MEDIUM;
+    const widthWorld = w * BLOCK_SIZE_MEDIUM;
+    const heightWorld = h * BLOCK_SIZE_MEDIUM;
+    room.sceneLights = room.sceneLights.filter(sl => {
+      sl.xWorld += shiftXWorld;
+      sl.yWorld += shiftYWorld;
+      return sl.xWorld >= 0 && sl.yWorld >= 0 && sl.xWorld < widthWorld && sl.yWorld < heightWorld;
+    });
+  }
 
-    // Shift light sources
-    for (const light of (room.lightSources ?? [])) {
-      light.xBlock += shiftX;
-      light.yBlock += shiftY;
-    }
+  // Sunbeams: block-unit anchor point; no natural footprint/clip, remove if
+  // shifted outside bounds.
+  room.sunbeams = filterInPlace(room.sunbeams, sb => shiftAndKeepPoint(sb, shiftX, shiftY, w, h));
 
-    // Shift water zones
-    for (const z of (room.waterZones ?? [])) {
-      z.xBlock += shiftX;
-      z.yBlock += shiftY;
-    }
+  // Ropes: two independent anchor points, no rect-clip semantics for a line
+  // segment — remove the rope if either anchor now falls outside bounds.
+  if (room.ropes) {
+    room.ropes = room.ropes.filter(r => {
+      r.anchorAXBlock += shiftX; r.anchorAYBlock += shiftY;
+      r.anchorBXBlock += shiftX; r.anchorBYBlock += shiftY;
+      return r.anchorAXBlock >= 0 && r.anchorAYBlock >= 0 && r.anchorAXBlock < w && r.anchorAYBlock < h &&
+        r.anchorBXBlock >= 0 && r.anchorBYBlock >= 0 && r.anchorBXBlock < w && r.anchorBYBlock < h;
+    });
+  }
 
-    // Shift lava zones
-    for (const z of (room.lavaZones ?? [])) {
-      z.xBlock += shiftX;
-      z.yBlock += shiftY;
-    }
-
-    // Shift TimeStop Field tiles
-    for (const z of (room.timeStopFields ?? [])) {
-      z.xBlock += shiftX;
-      z.yBlock += shiftY;
-    }
-
-    // Shift crumble blocks
-    for (const b of (room.crumbleBlocks ?? [])) {
-      b.xBlock += shiftX;
-      b.yBlock += shiftY;
-    }
-
-    // Shift bounce pads
-    for (const b of (room.bouncePads ?? [])) {
-      b.xBlock += shiftX;
-      b.yBlock += shiftY;
-    }
-
-    // Shift spikes
-    for (const sp of (room.spikes ?? [])) {
-      sp.xBlock += shiftX;
-      sp.yBlock += shiftY;
-    }
-
-    // Shift falling block tiles
-    for (const fb of (room.fallingBlocks ?? [])) {
-      fb.xBlock += shiftX;
-      fb.yBlock += shiftY;
-    }
-
-    // Shift pixel-material particles — these are in native-pixel units, so
-    // the shift must be scaled by BLOCK_SIZE_SMALL to match the block shift.
-    for (const p of (room.pixelMaterials ?? [])) {
-      p.xPixel += shiftX * BLOCK_SIZE_SMALL;
-      p.yPixel += shiftY * BLOCK_SIZE_SMALL;
-    }
-
-    // Shift interior walls
-    for (const wall of room.interiorWalls) {
-      wall.xBlock += shiftX;
-      wall.yBlock += shiftY;
-    }
-
-    // Shift transitions along the shifted axis
-    for (const trans of room.transitions) {
-      if (edge === 'top' && (trans.direction === 'left' || trans.direction === 'right')) {
-        trans.yBlock += shiftY;
-        trans.positionBlock = trans.yBlock; // keep legacy in sync
+  // Guide-dust paths: multi-point splines with no natural per-point clip —
+  // remove the whole path if any control point now falls outside bounds.
+  if (room.guideDustPaths) {
+    room.guideDustPaths = room.guideDustPaths.filter(path => {
+      let allInside = true;
+      for (const pt of path.points) {
+        pt.xBlock += shiftX;
+        pt.yBlock += shiftY;
+        if (pt.xBlock < 0 || pt.yBlock < 0 || pt.xBlock >= w || pt.yBlock >= h) allInside = false;
       }
-      if (edge === 'left' && (trans.direction === 'up' || trans.direction === 'down')) {
-        trans.xBlock += shiftX;
-        trans.positionBlock = trans.xBlock; // keep legacy in sync
-      }
+      return allInside;
+    });
+  }
+
+  // Transitions: xBlock/yBlock meaning depends on direction (see EditorTransition
+  // docstring) — only the axis that represents a genuine content-relative
+  // position (not "depth into the boundary this transition is attached to")
+  // shifts when that axis's edge is resized. This mirrors the original,
+  // already-correct logic: a left/right-direction transition's yBlock is its
+  // opening's y-start (content-relative — shifts with vertical resizes); its
+  // xBlock is the gradient depth from its own boundary (pinned). Symmetric for
+  // up/down-direction transitions.
+  for (const trans of room.transitions) {
+    if (edge === 'top' && (trans.direction === 'left' || trans.direction === 'right')) {
+      trans.yBlock += shiftY;
+      trans.positionBlock = trans.yBlock;
+    }
+    if (edge === 'left' && (trans.direction === 'up' || trans.direction === 'down')) {
+      trans.xBlock += shiftX;
+      trans.positionBlock = trans.xBlock;
+    }
+  }
+  // Re-clamp transition geometry (opening size/position, gradient start) to
+  // the new bounds. Transitions are boundary-attached, multi-field geometry
+  // without a sensible "remove" — clamping their span/position to fit is the
+  // correct per-type handling here (matches the pre-existing behavior this
+  // task's regression report did NOT flag as broken).
+  for (const trans of room.transitions) {
+    const isHoriz = trans.direction === 'left' || trans.direction === 'right';
+    const gw = trans.gradientWidthBlocks ?? 3;
+    if (isHoriz) {
+      const maxOpening = Math.max(1, h - 2);
+      trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
+      trans.yBlock = Math.min(Math.max(0, trans.yBlock), h - trans.openingSizeBlocks);
+      trans.xBlock = Math.min(Math.max(0, trans.xBlock), w - gw);
+      trans.positionBlock = trans.yBlock;
+    } else {
+      const maxOpening = Math.max(1, w - 2);
+      trans.openingSizeBlocks = Math.min(Math.max(1, trans.openingSizeBlocks), maxOpening);
+      trans.xBlock = Math.min(Math.max(0, trans.xBlock), w - trans.openingSizeBlocks);
+      trans.yBlock = Math.min(Math.max(0, trans.yBlock), h - gw);
+      trans.positionBlock = trans.xBlock;
     }
   }
 
-  // Re-clamp everything to new bounds
-  applyRoomDimensionChange(room, prop, newSize);
+  const commitResult = commitPendingSnapshot(history, pending, campaignSpawn, campaignSpawn?.roomId);
+  if (commitResult === 'noop') return;
 }
