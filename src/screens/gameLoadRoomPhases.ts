@@ -133,6 +133,25 @@ import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { resetShieldLiquidContactLatch } from '../sim/hazards';
 import { resetTimeStopFieldPlayerState } from '../sim/timeStopField/timeStopFieldPlayerState';
+import type { CombatMode } from '../sim/combatMode';
+
+/**
+ * Session-owned player configuration that must survive replacement of the
+ * active WorldState. Room-local builders deliberately create worlds from sim
+ * defaults, so every activation hydrates these fields from this owner.
+ */
+export interface PersistentPlayerWorldConfig {
+  assistMode: boolean;
+  combatMode: CombatMode;
+}
+
+export function applyPersistentPlayerWorldConfig(
+  world: WorldState,
+  config: PersistentPlayerWorldConfig,
+): void {
+  world.isAssistModeFlag = config.assistMode ? 1 : 0;
+  world.combatMode = config.combatMode;
+}
 
 /**
  * All dependencies required by `makeLoadRoomPhases`.
@@ -182,6 +201,8 @@ export interface LoadRoomCtx {
   getVirtualHeightPx: () => number;
   /** Returns the current graphics quality setting. */
   getGraphicsQuality: () => GraphicsQuality;
+  /** Returns session/player configuration that room-world replacement must not reset. */
+  getPersistentPlayerWorldConfig: () => PersistentPlayerWorldConfig;
 
   // ── Setters for closure variables written by the generator ───────────────
   /**
@@ -383,6 +404,7 @@ function applyPlayerWeaveWorldFields(
   world: WorldState,
   effectiveWeaveLoadout: PlayerWeaveLoadout,
 ): void {
+  applyPersistentPlayerWorldConfig(world, ctx.getPersistentPlayerWorldConfig());
   world.playerPrimaryWeaveId           = effectiveWeaveLoadout.primary.weaveId;
   world.playerSecondaryWeaveId         = effectiveWeaveLoadout.secondary.weaveId;
   world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;

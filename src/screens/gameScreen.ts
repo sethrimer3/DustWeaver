@@ -38,7 +38,7 @@ import { productionAdjacentRoomDrawImpl } from './gameRenderAdjacentRoomsImpl';
 import type { AdjacentRoomDrawPorts } from './gameRenderAdjacentRooms';
 import { wallTemplateToSnapshot } from '../render/walls/roomRenderState';
 import { computeRenderViewportMetrics, resizeCanvasBackingStore } from '../render/canvasViewport';
-import { setCombatMode } from '../sim/combatMode';
+import { getCombatMode, setCombatMode } from '../sim/combatMode';
 import { createMusicManager, MusicManager } from '../audio/musicManager';
 import { PlayerSfxManager } from '../audio/playerSfx';
 import { BloomSystem } from '../render/effects/bloomSystem';
@@ -397,10 +397,6 @@ export function startGameScreen(
   // `world` is `let` because it gets reassigned during resident WorldState
   // hot-swap transitions (via the transition coordinator's setWorld port).
   let world = createWorldState(FIXED_DT_MS, 42);
-  // Sync combat mode from the persisted module singleton (set above at line ~260)
-  world.combatMode = getCombatModeFromStorage();
-  // Set the selected character on the world for rendering
-  world.characterId = progress?.characterId ?? 'knight';
   const levelRng = createRng(12345);
   // Stable numeric seed for background resident world builds (BUILD 417).
   // Intentionally a DIFFERENT value from the levelRng seed so it is visually
@@ -675,6 +671,10 @@ export function startGameScreen(
     getVirtualWidthPx:  () => virtualWidthPx,
     getVirtualHeightPx: () => virtualHeightPx,
     getGraphicsQuality,
+    getPersistentPlayerWorldConfig: () => ({
+      assistMode: runOptions?.assistMode === true,
+      combatMode: getCombatMode(),
+    }),
     setCurrentRoom:             (r) => { currentRoom     = r; },
     setBgColor:                 (c) => { bgColor          = c; },
     setRoomWidthWorld:          (w) => { roomWidthWorld   = w; },
@@ -1058,9 +1058,6 @@ export function startGameScreen(
     runOptions?.initialRunTimerMs,
     runOptions?.initialCheckpointRunTimerMs,
   );
-
-  // Set assist mode flag on the world so the grapple system can check it.
-  world.isAssistModeFlag = (runOptions?.assistMode === true) ? 1 : 0;
 
   let lastTimestampMs = 0;
   /** Last full renderFrame() args — reused by the death-freeze branch to keep
