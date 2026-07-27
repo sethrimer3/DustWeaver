@@ -846,6 +846,14 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         crumbleStairs = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
 
+      let crumbleSmoothRamp: 0 | 1 | 2 | 3 | undefined;
+      if (item.isSmoothRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleSmoothRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      const crumblePillar: 0 | 1 | undefined = item.isPillarHalfWidthItem === 1 ? 1 : undefined;
+
       if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return;
 
       const crumbles = room.crumbleBlocks ?? [];
@@ -867,6 +875,8 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         hBlock: crumbleH,
         rampOrientation: crumbleRamp,
         stairsOrientation: crumbleStairs,
+        smoothRampOrientation: crumbleSmoothRamp,
+        isPillarHalfWidthFlag: crumblePillar,
         variant: state.pendingCrumbleVariant,
         blockTheme: placementBlockTheme,
       });
