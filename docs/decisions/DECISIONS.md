@@ -790,7 +790,7 @@ can verify the collision boundary matches the visual tile geometry.
 ### Dust Types
 - All dust types removed from player equipment except Gold Dust (Physical, kind 0)
 - Legacy kinds (Fire through Void, plus Water/Lava/Stone) retained for enemy use and backward compatibility
-- Full documentation of removed types and their mechanics preserved in `DUST_TYPES_ARCHIVE.md`
+- Full documentation of removed types and their mechanics preserved in `docs/archive/DUST_TYPES_ARCHIVE.md`
 
 ### Weave System
 - Old weave patterns (Aegis, Bastion, Spire, Torrent, Comet, Scatter) removed

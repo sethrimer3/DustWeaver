@@ -23,7 +23,7 @@ import { triggerAttackLaunch, tickAttackMode, applyBlockForces } from './playerC
  *       (mode=1, set by enemy AI in enemyAi.ts).
  *     • The flag-gated player paths are no-ops every tick and impose
  *       negligible cost.
- *   See combatDustPolishDecisions.md for the full audit.
+ *   See docs/decisions/combatDustPolishDecisions.md for the full audit.
  *
  * Combat mode source of truth: world.combatMode (synced each tick from the
  * persistence singleton in combatMode.ts).

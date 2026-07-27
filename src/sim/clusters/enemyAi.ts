@@ -2,7 +2,7 @@
  * Enemy AI — per-tick movement decisions for enemy clusters.
  *
  * Each alive enemy cluster independently decides each tick whether to dodge.
- * Attack and block decisions have been removed (see ENEMY_COMBAT_ARCHIVE.md).
+ * Attack and block decisions have been removed (see docs/archive/ENEMY_COMBAT_ARCHIVE.md).
  *
  * Called as step 0.5 in the tick pipeline.
  */

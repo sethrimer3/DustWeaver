@@ -1,6 +1,6 @@
 # DustWeaver
 
-Current player movement values and behavior are documented in [movement.md](movement.md).
+Current player movement values and behavior are documented in [docs/systems/movement.md](docs/systems/movement.md).
 
 ## Comprehensive Gameplay + Codebase Description (for AI Agents)
 DustWeaver is a **single-player, deterministic, top-down action RPG / arena battler** where every character is a **cluster of physically simulated particles**. The player progresses through menu → world map → loadout → level gameplay, clears enemy encounters in wave-like arena fights, then unlocks additional levels/worlds. The simulation is fixed-step and deterministic, the rendering is snapshot-based, and gameplay emerges from layered particle-force systems plus cluster-level combat inputs.

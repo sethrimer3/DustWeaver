@@ -18,8 +18,8 @@ Room loading has been attacked from several angles: asset decode readiness, phas
 
 Check these before proposing new work:
 
-- `PERFORMANCE_DIAGNOSIS.md` — historical and current rendering/transition diagnosis, especially room-transition freezes, sprite decode readiness, and chunk/render cache failures.
-- `performanceOptimizationDecisions.md` — build-by-build performance decisions and preservation notes.
+- `docs/systems/PERFORMANCE_DIAGNOSIS.md` — historical and current rendering/transition diagnosis, especially room-transition freezes, sprite decode readiness, and chunk/render cache failures.
+- `docs/decisions/performanceOptimizationDecisions.md` — build-by-build performance decisions and preservation notes.
 - `nextSteps.md` — current performance priority list and known caveats.
 - `docs/CURRENT_STATUS.md` — high-level current status and known caveats.
 - `docs/AI_REPO_MAP.md` — source map for agents.

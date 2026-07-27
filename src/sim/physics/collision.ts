@@ -23,7 +23,7 @@ export function overlapAABB(
  *
  * NOTE: This is a last-resort minimum-penetration resolver. Prefer the
  * axis-separated sweep (resolveClusterSolidWallCollision) for primary
- * resolution. See ARCHITECTURE.md §Collision.
+ * resolution. See docs/systems/render-pipeline.md §Collision.
  */
 export function resolveAABBPenetration(
   cluster: {

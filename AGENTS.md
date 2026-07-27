@@ -8,7 +8,7 @@ This file is the short entry point for coding agents. Keep it compact and update
 2. `docs/AI_REPO_MAP.md`
 3. `docs/CURRENT_STATUS.md`
 4. `docs/Todo.md`
-5. Existing detailed docs as needed: `README.md`, `nextSteps.md`, `performanceOptimizationDecisions.md`, `REFACTORING_PLAN.md`, `docs/render-chunk-prewarming.md`, and any feature-specific notes.
+5. Existing detailed docs as needed: `README.md`, `nextSteps.md`, `docs/decisions/performanceOptimizationDecisions.md`, `docs/decisions/REFACTORING_PLAN.md`, `docs/render-chunk-prewarming.md`, `docs/README.md` (documentation index), and any feature-specific notes.
 
 ## Working rule for token-efficient agents
 

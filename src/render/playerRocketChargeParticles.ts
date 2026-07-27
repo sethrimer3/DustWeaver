@@ -9,7 +9,7 @@
  * the player" look. Cosmetic only — no sim state is touched.
  *
  * Randomness note: Math.random() is acceptable here — purely cosmetic
- * render-layer state with no gameplay impact (see DECISIONS.md §Randomness).
+ * render-layer state with no gameplay impact (see docs/decisions/DECISIONS.md §Randomness).
  */
 
 import { ROCKET_BOOST_PARTICLE_EXTRA_SPEED_WORLD_PER_SEC } from '../sim/clusters/movementConstants';

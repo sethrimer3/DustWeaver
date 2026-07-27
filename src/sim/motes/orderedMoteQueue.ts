@@ -13,7 +13,7 @@
  * The queue order is stable.  Depleted slots are skipped when weaves form
  * active positions.  Regenerated slots return to their original queue position.
  *
- * Designed per MajorDustUpgradePlan.md Phases 1–4.
+ * Designed per docs/decisions/MajorDustUpgradePlan.md Phases 1–4.
  *
  * Sim-layer rules respected:
  *   • No DOM or browser APIs.
@@ -409,7 +409,7 @@ export function tickMoteSlotRegeneration(world: WorldState): void {
       // Note: while the player is airborne, updateParticleLifetimes freezes
       // the countdown for player-owned particles, so the particle may not
       // actually respawn until the player lands.  This is a known, documented
-      // exception (see combatDustPolishDecisions.md).
+      // exception (see docs/decisions/combatDustPolishDecisions.md).
       const pidx = world.moteSlotParticleIndex[i];
       if (pidx >= 0 && pidx < world.particleCount && world.isAliveFlag[pidx] === 0) {
         world.respawnDelayTicks[pidx] = 1;  // respawn on next lifetime tick

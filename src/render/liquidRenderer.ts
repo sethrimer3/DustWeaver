@@ -15,8 +15,8 @@
  *
  * Randomness note: Math.random() is acceptable here — all effects are
  * purely cosmetic render-layer state with no gameplay impact. This is an
- * intentional exception to the sim-layer seeded-RNG rule (see DECISIONS.md
- * §Randomness).
+ * intentional exception to the sim-layer seeded-RNG rule (see
+ * docs/decisions/DECISIONS.md §Randomness).
  */
 
 import type { WorldState } from '../sim/world';

@@ -1,7 +1,7 @@
 # DustWeaver — Room Loading & Rendering Optimizations
 
 _Working log for the room-load / render optimization pass started BUILD 431._
-_Companion to [`PERFORMANCE_DIAGNOSIS.md`](PERFORMANCE_DIAGNOSIS.md) (freeze diagnosis) — this
+_Companion to [`docs/systems/PERFORMANCE_DIAGNOSIS.md`](docs/systems/PERFORMANCE_DIAGNOSIS.md) (freeze diagnosis) — this
 file focuses on **throughput and consistency** of the load + prewarm + adopt pipeline._
 
 ---
@@ -130,7 +130,7 @@ noted only for completeness.
 
 ### B4. Base-tile / lighting-overlay chunk split — _high value, high effort_
 
-(Carried over from `PERFORMANCE_DIAGNOSIS.md` §Future Work.) `setActiveBlockLighting`
+(Carried over from `docs/systems/PERFORMANCE_DIAGNOSIS.md` §Future Work.) `setActiveBlockLighting`
 invalidates whole wall chunks. Separating static base tiles from the lighting
 overlay would allow lighting-only edits (and possibly some room-to-room
 transitions that share geometry) to rebuild only the cheap overlay layer. Large
@@ -143,7 +143,7 @@ change to the chunk renderer; out of scope for an incremental pass.
 - **The renderStateKey invariant** described at the top. Any new place that needs
   blocker keys MUST call `buildRoomAmbientBlockerKeys` — never re-derive inline.
 - Everything already listed under **"Already Well-Optimised Areas"** in
-  `PERFORMANCE_DIAGNOSIS.md` (chunked rendering, idle prewarm, BFS memoisation,
+  `docs/systems/PERFORMANCE_DIAGNOSIS.md` (chunked rendering, idle prewarm, BFS memoisation,
   bounded variant caches, `computeRenderStateKey` WeakMap memo).
 - Blocker builds and any new per-room derived data must stay referentially
   transparent (same `RoomDef` → same output) so they remain Worker-safe and

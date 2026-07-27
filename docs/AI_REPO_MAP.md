@@ -143,7 +143,7 @@ Room schema and compression:
 
 ## Performance systems and hot paths
 
-Consult `nextSteps.md`, `performanceOptimizationDecisions.md`, and `docs/render-chunk-prewarming.md` before touching performance-sensitive code.
+Consult `nextSteps.md`, `docs/decisions/performanceOptimizationDecisions.md`, and `docs/render-chunk-prewarming.md` before touching performance-sensitive code.
 
 Known hot or sensitive paths:
 

@@ -84,7 +84,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
   // against malformed/legacy data: a placement whose footprint overlaps an
   // already-claimed cell is simply not registered for liquid interaction
   // (its other properties are unaffected) — see "Overlapping liquid
-  // modifiers" in CustomBlockSpriteSystem.md. This keeps the runtime mask's
+  // modifiers" in docs/systems/CustomBlockSpriteSystem.md. This keeps the runtime mask's
   // single-byte-per-cell representation always unambiguous: every non-zero
   // mask cell belongs to exactly one placement, so a fragile placement's
   // destruction can always safely clear its own footprint without risking an

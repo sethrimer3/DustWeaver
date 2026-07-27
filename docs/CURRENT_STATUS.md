@@ -6,7 +6,7 @@ Last updated by AI repo Bible pass. Verify against source before relying on any 
 
 DustWeaver is an active TypeScript/Vite game with Electron development support. The current source and docs describe a deterministic particle/cluster-based action platformer/metroidvania-style game with custom campaign/editor support, lazy room loading, room transitions, render chunk caching, resident-room work, and compact room data formats.
 
-The top-level `README.md` is broad and older in some gameplay details, but still useful for core simulation/rendering principles: fixed-step deterministic simulation, snapshot-based rendering, particle/cluster entities, and layer separation. `nextSteps.md`, `performanceOptimizationDecisions.md`, and `docs/render-chunk-prewarming.md` are more useful for recent room-loading and performance work.
+The top-level `README.md` is broad and older in some gameplay details, but still useful for core simulation/rendering principles: fixed-step deterministic simulation, snapshot-based rendering, particle/cluster entities, and layer separation. `nextSteps.md`, `docs/decisions/performanceOptimizationDecisions.md`, and `docs/render-chunk-prewarming.md` are more useful for recent room-loading and performance work.
 
 ## Recent implementation status
 
@@ -46,7 +46,7 @@ High-confidence from current docs:
 - In-browser transition timing still needs capture. Node-side tests/builds are not a substitute for live transition stats.
 - The next transition bottleneck should be selected based on measured phases from `__dwTransitionStats()` / `__dwBenchPingPong()`.
 - Possible remaining bottlenecks include first-entry resident wall-template builds on very large rooms, sprite/background decode on first room entry, and dense grid allocation/memory concerns in huge sparse rooms.
-- `evictStalePrewarmedChunks` is documented as a no-op stub. Add an LRU/memory cap only if memory growth is observed.
+- `evictStalePrewarmedChunks` (`src/screens/roomRenderChunkWarmScheduler.ts`) already enforces a per-quality memory budget with radius/size-ordered eviction; this is implemented and tested, not a stub.
 - Radius-3 chunk warming is not fully adaptive yet; it gates primarily on high graphics mode and could be improved with frame-time gating.
 - Prewarm panel exposure in pause-menu debug UI may still be missing.
 - Editor palette previews for some enemies remain procedural until assets are added.

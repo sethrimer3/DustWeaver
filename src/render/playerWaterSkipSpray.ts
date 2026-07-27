@@ -7,7 +7,7 @@
  * only — no sim state is touched.
  *
  * Randomness note: Math.random() is acceptable here — purely cosmetic
- * render-layer state with no gameplay impact (see DECISIONS.md §Randomness).
+ * render-layer state with no gameplay impact (see docs/decisions/DECISIONS.md §Randomness).
  */
 
 // ── Tuning constants ──────────────────────────────────────────────────────────

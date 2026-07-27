@@ -33,7 +33,7 @@
  *   - Wind emission: none | left | right | up | down (continuous directional
  *     pixel-material wind vent — see sim/pixelMaterials/customBlockWindVents.ts)
  *
- * See CustomBlockSpriteSystem.md → "Future Predefined Properties" for
+ * See docs/systems/CustomBlockSpriteSystem.md → "Future Predefined Properties" for
  * deferred categories (triggers, water-zone interaction, multi-tier wind
  * vent strength).
  */
@@ -56,7 +56,7 @@ export type BreakResistancePreset = 'weak' | 'standard' | 'reinforced';
  * (getMaterialWindResponse in pixelMaterialTypes.ts — how reactive a material
  * itself is to wind). This property controls only the TRANSMISSION term (how
  * much force reaches a material through this block), never the material's own
- * response multiplier — see CustomBlockSpriteSystem.md for the full formula.
+ * response multiplier — see docs/systems/CustomBlockSpriteSystem.md for the full formula.
  */
 export type CustomBlockWindResponsePreset = 'passThrough' | 'dampen' | 'block';
 /**
@@ -167,7 +167,7 @@ export interface CustomBlockProperties {
    * Phase 2G: selects how this block interacts with pixel-material liquids.
    * 'none' (the default) is a complete no-op — matches all pre-Phase-2G
    * behavior exactly. Compatible with any collision preset — see
-   * CustomBlockSpriteSystem.md for the "seal/drain independent of player
+   * docs/systems/CustomBlockSpriteSystem.md for the "seal/drain independent of player
    * collision" rationale.
    */
   readonly liquidInteraction: CustomBlockLiquidInteractionPreset;
@@ -176,7 +176,7 @@ export interface CustomBlockProperties {
    * pixel-material wind from. 'none' (the default) is a complete no-op —
    * matches all pre-Phase-2H behavior exactly. Compatible with any collision
    * preset, any breakability, and any other property — see
-   * CustomBlockSpriteSystem.md for the full compatibility matrix.
+   * docs/systems/CustomBlockSpriteSystem.md for the full compatibility matrix.
    */
   readonly windEmission: CustomBlockWindEmissionPreset;
 }

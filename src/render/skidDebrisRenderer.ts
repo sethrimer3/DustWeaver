@@ -39,7 +39,7 @@ const COLORS = ['#8b7355', '#a08060', '#6b5330', '#c4a57b'];
 // baseline effect. Faster skid entries scale the effect up through a pure,
 // testable soft-knee curve — approximately linear near walking speed, with
 // smooth diminishing returns at extreme (grapple-launch-range) speeds. No
-// hard clamp: see movement.md and skidJumpHeight.ts for the sibling
+// hard clamp: see docs/systems/movement.md and skidJumpHeight.ts for the sibling
 // height-solver approach to the same "speed-scaled technique" idea.
 
 /**

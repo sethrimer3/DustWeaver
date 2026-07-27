@@ -8,8 +8,8 @@
  * the same values.
  *
  * Randomness: Math.random() is intentional here — all effects are purely
- * cosmetic render-layer state with no gameplay impact (see DECISIONS.md
- * §Randomness).
+ * cosmetic render-layer state with no gameplay impact (see
+ * docs/decisions/DECISIONS.md §Randomness).
  */
 
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';

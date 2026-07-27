@@ -39,7 +39,7 @@ architecture. Current materials: 1×1 sand (`MATERIAL_SAND`), 2×2 sand
 ## Coordinate space
 
 - 1 pixel-material cell = 1 native game pixel = 1 world unit (same convention
-  the rest of the sim already uses — see ARCHITECTURE.md's render pipeline).
+  the rest of the sim already uses — see docs/systems/render-pipeline.md).
 - An 8×8 world tile (`BLOCK_SIZE_SMALL`, `levels/roomDef.ts`) therefore covers
   an 8×8 block of pixel-material cells (64 cells).
 - The system's grid is sized to the room's world dimensions

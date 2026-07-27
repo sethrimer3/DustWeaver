@@ -52,9 +52,9 @@ Use this protocol for every refactor PR so parallel agents can coordinate safely
   *or* all call-sites must be updated atomically in the same commit.
 - No new allocations may be introduced in hot paths (forces, render loop).
 - Each new file should have a single clear responsibility (one concern per file).
-- All naming conventions from `ARCHITECTURE.md` and the agent guidelines apply.
+- All naming conventions from `docs/systems/render-pipeline.md` and the agent guidelines apply.
 - After each split, run `npm run build` and verify the game still loads.
-- Update `DECISIONS.md` if an architectural decision changes.
+- Update `docs/decisions/DECISIONS.md` if an architectural decision changes.
 
 ---
 

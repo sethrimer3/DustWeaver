@@ -2,7 +2,7 @@
  * Pixel-material system — shared types and tuning constants.
  *
  * Coordinate space: native game pixels (1 unit = 1 native px = 1 world unit,
- * matching the rest of the sim — see ARCHITECTURE.md "Native-resolution
+ * matching the rest of the sim — see docs/systems/render-pipeline.md "Native-resolution
  * rendering"). An 8x8 world tile occupies an 8x8 block of these cells.
  */
 

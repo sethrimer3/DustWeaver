@@ -1,7 +1,7 @@
 # DustWeaver — Legacy & Removed Logic
 
 This file documents significant logic that was changed or removed, and explains
-why the old approach was replaced.  See `DECISIONS.md` for the current design.
+why the old approach was replaced.  See `docs/decisions/DECISIONS.md` for the current design.
 
 ---
 
@@ -104,7 +104,7 @@ grid would duplicate data, add complexity, and require two collision systems to 
 in sync.  The merged rectangles ARE the precise collision source; the "broad-phase
 only" concern does not apply when merging is gap-free.
 
-See `DECISIONS.md §Grapple Collision Authority & Surface-Anchor Design (BUILD 231)`
+See `docs/decisions/DECISIONS.md §Grapple Collision Authority & Surface-Anchor Design (BUILD 231)`
 for the authoritative design rationale.
 
 ## Legacy Grapple Miss / Limp Chain Physics
