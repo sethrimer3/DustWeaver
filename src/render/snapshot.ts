@@ -1,4 +1,5 @@
 import { WorldState } from '../sim/world';
+import type { SecondaryWeaveGesturePhase } from '../input/secondaryWeaveGesture';
 import { _MutableCluster, _makeEmptyCluster, _fillCluster } from './snapshotClusterInit';
 
 // Re-export public snapshot interfaces from their dedicated types module so
@@ -80,6 +81,21 @@ interface _ReusableBacking {
   /** Total duration of the recharge-ring VFX in ticks. */
   grappleRechargeRingTotalTicks: number;
   isPlayerWeaveActiveFlag: 0 | 1;
+  selectedDustKind: number;
+  hasBowWeaveUnlockedFlag: 0 | 1;
+  secondaryWeaveGesturePhase: SecondaryWeaveGesturePhase;
+  secondaryWeaveGestureHoldAimXWorld: number;
+  secondaryWeaveGestureHoldAimYWorld: number;
+  bowArrowPhase: number;
+  bowArrowDirXWorld: number;
+  bowArrowDirYWorld: number;
+  hasSwordWeaveUnlockedFlag: 0 | 1;
+  newSwordActiveFlag: number;
+  newSwordToShieldTransition01: number;
+  newSwordReachWorld: number;
+  newSwordHandAnchorXWorld: number;
+  newSwordHandAnchorYWorld: number;
+  newSwordCurrentAngleRad: number;
   characterId: string;
   grasshopperCount: number;
   squareStampedeTrailXWorld: Float32Array;
@@ -256,6 +272,21 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     grappleRechargeRingTicksLeft:   world.grappleRechargeRingTicksLeft,
     grappleRechargeRingTotalTicks:  world.grappleRechargeRingTotalTicks,
     isPlayerWeaveActiveFlag:  (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0,
+    selectedDustKind: world.selectedDustKind,
+    hasBowWeaveUnlockedFlag: world.hasBowWeaveUnlockedFlag,
+    secondaryWeaveGesturePhase: world.secondaryWeaveGesture.phase,
+    secondaryWeaveGestureHoldAimXWorld: world.secondaryWeaveGesture.holdAimXWorld,
+    secondaryWeaveGestureHoldAimYWorld: world.secondaryWeaveGesture.holdAimYWorld,
+    bowArrowPhase: world.bowArrowPhase,
+    bowArrowDirXWorld: world.bowArrowDirXWorld,
+    bowArrowDirYWorld: world.bowArrowDirYWorld,
+    hasSwordWeaveUnlockedFlag: world.hasSwordWeaveUnlockedFlag,
+    newSwordActiveFlag: world.newSwordActiveFlag,
+    newSwordToShieldTransition01: world.newSwordToShieldTransition01,
+    newSwordReachWorld: world.newSwordReachWorld,
+    newSwordHandAnchorXWorld: world.newSwordHandAnchorXWorld,
+    newSwordHandAnchorYWorld: world.newSwordHandAnchorYWorld,
+    newSwordCurrentAngleRad: world.newSwordCurrentAngleRad,
     characterId:              world.characterId,
     grasshopperCount:         world.grasshopperCount,
     grasshopperXWorld:        world.grasshopperXWorld,
@@ -500,6 +531,21 @@ export function updateSnapshotInPlace(
   b.grappleRechargeRingTicksLeft  = world.grappleRechargeRingTicksLeft;
   b.grappleRechargeRingTotalTicks = world.grappleRechargeRingTotalTicks;
   b.isPlayerWeaveActiveFlag   = (world.isPlayerPrimaryWeaveActiveFlag === 1 || world.isPlayerSecondaryWeaveActiveFlag === 1) ? 1 : 0;
+  b.selectedDustKind = world.selectedDustKind;
+  b.hasBowWeaveUnlockedFlag = world.hasBowWeaveUnlockedFlag;
+  b.secondaryWeaveGesturePhase = world.secondaryWeaveGesture.phase;
+  b.secondaryWeaveGestureHoldAimXWorld = world.secondaryWeaveGesture.holdAimXWorld;
+  b.secondaryWeaveGestureHoldAimYWorld = world.secondaryWeaveGesture.holdAimYWorld;
+  b.bowArrowPhase = world.bowArrowPhase;
+  b.bowArrowDirXWorld = world.bowArrowDirXWorld;
+  b.bowArrowDirYWorld = world.bowArrowDirYWorld;
+  b.hasSwordWeaveUnlockedFlag = world.hasSwordWeaveUnlockedFlag;
+  b.newSwordActiveFlag = world.newSwordActiveFlag;
+  b.newSwordToShieldTransition01 = world.newSwordToShieldTransition01;
+  b.newSwordReachWorld = world.newSwordReachWorld;
+  b.newSwordHandAnchorXWorld = world.newSwordHandAnchorXWorld;
+  b.newSwordHandAnchorYWorld = world.newSwordHandAnchorYWorld;
+  b.newSwordCurrentAngleRad = world.newSwordCurrentAngleRad;
   b.grasshopperCount          = world.grasshopperCount;
 
   b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;

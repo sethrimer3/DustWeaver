@@ -22,6 +22,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
 import { overlapAABB } from './physics/collision';
+import { aabbOverlapsWallSolid } from './stairsWorldGeometry';
 import {
   PLAYER_WATER_STATE_OUTSIDE,
   PLAYER_WATER_STATE_SUBMERGED,
@@ -1051,6 +1052,10 @@ export function applyHazards(world: WorldState): void {
   // by the player body AABB overlapping (player walks into it).
   // 2-hit system: first contact cracks the block, second destroys it.
   {
+    // Fallback half-extent only used if a crumble block somehow has no linked
+    // wall slot (shouldn't happen in practice — gameRoomHazards.ts always
+    // allocates one for non-spike crumble blocks unless MAX_WALLS is
+    // exhausted) so contact-break never silently does nothing.
     const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
     for (let i = 0; i < world.crumbleBlockCount; i++) {
       if (world.isCrumbleBlockActiveFlag[i] === 0) continue;
@@ -1066,15 +1071,37 @@ export function applyHazards(world: WorldState): void {
         continue;
       }
 
-      const bx = world.crumbleBlockXWorld[i];
-      const by = world.crumbleBlockYWorld[i];
-      const bLeft   = bx - bHalf;
-      const bRight  = bx + bHalf;
-      const bTop    = by - bHalf;
-      const bBottom = by + bHalf;
+      // Use the block's REAL authored footprint (wBlock x hBlock), not a
+      // fixed one-block box — a 2x2+ crumble block must register contact
+      // anywhere across its full extent. The linked wall slot
+      // (crumbleBlockWallIndex) already carries the true world-space AABB
+      // (wallXWorld/YWorld/WWorld/HWorld) plus shape-orientation data, so we
+      // derive the footprint from it and reuse `aabbOverlapsWallSolid` for
+      // the actual hit test — this keeps stairs (and any other shape with
+      // an already-established "solid vs empty notch" contract) from
+      // regressing into a naive full-rectangle AABB: a contact point sitting
+      // in a stairs block's empty upper corner still correctly reports no
+      // hit, exactly as it does for non-crumble stair walls.
+      const wi = world.crumbleBlockWallIndex[i];
+      let bLeft: number, bTop: number, bRight: number, bBottom: number;
+      if (wi >= 0) {
+        bLeft   = world.wallXWorld[wi];
+        bTop    = world.wallYWorld[wi];
+        bRight  = bLeft + world.wallWWorld[wi];
+        bBottom = bTop + world.wallHWorld[wi];
+      } else {
+        const bx = world.crumbleBlockXWorld[i];
+        const by = world.crumbleBlockYWorld[i];
+        bLeft   = bx - bHalf;
+        bRight  = bx + bHalf;
+        bTop    = by - bHalf;
+        bBottom = by + bHalf;
+      }
 
       // Check player body AABB
-      let hit = overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom);
+      let hit = wi >= 0
+        ? aabbOverlapsWallSolid(world, wi, px - phw, py - phh, px + phw, py + phh)
+        : overlapAABB(px, py, phw, phh, bLeft, bTop, bRight, bBottom);
 
       // Check any alive particle from any cluster
       if (!hit) {
@@ -1082,7 +1109,10 @@ export function applyHazards(world: WorldState): void {
           if (world.isAliveFlag[p] === 0) continue;
           const partX = world.positionXWorld[p];
           const partY = world.positionYWorld[p];
-          if (partX >= bLeft && partX <= bRight && partY >= bTop && partY <= bBottom) {
+          // Quick reject against the block's own bounding box before the
+          // (potentially per-step) shape-aware test.
+          if (partX < bLeft || partX > bRight || partY < bTop || partY > bBottom) continue;
+          if (wi >= 0 ? aabbOverlapsWallSolid(world, wi, partX, partY, partX, partY) : true) {
             hit = true;
             break;
           }

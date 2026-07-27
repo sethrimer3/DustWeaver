@@ -171,7 +171,7 @@ export class BowTrajectoryPreviewRenderer {
       this._end, origin.x, origin.y, dx, dy, BOW_PREVIEW_MAX_RANGE_WORLD, raycast, fallbackDirX, fallbackDirY,
     );
 
-    const dustKind: ParticleKind = snapshot.currentWeaveDustKind;
+    const dustKind: ParticleKind = snapshot.selectedDustKind;
     const colorHex = getDustDefinition(dustKind).colorHex;
 
     const x0 = origin.x * zoom + ox;

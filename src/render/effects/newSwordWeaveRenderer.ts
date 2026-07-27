@@ -103,7 +103,7 @@ export class NewSwordWeaveRenderer {
     const currentAngleRad = snapshot.newSwordCurrentAngleRad;
     const reachWorld = snapshot.newSwordReachWorld;
 
-    const dustKind: ParticleKind = snapshot.currentWeaveDustKind;
+    const dustKind: ParticleKind = snapshot.selectedDustKind;
     const def = getDustDefinition(dustKind);
 
     ctx.save();

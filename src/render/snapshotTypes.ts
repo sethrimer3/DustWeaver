@@ -13,6 +13,7 @@
 
 export type { ClusterSnapshot } from './clusterSnapshotTypes';
 import type { ClusterSnapshot } from './clusterSnapshotTypes';
+import type { SecondaryWeaveGesturePhase } from '../input/secondaryWeaveGesture';
 import type { SurfaceRimStyle } from './walls/surfaceRimStyle';
 
 export interface ParticleSnapshot {
@@ -188,6 +189,22 @@ export interface WorldSnapshot {
   readonly grappleRechargeRingTotalTicks: number;
   /** 1 while the player has any sustained Weave active (primary or secondary). */
   readonly isPlayerWeaveActiveFlag: 0 | 1;
+  /** Currently selected dust kind, shared by active weave renderers. */
+  readonly selectedDustKind: number;
+  readonly hasBowWeaveUnlockedFlag: 0 | 1;
+  readonly secondaryWeaveGesturePhase: SecondaryWeaveGesturePhase;
+  readonly secondaryWeaveGestureHoldAimXWorld: number;
+  readonly secondaryWeaveGestureHoldAimYWorld: number;
+  readonly bowArrowPhase: number;
+  readonly bowArrowDirXWorld: number;
+  readonly bowArrowDirYWorld: number;
+  readonly hasSwordWeaveUnlockedFlag: 0 | 1;
+  readonly newSwordActiveFlag: number;
+  readonly newSwordToShieldTransition01: number;
+  readonly newSwordReachWorld: number;
+  readonly newSwordHandAnchorXWorld: number;
+  readonly newSwordHandAnchorYWorld: number;
+  readonly newSwordCurrentAngleRad: number;
   /** Selected character identifier ('knight', 'demonFox', 'princess', or 'outcast'). */
   readonly characterId: string;
   /** Number of active grasshoppers. */

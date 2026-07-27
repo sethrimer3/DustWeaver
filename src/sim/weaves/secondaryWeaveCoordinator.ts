@@ -243,14 +243,5 @@ function endShieldOwnership(world: WorldState): void {
   }
 }
 
-function _findPlayerEntityId(world: WorldState): number {
-  for (let ci = 0; ci < world.clusters.length; ci++) {
-    if (world.clusters[ci].isPlayerFlag === 1 && world.clusters[ci].isAliveFlag === 1) {
-      return world.clusters[ci].entityId;
-    }
-  }
-  return -1;
-}
-
 // Re-export for callers/tests that want to query arrow activity.
 export { isBowArrowActive };

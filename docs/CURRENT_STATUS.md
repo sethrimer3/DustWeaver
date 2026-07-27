@@ -10,6 +10,10 @@ The top-level `README.md` is broad and older in some gameplay details, but still
 
 ## Recent implementation status
 
+### BUILD 555 snapshot integration
+
+BUILD 555 completes the missing Bow/Sword scalar integration across both allocating and reusable simulation-to-render snapshots. BUILD 554's restored Bow and Sword runtime/render systems did not compile in the final tree because their renderer-required fields were absent from `WorldSnapshot`.
+
 ### Room transition and loading performance
 
 Recent work has focused on making room transitions nearly instant and avoiding large-room freezes.
