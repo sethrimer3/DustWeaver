@@ -16,12 +16,7 @@ import type { WorldState } from '../sim/world';
 import { renderHudOverlay } from '../render/hud/overlay';
 import type { HudState } from '../render/hud/overlay';
 import type { RenderProfiler } from '../render/hud/renderProfiler';
-import {
-  getTotalMoteSlotCount,
-  getAvailableMoteSlotCount,
-  getEffectiveGrappleRangeWorld,
-  MOTE_STATE_DEPLETED,
-} from '../sim/motes/orderedMoteQueue';
+import { getEffectiveGrappleRangeWorld } from '../sim/clusters/grappleShared';
 import { debugPanelVisibility } from '../ui/debugPanelManager';
 import { getPixelMaterialDebugCounterText } from '../render/pixelMaterials/pixelMaterialDebugRenderer';
 import { getAirCurrentsDebugLegendText } from '../render/pixelMaterials/airCurrentsDebugRenderer';
@@ -109,29 +104,12 @@ export function renderHighResolutionDebugOverlay(r: HighResolutionDebugOverlayCo
 
   // ── Mote / particle stats (gated behind "particles" panel) ───────────────
   if (debugPanelVisibility.particles) {
-    const totalSlots = getTotalMoteSlotCount(world);
-    const availableSlots = getAvailableMoteSlotCount(world);
-    const depletedSlots = totalSlots - availableSlots;
-    const ratio = totalSlots > 0 ? availableSlots / totalSlots : 1.0;
     const effectiveRangeWorld = getEffectiveGrappleRangeWorld(world);
-    const displayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
-
-    let slotBar = '';
-    if (world.moteSlotCount > 0) {
-      for (let i = 0; i < world.moteSlotCount; i++) {
-        slotBar += world.moteSlotState[i] === MOTE_STATE_DEPLETED ? '○' : '●';
-      }
-    } else {
-      for (let i = 0; i < totalSlots; i++) {
-        slotBar += i < availableSlots ? '●' : '○';
-      }
-    }
+    const displayRadiusWorld = world.grappleDisplayRadiusWorld;
 
     const moteLines = [
-      `Motes: ${availableSlots}/${totalSlots} (${(ratio * 100).toFixed(0)}%)`,
-      `Depleted: ${depletedSlots}`,
+      `Particles: ${world.particleCount}/${world.positionXWorld.length}`,
       `Range eff: ${effectiveRangeWorld.toFixed(1)}  disp: ${displayRadiusWorld.toFixed(1)}`,
-      slotBar || '(no motes)',
     ];
 
     const lineHeightPx = 9;

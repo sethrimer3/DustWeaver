@@ -134,6 +134,7 @@ import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
 import { getStormweaveMoteCount } from '../sim/stormweave/lifeMotes';
 import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
+import { resetShieldLiquidContactLatch } from '../sim/hazards';
 import { resetTimeStopFieldPlayerState } from '../sim/timeStopField/timeStopFieldPlayerState';
 
 /**
@@ -350,6 +351,7 @@ function resetRoomScopedSimState(world: WorldState): void {
   resetRadiantTetherState();
   resetRadiantWebState();
   resetShieldWeaveState(world.shieldWeave);
+  resetShieldLiquidContactLatch(world);
   // Hard clear (no release) — the player's velocity is independently reset
   // to zero by the fresh spawn on every room activation, so any stale
   // suspended momentum from the previous room must never be re-applied here.

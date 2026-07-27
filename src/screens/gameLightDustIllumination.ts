@@ -10,7 +10,6 @@ interface LightDustParticleView {
   readonly isAliveFlag: Uint8Array;
   readonly kindBuffer: Uint8Array;
   readonly ownerEntityId: Int32Array;
-  readonly particleMoteSlotState: Uint8Array;
 }
 
 /** Ownership/availability policy shared by rendering and Node-side tests. */
@@ -21,6 +20,5 @@ export function isAvailablePlayerLightDust(
 ): boolean {
   return particles.isAliveFlag[particleIndex] === 1
     && particles.kindBuffer[particleIndex] === ParticleKind.Light
-    && particles.ownerEntityId[particleIndex] === playerEntityId
-    && particles.particleMoteSlotState[particleIndex] === 0;
+    && particles.ownerEntityId[particleIndex] === playerEntityId;
 }

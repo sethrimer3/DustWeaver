@@ -155,11 +155,10 @@ export function tick(world: WorldState): void {
   //        further modify velocity.
   updateTimeStopFieldPlayerState(world);
 
-  // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
-  applyHazards(world);
-
-  // 0.11. Shield Weave geometry follows the post-movement player body and
-  // canonical health before hostile projectiles run later in this tick.
+  // 0.095. Shield Weave geometry — computed after post-movement cluster position
+  // is final and before applyHazards so that liquid-surface contact detection
+  // this tick uses the current shield arc. Also serves hostile projectile blocking
+  // later in this same tick (AI / combat steps).
   {
     const player = world.clusters[0];
     if (player !== undefined && player.isAliveFlag === 1) {
@@ -179,6 +178,9 @@ export function tick(world: WorldState): void {
       world.shieldWeave.moteCount = 0;
     }
   }
+
+  // 0.1. Environmental hazards — spikes, springs, water buoyancy, lava, breakables, jars, fireflies
+  applyHazards(world);
 
   // 0.15. Rope physics — Verlet integration + constraint relaxation
   tickRopes(world);

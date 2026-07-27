@@ -561,6 +561,33 @@ export interface HazardWorldState {
   playerWaterSkipEventVelocityXWorld: number;
   playerWaterSkipEventVelocityYWorld: number;
 
+  // ── Shield liquid-surface surfing latch ───────────────────────────────────
+  /**
+   * 1 while the shield crescent was in contact with a liquid top surface on
+   * the previous tick. 0 when not in contact (or shield is inactive / has
+   * zero motes). Used to fire exactly one skip per approach: the skip fires
+   * on the FIRST tick contact is detected; subsequent ticks of persistent
+   * overlap are suppressed by this latch. The latch resets to 0 as soon as
+   * the shield stops touching the surface (separation), allowing another skip
+   * on re-approach.
+   *
+   * Must be reset (set to 0) on room load, player death/respawn, shield
+   * deactivation, and loss of all motes. See resetShieldLiquidContactLatch().
+   */
+  shieldLiquidContactLatchFlag: 0 | 1;
+  /**
+   * Zone index of the liquid zone the shield was latched to on the previous
+   * tick, or -1 if not latched. Pairs with shieldLiquidContactLatchFlag.
+   * Stored to correctly detect separation from the same zone before allowing
+   * re-approach.
+   */
+  shieldLiquidContactLatchZoneIndex: number;
+  /**
+   * 0=none, 1=water, 2=lava — kind of liquid the latch refers to.
+   * Only meaningful when shieldLiquidContactLatchFlag === 1.
+   */
+  shieldLiquidContactLatchKind: 0 | 1 | 2;
+
   // ── Dust piles ────────────────────────────────────────────────────────────
   /** Number of dust piles loaded in the current room. */
   dustPileCount: number;
@@ -1032,6 +1059,9 @@ export function createHazardWorldState(): HazardWorldState {
     playerWaterSkipEventYWorld:    0,
     playerWaterSkipEventVelocityXWorld: 0,
     playerWaterSkipEventVelocityYWorld: 0,
+    shieldLiquidContactLatchFlag:       0,
+    shieldLiquidContactLatchZoneIndex:  -1,
+    shieldLiquidContactLatchKind:       0,
     dustPileCount:                 0,
     dustPileXWorld:                new Float32Array(MAX_DUST_PILES),
     dustPileYWorld:                new Float32Array(MAX_DUST_PILES),

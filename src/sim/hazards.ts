@@ -34,6 +34,13 @@ import {
 } from './clusters/playerWaterPhysics';
 import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from './momentumCombatConfig';
 import { rechargeGrappleCharge } from './clusters/grappleShared';
+import {
+  checkShieldLiquidSurfaceContact,
+  computeShieldLiquidSkipVelocity,
+  isShieldTouchingLiquidSurface,
+  SHIELD_LIQUID_SKIP_MIN_SPEED_X,
+} from './stormweave/shieldLiquidSurface';
+import { recordShieldImpact } from './stormweave/shieldWeave';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -381,6 +388,21 @@ export function computePlayerWaterState(world: WorldState): void {
 }
 
 /**
+ * Resets the shield liquid-surface contact latch — call on room load, player
+ * death/respawn, shield release, or loss of all motes to ensure the next
+ * surface approach fires a fresh skip rather than being suppressed.
+ *
+ * This is deliberately separate from resetShieldWeaveState (which owns only
+ * the shield arc geometry/mote state) so the hazard module controls its own
+ * latch lifecycle without coupling shieldWeave.ts to HazardWorldState.
+ */
+export function resetShieldLiquidContactLatch(world: WorldState): void {
+  world.shieldLiquidContactLatchFlag = 0;
+  world.shieldLiquidContactLatchZoneIndex = -1;
+  world.shieldLiquidContactLatchKind = 0;
+}
+
+/**
  * Main hazard update — called once per tick after cluster movement.
  */
 export function applyHazards(world: WorldState): void {
@@ -520,11 +542,102 @@ export function applyHazards(world: WorldState): void {
     ? Math.hypot(entryVelocityXWorld, entryVelocityYWorld)
     : 0;
 
+  // ── Shield Weave water surfing ───────────────────────────────────────────
+  // When the shield crescent contacts the water's exposed top surface from
+  // above, directly below the player, with sufficient horizontal speed, the
+  // player skips off the surface. This takes priority over and prevents the
+  // ordinary stone-skip below from also firing in the same tick.
+  let shieldWaterSkipFired = false;
+  if (world.isPlayerInWaterFlag === 1 && world.playerWaterZoneIndex >= 0) {
+    const wzi = world.playerWaterZoneIndex;
+    const wLeft = world.waterZoneXWorld[wzi];
+    const wTop = world.waterZoneYWorld[wzi];
+    const wRight = wLeft + world.waterZoneWWorld[wzi];
+    const playerBottom = player.positionYWorld + player.halfHeightWorld;
+
+    // Shield must be active and |vx| strictly > threshold.
+    const shieldIsActive = world.shieldWeave.isActive && world.shieldWeave.moteCount >= 1;
+    const absVx = Math.abs(entryVelocityXWorld);
+    const approachingContact = entryVelocityYWorld >= -SHIELD_LIQUID_SKIP_MIN_SPEED_X;
+
+    // Latch-separation check: if the latch is set for this same zone, check
+    // whether the shield is still touching. If not, clear the latch so the
+    // next approach can fire.
+    if (
+      world.shieldLiquidContactLatchFlag === 1 &&
+      world.shieldLiquidContactLatchKind === 1 &&
+      world.shieldLiquidContactLatchZoneIndex === wzi
+    ) {
+      const stillTouching = shieldIsActive && isShieldTouchingLiquidSurface(
+        world.shieldWeave, wLeft, wTop, wRight,
+        player.positionXWorld, player.halfWidthWorld,
+      );
+      if (!stillTouching) {
+        world.shieldLiquidContactLatchFlag = 0;
+        world.shieldLiquidContactLatchZoneIndex = -1;
+        world.shieldLiquidContactLatchKind = 0;
+      }
+    }
+
+    // Only attempt a skip when: shield active, speed qualifies, not already
+    // latched to this zone (persistent overlap suppression), not frozen water.
+    if (
+      shieldIsActive &&
+      absVx > SHIELD_LIQUID_SKIP_MIN_SPEED_X &&
+      approachingContact &&
+      world.frozenWaterZoneMask[wzi] === 0 &&
+      !(world.shieldLiquidContactLatchFlag === 1 &&
+        world.shieldLiquidContactLatchKind === 1 &&
+        world.shieldLiquidContactLatchZoneIndex === wzi)
+    ) {
+      const contact = checkShieldLiquidSurfaceContact(
+        world.shieldWeave,
+        wLeft, wTop, wRight,
+        player.positionXWorld, player.halfWidthWorld, playerBottom,
+        entryVelocityYWorld,
+        'water', wzi,
+      );
+      if (contact !== null) {
+        // Apply the shield-liquid skip velocity using the pre-friction incoming vx.
+        const skipVel = computeShieldLiquidSkipVelocity(entryVelocityXWorld);
+        player.velocityXWorld = skipVel.velocityXWorld;
+        player.velocityYWorld = skipVel.velocityYWorld;
+
+        // Keep the player out of the water this tick.
+        world.isPlayerInWaterFlag = 0;
+        world.playerWaterState = PLAYER_WATER_STATE_OUTSIDE;
+        world.playerWaterZoneIndex = -1;
+        world.playerWaterSubmersionRatio = 0;
+
+        // Emit a water-skip event so existing spray VFX can respond.
+        world.playerWaterSkipEventSequence += 1;
+        world.playerWaterSkipEventXWorld = player.positionXWorld;
+        world.playerWaterSkipEventYWorld = contact.yWorld;
+        world.playerWaterSkipEventVelocityXWorld = entryVelocityXWorld;
+        world.playerWaterSkipEventVelocityYWorld = entryVelocityYWorld;
+
+        // Latch: suppress re-triggering on persistent overlap.
+        world.shieldLiquidContactLatchFlag = 1;
+        world.shieldLiquidContactLatchZoneIndex = wzi;
+        world.shieldLiquidContactLatchKind = 1;
+
+        shieldWaterSkipFired = true;
+      }
+    }
+  } else if (world.shieldLiquidContactLatchKind === 1) {
+    // Player left all water zones — clear water latch unconditionally.
+    world.shieldLiquidContactLatchFlag = 0;
+    world.shieldLiquidContactLatchZoneIndex = -1;
+    world.shieldLiquidContactLatchKind = 0;
+  }
+
   // ── Water skip (stone-skip bounce) ─────────────────────────────────────
   // A shallow, fast impact skips off the surface like a thrown stone rather
   // than submerging: the vertical velocity flips upward and the player never
   // actually enters the water this tick.
-  if (enteredThroughTop) {
+  // Excluded when a shield water skip already fired this tick (they must not
+  // both apply in the same tick).
+  if (enteredThroughTop && !shieldWaterSkipFired) {
     const bounce = computeWaterSkipBounce(
       entryVelocityXWorld,
       entryVelocityYWorld,
@@ -560,15 +673,93 @@ export function applyHazards(world: WorldState): void {
   world.isPlayerWasInWaterLastTickFlag = world.isPlayerInWaterFlag;
 
   // ── Lava zones ───────────────────────────────────────────────────────────
-  if (world.lavaInvulnTicks === 0) {
+  // Shield Weave lava surfing: when the shield crescent contacts the lava's
+  // exposed top surface from above with sufficient horizontal speed, the player
+  // skips off and lava damage for that contact is suppressed. The shield must
+  // be aimed such that the crescent is directly below the player (not sideways
+  // or upward). A shield that only contacts the lava's side, bottom, or
+  // interior does not provide lava immunity.
+  {
+    const shieldIsActive = world.shieldWeave.isActive && world.shieldWeave.moteCount >= 1;
+    let lavaShieldSkipFired = false;
+
+    // Latch-separation: if latched to a lava zone, check whether the shield
+    // is still touching. If not, clear the latch.
+    if (
+      world.shieldLiquidContactLatchFlag === 1 &&
+      world.shieldLiquidContactLatchKind === 2
+    ) {
+      const lzi = world.shieldLiquidContactLatchZoneIndex;
+      let stillTouching = false;
+      if (shieldIsActive && lzi >= 0 && lzi < world.lavaZoneCount) {
+        const lLeft = world.lavaZoneXWorld[lzi];
+        const lTop = world.lavaZoneYWorld[lzi];
+        const lRight = lLeft + world.lavaZoneWWorld[lzi];
+        stillTouching = isShieldTouchingLiquidSurface(
+          world.shieldWeave, lLeft, lTop, lRight,
+          player.positionXWorld, player.halfWidthWorld,
+        );
+      }
+      if (!stillTouching) {
+        world.shieldLiquidContactLatchFlag = 0;
+        world.shieldLiquidContactLatchZoneIndex = -1;
+        world.shieldLiquidContactLatchKind = 0;
+      }
+    }
+
     for (let i = 0; i < world.lavaZoneCount; i++) {
       const lLeft = world.lavaZoneXWorld[i];
       const lTop = world.lavaZoneYWorld[i];
       const lRight = lLeft + world.lavaZoneWWorld[i];
       const lBottom = lTop + world.lavaZoneHWorld[i];
 
-      if (overlapAABB(px, py, phw, phh, lLeft, lTop, lRight, lBottom)) {
-        // Source point is the nearest point on the lava AABB to the player center.
+      if (!overlapAABB(px, py, phw, phh, lLeft, lTop, lRight, lBottom)) continue;
+
+      // Check whether the shield qualifies for a lava surface skip for this zone.
+      const absVx = Math.abs(player.velocityXWorld);
+      const movingTowardSurface = player.velocityYWorld >= -SHIELD_LIQUID_SKIP_MIN_SPEED_X;
+      const notLatched = !(world.shieldLiquidContactLatchFlag === 1 &&
+        world.shieldLiquidContactLatchKind === 2 &&
+        world.shieldLiquidContactLatchZoneIndex === i);
+
+      if (
+        shieldIsActive &&
+        absVx > SHIELD_LIQUID_SKIP_MIN_SPEED_X &&
+        movingTowardSurface &&
+        notLatched
+      ) {
+        const playerBottom = player.positionYWorld + player.halfHeightWorld;
+        // Capture incoming vx before any modification.
+        const incomingVx = player.velocityXWorld;
+        const contact = checkShieldLiquidSurfaceContact(
+          world.shieldWeave,
+          lLeft, lTop, lRight,
+          player.positionXWorld, player.halfWidthWorld, playerBottom,
+          player.velocityYWorld,
+          'lava', i,
+        );
+        if (contact !== null) {
+          // Apply skip velocity using the pre-friction incoming vx.
+          const skipVel = computeShieldLiquidSkipVelocity(incomingVx);
+          player.velocityXWorld = skipVel.velocityXWorld;
+          player.velocityYWorld = skipVel.velocityYWorld;
+
+          // Record a shield impact at the contact point for impact VFX.
+          recordShieldImpact(world.shieldWeave, contact.xWorld, contact.yWorld);
+
+          // Latch: suppress re-triggering on persistent overlap.
+          world.shieldLiquidContactLatchFlag = 1;
+          world.shieldLiquidContactLatchZoneIndex = i;
+          world.shieldLiquidContactLatchKind = 2;
+
+          // Lava damage is suppressed for this qualifying shield contact.
+          lavaShieldSkipFired = true;
+          break;
+        }
+      }
+
+      if (!lavaShieldSkipFired && world.lavaInvulnTicks === 0) {
+        // Shield did not qualify — apply ordinary lava damage.
         const sourceXWorld = Math.max(lLeft, Math.min(px, lRight));
         const sourceYWorld = Math.max(lTop, Math.min(py, lBottom));
         applyPlayerDamageWithKnockback(player, LAVA_ZONE_DAMAGE, sourceXWorld, sourceYWorld);

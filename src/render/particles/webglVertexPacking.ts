@@ -40,7 +40,7 @@ export function packFluidParticleVertices(
     particleCount, isAliveFlag,
     positionXWorld, positionYWorld,
     kindBuffer, ageTicks, lifetimeTicks,
-    disturbanceFactor, behaviorMode, particleMoteSlotState,
+    disturbanceFactor, behaviorMode,
   } = particles;
 
   let vertexCount = 0;
@@ -59,7 +59,7 @@ export function packFluidParticleVertices(
     out[base + 3] = normAge;
     out[base + 4] = disturbanceFactor[i];
     out[base + 5] = behaviorMode[i] === 1 ? 1.0 : 0.0;
-    out[base + 6] = particleMoteSlotState[i] !== 0 ? 1.0 : 0.0;
+    out[base + 6] = 0.0;
     vertexCount++;
   }
 

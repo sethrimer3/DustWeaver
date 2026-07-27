@@ -281,7 +281,7 @@ function drawReachableEdgeGlow(
   if (maxOpacity <= 0) return;
 
   const walls = snapshot.walls;
-  const influenceRadiusWorld = snapshot.moteGrappleDisplayRadiusWorld;
+  const influenceRadiusWorld = snapshot.grappleDisplayRadiusWorld;
 
   // Reuses the same cached SurfaceExposureMap the wall-tile edge-shading
   // renderer builds (see wallTilePassRenderers.ts) — one authoritative
@@ -439,7 +439,7 @@ export function renderGrappleInfluenceVisuals(
 
   // Fast reject: skip all influence visuals when the player is completely offscreen
   // (margin = influence radius so edge glows on nearby walls remain visible).
-  const influenceRadiusPx = snapshot.moteGrappleDisplayRadiusWorld * scalePx;
+  const influenceRadiusPx = snapshot.grappleDisplayRadiusWorld * scalePx;
   if (playerScreenXPx + influenceRadiusPx < 0 || playerScreenXPx - influenceRadiusPx > virtualWidthPx) return;
   if (playerScreenYPx + influenceRadiusPx < 0 || playerScreenYPx - influenceRadiusPx > virtualHeightPx) return;
 
@@ -471,7 +471,7 @@ export function renderGrappleInfluenceVisuals(
   }
 
   // Draw influence circle using the smoothed mote-based display radius
-  const radiusScreenPx = snapshot.moteGrappleDisplayRadiusWorld * scalePx;
+  const radiusScreenPx = snapshot.grappleDisplayRadiusWorld * scalePx;
   drawInfluenceCircle(ctx, playerScreenXPx, playerScreenYPx, radiusScreenPx, mouseAngleRad, circleOpacity, influenceHighlightWidth);
 
   // Draw reachable edge glow on walls within range
