@@ -58,6 +58,7 @@ import type { MomentumTrail } from '../render/clusters/momentumTrail';
 import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
 import type { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
+import type { PlayerDeathDustEffect } from '../render/playerDeathDust';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
 import type { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
@@ -152,6 +153,8 @@ export interface RenderFrameContext {
   skillTombEffectRenderer: SkillTombEffectRenderer;
   /** One-shot cosmetic golden-mote burst for Dust Container / Shard pickups. */
   dustContainerPickupEffect: DustContainerPickupEffect;
+  /** One-shot player-death disintegration burst — warm-gold motes blown leftward. */
+  playerDeathDust: PlayerDeathDustEffect;
   bloomSystem: BloomSystem;
   playerCloak: PlayerCloak;
   /** Phantasmal golden cloak extension — visible while the player is grappling. */
@@ -332,7 +335,7 @@ export interface RenderFrameContext {
 export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
-    webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect,
+    webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
     playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, swordWeaveRenderer,
     newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
@@ -507,6 +510,9 @@ export function renderFrame(r: RenderFrameContext): void {
   }
   sunraysRenderer.render(ctx, ox, oy, zoom, nowMs, virtualWidthPx, virtualHeightPx, playerForSunrayDust);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_SUNBEAMS);
+
+  // ── Player-death disintegration dust (behind solid foreground walls) ─────
+  playerDeathDust.render(ctx, ox, oy, zoom);
 
   // ── Walls ────────────────────────────────────────────────────────────────
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_WALLS);

@@ -52,7 +52,7 @@ import {
   worldBgColor,
   resolveSpawnBlock,
 } from './gameRoom';
-import { renderFrame } from './gameRender';
+import { renderFrame, type RenderFrameContext } from './gameRender';
 import { createCombatTextSystem } from '../render/hud/combatText';
 import { processLargeSlimeSplits } from '../sim/clusters/slimeAi';
 import { DecorationWaveState } from '../render/effects/wallDecorations';
@@ -128,7 +128,18 @@ import { DustSelectionWheelController, isDustWheelAvailable } from './gameDustSe
 import { cancelSecondaryWeaveGesture } from '../input/secondaryWeaveGesture';
 import { createDustWheelGestureState, updateDustWheelGesture } from '../input/dustWheelInput';
 import { cancelAllDustTypeSwitches } from '../sim/weaves/dustTypeSwitch';
-import { spawnPlayerDeathDisintegration } from '../sim/clusters/playerDeathDisintegration';
+import {
+  PlayerDeathDustEffect,
+  triggerPlayerDeathDustFromSprite,
+} from '../render/playerDeathDust';
+import {
+  getCharacterSprites,
+  getPlayerSprite,
+  PLAYER_SPRITE_WIDTH_WORLD,
+  PLAYER_SPRITE_HEIGHT_WORLD,
+  PLAYER_SPRITE_PIVOT_X_WORLD,
+} from '../render/clusters/characterSprites';
+import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
 import { createGameEditorDebugControls } from './gameEditorDebugControls';
 import {
   applyGameEditorRoomActivation,
@@ -368,6 +379,7 @@ export function startGameScreen(
     newSwordWeaveRenderer.reset();
     bowTrajectoryPreviewRenderer.reset();
     dustContainerPickupEffect.reset();
+    playerDeathDust.reset();
   }
 
   /**
@@ -470,6 +482,8 @@ export function startGameScreen(
   const bowTrajectoryPreviewRenderer = new BowTrajectoryPreviewRenderer();
   const fallingBlockDust = new FallingBlockDustRenderer();
   const dustContainerPickupEffect = new DustContainerPickupEffect();
+  const playerDeathDust = new PlayerDeathDustEffect();
+  let deathDustTriggerSeed = 1;
 
   // ── Dialogue system ──────────────────────────────────────────────────────
   // The dialogue overlay renders at full device resolution (not the virtual
@@ -1062,6 +1076,10 @@ export function startGameScreen(
   world.isAssistModeFlag = (runOptions?.assistMode === true) ? 1 : 0;
 
   let lastTimestampMs = 0;
+  /** Last full renderFrame() args — reused by the death-freeze branch to keep
+   * redrawing the frozen scene (with an updated death-dust pool) each frame
+   * without advancing world.tick or any other gameplay/input state. */
+  let lastRenderFrameArgs: RenderFrameContext | null = null;
   let accumulatorMs = 0;
   let frameCount = 0;
   let fpsAccMs = 0;
@@ -1519,12 +1537,21 @@ export function startGameScreen(
       return;
     }
 
-    // While dead, still render the frozen scene but skip sim
+    // While dead, still render the frozen scene but skip sim. The player-death
+    // dust burst keeps animating using this frame's real elapsedMs (a
+    // dedicated visual-effect clock), redrawing the last full frozen frame
+    // via the cached renderFrame() args so it visibly blows away instead of
+    // vanishing into a single static frame. world.tick, physics, input, and
+    // every other simulation/gameplay update remain frozen.
     if (gameOverlayController.state.isPlayerDead) {
       playerSfx.stopWind();
       dustWheelController.cancel(timestampMs);
       cancelSecondaryWeaveGesture(world.secondaryWeaveGesture);
       deactivateShieldWeave(world.shieldWeave);
+      playerDeathDust.update(elapsedMs);
+      if (lastRenderFrameArgs !== null) {
+        renderFrame(lastRenderFrameArgs);
+      }
       if (import.meta.env.DEV) FP.setFrameGameContext('paused');
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
@@ -1748,7 +1775,28 @@ export function startGameScreen(
     if (playerForDeath !== undefined
       && playerForDeath.isAliveFlag === 0
       && !gameOverlayController.state.isPlayerDead) {
-      spawnPlayerDeathDisintegration(world, playerForDeath.positionXWorld, playerForDeath.positionYWorld);
+      const deathCharSprites = getCharacterSprites(world.characterId);
+      // getPlayerSprite only reads flag/velocity fields that ClusterState already
+      // has (isCrouchingFlag, isGroundedFlag, velocityXWorld/YWorld,
+      // playerIdleAnimState) — cast past the render-only ClusterSnapshot shape
+      // (which adds interpolated renderPositionXWorld/YWorld) rather than
+      // constructing an interpolated snapshot for a one-shot death effect.
+      const deathSprite = getPlayerSprite(
+        deathCharSprites,
+        playerForDeath as unknown as ClusterSnapshot,
+        world.isGrappleActiveFlag === 1,
+      );
+      triggerPlayerDeathDustFromSprite(
+        playerDeathDust,
+        deathSprite,
+        playerForDeath.positionXWorld,
+        playerForDeath.positionYWorld,
+        playerForDeath.isFacingLeftFlag === 1,
+        PLAYER_SPRITE_WIDTH_WORLD,
+        PLAYER_SPRITE_HEIGHT_WORLD,
+        PLAYER_SPRITE_PIVOT_X_WORLD,
+        deathDustTriggerSeed++,
+      );
       gameOverlayController.showPlayerDeathScreen();
       dustWheelController.cancel(timestampMs);
       // Resolve any in-progress mote transformation immediately rather than
@@ -1885,9 +1933,9 @@ export function startGameScreen(
     // Advance the wheel's cosmetic open/close animation for this render.
     dustWheelController.tick(timestampMs);
 
-    renderFrame({
+    const renderFrameArgs = {
       ctx, deviceCtx, virtualCanvas, canvas,
-      webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect,
+      webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
       playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, swordWeaveRenderer,
       newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
@@ -1932,7 +1980,12 @@ export function startGameScreen(
       adjacentRoomDrawPorts,
       adjacentRoomDrawImpl: productionAdjacentRoomDrawImpl,
       adjacentMaxChunksPerRoom: 6,
-    });
+    };
+    renderFrame(renderFrameArgs);
+    // Cached so the death-freeze branch above can redraw this exact frozen
+    // frame on subsequent frames while advancing only the death-dust effect
+    // (world.tick stays frozen — see the isPlayerDead early return).
+    lastRenderFrameArgs = renderFrameArgs;
     playerSpeedometerOverlay.update({
       world,
       playerRenderXWorld: reusableSnapshot.clusters[0]?.renderPositionXWorld ?? world.clusters[0]?.positionXWorld ?? 0,
