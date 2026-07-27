@@ -15,7 +15,6 @@ import {
   createTimeStopFieldPlayerState,
   type TimeStopFieldPlayerState,
 } from './timeStopField/timeStopFieldPlayerState';
-import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
 
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
@@ -61,15 +60,6 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * TimeStop Field mechanic. See sim/timeStopField/timeStopFieldPlayerState.ts.
    */
   timeStopField: TimeStopFieldPlayerState;
-  /**
-   * Physical-gesture state of the secondary action button (RMB / equivalent),
-   * shared by Sword/Shield/Bow Weaves. Owns press/hold/release detection and
-   * aim capture only — see src/input/secondaryWeaveGesture.ts. Updated once
-   * per rendered frame by gameCommandProcessor.ts, before the sim tick runs
-   * applyPlayerWeaveCombat(). Not yet consumed by weaveCombat.ts (stage 3).
-   */
-  secondaryWeaveGesture: SecondaryWeaveGestureState;
-  secondaryWeaveHandledCancellationId: number;
   /** Temporary, instance-local state for the currently loaded room's challenge elements. */
   challengeMode: ChallengeModeState;
   gates: RuntimeGate[];
@@ -498,8 +488,6 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     shieldWeave: createShieldWeaveState(),
     timeStopField: createTimeStopFieldPlayerState(),
-    secondaryWeaveGesture: createSecondaryWeaveGestureState(),
-    secondaryWeaveHandledCancellationId: 0,
     combatMode: DEFAULT_COMBAT_MODE,
     challengeMode: createChallengeModeState(),
     gates: [],

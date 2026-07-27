@@ -41,7 +41,6 @@ import { applyInterParticleForces } from './particles/forces';
 import { applyWallForces, applyWallBounce, settleFloorDust } from './particles/walls';
 import { integrateParticles } from './particles/integration';
 import { updateParticleLifetimes } from './particles/lifetime';
-import { applyPlayerWeaveCombat } from './weaves/weaveCombat';
 import { updateMomentumCombatState, applyMomentumCombatCollisionDamage } from './momentumCombat';
 import { getCombatMode } from './combatMode';
 import { applyHazards, computePlayerWaterState } from './hazards';
@@ -67,18 +66,13 @@ import { applyDustWeaverArchitectAI } from './clusters/dustWeaverArchitectAi';
 import { applyVoidSingularityAI } from './clusters/voidSingularityAi';
 import { applyDustLeechAI } from './clusters/dustLeechAi';
 import { applySnakeAI } from './clusters/snakeAi';
-import {
-  syncMoteQueueWithParticles,
-  tickMoteSlotRegeneration,
-  tickMoteGrappleDisplayRadius,
-} from './motes/orderedMoteQueue';
+import { tickGrappleDisplayRadius } from './clusters/grappleShared';
 import { tickRopes } from './ropes/ropeSim';
 import { tickFallingBlocks } from './fallingBlocks/fallingBlockSim';
 import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
 import { tickZipMoveBlocks } from './zipMoveBlocks/zipMoveBlockSim';
 import { tickIceMoteAura } from './iceMoteAura';
-import { tickDustTypeSwitch } from './weaves/dustTypeSwitch';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
@@ -297,9 +291,6 @@ export function tick(world: WorldState): void {
   // 4.5. Combat forces — attack launch and block shield positioning
   applyCombatForces(world);
 
-  // 4.55. Player Weave combat — applies weave activation patterns for bound dust
-  applyPlayerWeaveCombat(world);
-
   // 4.57. Crimson Wizard fire/smoke/projectile buffers
   tickCrimsonWizardEffects(world);
 
@@ -314,18 +305,11 @@ export function tick(world: WorldState): void {
   // 5. Inter-particle: repulsion (different owners) + boid (same owner)
   applyInterParticleForces(world);
 
-  // 5.1. Mote queue sync — detect player particle combat kills → deplete slots
-  syncMoteQueueWithParticles(world);
-
   // 5.5. Wall repulsion forces — push particles away from obstacle geometry
   applyWallForces(world);
 
   // 6. Euler integration with per-element drag
   integrateParticles(world);
-
-  // 6.05. Dust type switch — custom recall steering (bypassed by integration
-  //        above for recalling motes) and post-transform return bookkeeping.
-  tickDustTypeSwitch(world);
 
   // 6.5. Wall velocity bounce — reflect particles off wall faces with damping;
   //      stone shatter events are processed here too.
@@ -340,11 +324,8 @@ export function tick(world: WorldState): void {
   // 7. Lifetime: age particles; cycle owned particles or respawn combat-killed ones
   updateParticleLifetimes(world);
 
-  // 7.5. Mote queue regeneration — count down depletion cooldowns → restore slots
-  tickMoteSlotRegeneration(world);
-
-  // 7.6. Mote display radius lerp — smooth the grapple influence circle
-  tickMoteGrappleDisplayRadius(world);
+  // 7.5. Mote display radius lerp — smooth the grapple influence circle
+  tickGrappleDisplayRadius(world);
 
   world.tick++;
 }
