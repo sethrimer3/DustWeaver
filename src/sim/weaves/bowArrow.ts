@@ -49,16 +49,16 @@
  * resolves on its first enemy hit).
  */
 
-import { WorldState, MAX_BOW_ARROW_MOTES, MIN_BOW_ARROW_MOTES } from '../world';
+import { WorldState, MAX_BOW_ARROW_MOTES, MIN_BOW_ARROW_MOTES, MAX_CANONICAL_MOTES } from '../world';
 import { ClusterState } from '../clusters/state';
-import { getAvailableOrderedMoteSlots } from '../motes/orderedMoteQueue';
-import { getMoteTypeProjectile } from '../motes/moteTypeConfig';
 import { BEHAVIOR_MODE_BOW_ARROW } from '../particles/bowArrowBehaviorMode';
 import { raycastWalls } from '../clusters/grappleShared';
-import { nextFloatRange } from '../rng';
-import { computeShieldCenterWorld, WorldPoint } from './shieldGeometry';
+import { getAvailableCanonicalMotes, MoteOwnershipState } from './moteOwnership';
 import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
 import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
+import { getMoteTypeProjectile } from './projectileProperties';
+import { nextFloatRange } from '../rng';
+import { computeShieldCenterWorld, WorldPoint } from './shieldGeometry';
 
 // ── Phases ───────────────────────────────────────────────────────────────────
 export const BOW_ARROW_PHASE_NONE       = 0;
@@ -188,12 +188,11 @@ export function beginBowArrowAssembly(
   gestureId: number,
 ): boolean {
   if (world.bowArrowPhase !== BOW_ARROW_PHASE_NONE) return true; // already assembling
-  const available = getAvailableOrderedMoteSlots(world);
+  const available = getAvailableCanonicalMotes(world);
   if (available.count < MIN_BOW_ARROW_MOTES) return false;
 
-  const centerSlot = available.indices[0];
-  const centerPidx = world.moteSlotParticleIndex[centerSlot];
-  if (centerPidx < 0 || centerPidx >= world.particleCount || world.isAliveFlag[centerPidx] === 0) {
+  const centerPidx = available.indices[0];
+  if (centerPidx < 0 || centerPidx >= MAX_CANONICAL_MOTES) {
     return false;
   }
 
@@ -207,11 +206,16 @@ export function beginBowArrowAssembly(
   world.bowArrowParticleIndex[0] = centerPidx;
   world.bowArrowSlotStartTick[0] = world.tick;
   world.bowArrowRankState[0]     = BOW_ARROW_RANK_LOADING;
-  world.bowArrowArcFromXWorld[0] = world.positionXWorld[centerPidx];
-  world.bowArrowArcFromYWorld[0] = world.positionYWorld[centerPidx];
-  world.bowArrowArcCtrlXWorld[0] = world.positionXWorld[centerPidx];
-  world.bowArrowArcCtrlYWorld[0] = world.positionYWorld[centerPidx];
-  world.behaviorMode[centerPidx] = BEHAVIOR_MODE_BOW_ARROW;
+  const fromX = world.canonicalMoteXWorld[centerPidx] !== 0 ? world.canonicalMoteXWorld[centerPidx] : (world.positionXWorld[centerPidx] || 0);
+  const fromY = world.canonicalMoteYWorld[centerPidx] !== 0 ? world.canonicalMoteYWorld[centerPidx] : (world.positionYWorld[centerPidx] || 0);
+  world.bowArrowArcFromXWorld[0] = fromX;
+  world.bowArrowArcFromYWorld[0] = fromY;
+  world.bowArrowArcCtrlXWorld[0] = fromX;
+  world.bowArrowArcCtrlYWorld[0] = fromY;
+  world.canonicalMoteOwnership[centerPidx] = MoteOwnershipState.BowAssembling;
+  if (centerPidx < world.behaviorMode.length) {
+    world.behaviorMode[centerPidx] = BEHAVIOR_MODE_BOW_ARROW;
+  }
   world.bowArrowTravelPx = 0;
   world.bowArrowReleaseLatchedFlag = 0;
   return true;
@@ -230,11 +234,10 @@ export function beginBowArrowAssembly(
  * position or floating-point distance.
  */
 function _pickEdgeAvailableMote(world: WorldState): number {
-  const available = getAvailableOrderedMoteSlots(world);
+  const available = getAvailableCanonicalMotes(world);
   for (let rank = available.count - 1; rank >= 0; rank--) {
-    const pidx = world.moteSlotParticleIndex[available.indices[rank]];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
-    if (world.isAliveFlag[pidx] === 0) continue;
+    const pidx = available.indices[rank];
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
     if (_isReserved(world, pidx)) continue;
     return pidx;
   }
@@ -251,15 +254,20 @@ function _reserveNextMote(world: WorldState, playerX: number, playerY: number): 
   world.bowArrowParticleIndex[rank] = pidx;
   world.bowArrowSlotStartTick[rank] = world.tick;
   world.bowArrowRankState[rank]     = BOW_ARROW_RANK_LOADING;
-  world.bowArrowArcFromXWorld[rank] = world.positionXWorld[pidx];
-  world.bowArrowArcFromYWorld[rank] = world.positionYWorld[pidx];
+  const fromX = world.canonicalMoteXWorld[pidx] !== 0 ? world.canonicalMoteXWorld[pidx] : (world.positionXWorld[pidx] || playerX);
+  const fromY = world.canonicalMoteYWorld[pidx] !== 0 ? world.canonicalMoteYWorld[pidx] : (world.positionYWorld[pidx] || playerY);
+  world.bowArrowArcFromXWorld[rank] = fromX;
+  world.bowArrowArcFromYWorld[rank] = fromY;
   // Control point bulges away from the player so the mote arcs out then curves back.
-  const awayX = world.positionXWorld[pidx] - playerX;
-  const awayY = world.positionYWorld[pidx] - playerY;
+  const awayX = fromX - playerX;
+  const awayY = fromY - playerY;
   const awayLen = Math.hypot(awayX, awayY) || 1;
-  world.bowArrowArcCtrlXWorld[rank] = world.positionXWorld[pidx] + (awayX / awayLen) * BOW_ARROW_ARC_BULGE_WORLD;
-  world.bowArrowArcCtrlYWorld[rank] = world.positionYWorld[pidx] + (awayY / awayLen) * BOW_ARROW_ARC_BULGE_WORLD;
-  world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+  world.bowArrowArcCtrlXWorld[rank] = fromX + (awayX / awayLen) * BOW_ARROW_ARC_BULGE_WORLD;
+  world.bowArrowArcCtrlYWorld[rank] = fromY + (awayY / awayLen) * BOW_ARROW_ARC_BULGE_WORLD;
+  world.canonicalMoteOwnership[pidx] = MoteOwnershipState.BowAssembling;
+  if (pidx < world.behaviorMode.length) {
+    world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+  }
   world.bowArrowCount++;
 }
 
@@ -320,7 +328,7 @@ export function tickBowArrowAssembly(
   // ── Drive each reserved mote toward its seated line position ──────────────
   for (let r = 0; r < world.bowArrowCount; r++) {
     const pidx = world.bowArrowParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
 
     const offset = bowArrowRankLineOffset(r) * BOW_ARROW_MOTE_SPACING_WORLD;
     const seatX = centerX + dirX * offset;
@@ -328,27 +336,38 @@ export function tickBowArrowAssembly(
 
     const arcElapsed = world.tick - world.bowArrowSlotStartTick[r];
     if (arcElapsed >= BOW_ARROW_ARC_TICKS) {
-      // Seated: track the line exactly (rotates with aim, follows the shield center).
-      world.positionXWorld[pidx] = seatX;
-      world.positionYWorld[pidx] = seatY;
-      world.velocityXWorld[pidx] = 0;
-      world.velocityYWorld[pidx] = 0;
+      world.canonicalMoteXWorld[pidx] = seatX;
+      world.canonicalMoteYWorld[pidx] = seatY;
+      world.canonicalMoteVelXWorld[pidx] = 0;
+      world.canonicalMoteVelYWorld[pidx] = 0;
+      if (pidx < world.positionXWorld.length) {
+        world.positionXWorld[pidx] = seatX;
+        world.positionYWorld[pidx] = seatY;
+        world.velocityXWorld[pidx] = 0;
+        world.velocityYWorld[pidx] = 0;
+      }
       world.bowArrowRankState[r] = BOW_ARROW_RANK_SEATED;
     } else {
-      // Arc in: quadratic bezier from the mote's shield slot, bulging outward,
-      // to its seated line position. Still LOADING — does not count toward
-      // the fireable minimum yet.
       const t = Math.max(0, arcElapsed) / BOW_ARROW_ARC_TICKS;
       const mt = 1 - t;
       const p0x = world.bowArrowArcFromXWorld[r];
       const p0y = world.bowArrowArcFromYWorld[r];
       const p1x = world.bowArrowArcCtrlXWorld[r];
       const p1y = world.bowArrowArcCtrlYWorld[r];
-      world.positionXWorld[pidx] = mt * mt * p0x + 2 * mt * t * p1x + t * t * seatX;
-      world.positionYWorld[pidx] = mt * mt * p0y + 2 * mt * t * p1y + t * t * seatY;
+      const posX = mt * mt * p0x + 2 * mt * t * p1x + t * t * seatX;
+      const posY = mt * mt * p0y + 2 * mt * t * p1y + t * t * seatY;
+      world.canonicalMoteXWorld[pidx] = posX;
+      world.canonicalMoteYWorld[pidx] = posY;
+      if (pidx < world.positionXWorld.length) {
+        world.positionXWorld[pidx] = posX;
+        world.positionYWorld[pidx] = posY;
+      }
       world.bowArrowRankState[r] = BOW_ARROW_RANK_LOADING;
     }
-    world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+    world.canonicalMoteOwnership[pidx] = MoteOwnershipState.BowAssembling;
+    if (pidx < world.behaviorMode.length) {
+      world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+    }
   }
 }
 
@@ -380,18 +399,20 @@ export function fireBowArrow(world: WorldState, aimDirXWorld: number, aimDirYWor
   const seatedPidx: number[] = [];
   for (let r = 0; r < world.bowArrowCount; r++) {
     const pidx = world.bowArrowParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
     if (world.bowArrowRankState[r] === BOW_ARROW_RANK_SEATED) {
       seatedPidx.push(pidx);
-    } else if (world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW) {
-      // Still mid-arc: hand back to Storm exactly where it is — no snap.
-      world.behaviorMode[pidx] = 0;
-      world.velocityXWorld[pidx] = 0;
-      world.velocityYWorld[pidx] = 0;
+    } else if (world.canonicalMoteOwnership[pidx] === MoteOwnershipState.BowAssembling || (pidx < world.behaviorMode.length && world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW)) {
+      world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Resting;
+      world.canonicalMoteVelXWorld[pidx] = 0;
+      world.canonicalMoteVelYWorld[pidx] = 0;
+      if (pidx < world.behaviorMode.length) {
+        world.behaviorMode[pidx] = 0;
+        world.velocityXWorld[pidx] = 0;
+        world.velocityYWorld[pidx] = 0;
+      }
     }
   }
-  // seatedPidx.length is guaranteed >= MIN_BOW_ARROW_MOTES here (confirmed by
-  // countSeatedBowArrowMotes above; nothing mutates rank state between).
 
   const aimLen = Math.hypot(aimDirXWorld, aimDirYWorld);
   const dirX = aimLen > 1e-6 ? aimDirXWorld / aimLen : world.bowArrowDirXWorld;
@@ -405,10 +426,8 @@ export function fireBowArrow(world: WorldState, aimDirXWorld: number, aimDirYWor
   world.bowArrowOriginYWorld = center.y;
   world.bowArrowTravelPx     = 0;
 
-  // Capture dust kind from the (always-seated) center mote.
-  world.bowArrowDustKind = world.kindBuffer[seatedPidx[0]];
+  world.bowArrowDustKind = world.selectedDustKind || (seatedPidx[0] < world.kindBuffer.length ? world.kindBuffer[seatedPidx[0]] : 0) || 0;
 
-  // Re-pack the reserved arrays down to just the fired (seated) set.
   world.bowArrowCount = seatedPidx.length;
   world.bowArrowParticleIndex.fill(-1);
   world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
@@ -417,7 +436,6 @@ export function fireBowArrow(world: WorldState, aimDirXWorld: number, aimDirYWor
     world.bowArrowRankState[r]     = BOW_ARROW_RANK_SEATED;
   }
 
-  // Snap the whole fired line onto the straight firing vector at the shield center.
   _placeArrowLine(world, world.bowArrowOriginXWorld, world.bowArrowOriginYWorld, dirX, dirY);
 
   world.bowArrowPhase = BOW_ARROW_PHASE_OUTBOUND;
@@ -430,13 +448,22 @@ export function fireBowArrow(world: WorldState, aimDirXWorld: number, aimDirYWor
 function _placeArrowLine(world: WorldState, cx: number, cy: number, dirX: number, dirY: number): void {
   for (let r = 0; r < world.bowArrowCount; r++) {
     const pidx = world.bowArrowParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
     const offset = bowArrowRankLineOffset(r) * BOW_ARROW_MOTE_SPACING_WORLD;
-    world.positionXWorld[pidx] = cx + dirX * offset;
-    world.positionYWorld[pidx] = cy + dirY * offset;
-    world.velocityXWorld[pidx] = 0;
-    world.velocityYWorld[pidx] = 0;
-    world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+    const posX = cx + dirX * offset;
+    const posY = cy + dirY * offset;
+    world.canonicalMoteXWorld[pidx] = posX;
+    world.canonicalMoteYWorld[pidx] = posY;
+    world.canonicalMoteVelXWorld[pidx] = 0;
+    world.canonicalMoteVelYWorld[pidx] = 0;
+    world.canonicalMoteOwnership[pidx] = MoteOwnershipState.BowOutbound;
+    if (pidx < world.positionXWorld.length) {
+      world.positionXWorld[pidx] = posX;
+      world.positionYWorld[pidx] = posY;
+      world.velocityXWorld[pidx] = 0;
+      world.velocityYWorld[pidx] = 0;
+      world.behaviorMode[pidx] = BEHAVIOR_MODE_BOW_ARROW;
+    }
   }
 }
 
@@ -726,11 +753,16 @@ function _releaseWithCurvedPeel(world: WorldState, dirX: number, dirY: number): 
 function _releaseArrowToStorm(world: WorldState, velX: number, velY: number): void {
   for (let r = 0; r < world.bowArrowCount; r++) {
     const pidx = world.bowArrowParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
-    if (world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW) {
-      world.behaviorMode[pidx] = 0;
-      world.velocityXWorld[pidx] = velX;
-      world.velocityYWorld[pidx] = velY;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
+    if (world.canonicalMoteOwnership[pidx] === MoteOwnershipState.BowAssembling || world.canonicalMoteOwnership[pidx] === MoteOwnershipState.BowOutbound || (pidx < world.behaviorMode.length && world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW)) {
+      world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Resting;
+      world.canonicalMoteVelXWorld[pidx] = velX;
+      world.canonicalMoteVelYWorld[pidx] = velY;
+      if (pidx < world.behaviorMode.length) {
+        world.behaviorMode[pidx] = 0;
+        world.velocityXWorld[pidx] = velX;
+        world.velocityYWorld[pidx] = velY;
+      }
     }
   }
   _clearArrowInstance(world);
@@ -748,20 +780,16 @@ function _clearArrowInstance(world: WorldState): void {
   world.bowArrowRankState.fill(BOW_ARROW_RANK_UNUSED);
 }
 
-/**
- * Cancels an in-progress arrow (assembling or outbound), releasing every
- * reserved mote back to Storm following in place (zero initial velocity).
- * Used when the player releases before the minimum three-mote arrow can ever
- * seat (fewer than MIN_BOW_ARROW_MOTES reserved), on damage cancellation,
- * dust-wheel/pause/dialogue cancellation, etc.
- */
 export function cancelBowArrow(world: WorldState): void {
   if (world.bowArrowPhase === BOW_ARROW_PHASE_NONE && world.bowArrowCount === 0) return;
   for (let r = 0; r < world.bowArrowCount; r++) {
     const pidx = world.bowArrowParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
-    if (world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW) {
-      world.behaviorMode[pidx] = 0;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
+    if (world.canonicalMoteOwnership[pidx] === MoteOwnershipState.BowAssembling || world.canonicalMoteOwnership[pidx] === MoteOwnershipState.BowOutbound || (pidx < world.behaviorMode.length && world.behaviorMode[pidx] === BEHAVIOR_MODE_BOW_ARROW)) {
+      world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Resting;
+      if (pidx < world.behaviorMode.length) {
+        world.behaviorMode[pidx] = 0;
+      }
     }
   }
   _clearArrowInstance(world);

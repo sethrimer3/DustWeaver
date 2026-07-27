@@ -400,6 +400,7 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
     }
     if (sw.ramp !== undefined) wall.rampOrientation = sw.ramp;
     if (sw.stairs !== undefined) wall.stairsOrientation = sw.stairs;
+    if (sw.smoothRamp !== undefined) wall.smoothRampOrientation = sw.smoothRamp;
     if (sw.half === 1) wall.isPillarHalfWidth = true;
     if (sw.rim !== undefined) wall.r = sw.rim;
     return wall;

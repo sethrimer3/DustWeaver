@@ -26,6 +26,7 @@ import {
   DIALOGUE_TRIGGER_COLOR, DIALOGUE_TRIGGER_SELECTED,
   GUIDE_DUST_PATH_COLOR, GUIDE_DUST_PATH_SELECTED, GUIDE_DUST_POINT_COLOR,
   drawMarker,
+  drawStairsShape,
   isElementInViewport,
   type EditorViewport,
 } from './editorRendererHelpers';
@@ -209,9 +210,17 @@ export function drawEditorCrumbleBlocks(
     const wPx = wBlocks * BLOCK_SIZE_SMALL * zoom;
     const hPx = hBlocks * BLOCK_SIZE_SMALL * zoom;
 
-    // Block fill
+    // Block fill — drawn first so the crack overlay below always layers on
+    // top of (never replaces) the shape/orientation preview. `stairsOrientation`
+    // is checked before `rampOrientation` since a block should never carry
+    // both, but stairs are the more specific shape when present.
     ctx.fillStyle = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
-    if (b.rampOrientation !== undefined) {
+    if (b.stairsOrientation !== undefined) {
+      // Stairs step shape — reuses the same geometry as wall stairs so the
+      // orientation reads identically to a normal (non-crumble) stairs block.
+      const stairsColor = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
+      drawStairsShape(ctx, b, offsetXPx, offsetYPx, zoom, stairsColor, sel ? 2 : 1);
+    } else if (b.rampOrientation !== undefined) {
       // Ramp triangle shape
       ctx.beginPath();
       switch (b.rampOrientation) {
@@ -232,7 +241,9 @@ export function drawEditorCrumbleBlocks(
       ctx.strokeRect(xPx, yPx, wPx, hPx);
     }
 
-    // Crack overlay — zigzag geometry, color indicates elemental weakness
+    // Crack overlay — zigzag geometry, color indicates elemental weakness.
+    // Always drawn AFTER the base shape above, as an additional pass on top —
+    // never a replacement for it — so the underlying orientation stays legible.
     const crackColor = CRUMBLE_VARIANT_CRACK_COLOR[b.variant ?? 'normal'];
     ctx.strokeStyle = crackColor;
     ctx.lineWidth = Math.max(1, zoom * 0.7);

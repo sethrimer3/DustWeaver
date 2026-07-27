@@ -840,6 +840,12 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         crumbleRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
 
+      let crumbleStairs: 0 | 1 | 2 | 3 | undefined;
+      if (item.isStairsItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleStairs = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
       if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return;
 
       const crumbles = room.crumbleBlocks ?? [];
@@ -860,6 +866,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         wBlock: crumbleW,
         hBlock: crumbleH,
         rampOrientation: crumbleRamp,
+        stairsOrientation: crumbleStairs,
         variant: state.pendingCrumbleVariant,
         blockTheme: placementBlockTheme,
       });

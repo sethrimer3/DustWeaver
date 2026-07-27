@@ -478,6 +478,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       wBlock: b.wBlock !== 1 ? b.wBlock : undefined,
       hBlock: b.hBlock !== 1 ? b.hBlock : undefined,
       rampOrientation: b.rampOrientation,
+      stairsOrientation: b.stairsOrientation,
       variant: b.variant !== 'normal' ? b.variant : undefined,
       blockTheme: b.blockTheme,
     })),

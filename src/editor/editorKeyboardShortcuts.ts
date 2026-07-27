@@ -66,10 +66,11 @@ export function handleEditorKeyboardShortcuts(
   if (inputState.isRotateRightPressed && state.activeTool === EditorTool.Place) {
     state.placementRotationSteps = (state.placementRotationSteps + 1) % 4;
   }
-  // Q/E in Select mode → rotate the selected transition
+  // Q/E in Select mode → rotate the selected transition, wall (incl. stairs/
+  // ramp shapes), or crumble block (incl. crumble stairs)
   if (state.activeTool === EditorTool.Select && state.selectedElements.length > 0 && state.roomData) {
     const selType = state.selectedElements[0]?.type;
-    if (selType === 'transition') {
+    if (selType === 'transition' || selType === 'wall' || selType === 'crumbleBlock') {
       if (inputState.isRotateRightPressed || inputState.isRotateLeftPressed) {
         // Lazy snapshot: rotate can be a no-op (e.g. unsupported element,
         // restricted layer, already-square wall) — only commit history and

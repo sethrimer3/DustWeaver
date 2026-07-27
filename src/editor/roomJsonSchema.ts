@@ -136,6 +136,11 @@ export interface RoomJsonWall {
    * 0=rises right, 1=rises left, 2=ceiling (rises right), 3=ceiling (rises left).
    */
   stairsOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Smooth-ramp orientation. Collision identical to stairs; rendering is a
+   * smooth diagonal triangle. Same 0-3 convention as `rampOrientation`.
+   */
+  smoothRampOrientation?: 0 | 1 | 2 | 3;
   /** true if this pillar wall is half-block wide (4 px). */
   isPillarHalfWidth?: boolean;
   /**
@@ -241,6 +246,11 @@ export interface RoomJsonCrumbleBlock {
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation (0-3). Absent = not stairs. Mirrors the wall-shape
+   * `stairsOrientation` field so crumble stairs round-trip through JSON.
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
   /** Elemental weakness variant. Defaults to `'normal'` when absent. */
   variant?: CrumbleVariant;
   /** Per-block theme override (defaults to room-level theme). */

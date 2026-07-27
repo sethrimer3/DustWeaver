@@ -116,7 +116,7 @@ function arePositionMapsEqual(
 }
 import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
-import { handlePropertyChange } from './editorPropertyChange';
+import { handlePropertyChange, handleCrumbleModifierToggle } from './editorPropertyChange';
 import type { EditableCampaignSession } from './editableCampaignSession';
 import {
   loadPersistedCampaignRoom,
@@ -997,6 +997,16 @@ export function createEditorController(
               if (commitResult !== 'noop') applyEdits('metadata');
             }
             return; // No applyEdits needed — campaign spawn is not in room data
+          }
+          if (prop === 'block.cracked') {
+            // Converts every selected wall/crumbleBlock between its normal and
+            // crumble forms in place — not a plain field mutation, so it's
+            // handled by a dedicated helper rather than applyPropertyToElement.
+            const toggled = state.roomData
+              ? handleCrumbleModifierToggle(state, history, value === 1 || value === '1')
+              : false;
+            if (toggled) applyEdits('metadata');
+            return;
           }
           const propertyChanged = state.roomData
             ? handlePropertyChange(state, history, prop, value, state.guideDustPathSelectedPointIndex)

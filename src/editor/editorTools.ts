@@ -287,13 +287,50 @@ export function rotateSelectedElement(state: EditorState): boolean {
   if (sel.type === 'wall') {
     const wall = state.roomData.interiorWalls.find(w => w.uid === sel.uid);
     if (!wall) return false;
+    let changed = false;
+    // Stairs/ramp/smooth-ramp shapes carry an explicit orientation (0-3) —
+    // cycle it first so e.g. a square 1x1 stairs block (where wBlock === hBlock
+    // and the dimension swap below is a no-op) still visibly rotates.
+    if (wall.stairsOrientation !== undefined) {
+      wall.stairsOrientation = ((wall.stairsOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    } else if (wall.rampOrientation !== undefined) {
+      wall.rampOrientation = ((wall.rampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    } else if (wall.smoothRampOrientation !== undefined) {
+      wall.smoothRampOrientation = ((wall.smoothRampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    }
     // A square wall's dimensions are unchanged by a width/height swap — this
     // is a genuine no-op, not just "rotation isn't visually distinguishable".
-    if (wall.wBlock === wall.hBlock) return false;
-    const tmp = wall.wBlock;
-    wall.wBlock = wall.hBlock;
-    wall.hBlock = tmp;
-    return true;
+    if (wall.wBlock !== wall.hBlock) {
+      const tmp = wall.wBlock;
+      wall.wBlock = wall.hBlock;
+      wall.hBlock = tmp;
+      changed = true;
+    }
+    return changed;
+  } else if (sel.type === 'crumbleBlock') {
+    const block = (state.roomData.crumbleBlocks ?? []).find(b => b.uid === sel.uid);
+    if (!block) return false;
+    let changed = false;
+    // Mirrors the 'wall' branch above so a crumble block (including crumble
+    // stairs) rotates through the exact same orientations as its non-crumble
+    // counterpart.
+    if (block.stairsOrientation !== undefined) {
+      block.stairsOrientation = ((block.stairsOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    } else if (block.rampOrientation !== undefined) {
+      block.rampOrientation = ((block.rampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    }
+    if (block.wBlock !== block.hBlock) {
+      const tmp = block.wBlock;
+      block.wBlock = block.hBlock;
+      block.hBlock = tmp;
+      changed = true;
+    }
+    return changed;
   } else if (sel.type === 'transition') {
     const t = state.roomData.transitions.find(tr => tr.uid === sel.uid);
     if (!t) return false;

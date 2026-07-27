@@ -29,14 +29,9 @@
  *   • No per-tick allocations.
  */
 
-import { WorldState, MAX_SWORD_SLASH_MOTES } from '../world';
+import { WorldState, MAX_SWORD_SLASH_MOTES, MAX_CANONICAL_MOTES } from '../world';
 import { ClusterState } from '../clusters/state';
-import {
-  getCircleOfInfluenceRadiusWorld,
-  getAvailableMoteSlotCount,
-  getAvailableOrderedMoteSlots,
-} from '../motes/orderedMoteQueue';
-import { BEHAVIOR_MODE_SWORD_SLASH } from '../particles/swordSlashBehaviorMode';
+import { getAvailableCanonicalMotes, MoteOwnershipState } from './moteOwnership';
 import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
 import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
 import { applyODCHit } from '../clusters/orbitalDustCoreAi';
@@ -281,13 +276,13 @@ export function tickSwordWeave(
   // When the player has no mote slots (no dust bound to the secondary weave),
   // the sword cannot exist.  Keep the FSM in ORBIT so the renderer skips
   // drawing, and return false so no shield crescent is attempted via this path.
-  if (world.moteSlotCount === 0) {
+  if (getAvailableCanonicalMotes(world).count === 0) {
     world.swordWeaveStateEnum = SWORD_STATE_ORBIT;
     return false;
   }
 
   // ── Phase 6: compute current blade length from available motes ──────────
-  const availableCount = getAvailableMoteSlotCount(world);
+  const availableCount = getAvailableCanonicalMotes(world).count;
   const activeSwordMoteCount = Math.min(MAX_SWORD_BLADE_MOTES, availableCount);
   const lengthRatio = activeSwordMoteCount / MAX_SWORD_BLADE_MOTES;
   world.swordWeaveLengthRatio = lengthRatio;
@@ -378,7 +373,7 @@ export function tickSwordWeave(
       // Phase 6: only enter windup if blade has at least one mote.
       if (activeSwordMoteCount > 0) {
         // Phase 4: use circle-of-influence radius for detection.
-        const influenceRadiusWorld = getCircleOfInfluenceRadiusWorld(world);
+        const influenceRadiusWorld = world.grappleDisplayRadiusWorld;
         const targetIndex = _findNearestEnemyIndex(world, _handAnchorScratch.xWorld, _handAnchorScratch.yWorld, influenceRadiusWorld);
         if (targetIndex !== -1) {
           world.swordWeaveTargetClusterIndex = targetIndex;
@@ -575,7 +570,8 @@ export function startNewSwordSwipe(
   const anchorX = _newSwordAnchorScratch.xWorld;
   const anchorY = _newSwordAnchorScratch.yWorld;
 
-  const availableCount = getAvailableMoteSlotCount(world);
+  const available = getAvailableCanonicalMotes(world);
+  const availableCount = available.count;
   const activeMoteCount = Math.min(MAX_SWORD_BLADE_MOTES, availableCount);
   const lengthRatio = activeMoteCount / MAX_SWORD_BLADE_MOTES;
 
@@ -602,27 +598,21 @@ export function startNewSwordSwipe(
   world.newSwordToShieldTransition01 = 0;
   _newSwordHitFlags.fill(0);
 
-  // Reserve the player's available motes as the actual blade. Each participating
-  // mote records its pre-swipe position so it can "shoot" from orbit into the
-  // rear staging arc, and is marked BEHAVIOR_MODE_SWORD_SLASH so integration,
-  // binding and the Shield crescent leave it fully under sword control.
   world.newSwordMoteParticleIndex.fill(-1);
   world.newSwordMoteCount = 0;
-  const available = getAvailableOrderedMoteSlots(world);
-  const bladeCount = Math.min(MAX_SWORD_SLASH_MOTES, available.count);
+  const bladeCount = Math.min(MAX_SWORD_SLASH_MOTES, availableCount);
   for (let rank = 0; rank < bladeCount; rank++) {
-    const pidx = world.moteSlotParticleIndex[available.indices[rank]];
-    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    const pidx = available.indices[rank];
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
     const r = world.newSwordMoteCount;
     world.newSwordMoteParticleIndex[r] = pidx;
-    world.newSwordMoteFromXWorld[r]    = world.positionXWorld[pidx];
-    world.newSwordMoteFromYWorld[r]    = world.positionYWorld[pidx];
-    // Seed the swept-collision "previous position" with the mote's pre-swipe
-    // position so the very first tick's swept test covers the initial shot
-    // into rear staging too (not just the forward sweep).
-    world.newSwordMotePrevXWorld[r]    = world.positionXWorld[pidx];
-    world.newSwordMotePrevYWorld[r]    = world.positionYWorld[pidx];
-    world.behaviorMode[pidx]           = BEHAVIOR_MODE_SWORD_SLASH;
+    const fromX = world.canonicalMoteXWorld[pidx] !== 0 ? world.canonicalMoteXWorld[pidx] : anchorX;
+    const fromY = world.canonicalMoteYWorld[pidx] !== 0 ? world.canonicalMoteYWorld[pidx] : anchorY;
+    world.newSwordMoteFromXWorld[r]    = fromX;
+    world.newSwordMoteFromYWorld[r]    = fromY;
+    world.newSwordMotePrevXWorld[r]    = fromX;
+    world.newSwordMotePrevYWorld[r]    = fromY;
+    world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Sword;
     world.newSwordMoteCount++;
   }
 }
@@ -658,7 +648,7 @@ function _driveSwordMotes(world: WorldState, t01: number): void {
 
   for (let r = 0; r < world.newSwordMoteCount; r++) {
     const pidx = world.newSwordMoteParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
 
     const angle = baseAngle - NEW_SWORD_RANK_ANGLE_LAG_RAD * r * swingSign;
     const radius = NEW_SWORD_CRESCENT_RADIUS_WORLD + NEW_SWORD_RANK_RADIAL_STEP_WORLD * r;
@@ -666,27 +656,26 @@ function _driveSwordMotes(world: WorldState, t01: number): void {
     const targetY = cy + Math.sin(angle) * radius;
 
     if (inStaging) {
-      // Shoot from the pre-swipe orbit position into the rear staging point.
       const s = _easeOutQuad(t01 / NEW_SWORD_STAGE_FRACTION);
-      world.positionXWorld[pidx] = world.newSwordMoteFromXWorld[r] + (targetX - world.newSwordMoteFromXWorld[r]) * s;
-      world.positionYWorld[pidx] = world.newSwordMoteFromYWorld[r] + (targetY - world.newSwordMoteFromYWorld[r]) * s;
+      world.canonicalMoteXWorld[pidx] = world.newSwordMoteFromXWorld[r] + (targetX - world.newSwordMoteFromXWorld[r]) * s;
+      world.canonicalMoteYWorld[pidx] = world.newSwordMoteFromYWorld[r] + (targetY - world.newSwordMoteFromYWorld[r]) * s;
     } else {
-      world.positionXWorld[pidx] = targetX;
-      world.positionYWorld[pidx] = targetY;
+      world.canonicalMoteXWorld[pidx] = targetX;
+      world.canonicalMoteYWorld[pidx] = targetY;
     }
-    world.velocityXWorld[pidx] = 0;
-    world.velocityYWorld[pidx] = 0;
-    world.behaviorMode[pidx] = BEHAVIOR_MODE_SWORD_SLASH;
+    world.canonicalMoteVelXWorld[pidx] = 0;
+    world.canonicalMoteVelYWorld[pidx] = 0;
+    world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Sword;
   }
 }
 
-/** Releases every reserved sword mote back to Storm following (behaviorMode 0). */
+/** Releases every reserved sword mote back to Resting state. */
 function _releaseSwordMotes(world: WorldState): void {
   for (let r = 0; r < world.newSwordMoteCount; r++) {
     const pidx = world.newSwordMoteParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount) continue;
-    if (world.behaviorMode[pidx] === BEHAVIOR_MODE_SWORD_SLASH) {
-      world.behaviorMode[pidx] = 0;
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
+    if (world.canonicalMoteOwnership[pidx] === MoteOwnershipState.Sword) {
+      world.canonicalMoteOwnership[pidx] = MoteOwnershipState.Resting;
     }
   }
   world.newSwordMoteCount = 0;
@@ -722,9 +711,9 @@ export function tickNewSwordSwipe(world: WorldState): boolean {
   // motes and damage geometry are now the same geometry, at every mote count.
   for (let r = 0; r < world.newSwordMoteCount; r++) {
     const pidx = world.newSwordMoteParticleIndex[r];
-    if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
-    world.newSwordMotePrevXWorld[r] = world.positionXWorld[pidx];
-    world.newSwordMotePrevYWorld[r] = world.positionYWorld[pidx];
+    if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
+    world.newSwordMotePrevXWorld[r] = world.canonicalMoteXWorld[pidx];
+    world.newSwordMotePrevYWorld[r] = world.canonicalMoteYWorld[pidx];
   }
   _driveSwordMotes(world, t);
 
@@ -776,11 +765,11 @@ function _applySweptMoteHits(world: WorldState): void {
     let hitByRank = -1;
     for (let r = 0; r < world.newSwordMoteCount; r++) {
       const pidx = world.newSwordMoteParticleIndex[r];
-      if (pidx < 0 || pidx >= world.particleCount || world.isAliveFlag[pidx] === 0) continue;
+      if (pidx < 0 || pidx >= MAX_CANONICAL_MOTES) continue;
 
       const distSq = segmentPointDistanceSq(
         world.newSwordMotePrevXWorld[r], world.newSwordMotePrevYWorld[r],
-        world.positionXWorld[pidx], world.positionYWorld[pidx],
+        world.canonicalMoteXWorld[pidx], world.canonicalMoteYWorld[pidx],
         c.positionXWorld, c.positionYWorld,
       );
       if (distSq <= hitRadiusSq) { hitByRank = r; break; }
@@ -789,7 +778,7 @@ function _applySweptMoteHits(world: WorldState): void {
 
     _newSwordHitFlags[ci] = 1;
     const hitPidx = world.newSwordMoteParticleIndex[hitByRank];
-    applyRoutedWeaveDamage(world, ci, NEW_SWORD_DAMAGE, world.positionXWorld[hitPidx], world.positionYWorld[hitPidx]);
+    applyRoutedWeaveDamage(world, ci, NEW_SWORD_DAMAGE, world.canonicalMoteXWorld[hitPidx], world.canonicalMoteYWorld[hitPidx]);
   }
 }
 

@@ -180,6 +180,7 @@ export function isUniformSolidWall(w: RoomJsonWall): boolean {
   if (w.isPlatform === true)             return false;
   if (w.rampOrientation !== undefined)   return false;
   if (w.stairsOrientation !== undefined) return false;
+  if (w.smoothRampOrientation !== undefined) return false;
   if (w.isPillarHalfWidth === true)      return false;
   return true;
 }
@@ -424,6 +425,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     }
     if (w.rampOrientation !== undefined) sw.ramp = w.rampOrientation;
     if (w.stairsOrientation !== undefined) sw.stairs = w.stairsOrientation;
+    if (w.smoothRampOrientation !== undefined) sw.smoothRamp = w.smoothRampOrientation;
     if (w.isPillarHalfWidth) sw.half = 1;
     if (w.r !== undefined) sw.rim = w.r;
     return sw;

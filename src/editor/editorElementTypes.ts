@@ -281,6 +281,13 @@ export interface EditorCrumbleBlock {
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation (0-3). Undefined = not stairs. Mirrors
+   * `EditorWall.stairsOrientation` so a crumble block can carry the same
+   * stairs shape as a normal wall.
+   * 0=rises right, 1=rises left, 2=ceiling (rises right), 3=ceiling (rises left).
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
   /** Which elemental type this crumble block is weak to. */
   variant: CrumbleVariant;
   /** Per-block theme override. When set, overrides the room-level default. */

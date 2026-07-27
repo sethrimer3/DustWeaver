@@ -176,10 +176,19 @@ export function updateInspector(
           BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
           '(mixed)',
           v => callbacks?.onPropertyChange('wall.blockTheme', v));
+        addCheckbox(div, 'Cracked', false,
+          v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
         const selectedWalls = state.selectedElements
           .map(e => room.interiorWalls.find(w => w.uid === e.uid))
           .filter((w): w is NonNullable<typeof w> => w !== undefined);
         renderSurfaceRimSection(div, selectedWalls, callbacks);
+      } else if (type === 'crumbleBlock') {
+        addSelect(div, 'variant',
+          CRUMBLE_VARIANT_OPTIONS.map(o => ({ label: o.label, value: o.id })),
+          '(mixed)',
+          v => callbacks?.onPropertyChange('crumbleBlock.variant', v));
+        addCheckbox(div, 'Cracked', true,
+          v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
       } else if (type === 'transition') {
         addColorPickerField(div, 'fadeColor', '#000000',
           v => callbacks?.onPropertyChange('transition.fadeColor', v));
@@ -228,6 +237,10 @@ export function updateInspector(
       typeDiv.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.5); margin-top: 4px;`;
       typeDiv.textContent = `Type: ${typeLabel}`;
       div.appendChild(typeDiv);
+      if (wall.isPlatformFlag !== 1 && wall.isPillarHalfWidthFlag !== 1 && wall.smoothRampOrientation === undefined) {
+        addCheckbox(div, 'Cracked', false,
+          v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
+      }
       renderSurfaceRimSection(div, [wall], callbacks);
     }
   } else if (el.type === 'enemy') {
@@ -888,6 +901,8 @@ export function updateInspector(
         CRUMBLE_VARIANT_OPTIONS.map(o => ({ label: o.label, value: o.id })),
         block.variant ?? 'normal',
         v => callbacks?.onPropertyChange('crumbleBlock.variant', v));
+      addCheckbox(div, 'Cracked', true,
+        v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
     }
   } else if (el.type === 'bouncePad') {
     const bp = (room.bouncePads ?? []).find(b => b.uid === el.uid);

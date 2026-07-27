@@ -362,7 +362,7 @@ export function drawMergedWallOutline(
  */
 export function drawStairsShape(
   ctx: CanvasRenderingContext2D,
-  w: EditorWall,
+  w: Pick<EditorWall, 'xBlock' | 'yBlock' | 'wBlock' | 'hBlock'> & { stairsOrientation?: 0 | 1 | 2 | 3 },
   ox: number, oy: number, zoom: number,
   color: string, lineWidth: number,
   overrideOrientation?: 0 | 1 | 2 | 3,

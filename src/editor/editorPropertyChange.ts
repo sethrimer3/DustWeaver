@@ -44,6 +44,7 @@ import type { EditorHistory } from './editorHistory';
 import { capturePendingSnapshot, commitPendingSnapshot } from './editorHistory';
 import { createDefaultDialogueEntry, MAX_DIALOGUE_ENTRIES } from '../dialogue/dialogueTypes';
 import { canMutateElement } from './editorLayers';
+import { bumpSelectionRevision } from './editorSelectionCache';
 import { normalizeSurfaceRimStyle, isDefaultSurfaceRimStyle, type SurfaceRimStyle } from '../render/walls/surfaceRimStyle';
 
 // Guide dust path property validation bounds
@@ -567,5 +568,121 @@ export function handlePropertyChange(
     // completely untouched by dropping `pending` here.
     return false;
   }
+  return commitPendingSnapshot(history, pending) !== 'noop';
+}
+
+/**
+ * Toggles the "Cracked" modifier on every selected element that is eligible
+ * for it, converting each one between its normal-block form (`EditorWall`)
+ * and its crumble-block form (`EditorCrumbleBlock`) in place.
+ *
+ * Each selected element is looked up and mutated individually by its own
+ * `uid` — exactly like `handlePropertyChange` — so toggling Cracked on one
+ * member of a multi-cell placement (e.g. one block that happens to share a
+ * "source group" with others) never touches the other members; only the
+ * elements actually present in `state.selectedElements` are converted.
+ *
+ * Eligible for `checked === true` (normal → crumble): a selected `'wall'`
+ * that is a plain block, ramp, or stairs shape (not a one-way platform,
+ * half-pillar, or smooth ramp — none of which have a crumble equivalent).
+ * Eligible for `checked === false` (crumble → normal): a selected
+ * `'crumbleBlock'`. Elements of other types, or walls/blocks already in the
+ * requested state, are left untouched — they don't block the elements that
+ * *are* eligible, matching the "convert every compatible selected block"
+ * requirement rather than an all-or-nothing gate.
+ *
+ * Orientation (`rampOrientation`/`stairsOrientation`), dimensions, position,
+ * and per-block theme are preserved across the conversion in both
+ * directions. `state.selectedElements` entries for converted elements are
+ * updated in place to the new type (same `uid`) so the inspector/overlay
+ * selection stays attached to the same logical block after conversion.
+ *
+ * @returns `true` if at least one element was converted (and a snapshot
+ *          pushed), `false` if nothing was eligible or the edit was blocked.
+ */
+export function handleCrumbleModifierToggle(
+  state: Pick<EditorState, 'roomData' | 'selectedElements' | 'selectionRevision'>,
+  history: EditorHistory,
+  checked: boolean,
+): boolean {
+  const roomData = state.roomData;
+  const selectedElements = state.selectedElements;
+  if (roomData === null || selectedElements.length === 0) return false;
+
+  const isEligibleWallForCrumble = (wall: EditorWall | undefined): wall is EditorWall =>
+    wall !== undefined &&
+    wall.isPlatformFlag !== 1 &&
+    wall.isPillarHalfWidthFlag !== 1 &&
+    wall.smoothRampOrientation === undefined;
+
+  const convertible = selectedElements.filter(el => {
+    if (checked) {
+      return el.type === 'wall' && isEligibleWallForCrumble(roomData.interiorWalls.find(w => w.uid === el.uid));
+    }
+    return el.type === 'crumbleBlock' && (roomData.crumbleBlocks ?? []).some(b => b.uid === el.uid);
+  });
+  if (convertible.length === 0) return false;
+
+  // Layer-mutation eligibility, scoped to only the elements that will
+  // actually be converted (an incompatible element elsewhere in the
+  // selection — e.g. a platform wall, or an enemy in a mixed selection —
+  // never blocks converting the eligible ones).
+  for (const el of convertible) {
+    if (!canMutateElement(state as EditorState, el)) return false;
+  }
+
+  const pending = capturePendingSnapshot(roomData, undefined, undefined, false, 'Property:cracked');
+
+  if (checked && !roomData.crumbleBlocks) roomData.crumbleBlocks = [];
+
+  for (const el of convertible) {
+    if (checked && el.type === 'wall') {
+      const idx = roomData.interiorWalls.findIndex(w => w.uid === el.uid);
+      if (idx === -1) continue;
+      const wall = roomData.interiorWalls[idx];
+      roomData.interiorWalls.splice(idx, 1);
+      const crumble: EditorCrumbleBlock = {
+        uid: wall.uid,
+        xBlock: wall.xBlock,
+        yBlock: wall.yBlock,
+        wBlock: wall.wBlock,
+        hBlock: wall.hBlock,
+        rampOrientation: wall.rampOrientation,
+        stairsOrientation: wall.stairsOrientation,
+        variant: 'normal',
+        blockTheme: wall.blockTheme,
+      };
+      (roomData.crumbleBlocks as EditorCrumbleBlock[]).push(crumble);
+      el.type = 'crumbleBlock';
+    } else if (!checked && el.type === 'crumbleBlock') {
+      const list = roomData.crumbleBlocks ?? [];
+      const idx = list.findIndex(b => b.uid === el.uid);
+      if (idx === -1) continue;
+      const block = list[idx];
+      list.splice(idx, 1);
+      const wall: EditorWall = {
+        uid: block.uid,
+        xBlock: block.xBlock,
+        yBlock: block.yBlock,
+        wBlock: block.wBlock,
+        hBlock: block.hBlock,
+        isPlatformFlag: 0,
+        platformEdge: 0,
+        blockTheme: block.blockTheme,
+        rampOrientation: block.rampOrientation,
+        stairsOrientation: block.stairsOrientation,
+        isPillarHalfWidthFlag: 0,
+      };
+      roomData.interiorWalls.push(wall);
+      el.type = 'wall';
+    }
+  }
+
+  // Selection cache keys selected elements by `${type}:${uid}` — bump the
+  // revision so it's rebuilt now that some entries' `type` changed, or the
+  // overlay/inspector would keep treating a just-converted block as
+  // selected under its old type.
+  bumpSelectionRevision(state);
+
   return commitPendingSnapshot(history, pending) !== 'noop';
 }

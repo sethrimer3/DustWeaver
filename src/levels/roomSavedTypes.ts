@@ -118,6 +118,8 @@ export interface SavedSpecialWall {
   ramp?: 0 | 1 | 2 | 3;
   /** Stairs orientation 0-3 (omit if not stairs). */
   stairs?: 0 | 1 | 2 | 3;
+  /** Smooth-ramp orientation 0-3 — stairs collision, smooth diagonal render (omit if not a smooth ramp). */
+  smoothRamp?: 0 | 1 | 2 | 3;
   /** 1 if half-width pillar. */
   half?: 1;
   /** Index into the room-level `rimStyles` table. */

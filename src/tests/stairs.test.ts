@@ -500,14 +500,21 @@ test('rays from open air stop on exposed stair faces, never on buried interior s
   assert.equal(fromBelow!.normalY, 1);
 });
 
-// ── Editor: ramp retirement, stairs availability ──────────────────────────────
+// ── Editor: smooth ramps (stairs collision, smooth diagonal render) ──────────
 
-test('ramp entries are no longer offered for normal editor placement', () => {
+test('legacy diagonal-physics ramp items are no longer offered for normal editor placement', () => {
   const rampBlockItems = PALETTE_ITEMS.filter(i => i.category === 'blocks' && i.isRampItem === 1);
-  assert.equal(rampBlockItems.length, 0, 'plain ramps must not appear in the blocks palette');
-  assert.equal(PALETTE_ITEMS.some(i => i.id === 'ramp_1x1'), false);
-  assert.equal(PALETTE_ITEMS.some(i => i.id === 'ramp_1x2'), false);
-  assert.equal(PALETTE_ITEMS.some(i => i.id === 'ramp_2x2'), false);
+  assert.equal(rampBlockItems.length, 0, 'plain diagonal-physics ramps must not appear in the blocks palette');
+});
+
+test('smooth ramps (stairs collision, smooth render) are available in the editor in all three sizes', () => {
+  for (const id of ['ramp_1x1', 'ramp_1x2', 'ramp_2x2']) {
+    const item = PALETTE_ITEMS.find(i => i.id === id);
+    assert.ok(item !== undefined, `missing palette item ${id}`);
+    assert.equal(item!.category, 'blocks');
+    assert.equal(item!.isSmoothRampItem, 1);
+    assert.equal(item!.isRampItem, undefined, 'smooth ramps must not use the legacy diagonal-physics flag');
+  }
 });
 
 test('stairs are available in the editor in all three sizes', () => {

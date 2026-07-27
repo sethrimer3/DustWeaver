@@ -52,6 +52,12 @@ export const MAX_ROPE_SEGMENTS = 32;
 /** Number of positions stored in the momentum trail circular buffer. */
 export const MOMENTUM_TRAIL_MAX_POINTS = 8;
 
+/** Maximum canonical motes derived from player life (mirrors MAX_LIFE_MOTES). */
+export const MAX_CANONICAL_MOTES = 32;
+export const MAX_SWORD_SLASH_MOTES = 8;
+export const MAX_BOW_ARROW_MOTES = 5;
+export const MIN_BOW_ARROW_MOTES = 3;
+
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
   /** Directional Shield Weave collision state, derived from canonical player life. */
   shieldWeave: ShieldWeaveState;
@@ -385,6 +391,56 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
   hasSwordWeaveUnlockedFlag: 0 | 1;
   hasShieldWeaveUnlockedFlag: 0 | 1;
   hasBowWeaveUnlockedFlag: 0 | 1;
+  shieldWeaveIndependentActiveFlag: 0 | 1;
+
+  // ── Canonical Mote Ownership & Ability State ────────────────────────────────
+  /** Authoritative ownership state per canonical mote (0..MAX_CANONICAL_MOTES-1). */
+  canonicalMoteOwnership: Uint8Array;
+  canonicalMoteXWorld: Float32Array;
+  canonicalMoteYWorld: Float32Array;
+  canonicalMoteVelXWorld: Float32Array;
+  canonicalMoteVelYWorld: Float32Array;
+
+  // ── Independent Sword Weave ─────────────────────────────────────────
+  newSwordActiveFlag: number;
+  newSwordGestureId: number;
+  newSwordTicksElapsed: number;
+  newSwordAimAngleRad: number;
+  newSwordCurrentAngleRad: number;
+  newSwordHandAnchorXWorld: number;
+  newSwordHandAnchorYWorld: number;
+  newSwordReachWorld: number;
+  newSwordToShieldTransition01: number;
+  newSwordStartAngleRad: number;
+  newSwordEndAngleRad: number;
+  newSwordMoteCount: number;
+  newSwordMoteParticleIndex: Int32Array;
+  newSwordMoteFromXWorld: Float32Array;
+  newSwordMoteFromYWorld: Float32Array;
+  newSwordMotePrevXWorld: Float32Array;
+  newSwordMotePrevYWorld: Float32Array;
+
+  // ── Independent Bow Weave ───────────────────────────────────────────
+  bowArrowPhase: number;
+  bowArrowGestureId: number;
+  bowArrowShieldStartTick: number;
+  bowArrowCount: number;
+  bowArrowParticleIndex: Int32Array;
+  bowArrowSlotStartTick: Int32Array;
+  bowArrowRankState: Uint8Array;
+  bowArrowArcFromXWorld: Float32Array;
+  bowArrowArcFromYWorld: Float32Array;
+  bowArrowArcCtrlXWorld: Float32Array;
+  bowArrowArcCtrlYWorld: Float32Array;
+  bowArrowDirXWorld: number;
+  bowArrowDirYWorld: number;
+  bowArrowOriginXWorld: number;
+  bowArrowOriginYWorld: number;
+  bowArrowTravelPx: number;
+  bowArrowDustKind: number;
+  bowArrowReleaseLatchedFlag: number;
+  bowArrowLatchedAimXWorld: number;
+  bowArrowLatchedAimYWorld: number;
 
   /** Currently active/selected dust kind (ParticleKind.Golden = 0 by default). */
   selectedDustKind: number;
@@ -588,6 +644,49 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     hasSwordWeaveUnlockedFlag:     0,
     hasShieldWeaveUnlockedFlag:    0,
     hasBowWeaveUnlockedFlag:       0,
+    shieldWeaveIndependentActiveFlag: 0,
+    canonicalMoteOwnership:        new Uint8Array(MAX_CANONICAL_MOTES),
+    canonicalMoteXWorld:           new Float32Array(MAX_CANONICAL_MOTES),
+    canonicalMoteYWorld:           new Float32Array(MAX_CANONICAL_MOTES),
+    canonicalMoteVelXWorld:        new Float32Array(MAX_CANONICAL_MOTES),
+    canonicalMoteVelYWorld:        new Float32Array(MAX_CANONICAL_MOTES),
+    newSwordActiveFlag:            0,
+    newSwordGestureId:             0,
+    newSwordTicksElapsed:          0,
+    newSwordAimAngleRad:           0,
+    newSwordCurrentAngleRad:       0,
+    newSwordHandAnchorXWorld:      0,
+    newSwordHandAnchorYWorld:      0,
+    newSwordReachWorld:            0,
+    newSwordToShieldTransition01:  0,
+    newSwordStartAngleRad:         0,
+    newSwordEndAngleRad:           0,
+    newSwordMoteCount:             0,
+    newSwordMoteParticleIndex:     new Int32Array(MAX_SWORD_SLASH_MOTES).fill(-1),
+    newSwordMoteFromXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMoteFromYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevXWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    newSwordMotePrevYWorld:        new Float32Array(MAX_SWORD_SLASH_MOTES),
+    bowArrowPhase:                 0,
+    bowArrowGestureId:             0,
+    bowArrowShieldStartTick:       0,
+    bowArrowCount:                 0,
+    bowArrowParticleIndex:         new Int32Array(MAX_BOW_ARROW_MOTES).fill(-1),
+    bowArrowSlotStartTick:         new Int32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowRankState:             new Uint8Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcFromXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcFromYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcCtrlXWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowArcCtrlYWorld:         new Float32Array(MAX_BOW_ARROW_MOTES),
+    bowArrowDirXWorld:             0,
+    bowArrowDirYWorld:             0,
+    bowArrowOriginXWorld:          0,
+    bowArrowOriginYWorld:          0,
+    bowArrowTravelPx:              0,
+    bowArrowDustKind:              0,
+    bowArrowReleaseLatchedFlag:    0,
+    bowArrowLatchedAimXWorld:      0,
+    bowArrowLatchedAimYWorld:      0,
     selectedDustKind:              0,
     grappleDisplayRadiusWorld:     96.0,
     // Default: Storm Weave is the starting primary, so motes orbit from the start.
