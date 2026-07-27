@@ -253,6 +253,7 @@ export function spawnEnemyClusters(
       enemyCluster.isCrimsonWizardFlag = 1;
       enemyCluster.crimsonWizardState = CW_STATE_IDLE;
       enemyCluster.crimsonWizardStateTicks = 0;
+      enemyCluster.crimsonWizardFireCircleTicks = 0;
       enemyCluster.crimsonWizardFacingX = 1;
       enemyCluster.crimsonWizardVelXWorld = 0;
       enemyCluster.crimsonWizardVelYWorld = 0;

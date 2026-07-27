@@ -63,6 +63,7 @@ import { spawnCrimsonFireDust, spawnCrimsonFireball, spawnCrimsonMeteor, spawnCr
 import { isCrimsonWizardGroundCastDone, isCrimsonWizardGroundCasting } from './crimsonWizardAnimation';
 import { hasWallOverlapAtPosition } from './movementAxisResolvers';
 import { raycastWalls } from './grappleShared';
+import { CW_FIRE_CIRCLE_TOTAL_TICKS } from './crimsonWizardFireCircleAnimation';
 
 export type CrimsonWizardPhase = typeof CW_PHASE_1 | typeof CW_PHASE_2 | typeof CW_PHASE_3;
 
@@ -186,6 +187,9 @@ function setState(cluster: ClusterState, state: number): void {
   cluster.crimsonWizardState = state;
   cluster.crimsonWizardStateTicks = 0;
   cluster.crimsonWizardTelegraphTicks = 0;
+  if (state !== CW_STATE_IDLE && state !== CW_STATE_RECOVER) {
+    cluster.crimsonWizardFireCircleTicks = 1;
+  }
   if (state !== CW_STATE_METEORS) {
     cluster.crimsonWizardMeteorCount = 0;
     cluster.crimsonWizardMeteorSpawnedFlag.fill(0);
@@ -578,6 +582,12 @@ function tickAttackState(world: WorldState, boss: ClusterState, player: ClusterS
   const phase = getCrimsonWizardPhase(boss.healthPoints, boss.maxHealthPoints);
   const tuning = getCrimsonWizardPhaseTuning(phase);
   boss.crimsonWizardStateTicks += 1;
+  if (boss.crimsonWizardFireCircleTicks > 0) {
+    boss.crimsonWizardFireCircleTicks =
+      boss.crimsonWizardFireCircleTicks < CW_FIRE_CIRCLE_TOTAL_TICKS
+        ? boss.crimsonWizardFireCircleTicks + 1
+        : 0;
+  }
   if (boss.crimsonWizardAttackCooldownTicks > 0) boss.crimsonWizardAttackCooldownTicks -= 1;
   if (boss.crimsonWizardTelegraphTicks > 0) boss.crimsonWizardTelegraphTicks -= 1;
 

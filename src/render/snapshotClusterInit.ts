@@ -57,6 +57,7 @@ export function _makeEmptyCluster(): _MutableCluster {
     isCrimsonWizardFlag: 0,
     crimsonWizardState: 0,
     crimsonWizardStateTicks: 0,
+    crimsonWizardFireCircleTicks: 0,
     crimsonWizardFacingX: 1,
     crimsonWizardTelegraphTicks: 0,
     isHeraldFlag: 0,
@@ -276,6 +277,7 @@ export function _fillCluster(dst: _MutableCluster, src: ClusterState): void {
   dst.isCrimsonWizardFlag             = src.isCrimsonWizardFlag;
   dst.crimsonWizardState              = src.crimsonWizardState;
   dst.crimsonWizardStateTicks         = src.crimsonWizardStateTicks;
+  dst.crimsonWizardFireCircleTicks    = src.crimsonWizardFireCircleTicks;
   dst.crimsonWizardFacingX            = src.crimsonWizardFacingX;
   dst.crimsonWizardTelegraphTicks     = src.crimsonWizardTelegraphTicks;
   dst.isHeraldFlag                    = src.isHeraldFlag;

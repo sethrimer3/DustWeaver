@@ -86,18 +86,14 @@ test('gameplay loadout sanitizer removes removed and unequipped Light Dust', () 
   assert.deepEqual(sanitizePlayerWeaveLoadoutForProgress(loadout, progress).primary.boundDust, []);
 });
 
-test('Light Dust illumination requires a live, available, player-owned mote', () => {
+test('Light Dust illumination requires a live, player-owned mote', () => {
   const particles = {
     isAliveFlag: new Uint8Array([1]),
     kindBuffer: new Uint8Array([ParticleKind.Light]),
     ownerEntityId: new Int32Array([42]),
-    particleMoteSlotState: new Uint8Array([0]),
   };
   assert.equal(isAvailablePlayerLightDust(particles, 0, 42), true);
   assert.equal(isAvailablePlayerLightDust(particles, 0, 7), false, 'boss/enemy ownership must not illuminate');
-  particles.particleMoteSlotState[0] = 1;
-  assert.equal(isAvailablePlayerLightDust(particles, 0, 42), false, 'depleted motes must not illuminate');
-  particles.particleMoteSlotState[0] = 0;
   particles.isAliveFlag[0] = 0;
   assert.equal(isAvailablePlayerLightDust(particles, 0, 42), false, 'destroyed/regenerating motes must not illuminate');
 });

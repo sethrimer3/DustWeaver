@@ -28,7 +28,7 @@ import { renderMomentumTurret } from './momentumTurretRenderer';
 import { renderSlimeSnailBody, renderSlimeSnailTrails } from './slimeSnailRenderer';
 import { renderShadowEnemy } from './shadowEnemyRenderer';
 import { renderNeedleProjectiles, renderNeedleUrchin } from './needleUrchinRenderer';
-import { renderCrimsonWizardBody, renderCrimsonWizardEffects } from './crimsonWizardRenderer';
+import { renderCrimsonWizardBody, renderCrimsonWizardEffects, renderCrimsonWizardFireCircle } from './crimsonWizardRenderer';
 import { renderHeraldBody, renderPhantasmalGeometry, renderVoidSpheres } from './heraldRenderer';
 import { renderIceSpikes, renderIceWizardBody } from './iceWizardRenderer';
 import {
@@ -447,6 +447,7 @@ export function renderClusters(
       // Radiant Web boss body is rendered by radiantWebRenderer.ts
       // Skip default cluster rendering; health bar drawn below.
     } else if (cluster.isCrimsonWizardFlag === 1) {
+      renderCrimsonWizardFireCircle(ctx, screenX, screenY, cluster, scalePx);
       renderCrimsonWizardBody(ctx, screenX, screenY, cluster, scalePx);
 
     } else if (cluster.isHeraldFlag === 1) {

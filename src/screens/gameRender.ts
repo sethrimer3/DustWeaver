@@ -32,7 +32,6 @@ import { applyTimeStopInversionCompositor } from '../render/effects/timeStopInve
 import { renderTimeStopFieldDebug } from '../render/effects/timeStopFieldDebugRenderer';
 import { renderParticles } from '../render/particles/renderer';
 import { renderPixelLockedDust } from '../render/particles/pixelLockedDustRenderer';
-import { renderDustSwitchTrails } from '../render/effects/dustSwitchTrailRenderer';
 import { renderDustSelectionWheel } from '../render/effects/dustSelectionWheelRenderer';
 import type { DustSelectionWheelController } from './gameDustSelectionState';
 import {
@@ -60,9 +59,6 @@ import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer'
 import type { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
 import type { PlayerDeathDustEffect } from '../render/playerDeathDust';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
-import type { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
-import type { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
-import type { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
 import type { SunbeamRenderer } from '../render/effects/sunbeamRenderer';
 import type { SunraysRenderer } from '../render/effects/sunraysRenderer';
 import type { AtmosphericLightDust } from '../render/effects/atmosphericLightDust';
@@ -164,12 +160,6 @@ export interface RenderFrameContext {
   /** Runtime visual cloud derived from canonical player health. */
   stormweaveLifeMotes: StormweaveLifeMotes;
   darkRoomOverlay: DarkRoomOverlay;
-  /** Shield Sword Weave renderer — golden-crossguard sword and slash trail. */
-  swordWeaveRenderer: SwordWeaveRenderer;
-  /** Independent (Stage 3/5) Sword Weave renderer — aimed crescent swipe + sword→shield fade. */
-  newSwordWeaveRenderer: NewSwordWeaveRenderer;
-  /** Independent (Stage 3/5) Bow Weave trajectory preview renderer. */
-  bowTrajectoryPreviewRenderer: BowTrajectoryPreviewRenderer;
   /** Pixel-art atmospheric sunbeam shafts. */
   sunbeamRenderer: SunbeamRenderer;
   sunraysRenderer: SunraysRenderer;
@@ -336,8 +326,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
-    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState, swordWeaveRenderer,
-    newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
+    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -598,9 +587,6 @@ export function renderFrame(r: RenderFrameContext): void {
     renderTimeStopField(ctx, world, ox, oy, zoom, qc);
   }
 
-  // Dust-switch trail + participating motes — drawn behind the player sprite.
-  renderDustSwitchTrails(ctx, world, ox, oy, zoom, graphicsQuality);
-
   // One-shot golden-mote pickup burst — drawn behind the player sprite so
   // absorbed motes visibly disappear behind it rather than popping in front.
   dustContainerPickupEffect.render(ctx, ox, oy, zoom);
@@ -632,15 +618,6 @@ export function renderFrame(r: RenderFrameContext): void {
   renderDustLeeches(ctx, snapshot, ox, oy, zoom, isDebugMode);
   renderGrappleCarryBlocks(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderGrapple(ctx, snapshot, ox, oy, zoom, isDebugMode);
-  // Shield Sword Weave — golden-crossguard sword + slash trail (drawn on top
-  // of the player so the crossguard reads against the body).
-  swordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
-  // Independent (Stage 3/5) Sword Weave — aimed crescent swipe, drawn on top
-  // of the player and above the legacy sword for the same reason.
-  newSwordWeaveRenderer.render(ctx, snapshot, ox, oy, zoom);
-  // Independent (Stage 3/5) Bow Weave trajectory preview — thin fading line,
-  // visible through the whole held gesture (Sword + Shield phases included).
-  bowTrajectoryPreviewRenderer.render(ctx, snapshot, world, ox, oy, zoom);
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_ENTITIES);
 
   // ── Bloom glow pass (skipped entirely on low quality) ────────────────────

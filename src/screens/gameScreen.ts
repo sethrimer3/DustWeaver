@@ -19,9 +19,6 @@ import { CrumbleDebrisRenderer } from '../render/crumbleDebrisRenderer';
 import { CrackedBlockShatterRenderer } from '../render/crackedBlockShatterRenderer';
 import { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
-import { SwordWeaveRenderer } from '../render/effects/swordWeaveRenderer';
-import { NewSwordWeaveRenderer } from '../render/effects/newSwordWeaveRenderer';
-import { BowTrajectoryPreviewRenderer } from '../render/effects/bowTrajectoryPreviewRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
 import { createInputState, attachInputListeners, clearAllTriggeredInputFlags } from '../input/handler';
@@ -372,10 +369,6 @@ export function startGameScreen(
     // Run all phases synchronously (for initial load / save-load paths).
     let result = gen.next();
     while (!result.done) result = gen.next();
-    // Reset render-local Sword/Bow smoothing state so a stale interpolation
-    // value from the previous room can never bleed a frame into this one.
-    newSwordWeaveRenderer.reset();
-    bowTrajectoryPreviewRenderer.reset();
     dustContainerPickupEffect.reset();
     playerDeathDust.reset();
   }
@@ -475,9 +468,6 @@ export function startGameScreen(
   const momentumTrail = new MomentumTrail();
   const stormweaveLifeMotes = new StormweaveLifeMotes();
   const decorationWaveState = new DecorationWaveState();
-  const swordWeaveRenderer = new SwordWeaveRenderer();
-  const newSwordWeaveRenderer = new NewSwordWeaveRenderer();
-  const bowTrajectoryPreviewRenderer = new BowTrajectoryPreviewRenderer();
   const fallingBlockDust = new FallingBlockDustRenderer();
   const dustContainerPickupEffect = new DustContainerPickupEffect();
   const playerDeathDust = new PlayerDeathDustEffect();
@@ -1926,8 +1916,7 @@ export function startGameScreen(
     const renderFrameArgs = {
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
-      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState, swordWeaveRenderer,
-      newSwordWeaveRenderer, bowTrajectoryPreviewRenderer,
+      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,

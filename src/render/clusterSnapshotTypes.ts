@@ -87,6 +87,7 @@ export interface ClusterSnapshot {
   readonly isCrimsonWizardFlag: 0 | 1;
   readonly crimsonWizardState: number;
   readonly crimsonWizardStateTicks: number;
+  readonly crimsonWizardFireCircleTicks: number;
   readonly crimsonWizardFacingX: number;
   readonly crimsonWizardTelegraphTicks: number;
   /** 1 if this cluster is The Herald boss. */

@@ -167,35 +167,6 @@ export function checkShieldLiquidSurfaceContact(
     }
   }
 
-  // ── Swept fallback: catch fast-moving player whose shield tunnels between ticks
-  // If the arc wasn't found in its current position but the player's bottom
-  // crossed zoneTop this tick (from above), treat the footprint center as the
-  // contact point. This handles high-speed entry without a special physics step.
-  if (!found) {
-    // Estimate previous bottom position by reversing the downward component:
-    // prevBottom = playerBottomYWorld - velocityYWorld * dtSec. But since we
-    // don't have dtSec here, we use a practical proxy: if the current bottom is
-    // below zoneTop and the center of the shield is within one radius of zoneTop
-    // we count it as a crossing. The shield radius is always at least the player
-    // half-height + SHIELD_EXTRA_DIAMETER_WORLD / 2, so if the arc center is
-    // above zoneTop and the bottom of the player is at or below zoneTop, the arc
-    // must have passed through the surface band.
-    const arcCenterY = geometry.centerYWorld;
-    const arcRadius = geometry.radiusWorld;
-    const arcBottom = arcCenterY + arcRadius;
-
-    if (
-      playerBottomYWorld >= zoneTop &&
-      arcBottom >= yMin &&
-      arcCenterY <= zoneTop + arcRadius &&
-      playerXWorld >= segLeft &&
-      playerXWorld <= segRight
-    ) {
-      contactXWorld = Math.max(segLeft, Math.min(segRight, playerXWorld));
-      found = true;
-    }
-  }
-
   if (!found) return null;
 
   return {
@@ -234,49 +205,28 @@ export function computeShieldLiquidSkipVelocity(incomingVelocityXWorld: number):
 }
 
 /**
- * Returns true if the player is currently in contact with any liquid surface
- * through the shield (used for latch state tracking — see the caller in
- * hazards.ts). Checks the same geometry conditions as checkShieldLiquidSurfaceContact
- * but returns only a boolean so the latch-reset logic can be efficient.
+ * Returns true if the player's AABB footprint overlaps the given liquid zone's
+ * AABB at all (used for latch-separation — the latch stays set while the player
+ * remains anywhere in the zone AABB, and clears once the player escapes).
  *
- * This is used to reset the latch ONLY when the shield is definitively
- * separated from the liquid surface, enabling re-triggering on the next approach.
+ * Using AABB overlap (not arc proximity) avoids the false-positive separation
+ * that would occur when the arc is submerged past the surface band but the
+ * player hasn't yet physically left the zone.
  */
-export function isShieldTouchingLiquidSurface(
-  geometry: ShieldArcGeometry,
+export function isPlayerOverlappingLiquidZoneAabb(
+  playerXWorld: number,
+  playerHalfWidthWorld: number,
+  playerYWorld: number,
+  playerHalfHeightWorld: number,
   zoneLeft: number,
   zoneTop: number,
   zoneRight: number,
-  playerXWorld: number,
-  playerHalfWidthWorld: number,
+  zoneBottom: number,
 ): boolean {
-  if (!geometry.isActive || geometry.moteCount < 1) return false;
-
-  const playerLeft = playerXWorld - playerHalfWidthWorld;
-  const playerRight = playerXWorld + playerHalfWidthWorld;
-  if (playerRight <= zoneLeft || playerLeft >= zoneRight) return false;
-
-  const segLeft = Math.max(zoneLeft, playerLeft);
-  const segRight = Math.min(zoneRight, playerRight);
-  if (segLeft >= segRight) return false;
-
-  const thickness = SHIELD_COLLISION_HALF_THICKNESS_WORLD;
-  const yMin = zoneTop - thickness;
-  const yMax = zoneTop + thickness;
-
-  const sampleCount = Math.max(2, Math.ceil(geometry.arcLengthWorld) + 1);
-  const startAngle = geometry.isFullCircle
-    ? geometry.directionAngleRad
-    : geometry.directionAngleRad - geometry.angularSpanRad * 0.5;
-  const step = geometry.isFullCircle
-    ? (Math.PI * 2) / sampleCount
-    : geometry.angularSpanRad / (sampleCount - 1);
-
-  for (let i = 0; i < sampleCount; i++) {
-    const angle = startAngle + step * i;
-    const ax = geometry.centerXWorld + Math.cos(angle) * geometry.radiusWorld;
-    const ay = geometry.centerYWorld + Math.sin(angle) * geometry.radiusWorld;
-    if (ay >= yMin && ay <= yMax && ax >= segLeft && ax <= segRight) return true;
-  }
-  return false;
+  return (
+    playerXWorld + playerHalfWidthWorld > zoneLeft &&
+    playerXWorld - playerHalfWidthWorld < zoneRight &&
+    playerYWorld + playerHalfHeightWorld > zoneTop &&
+    playerYWorld - playerHalfHeightWorld < zoneBottom
+  );
 }

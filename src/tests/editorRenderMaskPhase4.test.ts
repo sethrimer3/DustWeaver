@@ -145,7 +145,6 @@ function makeParticles(kind: ParticleKind, disturbanceFactor: number) {
     lifetimeTicks: Float32Array.from([100]),
     disturbanceFactor: Float32Array.from([disturbanceFactor]),
     behaviorMode: Uint8Array.from([0]),
-    particleMoteSlotState: Uint8Array.from([0]),
   } as unknown as import('../render/snapshot').WorldSnapshot['particles'];
 }
 

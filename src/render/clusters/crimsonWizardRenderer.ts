@@ -15,11 +15,17 @@ import {
   getCrimsonWizardSpriteFrame,
 } from '../../sim/clusters/crimsonWizardAnimation';
 import { loadImg, isSpriteReady } from '../imageCache';
+import {
+  CW_FIRE_CIRCLE_FRAME_COUNT,
+  getCrimsonWizardFireCircleFrame,
+} from '../../sim/clusters/crimsonWizardFireCircleAnimation';
 
 const FIRE_COLORS = ['#ffb02e', '#ff6a1a', '#ff3b12', '#b11226', '#6f1018'];
 
 const CW_SPRITE_DIR = 'SPRITES/ENEMIES/BOSSES/CrimsonWizard';
+const CW_FIRE_CIRCLE_ATLAS_URL = 'ANIMATIONS/FireCircle/spritesheet.png';
 const _cwIdleSprite = loadImg(`${CW_SPRITE_DIR}/CrimsonWizard_Idle.png`);
+const _cwFireCircleAtlas = loadImg(CW_FIRE_CIRCLE_ATLAS_URL);
 const _cwAttackSprites: readonly HTMLImageElement[] = [1, 2, 3, 4, 5, 6].map((n) =>
   loadImg(`${CW_SPRITE_DIR}/CrimsonWizard_Attacking_Frame_${n}.png`),
 );
@@ -32,6 +38,40 @@ function selectCrimsonWizardSprite(cluster: ClusterSnapshot): HTMLImageElement |
   if (frame.kind === CW_SPRITE_ATTACK) return _cwAttackSprites[frame.frameIndex - 1] ?? null;
   if (frame.kind === CW_SPRITE_ATTACK_ABOVE) return _cwAttackAboveSprites[frame.frameIndex - 1] ?? null;
   return _cwIdleSprite;
+}
+
+export function renderCrimsonWizardFireCircle(
+  ctx: CanvasRenderingContext2D,
+  screenX: number,
+  screenY: number,
+  cluster: ClusterSnapshot,
+  scalePx: number,
+): void {
+  const animation = getCrimsonWizardFireCircleFrame(cluster.crimsonWizardFireCircleTicks);
+  if (animation === null || animation.opacity <= 0 || !isSpriteReady(_cwFireCircleAtlas)) return;
+
+  const frameWidthPx = _cwFireCircleAtlas.naturalWidth / CW_FIRE_CIRCLE_FRAME_COUNT;
+  const frameHeightPx = _cwFireCircleAtlas.naturalHeight;
+  if (!Number.isInteger(frameWidthPx) || frameWidthPx !== frameHeightPx) return;
+
+  // The wizard occupies a 32x32-world-unit square. The circle is exactly 200%
+  // of that rendered size and remains centered behind the wizard.
+  const sizePx = cluster.halfWidthWorld * 4 * scalePx;
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.globalAlpha = animation.opacity;
+  ctx.drawImage(
+    _cwFireCircleAtlas,
+    animation.frameIndex * frameWidthPx,
+    0,
+    frameWidthPx,
+    frameHeightPx,
+    Math.round(screenX - sizePx * 0.5),
+    Math.round(screenY - sizePx * 0.5),
+    Math.round(sizePx),
+    Math.round(sizePx),
+  );
+  ctx.restore();
 }
 
 export function renderCrimsonWizardBody(

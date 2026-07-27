@@ -7,7 +7,6 @@ import {
 } from '../levels/roomDef';
 import { FAST_MAX_FALL_WORLD_PER_SEC, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC } from '../sim/clusters/movementConstants';
 import { GRAPPLE_ZIP_SPEED_WORLD_PER_SEC } from '../sim/clusters/grappleZip';
-import { SWORD_STATE_GUARD_SLASHING, SWORD_STATE_SLASHING } from '../sim/weaves/swordWeave';
 import type { CrackedBlockShatterRenderer } from '../render/crackedBlockShatterRenderer';
 
 const GROUND_PROBE_WORLD = 1.25;
@@ -23,7 +22,6 @@ export interface PlayerSfxState {
   wasGroundedFlag: 0 | 1;
   wasGrappleActiveFlag: 0 | 1;
   wasGrappleZipActiveFlag: 0 | 1;
-  previousSwordStateEnum: number;
   previousVelocityYWorld: number;
   previousWallJumpCountSinceReset: number;
   stepTicksUntilNext: number;
@@ -34,7 +32,6 @@ export function createPlayerSfxState(): PlayerSfxState {
     wasGroundedFlag: 0,
     wasGrappleActiveFlag: 0,
     wasGrappleZipActiveFlag: 0,
-    previousSwordStateEnum: 0,
     previousVelocityYWorld: 0,
     previousWallJumpCountSinceReset: 0,
     stepTicksUntilNext: 0,
@@ -99,10 +96,6 @@ function impactVolume(previousVelocityYWorld: number): number {
   return 0.45 + t * 0.75;
 }
 
-function isSwordSlashState(stateEnum: number): boolean {
-  return stateEnum === SWORD_STATE_SLASHING || stateEnum === SWORD_STATE_GUARD_SLASHING;
-}
-
 export function updatePlayerSfx(
   sfx: PlayerSfxManager,
   state: PlayerSfxState,
@@ -129,9 +122,6 @@ export function updatePlayerSfx(
   }
   if (state.wasGrappleZipActiveFlag === 0 && world.isGrappleZipActiveFlag === 1) {
     sfx.play('grapple_zip', 0.9);
-  }
-  if (!isSwordSlashState(state.previousSwordStateEnum) && isSwordSlashState(world.swordWeaveStateEnum)) {
-    sfx.play('quickWhoosh', 0.85);
   }
 
   if (state.wasGroundedFlag === 0 && isGrounded === 1) {
@@ -177,7 +167,6 @@ export function updatePlayerSfx(
   state.wasGroundedFlag = isGrounded;
   state.wasGrappleActiveFlag = world.isGrappleActiveFlag;
   state.wasGrappleZipActiveFlag = world.isGrappleZipActiveFlag;
-  state.previousSwordStateEnum = world.swordWeaveStateEnum;
   state.previousVelocityYWorld = player.velocityYWorld;
   state.previousWallJumpCountSinceReset = player.wallJumpCountSinceReset;
 }

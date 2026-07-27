@@ -70,6 +70,7 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       isCrimsonWizardFlag:              c.isCrimsonWizardFlag,
       crimsonWizardState:               c.crimsonWizardState,
       crimsonWizardStateTicks:          c.crimsonWizardStateTicks,
+      crimsonWizardFireCircleTicks:     c.crimsonWizardFireCircleTicks,
       crimsonWizardFacingX:             c.crimsonWizardFacingX,
       crimsonWizardTelegraphTicks:      c.crimsonWizardTelegraphTicks,
       isHeraldFlag:                     c.isHeraldFlag,
@@ -258,14 +259,6 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
       behaviorMode:      world.behaviorMode,
-      particleMoteSlotState: (() => {
-        const arr = new Uint8Array(MAX_PARTICLES);
-        for (let s = 0; s < world.moteSlotCount; s++) {
-          const pidx = world.moteSlotParticleIndex[s];
-          if (pidx >= 0 && world.moteSlotState[s] !== 0) arr[pidx] = 1;
-        }
-        return arr;
-      })(),
       noiseTickSeed:     world.noiseTickSeed,
       particleCount:     world.particleCount,
     },
@@ -360,45 +353,8 @@ export function createSnapshot(world: WorldState): WorldSnapshot {
     beeSwarmBeeVelYWorld:      world.beeSwarmBeeVelYWorld,
     playerWeaveAimDirXWorld:    world.playerWeaveAimDirXWorld,
     playerWeaveAimDirYWorld:    world.playerWeaveAimDirYWorld,
-    // Shield Sword Weave
-    playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
-    swordWeaveStateEnum:           world.swordWeaveStateEnum,
-    swordWeaveStateTicksElapsed:   world.swordWeaveStateTicksElapsed,
-    swordWeaveAngleRad:            world.swordWeaveAngleRad,
-    swordWeaveSlashStartAngleRad:  world.swordWeaveSlashStartAngleRad,
-    swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
-    swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
-    swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
-    swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
-    // Independent Sword/Shield/Bow Weaves (Stage 3/5)
-    currentWeaveDustKind:          (() => {
-      if (world.selectedDustKind !== 0 || world.moteSlotCount === 0) return world.selectedDustKind;
-      for (let s = 0; s < world.moteSlotCount; s++) {
-        if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) return world.moteSlotKind[s];
-      }
-      return 0;
-    })(),
-    hasSwordWeaveUnlockedFlag:     world.hasSwordWeaveUnlockedFlag,
-    hasShieldWeaveUnlockedFlag:    world.hasShieldWeaveUnlockedFlag,
-    hasBowWeaveUnlockedFlag:       world.hasBowWeaveUnlockedFlag,
-    secondaryWeaveGesturePhase:        world.secondaryWeaveGesture.phase,
-    secondaryWeaveGestureHoldAimXWorld: world.secondaryWeaveGesture.holdAimXWorld,
-    secondaryWeaveGestureHoldAimYWorld: world.secondaryWeaveGesture.holdAimYWorld,
-    newSwordActiveFlag:            world.newSwordActiveFlag,
-    newSwordCurrentAngleRad:       world.newSwordCurrentAngleRad,
-    newSwordHandAnchorXWorld:      world.newSwordHandAnchorXWorld,
-    newSwordHandAnchorYWorld:      world.newSwordHandAnchorYWorld,
-    newSwordReachWorld:            world.newSwordReachWorld,
-    newSwordTicksElapsed:          world.newSwordTicksElapsed,
-    newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
-    bowArrowPhase:                 world.bowArrowPhase,
-    bowArrowCount:                 world.bowArrowCount,
-    bowArrowDirXWorld:             world.bowArrowDirXWorld,
-    bowArrowDirYWorld:             world.bowArrowDirYWorld,
-    shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
-    // Ordered Mote Queue display
-    moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
-    isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
+    // Grapple display
+    grappleDisplayRadiusWorld: world.grappleDisplayRadiusWorld,
     grappleTensionFactor:          world.grappleTensionFactor,
     // Phase 2: geometric grapple wrapping
     isGrappleWrappingEnabled:      world.isGrappleWrappingEnabled,

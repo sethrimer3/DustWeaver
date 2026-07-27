@@ -37,7 +37,7 @@ import { rechargeGrappleCharge } from './clusters/grappleShared';
 import {
   checkShieldLiquidSurfaceContact,
   computeShieldLiquidSkipVelocity,
-  isShieldTouchingLiquidSurface,
+  isPlayerOverlappingLiquidZoneAabb,
   SHIELD_LIQUID_SKIP_MIN_SPEED_X,
 } from './stormweave/shieldLiquidSurface';
 import { recordShieldImpact } from './stormweave/shieldWeave';
@@ -568,11 +568,15 @@ export function applyHazards(world: WorldState): void {
       world.shieldLiquidContactLatchKind === 1 &&
       world.shieldLiquidContactLatchZoneIndex === wzi
     ) {
-      const stillTouching = shieldIsActive && isShieldTouchingLiquidSurface(
-        world.shieldWeave, wLeft, wTop, wRight,
+      // Latch clears when the player's AABB no longer overlaps the zone at all
+      // (player has escaped). Using AABB overlap (not arc-band proximity) avoids
+      // false-separation when the arc is submerged past the surface band.
+      const stillInZone = isPlayerOverlappingLiquidZoneAabb(
         player.positionXWorld, player.halfWidthWorld,
+        player.positionYWorld, player.halfHeightWorld,
+        wLeft, wTop, wRight, wTop + world.waterZoneHWorld[wzi],
       );
-      if (!stillTouching) {
+      if (!stillInZone) {
         world.shieldLiquidContactLatchFlag = 0;
         world.shieldLiquidContactLatchZoneIndex = -1;
         world.shieldLiquidContactLatchKind = 0;
@@ -590,13 +594,28 @@ export function applyHazards(world: WorldState): void {
         world.shieldLiquidContactLatchKind === 1 &&
         world.shieldLiquidContactLatchZoneIndex === wzi)
     ) {
-      const contact = checkShieldLiquidSurfaceContact(
+      // When the arc doesn't directly sample the surface band but the player
+      // entered through the top this tick (high-speed tunnel), also attempt.
+      // This ensures the skip fires even when the player crossed the surface
+      // in a single frame without the arc sitting in the ±2px surface band.
+      let contact = checkShieldLiquidSurfaceContact(
         world.shieldWeave,
         wLeft, wTop, wRight,
         player.positionXWorld, player.halfWidthWorld, playerBottom,
         entryVelocityYWorld,
         'water', wzi,
       );
+      // Swept-entry fallback: if enteredThroughTop and arc didn't detect
+      if (contact === null && enteredThroughTop) {
+        contact = {
+          xWorld: player.positionXWorld,
+          yWorld: wTop,
+          normalX: 0,
+          normalY: -1,
+          liquidKind: 'water',
+          zoneIndex: wzi,
+        };
+      }
       if (contact !== null) {
         // Apply the shield-liquid skip velocity using the pre-friction incoming vx.
         const skipVel = computeShieldLiquidSkipVelocity(entryVelocityXWorld);
@@ -690,17 +709,19 @@ export function applyHazards(world: WorldState): void {
       world.shieldLiquidContactLatchKind === 2
     ) {
       const lzi = world.shieldLiquidContactLatchZoneIndex;
-      let stillTouching = false;
-      if (shieldIsActive && lzi >= 0 && lzi < world.lavaZoneCount) {
+      let stillInZone = false;
+      if (lzi >= 0 && lzi < world.lavaZoneCount) {
         const lLeft = world.lavaZoneXWorld[lzi];
         const lTop = world.lavaZoneYWorld[lzi];
         const lRight = lLeft + world.lavaZoneWWorld[lzi];
-        stillTouching = isShieldTouchingLiquidSurface(
-          world.shieldWeave, lLeft, lTop, lRight,
+        const lBottom = lTop + world.lavaZoneHWorld[lzi];
+        stillInZone = isPlayerOverlappingLiquidZoneAabb(
           player.positionXWorld, player.halfWidthWorld,
+          player.positionYWorld, player.halfHeightWorld,
+          lLeft, lTop, lRight, lBottom,
         );
       }
-      if (!stillTouching) {
+      if (!stillInZone) {
         world.shieldLiquidContactLatchFlag = 0;
         world.shieldLiquidContactLatchZoneIndex = -1;
         world.shieldLiquidContactLatchKind = 0;
@@ -731,13 +752,36 @@ export function applyHazards(world: WorldState): void {
         const playerBottom = player.positionYWorld + player.halfHeightWorld;
         // Capture incoming vx before any modification.
         const incomingVx = player.velocityXWorld;
-        const contact = checkShieldLiquidSurfaceContact(
+        // Primary: arc-band contact check
+        let contact = checkShieldLiquidSurfaceContact(
           world.shieldWeave,
           lLeft, lTop, lRight,
           player.positionXWorld, player.halfWidthWorld, playerBottom,
           player.velocityYWorld,
           'lava', i,
         );
+        // Swept fallback: if the arc didn't directly sample the surface band but
+        // the player just entered from above AND the shield is aimed in the
+        // downward semicircle (sin(directionAngle) > 0, i.e. the crescent faces
+        // downward), treat the player footprint center as the contact point.
+        // Shields aimed sideways (sin ≈ 0) or upward (sin < 0) do not qualify.
+        if (contact === null) {
+          const shieldSinDir = Math.sin(world.shieldWeave.directionAngleRad);
+          if (
+            shieldSinDir > 0 &&
+            playerBottom >= lTop &&
+            playerBottom <= lTop + player.halfHeightWorld
+          ) {
+            contact = {
+              xWorld: player.positionXWorld,
+              yWorld: lTop,
+              normalX: 0,
+              normalY: -1,
+              liquidKind: 'lava',
+              zoneIndex: i,
+            };
+          }
+        }
         if (contact !== null) {
           // Apply skip velocity using the pre-friction incoming vx.
           const skipVel = computeShieldLiquidSkipVelocity(incomingVx);

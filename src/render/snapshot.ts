@@ -23,7 +23,7 @@ const MAX_REUSABLE_CLUSTERS = 64;
 interface _ReusableBacking {
   tick: number;
   /** Sub-object whose typed-array fields are refreshed on every room transition via refreshSnapshotWorldArrayRefs(). */
-  readonly particles: { particleCount: number; particleMoteSlotState: Uint8Array };
+  readonly particles: { particleCount: number };
   clusters: _MutableCluster[];
   /** Sub-object whose typed-array fields are refreshed on every room transition via refreshSnapshotWorldArrayRefs(). */
   readonly walls: { count: number };
@@ -125,37 +125,7 @@ interface _ReusableBacking {
   iceSpikeAliveFlag: Uint8Array;
   playerWeaveAimDirXWorld: number;
   playerWeaveAimDirYWorld: number;
-  // Shield Sword Weave scalar fields updated each frame
-  playerSecondaryWeaveId: string;
-  swordWeaveStateEnum: number;
-  swordWeaveStateTicksElapsed: number;
-  swordWeaveAngleRad: number;
-  swordWeaveSlashStartAngleRad: number;
-  swordWeaveSlashEndAngleRad: number;
-  swordWeaveHandAnchorXWorld: number;
-  swordWeaveHandAnchorYWorld: number;
-  swordWeaveLengthRatio: number;
-  currentWeaveDustKind: number;
-  hasSwordWeaveUnlockedFlag: 0 | 1;
-  hasShieldWeaveUnlockedFlag: 0 | 1;
-  hasBowWeaveUnlockedFlag: 0 | 1;
-  secondaryWeaveGesturePhase: number;
-  secondaryWeaveGestureHoldAimXWorld: number;
-  secondaryWeaveGestureHoldAimYWorld: number;
-  newSwordActiveFlag: 0 | 1;
-  newSwordCurrentAngleRad: number;
-  newSwordHandAnchorXWorld: number;
-  newSwordHandAnchorYWorld: number;
-  newSwordReachWorld: number;
-  newSwordTicksElapsed: number;
-  newSwordToShieldTransition01: number;
-  bowArrowPhase: number;
-  bowArrowCount: number;
-  bowArrowDirXWorld: number;
-  bowArrowDirYWorld: number;
-  shieldWeaveIndependentActiveFlag: 0 | 1;
-  moteGrappleDisplayRadiusWorld: number;
-  isMoteSourceOrbitFlag: 0 | 1;
+  grappleDisplayRadiusWorld: number;
   grappleTensionFactor: number;
   isGrappleWrappingEnabled: 0 | 1;
   grappleWrapPointCount: number;
@@ -218,7 +188,6 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
       lifetimeTicks:     world.lifetimeTicks,
       disturbanceFactor: world.disturbanceFactor,
       behaviorMode:      world.behaviorMode,
-      particleMoteSlotState: new Uint8Array(MAX_PARTICLES),
       noiseTickSeed:     world.noiseTickSeed,
       particleCount:     world.particleCount,
     },
@@ -426,39 +395,8 @@ export function createReusableSnapshot(world: WorldState): ReusableWorldSnapshot
     isDwaNailAliveFlag:          world.isDwaNailAliveFlag,
     playerWeaveAimDirXWorld:    world.playerWeaveAimDirXWorld,
     playerWeaveAimDirYWorld:    world.playerWeaveAimDirYWorld,
-    // Shield Sword Weave
-    playerSecondaryWeaveId:        world.playerSecondaryWeaveId,
-    swordWeaveStateEnum:           world.swordWeaveStateEnum,
-    swordWeaveStateTicksElapsed:   world.swordWeaveStateTicksElapsed,
-    swordWeaveAngleRad:            world.swordWeaveAngleRad,
-    swordWeaveSlashStartAngleRad:  world.swordWeaveSlashStartAngleRad,
-    swordWeaveSlashEndAngleRad:    world.swordWeaveSlashEndAngleRad,
-    swordWeaveHandAnchorXWorld:    world.swordWeaveHandAnchorXWorld,
-    swordWeaveHandAnchorYWorld:    world.swordWeaveHandAnchorYWorld,
-    swordWeaveLengthRatio:         world.swordWeaveLengthRatio,
-    // Independent Sword/Shield/Bow Weaves (Stage 3/5)
-    currentWeaveDustKind:          0,
-    hasSwordWeaveUnlockedFlag:     world.hasSwordWeaveUnlockedFlag,
-    hasShieldWeaveUnlockedFlag:    world.hasShieldWeaveUnlockedFlag,
-    hasBowWeaveUnlockedFlag:       world.hasBowWeaveUnlockedFlag,
-    secondaryWeaveGesturePhase:        world.secondaryWeaveGesture.phase,
-    secondaryWeaveGestureHoldAimXWorld: world.secondaryWeaveGesture.holdAimXWorld,
-    secondaryWeaveGestureHoldAimYWorld: world.secondaryWeaveGesture.holdAimYWorld,
-    newSwordActiveFlag:            world.newSwordActiveFlag,
-    newSwordCurrentAngleRad:       world.newSwordCurrentAngleRad,
-    newSwordHandAnchorXWorld:      world.newSwordHandAnchorXWorld,
-    newSwordHandAnchorYWorld:      world.newSwordHandAnchorYWorld,
-    newSwordReachWorld:            world.newSwordReachWorld,
-    newSwordTicksElapsed:          world.newSwordTicksElapsed,
-    newSwordToShieldTransition01:  world.newSwordToShieldTransition01,
-    bowArrowPhase:                 world.bowArrowPhase,
-    bowArrowCount:                 world.bowArrowCount,
-    bowArrowDirXWorld:             world.bowArrowDirXWorld,
-    bowArrowDirYWorld:             world.bowArrowDirYWorld,
-    shieldWeaveIndependentActiveFlag: world.shieldWeaveIndependentActiveFlag,
-    // Ordered Mote Queue display
-    moteGrappleDisplayRadiusWorld: world.moteGrappleDisplayRadiusWorld,
-    isMoteSourceOrbitFlag:         world.isMoteSourceOrbitFlag,
+    // Grapple display
+    grappleDisplayRadiusWorld: world.grappleDisplayRadiusWorld,
     grappleTensionFactor:          world.grappleTensionFactor,
     // Phase 2: geometric grapple wrapping (shared typed-array views)
     isGrappleWrappingEnabled:      world.isGrappleWrappingEnabled,
@@ -512,19 +450,6 @@ export function updateSnapshotInPlace(
   b.tick = world.tick;
   b.particles.particleCount = world.particleCount;
   b.walls.count             = world.wallCount;
-
-  // Populate per-particle mote slot state from the logical mote queue.
-  // O(MAX_MOTE_SLOTS): zero-fill then mark each slot's linked particle.
-  b.particles.particleMoteSlotState.fill(0);
-  const slotCount           = world.moteSlotCount;
-  const moteSlotPIdx        = world.moteSlotParticleIndex;
-  const moteSlotState       = world.moteSlotState;
-  for (let s = 0; s < slotCount; s++) {
-    const pidx = moteSlotPIdx[s];
-    if (pidx >= 0 && moteSlotState[s] !== 0) {
-      b.particles.particleMoteSlotState[pidx] = 1;
-    }
-  }
 
   b.isGrappleActiveFlag       = world.isGrappleActiveFlag;
   b.isGrappleMissActiveFlag   = world.isGrappleMissActiveFlag;
@@ -581,55 +506,8 @@ export function updateSnapshotInPlace(
   b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;
   b.playerWeaveAimDirYWorld    = world.playerWeaveAimDirYWorld;
 
-  // Shield Sword Weave scalar fields
-  b.playerSecondaryWeaveId        = world.playerSecondaryWeaveId;
-  b.swordWeaveStateEnum           = world.swordWeaveStateEnum;
-  b.swordWeaveStateTicksElapsed   = world.swordWeaveStateTicksElapsed;
-  b.swordWeaveAngleRad            = world.swordWeaveAngleRad;
-  b.swordWeaveSlashStartAngleRad  = world.swordWeaveSlashStartAngleRad;
-  b.swordWeaveSlashEndAngleRad    = world.swordWeaveSlashEndAngleRad;
-  b.swordWeaveHandAnchorXWorld    = world.swordWeaveHandAnchorXWorld;
-  b.swordWeaveHandAnchorYWorld    = world.swordWeaveHandAnchorYWorld;
-  b.swordWeaveLengthRatio         = world.swordWeaveLengthRatio;
-
-  // Independent Sword/Shield/Bow Weaves (Stage 3/5) scalar fields
-  b.hasSwordWeaveUnlockedFlag     = world.hasSwordWeaveUnlockedFlag;
-  b.hasShieldWeaveUnlockedFlag    = world.hasShieldWeaveUnlockedFlag;
-  b.hasBowWeaveUnlockedFlag       = world.hasBowWeaveUnlockedFlag;
-  b.secondaryWeaveGesturePhase         = world.secondaryWeaveGesture.phase;
-  b.secondaryWeaveGestureHoldAimXWorld = world.secondaryWeaveGesture.holdAimXWorld;
-  b.secondaryWeaveGestureHoldAimYWorld = world.secondaryWeaveGesture.holdAimYWorld;
-  b.newSwordActiveFlag            = world.newSwordActiveFlag;
-  b.newSwordCurrentAngleRad       = world.newSwordCurrentAngleRad;
-  b.newSwordHandAnchorXWorld      = world.newSwordHandAnchorXWorld;
-  b.newSwordHandAnchorYWorld      = world.newSwordHandAnchorYWorld;
-  b.newSwordReachWorld            = world.newSwordReachWorld;
-  b.newSwordTicksElapsed          = world.newSwordTicksElapsed;
-  b.newSwordToShieldTransition01  = world.newSwordToShieldTransition01;
-  b.bowArrowPhase                 = world.bowArrowPhase;
-  b.bowArrowCount                 = world.bowArrowCount;
-  b.bowArrowDirXWorld             = world.bowArrowDirXWorld;
-  b.bowArrowDirYWorld             = world.bowArrowDirYWorld;
-  b.shieldWeaveIndependentActiveFlag = world.shieldWeaveIndependentActiveFlag;
-  // First available ordered-mote-queue slot's dust kind — same source used by
-  // fireNewBow() to capture arrowDustKind, so sword/shield/bow-preview theming
-  // matches whatever dust will actually be spent.
-  {
-    let dustKind = world.selectedDustKind;
-    if (dustKind === 0 && world.moteSlotCount > 0) {
-      for (let s = 0; s < world.moteSlotCount; s++) {
-        if (world.moteSlotState[s] === 0 /* MOTE_STATE_AVAILABLE */) {
-          dustKind = world.moteSlotKind[s];
-          break;
-        }
-      }
-    }
-    b.currentWeaveDustKind = dustKind;
-  }
-
-  // Ordered Mote Queue display
-  b.moteGrappleDisplayRadiusWorld = world.moteGrappleDisplayRadiusWorld;
-  b.isMoteSourceOrbitFlag         = world.isMoteSourceOrbitFlag;
+  // Grapple display
+  b.grappleDisplayRadiusWorld = world.grappleDisplayRadiusWorld;
   b.grappleTensionFactor          = world.grappleTensionFactor;
   // Phase 2: geometric wrapping (typed-array fields are shared views — no copy needed)
   b.isGrappleWrappingEnabled      = world.isGrappleWrappingEnabled;

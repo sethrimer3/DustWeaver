@@ -39,15 +39,6 @@ export interface ParticleSnapshot {
    */
   readonly behaviorMode:      Uint8Array;
   /**
-   * Per-particle mote slot state: 0 = available (normal render), 1 = depleted.
-   * Non-zero for player mote particles whose logical slot is currently depleted.
-   * Zero for all non-mote and non-player particles.
-   * Renderers apply a reduced alpha (0.25×) to depleted-slot particles as a
-   * "spent" visual cue.  Populated each frame by scanning world.moteSlotParticleIndex
-   * and world.moteSlotState — O(MAX_MOTE_SLOTS) per frame.
-   */
-  readonly particleMoteSlotState: Uint8Array;
-  /**
    * Per-particle noise seed (Uint32) — stable throughout each particle's
    * lifetime and reset on respawn.  Used by the Pixel-Locked Prismatic Dust
    * renderer as a stable per-particle colour-tone identifier so all particles
@@ -395,67 +386,12 @@ export interface WorldSnapshot {
   /** Current aim direction Y (world units, normalized) — for weave placement. */
   readonly playerWeaveAimDirYWorld: number;
 
-  // ── Shield Sword Weave state ─────────────────────────────────────────────
-  /** ID of the equipped secondary weave (e.g. 'arrow', 'shield_sword'). */
-  readonly playerSecondaryWeaveId: string;
-  /** Current sword state — see SWORD_STATE_* in sim/weaves/swordWeave.ts. */
-  readonly swordWeaveStateEnum: number;
-  /** Ticks elapsed in the current sword state. */
-  readonly swordWeaveStateTicksElapsed: number;
-  /** Current sword angle (radians) in world space. */
-  readonly swordWeaveAngleRad: number;
-  /** Slash sweep start angle (radians). */
-  readonly swordWeaveSlashStartAngleRad: number;
-  /** Slash sweep end angle (radians). */
-  readonly swordWeaveSlashEndAngleRad: number;
-  /** World X of the sword's hand anchor. */
-  readonly swordWeaveHandAnchorXWorld: number;
-  /** World Y of the sword's hand anchor. */
-  readonly swordWeaveHandAnchorYWorld: number;
-  /**
-   * Current sword length ratio in [0, 1].
-   * 1.0 = full blade (all motes available).  0 = no motes — sword cannot form.
-   * Used by the renderer to scale the number of blade segments drawn and the
-   * reach of the slash trail tip.
-   */
-  readonly swordWeaveLengthRatio: number;
-
-  // ── Independent Sword/Shield/Bow Weaves (Stage 3/5) ──────────────────────
-  /** Dust kind (ParticleKind) currently at the front of the player's ordered mote queue — used to theme sword/shield/bow visuals. */
-  readonly currentWeaveDustKind: number;
-  readonly hasSwordWeaveUnlockedFlag: 0 | 1;
-  readonly hasShieldWeaveUnlockedFlag: 0 | 1;
-  readonly hasBowWeaveUnlockedFlag: 0 | 1;
-  readonly secondaryWeaveGesturePhase: number;
-  readonly secondaryWeaveGestureHoldAimXWorld: number;
-  readonly secondaryWeaveGestureHoldAimYWorld: number;
-  readonly newSwordActiveFlag: 0 | 1;
-  readonly newSwordCurrentAngleRad: number;
-  readonly newSwordHandAnchorXWorld: number;
-  readonly newSwordHandAnchorYWorld: number;
-  readonly newSwordReachWorld: number;
-  readonly newSwordTicksElapsed: number;
-  readonly newSwordToShieldTransition01: number;
-  readonly bowArrowPhase: number;
-  readonly bowArrowCount: number;
-  readonly bowArrowDirXWorld: number;
-  readonly bowArrowDirYWorld: number;
-  readonly shieldWeaveIndependentActiveFlag: 0 | 1;
-
-  // ── Ordered Mote Queue display ────────────────────────────────────────────
+  // ── Grapple influence display ─────────────────────────────────────────────
   /**
    * Smoothed grapple influence circle radius (world units).
    * Lerps toward the effective grapple range each tick.
-   * Used by grappleInfluenceRenderer to scale the influence circle so it
-   * visually shrinks and grows as motes are depleted and regenerated.
    */
-  readonly moteGrappleDisplayRadiusWorld: number;
-  /**
-   * Phase 8: 1 when the player's primary weave is Storm (motes orbit passively).
-   * 0 when Storm is not the primary weave (motes come from inventory space).
-   * Used by renderers to choose between orbit-fly and center-pop visual styles.
-   */
-  readonly isMoteSourceOrbitFlag: 0 | 1;
+  readonly grappleDisplayRadiusWorld: number;
   /**
    * Phase 9: Grapple rope tension factor in [0, 1].
    * 0 = rope within effective range, no tension.

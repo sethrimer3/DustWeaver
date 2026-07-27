@@ -275,20 +275,25 @@ describe('checkShieldLiquidSurfaceContact geometry', () => {
     assert.strictEqual(result, null, 'strongly upward velocity means moving away');
   });
 
-  test('12. swept fallback: high-speed entry still detects contact even if arc is below surface', () => {
-    // Player at y=120 (bottom at 125), well inside the water, moving fast down.
-    // The arc center is at 120, radius 14, so arc bottom is at 134 — inside water.
-    // The swept check should still recognize this as having crossed the top surface.
-    const shield = makeDownShieldAt(100, 120, 4);
-    const result = checkShieldLiquidSurfaceContact(
-      shield, 80, 100, 120,
-      100, PLAYER_HALF_WIDTH_WORLD,
-      120 + PLAYER_HALF_HEIGHT_WORLD, // bottom = 125
-      50, // vy > 0
-      'water', 0,
-    );
-    // Should detect via swept fallback since arc center (120) > zoneTop (100) - radius (14) = 86
-    assert.ok(result !== null, 'swept fallback should detect high-speed entry');
+  test('12. swept fallback via applyHazards: high-speed entry triggers shield skip even when player is submerged', () => {
+    // Player at y=91 (bottom=101), water top at 100. Player is 1px into the water
+    // with high downward velocity. Shield is downward. enteredThroughTop should be
+    // true (was outside last tick), triggering the swept fallback in applyHazards.
+    const world = createWaterWorld(91);
+    computePlayerWaterState(world);       // first compute: not in water (bottom=101, just entered)
+    world.isPlayerWasInWaterLastTickFlag = 0; // was NOT in water last tick
+    const player = world.clusters[0];
+    player.velocityXWorld = 50;
+    player.velocityYWorld = 200; // fast downward
+
+    activateShieldDown(world, 4);
+
+    applyHazards(world);
+
+    // The shield skip should fire via enteredThroughTop + swept fallback
+    assert.ok(world.playerWaterSkipEventSequence > 0, 'swept fallback should detect high-speed entry via applyHazards');
+    assert.strictEqual(player.velocityXWorld, 40);
+    assert.strictEqual(player.velocityYWorld, -25);
   });
 });
 
@@ -425,9 +430,11 @@ describe('shield water surfing via applyHazards', () => {
     assert.ok(seqAfterFirst > 0, 'first contact should emit skip event');
 
     // Second tick (simulate staying in same position — persistent overlap):
-    // Shield should be latched; no additional skip.
+    // Must call computePlayerWaterState to restore isPlayerInWaterFlag (the skip
+    // cleared it, but the player is still overlapping the zone).
     player.velocityXWorld = 50;
     player.velocityYWorld = 30;
+    computePlayerWaterState(world);  // re-detect water (player still overlapping)
     applyHazards(world);
     const seqAfterSecond = world.playerWaterSkipEventSequence;
     // The skip event sequence should NOT have advanced again.

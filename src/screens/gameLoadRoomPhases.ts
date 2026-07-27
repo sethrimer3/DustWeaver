@@ -64,9 +64,7 @@ import {
   type PlayerWeaveLoadout,
   sanitizePlayerWeaveLoadoutForProgress,
 } from '../sim/weaves/playerLoadout';
-import { WEAVE_NONE, WEAVE_STORM } from '../sim/weaves/weaveDefinition';
-import { hasSwordWeave, hasShieldWeave, hasBowWeave } from '../progression/weaveMigration';
-import { resetSecondaryWeaveCoordinatorState } from '../sim/weaves/secondaryWeaveCoordinator';
+import { resetGrappleDisplayRadius } from '../sim/clusters/grapple';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
@@ -94,9 +92,7 @@ import {
   captureClusterInterpolationState,
 } from './gameInterpolationBuffers';
 import type { GameInterpolationBuffers } from './gameInterpolationBuffers';
-import { buildRoomDecorations } from '../render/effects/wallDecorations';
-import type { WallDecoration } from '../render/effects/wallDecorations';
-import { resetSwordWeaveState } from '../sim/weaves/swordWeave';
+import { buildRoomDecorations, type WallDecoration } from '../render/effects/wallDecorations';
 import type { DialogueState } from '../dialogue/dialogueState';
 import type { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { prepareRoomDialogueVisitState } from './gameDialogueHandler';
@@ -391,14 +387,7 @@ function applyPlayerWeaveWorldFields(
   world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
   world.isMoteSourceOrbitFlag          = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
   world.characterId                    = ctx.progress?.characterId ?? 'knight';
-
-  // Stage 3: independent Sword/Shield/Bow unlock flags, read directly from
-  // progression rather than the single equipped secondary-weave slot above —
-  // all three may be simultaneously usable regardless of what is equipped.
-  world.hasSwordWeaveUnlockedFlag  = ctx.progress !== undefined && hasSwordWeave(ctx.progress) ? 1 : 0;
-  world.hasShieldWeaveUnlockedFlag = ctx.progress !== undefined && hasShieldWeave(ctx.progress) ? 1 : 0;
-  world.hasBowWeaveUnlockedFlag    = ctx.progress !== undefined && hasBowWeave(ctx.progress) ? 1 : 0;
-  resetSecondaryWeaveCoordinatorState(world);
+  resetGrappleDisplayRadius(world);
 }
 
 /** Camera / spawn inputs for `applyRoomEnvironmentAndScheduling`. */
@@ -673,7 +662,6 @@ export function* makeLoadRoomPhases(
     }
 
     applyPlayerWeaveWorldFields(ctx, world, effectiveWeaveLoadout);
-    resetSwordWeaveState(world);
     FP.recordLoadPhaseStep('B:playerParticles+moteQueue', import.meta.env.DEV ? performance.now() - _t0 : 0);
 
     if (import.meta.env.DEV) {
@@ -1017,7 +1005,6 @@ export function applyResidentRoomActivation(
     // the player's reserved grapple-chain slots. Allocate them after restoring
     // player dust, matching the normal Phase D room-load lifecycle.
     initGrappleChainParticles(world, playerCluster.entityId);
-    resetSwordWeaveState(world);
   }
 
   // ── Dialogue reset (Phase E equivalent) ──────────────────────────────────

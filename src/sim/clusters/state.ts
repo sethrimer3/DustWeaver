@@ -379,6 +379,8 @@ export interface ClusterState {
   crimsonWizardState: number;
   /** Ticks elapsed in the current Crimson Wizard state. */
   crimsonWizardStateTicks: number;
+  /** Attack-triggered fire-circle animation timer; 0 when inactive. */
+  crimsonWizardFireCircleTicks: number;
   /** Horizontal facing direction, -1 left or 1 right. */
   crimsonWizardFacingX: number;
   /** Boss horizontal velocity (world units/tick). */
@@ -1149,6 +1151,7 @@ export function createClusterState(
     isCrimsonWizardFlag: 0,
     crimsonWizardState: 0,
     crimsonWizardStateTicks: 0,
+    crimsonWizardFireCircleTicks: 0,
     crimsonWizardFacingX: 1,
     crimsonWizardVelXWorld: 0,
     crimsonWizardVelYWorld: 0,
