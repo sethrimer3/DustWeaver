@@ -239,7 +239,7 @@ export function updateInspector(
       typeDiv.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.5); margin-top: 4px;`;
       typeDiv.textContent = `Type: ${typeLabel}`;
       div.appendChild(typeDiv);
-      if (wall.isPlatformFlag !== 1 && wall.isPillarHalfWidthFlag !== 1 && wall.smoothRampOrientation === undefined) {
+      if (wall.isPlatformFlag !== 1) {
         addCheckbox(div, 'Cracked', false,
           v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
       }

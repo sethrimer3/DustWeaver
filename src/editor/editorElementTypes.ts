@@ -288,6 +288,17 @@ export interface EditorCrumbleBlock {
    * 0=rises right, 1=rises left, 2=ceiling (rises right), 3=ceiling (rises left).
    */
   stairsOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Smooth-ramp orientation (0-3). Undefined = not a smooth ramp. Mirrors
+   * `EditorWall.smoothRampOrientation` — identical stepped physics to
+   * `stairsOrientation`, rendered as a smooth diagonal instead of steps.
+   */
+  smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * 1 if this crumble block is a half-width pillar. Mirrors
+   * `EditorWall.isPillarHalfWidthFlag`.
+   */
+  isPillarHalfWidthFlag?: 0 | 1;
   /** Which elemental type this crumble block is weak to. */
   variant: CrumbleVariant;
   /** Per-block theme override. When set, overrides the room-level default. */

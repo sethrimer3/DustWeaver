@@ -479,6 +479,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       hBlock: b.hBlock !== 1 ? b.hBlock : undefined,
       rampOrientation: b.rampOrientation,
       stairsOrientation: b.stairsOrientation,
+      smoothRampOrientation: b.smoothRampOrientation,
+      isPillarHalfWidthFlag: b.isPillarHalfWidthFlag,
       variant: b.variant !== 'normal' ? b.variant : undefined,
       blockTheme: b.blockTheme,
       spikeDirection: b.spikeDirection,

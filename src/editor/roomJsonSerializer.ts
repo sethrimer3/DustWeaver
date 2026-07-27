@@ -381,6 +381,8 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.hBlock !== 1) entry.hBlock = b.hBlock;
       if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
       if (b.stairsOrientation !== undefined) entry.stairsOrientation = b.stairsOrientation;
+      if (b.smoothRampOrientation !== undefined) entry.smoothRampOrientation = b.smoothRampOrientation;
+      if (b.isPillarHalfWidthFlag === 1) entry.isPillarHalfWidthFlag = 1;
       if (b.variant !== 'normal') entry.variant = b.variant;
       if (b.blockTheme !== undefined) {
         entry.blockTheme = b.blockTheme;

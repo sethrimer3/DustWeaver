@@ -330,6 +330,9 @@ export function rotateSelectedElement(state: EditorState): boolean {
     } else if (block.rampOrientation !== undefined) {
       block.rampOrientation = ((block.rampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
       changed = true;
+    } else if (block.smoothRampOrientation !== undefined) {
+      block.smoothRampOrientation = ((block.smoothRampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
     }
     if (block.spikeDirection === undefined && block.wBlock !== block.hBlock) {
       const tmp = block.wBlock;

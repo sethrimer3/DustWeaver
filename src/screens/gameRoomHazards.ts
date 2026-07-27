@@ -38,6 +38,7 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { resolveWallSoundHardnessIndex } from './gameRoomWalls';
+import { wallShapeOrientationIndex } from '../levels/stairsGeometry';
 import { raycastToWallWithNormal } from '../sim/clusters/radiantWebBeams';
 
 /**
@@ -458,9 +459,14 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     let wallIdx = -1;
     if (world.wallCount < MAX_WALLS) {
       wallIdx = world.wallCount++;
+      const isHalfWidthPillar = b.isPillarHalfWidthFlag === 1;
+      // Mirrors gameRoomWalls.ts's half-width-pillar narrowing so a crumble
+      // pillar has the exact same collision footprint as a normal pillar wall.
       world.wallXWorld[wallIdx] = b.xBlock * BLOCK_SIZE_MEDIUM;
       world.wallYWorld[wallIdx] = b.yBlock * BLOCK_SIZE_MEDIUM;
-      world.wallWWorld[wallIdx] = wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallWWorld[wallIdx] = isHalfWidthPillar
+        ? Math.max(BLOCK_SIZE_MEDIUM / 2, wBlocks * (BLOCK_SIZE_MEDIUM / 2))
+        : wBlocks * BLOCK_SIZE_MEDIUM;
       world.wallHWorld[wallIdx] = hBlocks * BLOCK_SIZE_MEDIUM;
       world.wallThemeIndex[wallIdx] = b.blockTheme !== undefined
         ? blockThemeToIndex(b.blockTheme)
@@ -469,8 +475,12 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.wallSoundHardnessIndex[wallIdx] = resolveWallSoundHardnessIndex(room, b.blockTheme);
       world.wallIsInvisibleFlag[wallIdx] = 0;
       world.wallIsPlatformFlag[wallIdx] = 0;
-      world.wallRampOrientationIndex[wallIdx] = 255;
-      world.wallIsPillarHalfWidthFlag[wallIdx] = 0;
+      // Reuse the same shape-orientation packing as normal walls (stairs wins
+      // over smooth ramp wins over legacy ramp wins over plain rect) so the
+      // existing plain/ramp/stairs collision resolvers pick up crumble
+      // stairs/smooth-ramp/ramp shapes automatically — no new collision code.
+      world.wallRampOrientationIndex[wallIdx] = wallShapeOrientationIndex(b);
+      world.wallIsPillarHalfWidthFlag[wallIdx] = isHalfWidthPillar ? 1 : 0;
     }
 
     const ci = world.crumbleBlockCount++;

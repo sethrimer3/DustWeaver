@@ -522,6 +522,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     hBlock: b.hBlock ?? 1,
     rampOrientation: b.rampOrientation,
     stairsOrientation: b.stairsOrientation,
+    smoothRampOrientation: b.smoothRampOrientation,
+    isPillarHalfWidthFlag: b.isPillarHalfWidthFlag,
     variant: b.variant ?? 'normal',
     blockTheme: resolveJsonBlockTheme(b.blockTheme, b.blockThemeId),
     spikeDirection: b.spikeDirection,

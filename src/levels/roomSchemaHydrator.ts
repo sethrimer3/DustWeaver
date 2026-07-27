@@ -605,6 +605,9 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
       if (c.r[3] !== 1) entry.hBlock = c.r[3];
       if (c.v) entry.variant = c.v;
       if (c.ramp !== undefined) entry.rampOrientation = c.ramp;
+      if (c.stairs !== undefined) entry.stairsOrientation = c.stairs;
+      if (c.smoothRamp !== undefined) entry.smoothRampOrientation = c.smoothRamp;
+      if (c.pillar === 1) entry.isPillarHalfWidthFlag = 1;
       if (c.theme) entry.blockThemeId = c.theme;
       if (c.sd !== undefined) {
         entry.spikeDirection = c.sd;

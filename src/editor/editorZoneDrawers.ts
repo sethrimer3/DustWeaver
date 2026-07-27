@@ -249,10 +249,13 @@ export function drawEditorCrumbleBlocks(
       // orientation reads identically to a normal (non-crumble) stairs block.
       const stairsColor = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
       drawStairsShape(ctx, b, offsetXPx, offsetYPx, zoom, stairsColor, sel ? 2 : 1);
-    } else if (b.rampOrientation !== undefined) {
-      // Ramp triangle shape
+    } else if (b.rampOrientation !== undefined || b.smoothRampOrientation !== undefined) {
+      // Ramp/smooth-ramp triangle shape — smooth ramps share the exact same
+      // triangle silhouette as legacy ramps (identical stepped physics,
+      // just rendered smooth in normal-wall rendering too).
+      const ori = b.rampOrientation ?? b.smoothRampOrientation ?? 0;
       ctx.beginPath();
-      switch (b.rampOrientation) {
+      switch (ori) {
         case 0: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx); break;
         case 1: ctx.moveTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx); ctx.lineTo(xPx, yPx); break;
         case 2: ctx.moveTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx); break;
@@ -263,6 +266,17 @@ export function drawEditorCrumbleBlocks(
       ctx.strokeStyle = sel ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
       ctx.lineWidth = sel ? 2 : 1;
       ctx.stroke();
+    } else if (b.isPillarHalfWidthFlag === 1) {
+      // Half-width pillar — narrow rect (half the block's AABB width), plus
+      // a faint outline of the full block extent, mirroring drawHalfPillarRect.
+      const halfW = wPx / 2;
+      ctx.fillRect(xPx, yPx, halfW, hPx);
+      ctx.strokeStyle = sel ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';
+      ctx.lineWidth = sel ? 2 : 1;
+      ctx.strokeRect(xPx, yPx, halfW, hPx);
+      ctx.strokeStyle = 'rgba(200,150,60,0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(xPx, yPx, wPx, hPx);
     } else {
       ctx.fillRect(xPx, yPx, wPx, hPx);
       ctx.strokeStyle = sel ? 'rgba(220,160,50,0.90)' : 'rgba(200,150,60,0.55)';

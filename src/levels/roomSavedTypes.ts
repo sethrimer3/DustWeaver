@@ -239,6 +239,12 @@ export interface SavedCrumble {
   v?: CrumbleVariant;
   /** Ramp orientation 0-3 (omit if not a ramp). */
   ramp?: 0 | 1 | 2 | 3;
+  /** Stairs orientation 0-3 (omit if not stairs). */
+  stairs?: 0 | 1 | 2 | 3;
+  /** Smooth-ramp orientation 0-3 (omit if not a smooth ramp). */
+  smoothRamp?: 0 | 1 | 2 | 3;
+  /** 1 if this crumble block is a half-width pillar (omit if not). */
+  pillar?: 1;
   /** Block theme ID override (omit if using room default). */
   theme?: string;
   /** Spike direction (omit unless this crumble entry is a crumble spike). */

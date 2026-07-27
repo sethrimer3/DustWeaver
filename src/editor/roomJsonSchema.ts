@@ -251,6 +251,13 @@ export interface RoomJsonCrumbleBlock {
    * `stairsOrientation` field so crumble stairs round-trip through JSON.
    */
   stairsOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Smooth-ramp orientation (0-3). Absent = not a smooth ramp. Mirrors the
+   * wall-shape `smoothRampOrientation` field.
+   */
+  smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /** 1 if this crumble block is a half-width pillar. Absent/0 = not a pillar. */
+  isPillarHalfWidthFlag?: 0 | 1;
   /** Elemental weakness variant. Defaults to `'normal'` when absent. */
   variant?: CrumbleVariant;
   /** Per-block theme override (defaults to room-level theme). */

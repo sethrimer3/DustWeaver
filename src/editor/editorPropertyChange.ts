@@ -609,11 +609,12 @@ export function handleCrumbleModifierToggle(
   const selectedElements = state.selectedElements;
   if (roomData === null || selectedElements.length === 0) return false;
 
+  // Platforms are the only shape excluded from crumble support — plain rects,
+  // legacy ramps, stairs, smooth ramps, and half-width pillars can all be
+  // cracked.
   const isEligibleWallForCrumble = (wall: EditorWall | undefined): wall is EditorWall =>
     wall !== undefined &&
-    wall.isPlatformFlag !== 1 &&
-    wall.isPillarHalfWidthFlag !== 1 &&
-    wall.smoothRampOrientation === undefined;
+    wall.isPlatformFlag !== 1;
 
   const convertible = selectedElements.filter(el => {
     if (checked) {
@@ -669,6 +670,8 @@ export function handleCrumbleModifierToggle(
         hBlock: wall.hBlock,
         rampOrientation: wall.rampOrientation,
         stairsOrientation: wall.stairsOrientation,
+        smoothRampOrientation: wall.smoothRampOrientation,
+        isPillarHalfWidthFlag: wall.isPillarHalfWidthFlag,
         variant: 'normal',
         blockTheme: wall.blockTheme,
       };
@@ -705,7 +708,8 @@ export function handleCrumbleModifierToggle(
         blockTheme: block.blockTheme,
         rampOrientation: block.rampOrientation,
         stairsOrientation: block.stairsOrientation,
-        isPillarHalfWidthFlag: 0,
+        smoothRampOrientation: block.smoothRampOrientation,
+        isPillarHalfWidthFlag: block.isPillarHalfWidthFlag ?? 0,
       };
       roomData.interiorWalls.push(wall);
       el.type = 'wall';

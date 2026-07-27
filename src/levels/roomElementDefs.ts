@@ -276,6 +276,19 @@ export interface RoomCrumbleBlockDef {
    * 0=rises right(/), 1=rises left(\), 2=ceiling ramp(⌐), 3=ceiling ramp(¬).
    */
   rampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Stairs orientation (0-3). Undefined or absent = not stairs. Mirrors
+   * `rampOrientation`'s convention.
+   */
+  stairsOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Smooth-ramp orientation (0-3). Undefined or absent = not a smooth ramp.
+   * Identical stepped physics to `stairsOrientation`, rendered as a smooth
+   * diagonal instead of jagged steps.
+   */
+  smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /** 1 if this crumble block is a half-width pillar (4px wide). */
+  isPillarHalfWidthFlag?: 0 | 1;
   /** Which elemental type this crumble block is weak to. Defaults to `'normal'`. */
   variant?: CrumbleVariant;
   /** Per-block theme override. When set, overrides the room-level default. */
