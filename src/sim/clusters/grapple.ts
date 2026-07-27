@@ -71,6 +71,7 @@ import { getElementProfile } from '../particles/elementProfiles';
 import { ClusterState } from './state';
 import {
   GRAPPLE_SEGMENT_COUNT,
+  GRAPPLE_RELEASE_POOL_CAPACITY,
   GRAPPLE_MIN_LENGTH_WORLD,
   GRAPPLE_ATTACH_FX_TICKS,
   BEHAVIOR_MODE_GRAPPLE_CHAIN,
@@ -140,6 +141,41 @@ export function initGrappleChainParticles(world: WorldState, playerEntityId: num
   }
 
   world.grappleParticleStartIndex = startIndex;
+
+  // Dedicated pool for released grapple motes — allocated contiguously after
+  // the active chain slots. Starts fully dead; releaseGrapple() populates
+  // groups of GRAPPLE_SEGMENT_COUNT slots round-robin so overlapping release
+  // bursts from rapid re-grapples never overwrite each other prematurely.
+  const releaseStartIndex = world.particleCount;
+  for (let i = 0; i < GRAPPLE_RELEASE_POOL_CAPACITY; i++) {
+    const idx = world.particleCount++;
+
+    world.positionXWorld[idx]    = 0.0;
+    world.positionYWorld[idx]    = 0.0;
+    world.velocityXWorld[idx]    = 0.0;
+    world.velocityYWorld[idx]    = 0.0;
+    world.forceX[idx]            = 0.0;
+    world.forceY[idx]            = 0.0;
+    world.massKg[idx]            = profile.massKg;
+    world.chargeUnits[idx]       = 0.0;
+    world.isAliveFlag[idx]       = 0;   // inactive until a grapple release fills it
+    world.kindBuffer[idx]        = ParticleKind.Gold;
+    world.ownerEntityId[idx]     = -1;
+    world.anchorAngleRad[idx]    = 0.0;
+    world.anchorRadiusWorld[idx] = 0.0;
+    world.disturbanceFactor[idx] = 0.0;
+    world.ageTicks[idx]          = 0.0;
+    world.lifetimeTicks[idx]     = 0.0;
+    world.noiseTickSeed[idx]     = (0xba11de00 + i) >>> 0;
+    world.behaviorMode[idx]      = 0;
+    world.particleDurability[idx]  = profile.toughness;
+    world.respawnDelayTicks[idx]   = 0;
+    world.attackModeTicksLeft[idx] = 0;
+    world.isTransientFlag[idx]     = 1;  // no respawn — release pool is fully transient
+  }
+  world.grappleReleaseStartIndex = releaseStartIndex;
+  world.grappleReleaseBurstCounter = 0;
+
   resetGrappleDisplayRadius(world);
 }
 
