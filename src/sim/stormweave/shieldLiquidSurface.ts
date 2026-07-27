@@ -104,7 +104,7 @@ export function checkShieldLiquidSurfaceContact(
   zoneRight: number,
   playerXWorld: number,
   playerHalfWidthWorld: number,
-  playerBottomYWorld: number,
+  _playerBottomYWorld: number,
   velocityYWorld: number,
   liquidKind: 'water' | 'lava',
   zoneIndex: number,

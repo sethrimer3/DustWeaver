@@ -8,6 +8,20 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 553 — Remove Legacy Ordered Combat-Mote Queue and Secondary Weave Runtime
+
+**Why:** The game had migrated its primary defensive and offensive mechanics onto the health-derived Stormweave system (`src/sim/stormweave/`), leaving behind obsolete secondary-weave runtimes (`swordWeave`, `bowArrow`, legacy queue-backed `weaves/shieldWeave`, and `orderedMoteQueue`) that were still needlessly consuming input, snapshot, and simulation resources.
+
+**What was done:**
+1. Purged obsolete legacy secondary-weave runtime files (`src/sim/weaves/bowArrow.ts`, `swordWeave.ts`, `secondaryWeaveCoordinator.ts`, legacy `shieldWeave.ts`) and the ordered combat-mote queue (`orderedMoteQueue.ts`, `dustTypeSwitch.ts`).
+2. Preserved canonical Stormweave shield (`src/sim/stormweave/shieldWeave.ts`) and kept its collision adapters, renderers, and input paths intact.
+3. Decoupled world snapshot and rendering systems from `particleMoteSlotState`, replacing legacy weave visual resets with `resetGrappleDisplayRadius` during room transitions.
+4. Preserved existing save file legacy weave identifiers (`shield_sword`, `arrow`, `sword`, `shield`, `storm`, `none`) exclusively within migration routines (`src/progression/playerWeaves.ts` / `src/sim/weaves/playerLoadout.ts`) to ensure existing saves load safely without re-exposing obsolete secondary combat abilities in gameplay.
+
+**Validation:** `npm run build` clean, `npm run lint` clean, `npm test` passes (2,496 passing tests).
+
+---
+
 ## BUILD 549 — Repository Documentation Reorganization
 
 **Why:** A deferred Todo item asked to move most root-level Markdown files under `docs/` into coherent locations without breaking agent workflows, since root had accumulated 16+ ad-hoc planning/decision/archive files alongside the human/agent entry points.

@@ -169,7 +169,7 @@ export class DustSelectionWheelController {
    *                     transformation (if any live motes participate) began.
    */
   selectAtAim(
-    world: WorldState,
+    _world: WorldState,
     progress: PlayerProgress | undefined,
     aimXWorld: number,
     aimYWorld: number,

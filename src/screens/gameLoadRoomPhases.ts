@@ -64,7 +64,8 @@ import {
   type PlayerWeaveLoadout,
   sanitizePlayerWeaveLoadoutForProgress,
 } from '../sim/weaves/playerLoadout';
-import { resetGrappleDisplayRadius } from '../sim/clusters/grapple';
+import { WEAVE_NONE, WEAVE_STORM } from '../sim/weaves/weaveDefinition';
+import { resetGrappleDisplayRadius } from '../sim/clusters/grappleShared';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
 import { initGrappleHunterChainParticles } from '../sim/clusters/grappleHunterAi';
