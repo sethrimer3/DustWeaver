@@ -617,6 +617,7 @@ export function handleCrumbleModifierToggle(
 
   const convertible = selectedElements.filter(el => {
     if (checked) {
+      if (el.type === 'spike') return (roomData.spikes ?? []).some(s => s.uid === el.uid);
       return el.type === 'wall' && isEligibleWallForCrumble(roomData.interiorWalls.find(w => w.uid === el.uid));
     }
     return el.type === 'crumbleBlock' && (roomData.crumbleBlocks ?? []).some(b => b.uid === el.uid);
@@ -636,7 +637,26 @@ export function handleCrumbleModifierToggle(
   if (checked && !roomData.crumbleBlocks) roomData.crumbleBlocks = [];
 
   for (const el of convertible) {
-    if (checked && el.type === 'wall') {
+    if (checked && el.type === 'spike') {
+      const idx = (roomData.spikes ?? []).findIndex(s => s.uid === el.uid);
+      if (idx === -1) continue;
+      const spike = (roomData.spikes as EditorSpike[])[idx];
+      (roomData.spikes as EditorSpike[]).splice(idx, 1);
+      const sizeBlocks = spike.size === '2x2' ? 2 : 1;
+      const crumble: EditorCrumbleBlock = {
+        uid: spike.uid,
+        xBlock: spike.xBlock,
+        yBlock: spike.yBlock,
+        wBlock: sizeBlocks,
+        hBlock: sizeBlocks,
+        variant: 'normal',
+        blockTheme: spike.blockTheme,
+        spikeDirection: spike.direction,
+        spikeSize: spike.size,
+      };
+      (roomData.crumbleBlocks as EditorCrumbleBlock[]).push(crumble);
+      el.type = 'crumbleBlock';
+    } else if (checked && el.type === 'wall') {
       const idx = roomData.interiorWalls.findIndex(w => w.uid === el.uid);
       if (idx === -1) continue;
       const wall = roomData.interiorWalls[idx];
@@ -660,6 +680,20 @@ export function handleCrumbleModifierToggle(
       if (idx === -1) continue;
       const block = list[idx];
       list.splice(idx, 1);
+      if (block.spikeDirection !== undefined) {
+        const spike: EditorSpike = {
+          uid: block.uid,
+          xBlock: block.xBlock,
+          yBlock: block.yBlock,
+          direction: block.spikeDirection,
+          size: block.spikeSize ?? '1x1',
+          blockTheme: block.blockTheme,
+        };
+        if (!roomData.spikes) roomData.spikes = [];
+        (roomData.spikes as EditorSpike[]).push(spike);
+        el.type = 'spike';
+        continue;
+      }
       const wall: EditorWall = {
         uid: block.uid,
         xBlock: block.xBlock,

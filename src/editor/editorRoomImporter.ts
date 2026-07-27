@@ -415,6 +415,8 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     rampOrientation: b.rampOrientation,
     variant: b.variant ?? 'normal',
     blockTheme: b.blockTheme,
+    spikeDirection: b.spikeDirection,
+    spikeSize: b.spikeDirection !== undefined ? (b.spikeSize ?? '1x1') : undefined,
   }));
 
   const spikes: EditorSpike[] = (room.spikes ?? []).map(sp => ({

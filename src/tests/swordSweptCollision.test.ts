@@ -4,7 +4,6 @@ import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from '../screens/gameSpawn';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import {
   startNewSwordSwipe,
   tickNewSwordSwipe,
@@ -18,7 +17,8 @@ function makeFixture(moteCount = 8) {
   const player = createClusterState(0, 100, 100, 1, 20);
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
-  initMoteQueueFromParticles(world, player.entityId);
+  player.healthPoints = moteCount;
+  player.maxHealthPoints = moteCount;
   return { world, player };
 }
 
@@ -39,7 +39,7 @@ function recordSwordPath(world: ReturnType<typeof createWorldState>, player: Ret
     for (let r = 0; r < world.newSwordMoteCount; r++) {
       const pidx = world.newSwordMoteParticleIndex[r];
       if (pidx < 0) continue;
-      samples.push({ rank: r, x: world.positionXWorld[pidx], y: world.positionYWorld[pidx], tick: i });
+      samples.push({ rank: r, x: world.canonicalMoteXWorld[pidx], y: world.canonicalMoteYWorld[pidx], tick: i });
     }
   }
   return samples;

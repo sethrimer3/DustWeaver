@@ -445,6 +445,13 @@ export function applyHazards(world: WorldState): void {
   // be overlapping the thicker base region to actually take damage.
   if (world.spikeInvulnTicks === 0) {
     for (let i = 0; i < world.spikeCount; i++) {
+      // A crumble spike whose linked crumble-block record has already been
+      // broken (isCrumbleBlockActiveFlag === 0) is fully inert — no damage,
+      // no further contact checks — matching how a destroyed crumble wall's
+      // wallWWorld/wallHWorld are zeroed so the collision sweep ignores it.
+      const crumbleIdx = world.spikeCrumbleBlockIndex[i];
+      if (crumbleIdx >= 0 && world.isCrumbleBlockActiveFlag[crumbleIdx] === 0) continue;
+
       const sx = world.spikeXWorld[i];
       const sy = world.spikeYWorld[i];
       const sizeBlocks = world.spikeSizeBlocks[i] || 1;
@@ -464,6 +471,17 @@ export function applyHazards(world: WorldState): void {
       }
 
       if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
+        // A crumble spike breaks (no damage) when the player meets the same
+        // momentum-attack break requirement used by the momentum-shatter path
+        // for crumble walls (crackedBlockShatter.ts / movementAxisResolvers.ts
+        // — cluster.isHighVelocityAttacking). Casual contact still deals
+        // normal spike damage exactly like a non-crumble spike.
+        if (crumbleIdx >= 0 && player.isHighVelocityAttacking === 1) {
+          world.isCrumbleBlockActiveFlag[crumbleIdx] = 0;
+          world.crumbleBlockHitsRemaining[crumbleIdx] = 0;
+          break; // one spike interaction per tick
+        }
+
         const sourceXWorld = sx;
         const sourceYWorld = sy;
         // Throw the player back the way they came: reverse their velocity
@@ -1036,6 +1054,11 @@ export function applyHazards(world: WorldState): void {
     const bHalf = BLOCK_SIZE_MEDIUM * 0.5;
     for (let i = 0; i < world.crumbleBlockCount; i++) {
       if (world.isCrumbleBlockActiveFlag[i] === 0) continue;
+      // Crumble spikes aren't solid walls and use a different footprint/break
+      // rule (momentum-attack contact, handled in the spike-damage loop
+      // above) — skip them here so this rect-shaped contact-break path
+      // doesn't apply a wrong 1-block AABB or double-break the same entry.
+      if (world.crumbleBlockSpikeIndex[i] >= 0) continue;
 
       // Tick down cooldown
       if (world.crumbleBlockHitCooldownTicks[i] > 0) {

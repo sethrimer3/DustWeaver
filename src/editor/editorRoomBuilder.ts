@@ -481,6 +481,8 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       stairsOrientation: b.stairsOrientation,
       variant: b.variant !== 'normal' ? b.variant : undefined,
       blockTheme: b.blockTheme,
+      spikeDirection: b.spikeDirection,
+      spikeSize: b.spikeDirection !== undefined ? b.spikeSize : undefined,
     })),
     spikes: (data.spikes ?? []).map(sp => ({
       xBlock: sp.xBlock,

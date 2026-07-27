@@ -292,6 +292,18 @@ export interface EditorCrumbleBlock {
   variant: CrumbleVariant;
   /** Per-block theme override. When set, overrides the room-level default. */
   blockTheme?: BlockTheme;
+  /**
+   * Spike direction (the dangerous end). Undefined = not a spike (plain
+   * rect/ramp/stairs crumble block). When set, this crumble block was
+   * converted from an `EditorSpike` — `wBlock`/`hBlock` still hold the
+   * spike's footprint (derived from `spikeSize`) so the shape-agnostic crack
+   * overlay's bounding box math needs no special-casing, while
+   * `spikeDirection`/`spikeSize` let the block be reconstituted back into an
+   * `EditorSpike` (or loaded as a crumble-spike hazard at runtime).
+   */
+  spikeDirection?: import('../levels/roomDef').SpikeDirection;
+  /** Spike footprint size in blocks. Only meaningful when `spikeDirection` is set. */
+  spikeSize?: import('../levels/roomDef').SpikeSize;
 }
 
 // ── Spikes ────────────────────────────────────────────────────────────────────

@@ -317,14 +317,21 @@ export function rotateSelectedElement(state: EditorState): boolean {
     // Mirrors the 'wall' branch above so a crumble block (including crumble
     // stairs) rotates through the exact same orientations as its non-crumble
     // counterpart.
-    if (block.stairsOrientation !== undefined) {
+    if (block.spikeDirection !== undefined) {
+      // Cycles in the same up→right→down→left order as the spike's
+      // 'direction' <select> options in editorInspector.ts.
+      const SPIKE_DIRS = ['up', 'right', 'down', 'left'] as const;
+      const idx = SPIKE_DIRS.indexOf(block.spikeDirection);
+      block.spikeDirection = SPIKE_DIRS[(idx + 1) % 4];
+      changed = true;
+    } else if (block.stairsOrientation !== undefined) {
       block.stairsOrientation = ((block.stairsOrientation + 1) % 4) as 0 | 1 | 2 | 3;
       changed = true;
     } else if (block.rampOrientation !== undefined) {
       block.rampOrientation = ((block.rampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
       changed = true;
     }
-    if (block.wBlock !== block.hBlock) {
+    if (block.spikeDirection === undefined && block.wBlock !== block.hBlock) {
       const tmp = block.wBlock;
       block.wBlock = block.hBlock;
       block.hBlock = tmp;

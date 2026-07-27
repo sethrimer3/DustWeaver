@@ -386,6 +386,10 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
         entry.blockTheme = b.blockTheme;
         entry.blockThemeId = blockThemeToId(b.blockTheme);
       }
+      if (b.spikeDirection !== undefined) {
+        entry.spikeDirection = b.spikeDirection;
+        if (b.spikeSize !== undefined && b.spikeSize !== '1x1') entry.spikeSize = b.spikeSize;
+      }
       return entry;
     });
   }

@@ -215,7 +215,36 @@ export function drawEditorCrumbleBlocks(
     // is checked before `rampOrientation` since a block should never carry
     // both, but stairs are the more specific shape when present.
     ctx.fillStyle = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
-    if (b.stairsOrientation !== undefined) {
+    if (b.spikeDirection !== undefined) {
+      // Spike triangle shape — same per-direction geometry as a plain
+      // (non-crumble) spike in drawEditorSpikes, parameterized by this
+      // block's bounding box so the crack overlay below (which is already
+      // shape-agnostic and bounding-box driven) layers on top correctly.
+      const fillAlpha = sel ? 0.65 : 0.45;
+      const strokeAlpha = sel ? 1.0 : 0.65;
+      ctx.fillStyle = `rgba(160,20,20,${fillAlpha})`;
+      ctx.strokeStyle = `rgba(220,60,60,${strokeAlpha})`;
+      ctx.lineWidth = sel ? 2 : 1;
+      const cy = yPx + hPx * 0.5;
+      ctx.beginPath();
+      switch (b.spikeDirection) {
+        case 'up':
+          ctx.moveTo(xPx + wPx * 0.5, yPx); ctx.lineTo(xPx, yPx + hPx); ctx.lineTo(xPx + wPx, yPx + hPx);
+          break;
+        case 'down':
+          ctx.moveTo(xPx + wPx * 0.5, yPx + hPx); ctx.lineTo(xPx, yPx); ctx.lineTo(xPx + wPx, yPx);
+          break;
+        case 'left':
+          ctx.moveTo(xPx, cy); ctx.lineTo(xPx + wPx, yPx); ctx.lineTo(xPx + wPx, yPx + hPx);
+          break;
+        case 'right':
+          ctx.moveTo(xPx + wPx, cy); ctx.lineTo(xPx, yPx); ctx.lineTo(xPx, yPx + hPx);
+          break;
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (b.stairsOrientation !== undefined) {
       // Stairs step shape — reuses the same geometry as wall stairs so the
       // orientation reads identically to a normal (non-crumble) stairs block.
       const stairsColor = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';

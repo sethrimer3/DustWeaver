@@ -56,7 +56,7 @@ import { raycastWalls } from '../clusters/grappleShared';
 import { getAvailableCanonicalMotes, MoteOwnershipState } from './moteOwnership';
 import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
 import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
-import { getMoteTypeProjectile } from './projectileProperties';
+import { getMoteTypeProjectile } from '../motes/moteTypeConfig';
 import { nextFloatRange } from '../rng';
 import { computeShieldCenterWorld, WorldPoint } from './shieldGeometry';
 

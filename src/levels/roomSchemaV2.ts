@@ -617,6 +617,10 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       if (c.variant && c.variant !== 'normal') entry.v = c.variant;
       if (c.rampOrientation !== undefined) entry.ramp = c.rampOrientation as 0 | 1 | 2 | 3;
       if (c.blockThemeId) entry.theme = c.blockThemeId;
+      if (c.spikeDirection !== undefined) {
+        entry.sd = c.spikeDirection;
+        if (c.spikeSize === '2x2') entry.ss = '2x2';
+      }
       return entry;
     });
   }

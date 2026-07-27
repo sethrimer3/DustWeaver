@@ -203,6 +203,8 @@ export function updateInspector(
           BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
           '(mixed)',
           v => callbacks?.onPropertyChange('spike.blockTheme', v));
+        addCheckbox(div, 'Cracked', false,
+          v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
       }
     } else {
       const typeInfo = document.createElement('div');
@@ -946,6 +948,8 @@ export function updateInspector(
         BLOCK_THEMES.map(t => ({ label: t.label, value: t.id })),
         sp.blockTheme ?? room.blockTheme,
         v => callbacks?.onPropertyChange('spike.blockTheme', v));
+      addCheckbox(div, 'Cracked', false,
+        v => callbacks?.onPropertyChange('block.cracked', v ? 1 : 0));
     }
   } else if (el.type === 'rope') {
     const ropes = room.ropes ?? [];

@@ -280,6 +280,17 @@ export interface RoomCrumbleBlockDef {
   variant?: CrumbleVariant;
   /** Per-block theme override. When set, overrides the room-level default. */
   blockTheme?: BlockTheme;
+  /**
+   * Spike direction (the dangerous end). When set, this crumble block is a
+   * crumble SPIKE rather than a solid crumble block/ramp/stairs shape — it is
+   * loaded as a hazard (like a plain RoomSpikeDef) instead of a wall, and
+   * breaks (no damage) instead of always damaging the player when the
+   * player's momentum-attack break requirement is met on contact. Undefined =
+   * not a spike.
+   */
+  spikeDirection?: SpikeDirection;
+  /** Spike footprint size in blocks. Only meaningful when `spikeDirection` is set. Defaults to `'1x1'`. */
+  spikeSize?: SpikeSize;
 }
 
 /** A bounce pad that reflects the player's velocity on contact.

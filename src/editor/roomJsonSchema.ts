@@ -257,6 +257,14 @@ export interface RoomJsonCrumbleBlock {
   blockTheme?: BlockTheme;
   /** Compact per-block theme override used by newer JSON exports. */
   blockThemeId?: BlockThemeId;
+  /**
+   * Spike direction (the dangerous end). Absent = not a spike. Mirrors
+   * `EditorCrumbleBlock.spikeDirection` so a crumble spike round-trips
+   * through JSON.
+   */
+  spikeDirection?: 'up' | 'down' | 'left' | 'right';
+  /** Spike footprint size in blocks. Only meaningful when `spikeDirection` is set. */
+  spikeSize?: '1x1' | '2x2';
 }
 
 export interface RoomJsonDustBoostJar {

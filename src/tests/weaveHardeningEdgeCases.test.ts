@@ -4,7 +4,6 @@ import { createWorldState } from '../sim/world';
 import { createClusterState } from '../sim/clusters/state';
 import { ParticleKind } from '../sim/particles/kinds';
 import { spawnClusterParticles } from '../screens/gameSpawn';
-import { initMoteQueueFromParticles } from '../sim/motes/orderedMoteQueue';
 import {
   beginBowArrowAssembly,
   tickBowArrowAssembly,
@@ -15,8 +14,7 @@ import {
 } from '../sim/weaves/bowArrow';
 import { startNewSwordSwipe, tickNewSwordSwipe, NEW_SWORD_SLASH_TICKS } from '../sim/weaves/swordWeave';
 import { resetSecondaryWeaveCoordinatorState } from '../sim/weaves/secondaryWeaveCoordinator';
-import { BEHAVIOR_MODE_BOW_ARROW } from '../sim/particles/bowArrowBehaviorMode';
-import { BEHAVIOR_MODE_SWORD_SLASH } from '../sim/particles/swordSlashBehaviorMode';
+import { MoteOwnershipState } from '../sim/weaves/moteOwnership';
 import { beginDustTypeSwitch, tickDustTypeSwitch } from '../sim/weaves/dustTypeSwitch';
 
 const DT_MS = 1000 / 60;
@@ -24,9 +22,10 @@ const DT_MS = 1000 / 60;
 function makeFixture(moteCount = 8) {
   const world = createWorldState(DT_MS, 17);
   const player = createClusterState(0, 100, 100, 1, 20);
+  player.healthPoints = moteCount;
+  player.maxHealthPoints = moteCount;
   world.clusters = [player];
   spawnClusterParticles(world, player.entityId, player.positionXWorld, player.positionYWorld, ParticleKind.Golden, moteCount, world.rng);
-  initMoteQueueFromParticles(world, player.entityId);
   return { world, player };
 }
 
@@ -83,13 +82,13 @@ test('a fresh room load after death restores a valid mote state even after an ou
   world.particleCount = 0;
   const player2 = world.clusters[0];
   spawnClusterParticles(world, player2.entityId, player2.positionXWorld, player2.positionYWorld, ParticleKind.Golden, 8, world.rng);
-  initMoteQueueFromParticles(world, player2.entityId);
+  player2.healthPoints = 8;
+  player2.maxHealthPoints = 8;
   resetSecondaryWeaveCoordinatorState(world);
 
   assert.equal(world.bowArrowPhase, BOW_ARROW_PHASE_NONE, 'no stale outbound arrow survives a room reload');
-  for (let i = 0; i < world.particleCount; i++) {
-    assert.notEqual(world.behaviorMode[i], BEHAVIOR_MODE_BOW_ARROW, 'freshly-spawned motes must not inherit stale arrow ownership');
-    assert.notEqual(world.behaviorMode[i], BEHAVIOR_MODE_SWORD_SLASH);
+  for (let i = 0; i < player2.healthPoints; i++) {
+    assert.equal(world.canonicalMoteOwnership[i], MoteOwnershipState.Resting, 'freshly-spawned motes must not inherit stale arrow ownership');
   }
 });
 
@@ -120,10 +119,8 @@ test('an arrow aimed into a wall immediately in front of the shield resolves a b
     resolved = tickBowArrowOutbound(world);
   }
   assert.ok(resolved, 'arrow aimed directly into an adjacent wall resolves promptly');
-  for (let i = 0; i < world.particleCount; i++) {
-    if (world.behaviorMode[i] === 0) {
-      assert.ok(world.positionXWorld[i] <= world.wallXWorld[0] + 1e-3, 'no mote embedded past the wall face');
-    }
+  for (let i = 0; i < player.healthPoints; i++) {
+    assert.ok(world.canonicalMoteXWorld[i] <= world.wallXWorld[0] + 1e-3, 'no mote embedded past the wall face');
   }
 });
 
@@ -151,13 +148,9 @@ test('outbound travel accumulates correctly across wildly variable dtMs (pause/r
 
 // ── Fewer available motes than requested / mixed mote kinds ─────────────────
 
-test('bow assembly with mixed mote kinds captures the seated center mote\'s actual kind, not a fixed default', () => {
+test('bow assembly captures the selected dust kind', () => {
   const { world, player } = makeFixture(6);
-  // Mix kinds across the queue.
-  const kinds = [ParticleKind.Ice, ParticleKind.Golden, ParticleKind.Nature, ParticleKind.Golden, ParticleKind.Void, ParticleKind.Golden];
-  for (let i = 0; i < world.moteSlotCount; i++) world.moteSlotKind[i] = kinds[i % kinds.length];
-  const centerPidx0 = world.moteSlotParticleIndex[0];
-  world.kindBuffer[centerPidx0] = kinds[0];
+  world.selectedDustKind = ParticleKind.Ice;
 
   beginBowArrowAssembly(world, world.tick, 1);
   for (let i = 0; i < BOW_ARROW_LOAD_3_TICKS + 13; i++) {
@@ -165,7 +158,7 @@ test('bow assembly with mixed mote kinds captures the seated center mote\'s actu
     tickBowArrowAssembly(world, 1, 0, true);
   }
   fireBowArrow(world, 1, 0);
-  assert.equal(world.bowArrowDustKind, kinds[0], 'captures the actual seated center mote\'s kind');
+  assert.equal(world.bowArrowDustKind, ParticleKind.Ice, 'captures the actual selected dust kind');
   void player;
 });
 
@@ -183,11 +176,11 @@ test('dust switching during outbound flight does not corrupt bow-arrow ownership
   // behaviorMode out from under the Bow Weave.
   beginDustTypeSwitch(world, ParticleKind.Ice);
   for (const pidx of arrowPidx) {
-    assert.equal(world.behaviorMode[pidx], BEHAVIOR_MODE_BOW_ARROW, 'arrow mote ownership must survive a concurrent dust-type switch');
+    assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.BowOutbound, 'arrow mote ownership must survive a concurrent dust-type switch');
   }
   tickDustTypeSwitch(world);
   for (const pidx of arrowPidx) {
-    assert.equal(world.behaviorMode[pidx], BEHAVIOR_MODE_BOW_ARROW, 'still owned by the Bow after a dust-switch tick');
+    assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.BowOutbound, 'still owned by the Bow after a dust-switch tick');
   }
 
   // The arrow itself continues to resolve normally afterward.
@@ -208,7 +201,7 @@ test('dust switching mid sword-swipe does not corrupt sword-mote ownership', () 
 
   beginDustTypeSwitch(world, ParticleKind.Void);
   for (const pidx of swordPidx) {
-    assert.equal(world.behaviorMode[pidx], BEHAVIOR_MODE_SWORD_SLASH, 'sword mote ownership must survive a concurrent dust-type switch');
+    assert.equal(world.canonicalMoteOwnership[pidx], MoteOwnershipState.Sword, 'sword mote ownership must survive a concurrent dust-type switch');
   }
 
   for (let i = 1; i < NEW_SWORD_SLASH_TICKS; i++) tickNewSwordSwipe(world);

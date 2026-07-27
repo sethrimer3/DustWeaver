@@ -241,6 +241,10 @@ export interface SavedCrumble {
   ramp?: 0 | 1 | 2 | 3;
   /** Block theme ID override (omit if using room default). */
   theme?: string;
+  /** Spike direction (omit unless this crumble entry is a crumble spike). */
+  sd?: 'up' | 'down' | 'left' | 'right';
+  /** Spike footprint size (omit if '1x1'). Only meaningful when `sd` is set. */
+  ss?: '2x2';
 }
 
 /** Compact bounce pad entry. */

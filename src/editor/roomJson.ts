@@ -524,6 +524,8 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     stairsOrientation: b.stairsOrientation,
     variant: b.variant ?? 'normal',
     blockTheme: resolveJsonBlockTheme(b.blockTheme, b.blockThemeId),
+    spikeDirection: b.spikeDirection,
+    spikeSize: b.spikeDirection !== undefined ? (b.spikeSize ?? '1x1') : undefined,
   }));
 
   const spikes: EditorSpike[] = (json.spikes ?? []).map(sp => ({

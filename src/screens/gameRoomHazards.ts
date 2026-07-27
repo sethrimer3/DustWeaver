@@ -94,6 +94,8 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   // value here could otherwise make an unrelated wall (e.g. a bounce pad that
   // now occupies a slot a crumble block used last room) falsely shatterable.
   world.wallCrumbleBlockIndex.fill(-1);
+  world.spikeCrumbleBlockIndex.fill(-1);
+  world.crumbleBlockSpikeIndex.fill(-1);
   world.bouncePadCount = 0;
   world.kineticBlockCount = 0;
   world.grappleCarryBlockCount = 0;
@@ -408,10 +410,46 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   }
 
   // ── Crumble blocks ────────────────────────────────────────────────────────
-  // Each crumble block is added as a wall AND tracked in the crumble arrays.
+  // Each crumble block is added as a wall AND tracked in the crumble arrays —
+  // EXCEPT a crumble SPIKE (spikeDirection set), which isn't a solid wall at
+  // all: it's loaded as a hazard spike (same as a plain RoomSpikeDef) and
+  // cross-linked to its crumble-block record via crumbleBlockSpikeIndex /
+  // spikeCrumbleBlockIndex so sim/hazards.ts's spike-damage loop can look up
+  // whether a given spike is crumble-linked and still active.
   const crumbleDefs = room.crumbleBlocks ?? [];
   for (let i = 0; i < crumbleDefs.length && world.crumbleBlockCount < world.crumbleBlockXWorld.length; i++) {
     const b = crumbleDefs[i];
+
+    if (b.spikeDirection !== undefined) {
+      if (world.spikeCount >= world.spikeXWorld.length) continue;
+      const sizeBlocks = b.spikeSize === '2x2' ? 2 : 1;
+      const si = world.spikeCount++;
+      world.spikeSizeBlocks[si] = sizeBlocks;
+      world.spikeXWorld[si] = (b.xBlock + sizeBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+      world.spikeYWorld[si] = (b.yBlock + sizeBlocks * 0.5) * BLOCK_SIZE_MEDIUM;
+      switch (b.spikeDirection) {
+        case 'up':    world.spikeDirection[si] = SPIKE_DIR_UP; break;
+        case 'down':  world.spikeDirection[si] = SPIKE_DIR_DOWN; break;
+        case 'left':  world.spikeDirection[si] = SPIKE_DIR_LEFT; break;
+        case 'right': world.spikeDirection[si] = SPIKE_DIR_RIGHT; break;
+      }
+      world.spikeBlockThemeIndex[si] = b.blockTheme !== undefined
+        ? blockThemeToIndex(b.blockTheme)
+        : WALL_THEME_DEFAULT_INDEX;
+
+      const ci = world.crumbleBlockCount++;
+      world.crumbleBlockXWorld[ci] = world.spikeXWorld[si];
+      world.crumbleBlockYWorld[ci] = world.spikeYWorld[si];
+      world.isCrumbleBlockActiveFlag[ci] = 1;
+      world.crumbleBlockHitsRemaining[ci] = 2;
+      world.crumbleBlockHitCooldownTicks[ci] = 0;
+      world.crumbleBlockWallIndex[ci] = -1;
+      world.crumbleBlockVariant[ci] = CRUMBLE_VARIANT_INDEX[b.variant ?? 'normal'];
+      world.crumbleBlockSpikeIndex[ci] = si;
+      world.spikeCrumbleBlockIndex[si] = ci;
+      continue;
+    }
+
     const wBlocks = b.wBlock ?? 1;
     const hBlocks = b.hBlock ?? 1;
     const bx = (b.xBlock + wBlocks * 0.5) * BLOCK_SIZE_MEDIUM;

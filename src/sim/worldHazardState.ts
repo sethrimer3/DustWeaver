@@ -214,6 +214,14 @@ export interface HazardWorldState {
   spikeBlockThemeIndex: Uint8Array;
   /** Invulnerability cooldown ticks after spike damage. */
   spikeInvulnTicks: number;
+  /**
+   * Crumble-block index this spike is linked to, or -1 if this spike is a
+   * plain (non-crumble) spike. Set when a `RoomCrumbleBlockDef` carries
+   * `spikeDirection`/`spikeSize` — the spike loop in hazards.ts uses this to
+   * check `isCrumbleBlockActiveFlag`/break the block instead of dealing
+   * damage when the player's break requirement is met on contact.
+   */
+  spikeCrumbleBlockIndex: Int8Array;
 
   // ── Lasers ─────────────────────────────────────────────────────────────────
   /** Number of active laser emitters. */
@@ -462,6 +470,13 @@ export interface HazardWorldState {
    * Maps to CrumbleVariant: 0=normal, 1=fire, 2=water, 3=void, 4=ice, 5=lightning, 6=poison, 7=shadow, 8=nature.
    */
   crumbleBlockVariant: Uint8Array;
+  /**
+   * Spike index in the spike arrays that corresponds to each crumble block,
+   * or -1 if this crumble block is a plain rect/ramp/stairs shape (not a
+   * crumble spike). A crumble spike has no `crumbleBlockWallIndex` (spikes
+   * aren't solid walls) — this is the spike-side analog of that link.
+   */
+  crumbleBlockSpikeIndex: Int8Array;
 
   // ── Bounce pads ────────────────────────────────────────────────────────────
   /** Number of bounce pads loaded in the current room. */
@@ -963,6 +978,7 @@ export function createHazardWorldState(): HazardWorldState {
     spikeDirection:                new Uint8Array(MAX_SPIKES),
     spikeSizeBlocks:               new Uint8Array(MAX_SPIKES),
     spikeBlockThemeIndex:          new Uint8Array(MAX_SPIKES),
+    spikeCrumbleBlockIndex:        new Int8Array(MAX_SPIKES).fill(-1),
     spikeInvulnTicks:              0,
     laserCount:                    0,
     laserXWorld:                   new Float32Array(MAX_LASERS),
@@ -1031,6 +1047,7 @@ export function createHazardWorldState(): HazardWorldState {
     crumbleBlockHitCooldownTicks:  new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockWallIndex:         new Int8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockVariant:           new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    crumbleBlockSpikeIndex:        new Int8Array(MAX_CRUMBLE_BLOCKS).fill(-1),
     bouncePadCount:                0,
     bouncePadXWorld:               new Float32Array(MAX_BOUNCE_PADS),
     bouncePadYWorld:               new Float32Array(MAX_BOUNCE_PADS),

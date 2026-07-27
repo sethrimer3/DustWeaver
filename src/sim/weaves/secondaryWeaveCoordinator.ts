@@ -32,6 +32,7 @@ import {
   startNewSwordSwipe,
   tickNewSwordSwipe,
   resetNewSwordState,
+} from './swordWeave';
 import { updateShieldWeaveState, deactivateShieldWeave } from '../stormweave/shieldWeave';
 import { getAvailableCanonicalMotes, MoteOwnershipState } from './moteOwnership';
 import { MAX_CANONICAL_MOTES } from '../world';
