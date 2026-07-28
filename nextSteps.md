@@ -796,7 +796,7 @@ Confirmed in code: `roomRenderChunkWarmScheduler.ts` line 666 checks `entry.bloc
 
 ---
 
-### 3. Add real global/LRU eviction for prewarmed chunks (PARTIALLY DONE — BUILD 405)
+### 3. Add real global/LRU eviction for prewarmed chunks (DONE — BUILD 405, closed BUILD 560)
 
 Quality-tier memory budgets (`PREWARM_MEMORY_BUDGET_KB`) and radius-based eviction exist in the scheduler.
 
@@ -806,7 +806,7 @@ Also in BUILD 405:
 - `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` now return `PrewarmChunkResult { rebuilt, skipped, totalChunks, dirtyChunks }` instead of a raw `number`.  Done detection in both the scheduler and `tickEntryWarm` now checks `rebuilt === 0 && skipped === 0`.
 - `PrewarmStats` gains `chunksSkippedLastSlice` and `memoryBudgetKB` for debug panel visibility.
 
-What remains deferred:
+**BUILD 560 closure**: Re-audited the full lifecycle (creation, accounting, stale-set eviction, budget eviction, adoption/removal, invalidation, schedule restart, quality changes, stats reporting) against the Todo item asking for "an LRU or memory cap." The existing radius/size-ordered per-quality-budget policy was retained rather than replaced with timestamp-based LRU: prewarmed rooms are never "accessed" in the LRU sense (they're speculatively built, then either adopted once or discarded), so BFS radius to the current room is a materially better recency proxy than any real access timestamp would be. Fixed one real defect: `invalidateRoomChunkPrewarm` unconditionally read `import.meta.env.DEV`, which throws when called outside a Vite-provided `import.meta.env`; changed to `import.meta.env?.DEV`, matching the guard pattern already used in `src/debug/perfFreezeProfiler.ts`. Added 10 focused tests to `src/tests/roomRenderChunkWarmScheduler.test.ts` (bg-only rooms, combined wall+bg accounting, dual-store stale eviction, active-room protection over budget, per-quality budget selection, eviction-stats stability across repeated calls, post-slice enforcement, invalidate+re-queue, and keep-set protection for completed nearby rooms). No other defects found. 2675/2675 tests pass; build and lint clean.
 
 ---
 

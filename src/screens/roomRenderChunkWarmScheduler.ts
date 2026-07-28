@@ -746,7 +746,7 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
   // Remove from the keep-set so the scheduler's next eviction pass does not
   // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
   _keepIds.delete(roomId);
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
   }
 }
