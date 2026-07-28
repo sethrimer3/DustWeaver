@@ -675,7 +675,9 @@ export function* makeLoadRoomPhases(
   const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
   const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
   const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, playerMoteCapacity);
-  playerCluster.healthPoints = Math.min(carryHealthPoints, playerCluster.maxHealthPoints);
+  // Overhealth (healthPoints > maxHealthPoints) must survive ordinary room
+  // transitions — do not clamp the carried value down to capacity here.
+  playerCluster.healthPoints = carryHealthPoints;
   world.clusters.push(playerCluster);
 
   {
@@ -999,7 +1001,9 @@ export function applyResidentRoomActivation(
   const playerMoteCapacity = getPlayerMoteCapacityFromProgress(progress);
   const playerCluster = createClusterState(1, spawnXWorld, spawnYWorld, 1, playerMoteCapacity);
   const effectiveHealth = playerTransfer !== undefined ? carryHealthPoints : playerMoteCapacity;
-  playerCluster.healthPoints = Math.min(effectiveHealth, playerMoteCapacity);
+  // Overhealth must survive resident hot-swap transfers too — only clamp
+  // when there is no transfer snapshot (fresh spawn uses full capacity).
+  playerCluster.healthPoints = playerTransfer !== undefined ? effectiveHealth : playerMoteCapacity;
   // Preserve sprite facing direction from the outgoing room so the player
   // does not snap to the default (right-facing) on entry.
   if (playerTransfer !== undefined) {

@@ -11,7 +11,9 @@ import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from '../momentumCombatConfig';
 
 export const STORMWEAVE_RESTING_REGION_WORLD = 15;
 
-const MAX_LIFE_MOTES = 32;
+// Must stay equal to MAX_CANONICAL_MOTES in ../world.ts — see that constant's
+// doc comment for the capacity/overhealth sizing rationale.
+const MAX_LIFE_MOTES = 48;
 const MAX_PLAYER_PATH_SAMPLES = 256;
 export const STORMWEAVE_TRAIL_LIFETIME_SEC = 0.68;
 export const STORMWEAVE_TRAIL_SAMPLE_SPACING_WORLD = 1.5;

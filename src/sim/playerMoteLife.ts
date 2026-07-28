@@ -51,6 +51,23 @@ export function grantPlayerMotes(player: PlayerMoteLifeState, moteCount: number)
   return player.healthPoints - before;
 }
 
+/**
+ * Grants temporary overhealth motes directly onto current health, allowed to
+ * exceed `maxHealthPoints`. Used by one-shot pickups (Dust Boost Jars, Dust
+ * Swarms) that must not permanently raise capacity. Overhealth is represented
+ * simply as `healthPoints > maxHealthPoints` — no separate field. It is
+ * consumed by damage before permanent health, is not restored by ordinary
+ * healing (`grantPlayerMotes`/`grantDustContainerMotes`, both of which clamp
+ * to capacity), and is cleared back to `maxHealthPoints` on death/respawn,
+ * new campaign start, and checkpoint load.
+ */
+export function grantOverhealthMotes(player: PlayerMoteLifeState, moteCount: number): number {
+  const grant = normalizeMoteCount(moteCount);
+  const before = normalizeMoteCount(player.healthPoints);
+  player.healthPoints = before + grant;
+  return grant;
+}
+
 /** Adds permanent capacity and fills every newly added mote slot atomically. */
 export function grantDustContainerMotes(
   player: PlayerMoteLifeState,

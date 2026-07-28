@@ -640,6 +640,7 @@ export class RenderProfiler {
         `W hits: ${pw.wallCacheHits}  miss: ${pw.wallCacheMisses}`,
         `BG hits: ${pw.bgCacheHits}  miss: ${pw.bgCacheMisses}`,
         `Defer!rdy: ${pw.deferredNotReady}  !spr: ${pw.deferredSpritesNotReady}`,
+        `R3 defer-evts: ${pw.deferredRadius3Events}  susp: ${pw.suspendedRadius3Count}  active: ${pw.activeRadius3Count}`,
         `Evict pass: ${pw.evictedThisPass}  total: ${pw.totalEvictions}`,
         `Last xtn: ${pw.lastTransitionOutcome}`,
         ...diagLines,

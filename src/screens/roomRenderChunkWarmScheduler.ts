@@ -303,12 +303,25 @@ export interface PrewarmStats {
   /** Memory budget for the current quality tier (KB).  0 when scheduler not yet started. */
   memoryBudgetKB: number;
   /**
-   * Radius-3 tasks deferred (moved to the back of the queue, not discarded)
-   * this schedule because quality was not 'high' or frame time was poor.
-   * Resets each schedule. A deferred task remains eligible to build once
-   * quality/frame time recover, without waiting for a new room transition.
+   * COUNT OF DEFERRAL EVENTS (not a distinct-room count): incremented every
+   * time a radius-3 task already in the active queue is rotated to the back
+   * because frame time was poor while quality is 'high'. The same task can
+   * be deferred multiple times across slices, so this number can exceed the
+   * number of radius-3 rooms. Resets each schedule.
+   * Quality-tier suspension (low/med) does NOT increment this counter — see
+   * `suspendedRadius3Count` for that case.
    */
-  deferredRadius3: number;
+  deferredRadius3Events: number;
+  /**
+   * Radius-3 tasks currently held out of the active queue because graphics
+   * quality is not 'high'. These are NOT deferral events — they are parked
+   * so the active queue is never repeatedly rotated through ineligible work.
+   * They resume into the active queue automatically once quality returns to
+   * 'high', without requiring a new room transition.
+   */
+  suspendedRadius3Count: number;
+  /** Radius-3 tasks currently present in the active (non-suspended) queue. */
+  activeRadius3Count: number;
   /** Outcome of the most recent room transition. */
   lastTransitionOutcome: TransitionOutcome;
   /**
@@ -341,7 +354,9 @@ let _stats: PrewarmStats = {
   totalEvictions:          0,
   totalPrewarmMemoryKB:    0,
   memoryBudgetKB:          0,
-  deferredRadius3:         0,
+  deferredRadius3Events:   0,
+  suspendedRadius3Count:   0,
+  activeRadius3Count:      0,
   lastTransitionOutcome:   'none' as TransitionOutcome,
   lastTransitionDiagnostic: null,
 };
@@ -390,6 +405,35 @@ interface WarmTask {
 
 /** BFS-ordered list of rooms to warm. Front = highest priority. */
 let _queue: WarmTask[] = [];
+/**
+ * Authoritative schedule-owned priority metadata: room ID -> effective
+ * prewarm radius. Unlike `_queue` membership, this survives a task
+ * completing (leaving `_queue`) so a completed radius-1 room is never
+ * misclassified as speculative radius-3 during memory-budget eviction.
+ * Rebuilt from scratch on every `scheduleChunkPrewarms` call (new BFS
+ * neighbourhood); individual task-creation paths only ADD entries and never
+ * downgrade a room already tracked at a more valuable (lower) radius.
+ * Entries are removed by `invalidateRoomChunkPrewarm`. Rooms absent from
+ * this map are truly unknown/non-scheduled and are treated as the lowest
+ * value (see `evictStalePrewarmedChunks`'s `UNKNOWN_ROOM_RADIUS` fallback).
+ */
+let _roomPriority: Map<string, number> = new Map();
+/**
+ * Radius-3 tasks parked out of the active `_queue` because graphics quality
+ * is not 'high'. Kept separate from temporary frame-time deferral (which
+ * just rotates a task to the back of `_queue`) so the active queue is never
+ * repeatedly churned through work that cannot execute until the quality
+ * setting itself changes. Resumed into `_queue` automatically once a slice
+ * observes quality has returned to 'high' — see `_reconcileRadius3Suspension`.
+ */
+let _suspendedRadius3: WarmTask[] = [];
+/**
+ * Quality tier observed on the most recent slice. `null` forces a
+ * reconciliation check on the next slice (e.g. right after a schedule
+ * (re)start). Comparing against this avoids scanning `_queue`/
+ * `_suspendedRadius3` on every slice — only an actual quality change does.
+ */
+let _lastQualitySeen: 'low' | 'med' | 'high' | null = null;
 /** Current idle callback handle (`0` = not scheduled). */
 let _idleHandle: IdleCallbackHandle = 0;
 /** Whether the scheduler has been cancelled. */
@@ -483,6 +527,11 @@ export function scheduleChunkPrewarms(
 
   // Build the task queue (radius-1 first, then radius-2, then radius-3).
   _queue = [];
+  // Fresh BFS neighbourhood → fresh authoritative priority map and cleared
+  // suspension state (discards suspended tasks from the prior neighbourhood).
+  _roomPriority = new Map();
+  _suspendedRadius3 = [];
+  _lastQualitySeen = null;
   const currentRoomDef = roomRegistry.get(currentRoom.id);
   if (currentRoomDef === undefined) {
     // Should not happen in practice; currentRoom is always registered.
@@ -532,6 +581,10 @@ export function scheduleChunkPrewarms(
       wallDone: false,
       bgDone:   false,
     });
+    // Authoritative priority: this BFS pass is the source of truth for this
+    // room's radius for the lifetime of this schedule, independent of when
+    // (or whether) its task finishes and leaves `_queue`.
+    _roomPriority.set(roomId, radius);
   }
 
   // ── Velocity-direction queue ordering ───────────────────────────────────────
@@ -573,7 +626,7 @@ export function scheduleChunkPrewarms(
   evictStalePrewarmedChunks(keepIds, getQuality());
 
   // Reset per-schedule deferred counters so they reflect only the new schedule.
-  _stats = { ..._stats, deferredNotReady: 0, deferredSpritesNotReady: 0, deferredRadius3: 0 };
+  _stats = { ..._stats, deferredNotReady: 0, deferredSpritesNotReady: 0, deferredRadius3Events: 0 };
 
   // Kick off the first idle callback.
   _idleHandle = _scheduleIdle(_onIdle);
@@ -637,7 +690,14 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
     return;
   }
 
-  // Room is NOT in the queue.
+  // Room is NOT in the active queue. It may still be parked in the
+  // quality-tier suspension list (e.g. a radius-3 BFS candidate suspended
+  // because quality was not 'high') — drop it from there so this explicit
+  // priority request never leaves a duplicate stale task behind.
+  const suspendedIdx = _suspendedRadius3.findIndex(t => t.roomId === roomId);
+  if (suspendedIdx >= 0) {
+    _suspendedRadius3.splice(suspendedIdx, 1);
+  }
 
   // If prewarm data is already present for both wall and bg, adoption will pick
   // it up — no need to re-queue.  For rooms with no background blocks, bg is
@@ -697,6 +757,12 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
     bgDone:   false,
   });
 
+  // Authoritative priority: only upgrade (never downgrade) — a room already
+  // tracked at a more valuable radius (e.g. a completed radius-1 BFS entry)
+  // must not be demoted just because an ensure-request re-touches it at the
+  // generic radius-1 task-creation default.
+  _roomPriority.set(roomId, Math.min(_roomPriority.get(roomId) ?? Infinity, 1));
+
   // Add to the keep-set so the next eviction pass does not remove newly created data.
   _keepIds.add(roomId);
 
@@ -754,6 +820,15 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
   // Remove from the keep-set so the scheduler's next eviction pass does not
   // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
   _keepIds.delete(roomId);
+  // Drop authoritative priority metadata so a stale radius classification
+  // cannot protect this room during a later eviction pass, and drop any
+  // parked suspended task so invalidation cannot be silently undone by a
+  // later quality-change resume.
+  _roomPriority.delete(roomId);
+  const suspendedIdx = _suspendedRadius3.findIndex(t => t.roomId === roomId);
+  if (suspendedIdx >= 0) {
+    _suspendedRadius3.splice(suspendedIdx, 1);
+  }
   if (import.meta.env?.DEV) {
     console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
   }
@@ -823,6 +898,9 @@ export function addZoneEntryViewportTasks(
       wallDone: false,
       bgDone:   false,
     });
+    // Authoritative priority: only upgrade, never demote a room already
+    // tracked at a more valuable (lower) radius from the BFS schedule.
+    _roomPriority.set(roomId, Math.min(_roomPriority.get(roomId) ?? Infinity, 2));
     existingIds.add(roomId);
     added++;
   }
@@ -931,9 +1009,15 @@ export function evictStalePrewarmedChunks(
 
   if (totalMemKB > budget) {
     // Build a list of remaining prewarm rooms with their radius and memory.
-    // Rooms not currently in the queue get radius 3 (treated as speculative).
-    const radiusMap = new Map<string, number>();
-    for (const task of _queue) radiusMap.set(task.roomId, task.radius);
+    // Radius comes from the authoritative `_roomPriority` map (Part 1), NOT
+    // from `_queue` membership — a completed task leaves `_queue` but its
+    // cached prewarm data remains just as valuable, so deriving radius from
+    // the queue would misclassify e.g. a completed radius-1 room as
+    // speculative radius-3. Truly unknown/non-scheduled cached rooms (never
+    // tracked by this schedule) fall back to a sentinel radius one worse
+    // than the deepest real radius, so they rank as least valuable even
+    // against a genuine radius-3 candidate.
+    const UNKNOWN_ROOM_RADIUS = MAX_PREWARM_RADIUS + 1;
 
     interface EvictCandidate { roomId: string; radius: number; memKB: number }
     const candidates: EvictCandidate[] = [];
@@ -944,12 +1028,12 @@ export function evictStalePrewarmedChunks(
       seen.add(roomId);
       const wallMem = getPrewarmWallRoomStats(roomId)?.memoryKB ?? 0;
       const bgMem   = getPrewarmBgRoomStats(roomId)?.memoryKB   ?? 0;
-      candidates.push({ roomId, radius: radiusMap.get(roomId) ?? 3, memKB: wallMem + bgMem });
+      candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: wallMem + bgMem });
     }
     for (const roomId of listPrewarmedBgRoomIds()) {
       if (roomId === currentRoom || seen.has(roomId)) continue;
       const bgMem = getPrewarmBgRoomStats(roomId)?.memoryKB ?? 0;
-      candidates.push({ roomId, radius: radiusMap.get(roomId) ?? 3, memKB: bgMem });
+      candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: bgMem });
     }
 
     // Sort: highest radius first; within same radius, largest memory first.
@@ -1004,7 +1088,11 @@ function _onIdle(deadline: IdleDeadline): void {
  * chunk/time budgets as the idle path.
  */
 export function runChunkPrewarmSliceNow(maxMs: number): void {
-  if (_cancelled || _queue.length === 0) return;
+  // Even when the active queue is empty, a slice must still run if radius-3
+  // work is parked in quality-tier suspension — that is what lets suspended
+  // work resume as soon as quality returns to 'high', driven by this same
+  // per-frame call site rather than a new dedicated poll.
+  if (_cancelled || (_queue.length === 0 && _suspendedRadius3.length === 0)) return;
   // Cancel any pending idle callback so this slice and the idle-triggered
   // slice never double-process the same queue head in the same tick.
   if (_idleHandle !== 0) {
@@ -1014,15 +1102,48 @@ export function runChunkPrewarmSliceNow(maxMs: number): void {
   _runSlice({ timeRemaining: () => maxMs, didTimeout: false });
 }
 
+/**
+ * Reconciles radius-3 tasks between the active `_queue` and quality-tier
+ * suspension whenever the observed quality tier changes:
+ *  - Quality leaves 'high': every radius-3 task still in `_queue` is moved
+ *    into `_suspendedRadius3` so the active queue is never repeatedly
+ *    rotated through work that cannot execute until quality changes back.
+ *  - Quality returns to 'high': every suspended task is moved back into
+ *    `_queue` so it becomes eligible again without a new room transition.
+ *
+ * No-ops when quality hasn't changed since the last call (`_lastQualitySeen`),
+ * so this never scans `_queue`/`_suspendedRadius3` on quality-stable slices.
+ */
+function _reconcileRadius3Suspension(quality: 'low' | 'med' | 'high'): void {
+  if (quality === _lastQualitySeen) return;
+  _lastQualitySeen = quality;
+  if (!RADIUS3_HIGH_QUALITY_ONLY) return;
+
+  if (quality !== 'high') {
+    if (_queue.length === 0) return;
+    const stillActive: WarmTask[] = [];
+    for (const task of _queue) {
+      if (task.radius >= 3) _suspendedRadius3.push(task);
+      else stillActive.push(task);
+    }
+    _queue = stillActive;
+  } else if (_suspendedRadius3.length > 0) {
+    _queue.push(..._suspendedRadius3);
+    _suspendedRadius3 = [];
+  }
+}
+
 function _runSlice(deadline: IdleDeadline): void {
   if (_cancelled) return;
+
+  const quality     = _getQuality?.()     ?? 'med';
+  const lastFrameMs = _getLastFrameMs?.() ?? 0;
+  _reconcileRadius3Suspension(quality);
+
   if (_queue.length === 0) {
     _refreshStats();
     return;
   }
-
-  const quality     = _getQuality?.()     ?? 'med';
-  const lastFrameMs = _getLastFrameMs?.() ?? 0;
 
   // Back off when frame time is bad.
   const framePoor = lastFrameMs > FRAME_TIME_PAUSE_THRESHOLD_MS;
@@ -1040,7 +1161,7 @@ function _runSlice(deadline: IdleDeadline): void {
   let chunksSkipped = 0;
   let deferredNotReady        = _stats.deferredNotReady;
   let deferredSpritesNotReady = _stats.deferredSpritesNotReady;
-  let deferredRadius3         = _stats.deferredRadius3;
+  let deferredRadius3Events   = _stats.deferredRadius3Events;
   // How many not-ready tasks we've skipped over in this slice.
   // When this reaches MAX_DEFERRALS_PER_SLICE the slice stops so we don't
   // loop through the entire queue when everything is blocked.
@@ -1054,13 +1175,14 @@ function _runSlice(deadline: IdleDeadline): void {
 
     const task = _queue[0];
 
-    // Defer (not discard) radius-3 rooms on low/med quality or poor frame time.
-    // Moving to the back — rather than dropping the task — lets radius-3
-    // warming resume automatically once quality returns to 'high' or frame
-    // time recovers, without waiting for the next room transition to
-    // re-schedule it from scratch.
-    if (task.radius >= 3 && RADIUS3_HIGH_QUALITY_ONLY && (quality !== 'high' || framePoor)) {
-      deferredRadius3++;
+    // Quality-tier ineligibility (low/med) is handled entirely by
+    // `_reconcileRadius3Suspension` above — a radius-3 task never reaches
+    // this point while quality isn't 'high', so no per-slice quality check
+    // is needed here. Only TEMPORARY poor-frame-time deferral remains: defer
+    // (rotate to the back, not discard) so warming resumes automatically
+    // once frame time recovers, without waiting for a new room transition.
+    if (task.radius >= 3 && RADIUS3_HIGH_QUALITY_ONLY && framePoor) {
+      deferredRadius3Events++;
       _queue.push(_queue.shift()!);
       deferralCountThisSlice++;
       if (deferralCountThisSlice >= MAX_DEFERRALS_PER_SLICE) break;
@@ -1179,7 +1301,9 @@ function _runSlice(deadline: IdleDeadline): void {
     bgCacheMisses:           _stats.bgCacheMisses,
     deferredNotReady:        deferredNotReady,
     deferredSpritesNotReady: deferredSpritesNotReady,
-    deferredRadius3:         deferredRadius3,
+    deferredRadius3Events:   deferredRadius3Events,
+    suspendedRadius3Count:   _suspendedRadius3.length,
+    activeRadius3Count:      _queue.reduce((n, t) => t.radius >= 3 ? n + 1 : n, 0),
   };
 
   // Schedule next slice if there's more work.
@@ -1205,6 +1329,8 @@ function _refreshStatsObj(): PrewarmStats {
     totalPrewarmMemoryKB: ws.memoryEstimateKB + bs.memoryEstimateKB,
     queueLength:          _queue.length,
     memoryBudgetKB:       quality !== null ? PREWARM_MEMORY_BUDGET_KB[quality] : 0,
+    suspendedRadius3Count: _suspendedRadius3.length,
+    activeRadius3Count:    _queue.reduce((n, t) => t.radius >= 3 ? n + 1 : n, 0),
   };
 }
 

@@ -25,7 +25,7 @@ export interface AvailableCanonicalMotes {
   readonly indices: Int32Array;
 }
 
-const _availableMoteIndices = new Int32Array(32); // MAX_CANONICAL_MOTES
+const _availableMoteIndices = new Int32Array(MAX_CANONICAL_MOTES);
 const _availableResult: AvailableCanonicalMotes = {
   count: 0,
   indices: _availableMoteIndices,

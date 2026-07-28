@@ -18,6 +18,16 @@ export const DUST_PARTICLES_PER_CONTAINER = MOTES_PER_DUST_CONTAINER;
 /**
  * Spawns `count` particles of `kind` orbiting the given cluster position.
  * Sets all new particle buffer fields including anchor, lifetime, and noise seed.
+ *
+ * Enemy/environmental/grapple/projectile/pickup-burst owners only. Canonical
+ * player life (Dust Mote health) is represented by
+ * `src/sim/stormweave/lifeMotes.ts`, driven directly from `healthPoints` —
+ * spawning these legacy mode-0 orbit particles with the player cluster as
+ * owner would create a second, tiny pixel-locked follower cloud duplicating
+ * that system. Dust Boost Jar / Dust Swarm collection grant overhealth
+ * directly onto `healthPoints` (see `grantOverhealthMotes` in
+ * `sim/playerMoteLife.ts`) instead of calling this function with the player
+ * as owner.
  */
 export function spawnClusterParticles(
   world: WorldState,
@@ -28,6 +38,17 @@ export function spawnClusterParticles(
   count: number,
   rng: RngState,
 ): void {
+  if (import.meta.env?.DEV && clusterEntityId >= 0) {
+    const owner = world.clusters.find(c => c.entityId === clusterEntityId);
+    if (owner?.isPlayerFlag === 1) {
+      console.warn(
+        '[gameSpawn] spawnClusterParticles called with the player cluster as owner — ' +
+        'this creates legacy mode-0 follower particles that duplicate the canonical ' +
+        'Stormweave life-mote cloud. Player health grants must use grantOverhealthMotes/' +
+        'grantPlayerMotes instead of spawning player-owned particles.',
+      );
+    }
+  }
   const profile = getElementProfile(kind);
 
   for (let i = 0; i < count; i++) {

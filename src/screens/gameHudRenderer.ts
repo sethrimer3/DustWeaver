@@ -244,7 +244,27 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     const isFilled = moteIndex < currentMoteCount;
     drawAnimatedDustContainer(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, isFilled, moteIndex, nowMs);
   }
-  const moteLifeColumnCount = getMoteLifeColumnCount(maxMoteCapacity);
+  // ── Overhealth slots (temporary current health above max capacity) ─────
+  // Rendered after the permanent slots in the same column-major layout, so
+  // they extend the row/column grid without overlapping or resizing the
+  // permanent capacity display. Visually distinguished with a gold glow
+  // outline so they read as temporary rather than permanent capacity.
+  const overhealthMoteCount = Math.max(0, currentMoteCount - maxMoteCapacity);
+  if (overhealthMoteCount > 0) {
+    for (let i = 0; i < overhealthMoteCount; i++) {
+      const moteIndex = maxMoteCapacity + i;
+      const slot = getMoteLifeSlotPosition(moteIndex);
+      drawAnimatedDustContainer(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, true, moteIndex, nowMs);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,215,90,0.9)';
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 4;
+      ctx.shadowColor = 'rgba(255,215,90,0.85)';
+      ctx.strokeRect(slot.xPx + 0.5, slot.yPx + 0.5, dustSquareWidth - 1, dustSquareHeight - 1);
+      ctx.restore();
+    }
+  }
+  const moteLifeColumnCount = getMoteLifeColumnCount(maxMoteCapacity + overhealthMoteCount);
   if (r.isChallengeModeActive && moteLifeColumnCount > 0) {
     drawChallengeHudShield(ctx, dustStartX + moteLifeColumnCount * (dustSquareWidth + MOTE_LIFE_SLOT_GAP_PX) + 4, MOTE_LIFE_ORIGIN_Y_PX + 6);
   }

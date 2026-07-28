@@ -12,8 +12,7 @@ import type { ClusterState } from '../sim/clusters/state';
 import type { PlayerProgress } from '../progression/playerProgress';
 import type { RngState } from '../sim/rng';
 import { ParticleKind, isEquippableParticleKind } from '../sim/particles/kinds';
-import { spawnClusterParticles } from './gameSpawn';
-import { grantDustContainerMotes, grantPlayerMotes } from '../sim/playerMoteLife';
+import { grantDustContainerMotes, grantPlayerMotes, grantOverhealthMotes } from '../sim/playerMoteLife';
 import {
   DUST_CONTAINER_PICKUP_RADIUS_WORLD,
   DUST_CONTAINER_SHARD_PICKUP_RADIUS_WORLD,
@@ -29,7 +28,8 @@ import {
  * @param collectedKeySet  Set of already-collected pickup keys (mutated on pickup).
  * @param progress       Player progression state, or undefined in arcade mode.
  * @param player         The live player cluster (positionXWorld/Y, entityId).
- * @param levelRng       Room-level RNG for particle spawning.
+ * @param _levelRng      Unused — retained for call-site signature stability
+ *   after removing legacy particle spawning from jar pickups.
  * @param onPickupBurst  Optional callback invoked once per first-time Dust
  *   Container / Shard pickup with the collectible's world-space center, so
  *   the caller can drive a render-only cosmetic effect without coupling this
@@ -43,7 +43,7 @@ export function processRoomPickups(
   collectedKeySet: Set<string>,
   progress: PlayerProgress | undefined,
   player: ClusterState,
-  levelRng: RngState,
+  _levelRng: RngState,
   roomOriginXWorld = 0,
   roomOriginYWorld = 0,
   onPickupBurst?: (kind: 'container' | 'shard', xWorld: number, yWorld: number) => void,
@@ -118,15 +118,10 @@ export function processRoomPickups(
       const dustKind = world.dustBoostJarKind[i] as ParticleKind;
       if (!isEquippableParticleKind(dustKind)) continue;
       const dustCount = world.dustBoostJarDustCount[i];
-      spawnClusterParticles(
-        world,
-        player.entityId,
-        player.positionXWorld,
-        player.positionYWorld,
-        dustKind,
-        dustCount,
-        levelRng,
-      );
+      // Jar dust grants overhealth directly onto current health — it must
+      // not spawn player-owned legacy orbit particles (canonical life motes
+      // already follow the player visually and are derived from health).
+      grantOverhealthMotes(player, dustCount);
     }
   }
 }

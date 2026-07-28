@@ -184,7 +184,8 @@ test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks whe
     runChunkPrewarmSliceNow(50);
     assert.equal(getPrewarmStats().pausedForFrameTime, false);
     assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room should remain queued when frame time is stable');
-    assert.equal(getPrewarmStats().deferredRadius3, 0, 'No radius-3 deferral should occur with good frame time and high quality');
+    assert.equal(getPrewarmStats().deferredRadius3Events, 0, 'No radius-3 deferral should occur with good frame time and high quality');
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 0, 'No radius-3 suspension should occur at high quality');
   } catch (e) {
     console.error('Test 4A failure:', e);
     throw e;
@@ -196,8 +197,9 @@ test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks whe
   try {
     runChunkPrewarmSliceNow(50);
     assert.equal(getPrewarmStats().pausedForFrameTime, true, 'pausedForFrameTime should be true when frame time > 20ms');
-    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room must remain queued (deferred, not discarded) during poor frame time');
-    assert.ok(getPrewarmStats().deferredRadius3 > 0, 'deferredRadius3 should record the deferral');
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room must remain queued (temporarily deferred, not discarded) during poor frame time at high quality');
+    assert.ok(getPrewarmStats().deferredRadius3Events > 0, 'deferredRadius3Events should record the deferral');
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 0, 'Poor frame time is a temporary deferral, not a quality-tier suspension');
   } catch (e) {
     console.error('Test 4B failure:', e);
     throw e;
@@ -205,11 +207,16 @@ test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks whe
     handle.cancel();
   }
 
+  // On med/low quality, radius-3 work is SUSPENDED out of the active queue
+  // entirely (not repeatedly rotated through it) — queueLength should drop
+  // to just the eligible radius-1/2 tasks, and the radius-3 task should be
+  // tracked as suspended rather than as a deferral event.
   handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'med', () => 10, 800, 600, 1);
   try {
     runChunkPrewarmSliceNow(50);
-    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room must remain queued (deferred, not discarded) on med quality');
-    assert.ok(getPrewarmStats().deferredRadius3 > 0, 'deferredRadius3 should record the deferral on med quality too');
+    assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be suspended out of the active queue on med quality, leaving only radius-1/2');
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1, 'Exactly the one radius-3 room should be tracked as suspended');
+    assert.equal(getPrewarmStats().deferredRadius3Events, 0, 'Quality-tier suspension must not be counted as a deferral event');
   } catch (e) {
     console.error('Test 4C failure:', e);
     throw e;

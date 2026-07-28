@@ -32,7 +32,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import type { RngState } from '../sim/rng';
 import { isEquippableParticleKind } from '../sim/particles/kinds';
 import { stringToParticleKind } from '../editor/roomJsonSchema';
-import { spawnClusterParticles } from './gameSpawn';
+import { grantOverhealthMotes } from '../sim/playerMoteLife';
 import { getDustDefinition } from '../sim/weaves/dustDefinition';
 import type { DustSelectionWheelController } from './gameDustSelectionState';
 
@@ -167,7 +167,7 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     skillTombRenderer, skillTombEffectRenderer,
     progress, consumedSkillTombKeySet, combatText,
     currentRoomId, openMapOnly,
-    currentRoom, collectedDustSwarmKeySet, levelRng, nowMs,
+    currentRoom, collectedDustSwarmKeySet, nowMs,
     linkedAnchorIndex, linkedAnchorRoomId,
     setLambdaAnchorLink, clearLambdaAnchorLink, lambdaTeleportFlash,
   } = ctx;
@@ -458,15 +458,13 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
                 progress.collectedDustSwarmKeys.push(swarmKey);
               }
             }
-            spawnClusterParticles(
-              world,
-              playerForInteract.entityId,
-              playerForInteract.positionXWorld,
-              playerForInteract.positionYWorld,
-              dustKind,
-              sw.dustCount,
-              levelRng,
-            );
+            // Grant the swarm's dust as overhealth directly onto current
+            // health — this only runs on first collection (gated by
+            // collectedDustSwarmKeySet above, which is seeded from
+            // progress.collectedDustSwarmKeys on room load, so reloading a
+            // save with an already-collected swarm never re-grants). Must
+            // not spawn a second player-owned legacy particle cloud.
+            grantOverhealthMotes(playerForInteract, sw.dustCount);
             const kindName = getDustDefinition(dustKind).displayName;
             combatText.spawnLabel(
               playerForInteract.positionXWorld,
