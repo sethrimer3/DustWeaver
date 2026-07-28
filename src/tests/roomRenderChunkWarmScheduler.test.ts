@@ -165,7 +165,7 @@ test('evictStalePrewarmedChunks evicts largest memory footprint first within sam
   }
 });
 
-test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is poor', () => {
+test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks when frame time is poor', () => {
   clearAllRenderSnapshots();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
@@ -184,6 +184,7 @@ test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is
     runChunkPrewarmSliceNow(50);
     assert.equal(getPrewarmStats().pausedForFrameTime, false);
     assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room should remain queued when frame time is stable');
+    assert.equal(getPrewarmStats().deferredRadius3, 0, 'No radius-3 deferral should occur with good frame time and high quality');
   } catch (e) {
     console.error('Test 4A failure:', e);
     throw e;
@@ -195,7 +196,8 @@ test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is
   try {
     runChunkPrewarmSliceNow(50);
     assert.equal(getPrewarmStats().pausedForFrameTime, true, 'pausedForFrameTime should be true when frame time > 20ms');
-    assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue during poor frame time');
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room must remain queued (deferred, not discarded) during poor frame time');
+    assert.ok(getPrewarmStats().deferredRadius3 > 0, 'deferredRadius3 should record the deferral');
   } catch (e) {
     console.error('Test 4B failure:', e);
     throw e;
@@ -206,9 +208,80 @@ test('adaptive radius-3 chunk warming discards radius-3 tasks when frame time is
   handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'med', () => 10, 800, 600, 1);
   try {
     runChunkPrewarmSliceNow(50);
-    assert.equal(getPrewarmStats().queueLength, 2, 'Radius-3 room should be discarded from queue on med quality');
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 room must remain queued (deferred, not discarded) on med quality');
+    assert.ok(getPrewarmStats().deferredRadius3 > 0, 'deferredRadius3 should record the deferral on med quality too');
   } catch (e) {
     console.error('Test 4C failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('adaptive radius-3 chunk warming resumes without a new room transition once frame time/quality recover', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0],
+    ['room1', room1],
+    ['room2', room2],
+    ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  // Simulate an anomalous slow-frame window: frame time starts poor, then
+  // recovers on a later slice within the SAME schedule (no re-transition).
+  let frameMs = 30;
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => frameMs, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().pausedForFrameTime, true);
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 task survives the poor-frame slice');
+
+    // Frame time recovers; radius-3 gating should re-evaluate favorably on
+    // the very next slice without requiring scheduleChunkPrewarms to be
+    // called again (i.e. without a fresh room transition).
+    frameMs = 10;
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().pausedForFrameTime, false, 'pausedForFrameTime should clear once frame time recovers');
+    assert.equal(getPrewarmStats().queueLength, 3, 'Radius-3 task remains present (not lost) through the recovery slice');
+  } catch (e) {
+    console.error('Test 4D failure:', e);
+    throw e;
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('adaptive radius-3 chunk warming oscillating frame time neither loses the task nor spins forever', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0],
+    ['room1', room1],
+    ['room2', room2],
+    ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  let frameMs = 10;
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => frameMs, 800, 600, 1);
+  try {
+    for (let i = 0; i < 6; i++) {
+      frameMs = i % 2 === 0 ? 30 : 10;
+      runChunkPrewarmSliceNow(50);
+      assert.equal(getPrewarmStats().queueLength, 3, `Radius-3 task must survive oscillation iteration ${i}`);
+    }
+  } catch (e) {
+    console.error('Test 4E failure:', e);
     throw e;
   } finally {
     handle.cancel();

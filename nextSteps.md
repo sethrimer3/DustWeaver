@@ -8,6 +8,25 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 561 — Radius-3 Render Chunk Warming: Defer Instead of Discard Under Poor Frame Time
+
+**Why:** Todo item asked to audit/harden radius-3 idle chunk prewarming's frame-time adaptivity. `roomRenderChunkWarmScheduler.ts` already had the adaptive gating (`FRAME_TIME_PAUSE_THRESHOLD_MS = 20`, `RADIUS3_HIGH_QUALITY_ONLY`, reduced one-chunk-per-idle budget under poor frame time), but `_runSlice`'s gate for radius-3 tasks called `_queue.shift()` on a gated task — permanently deleting it. A single anomalously slow frame, or being on 'med' quality for even one slice, silently threw away radius-3 prewarm work; it could only be recreated by a brand-new room transition (`scheduleChunkPrewarms`), and a quality change from medium→high mid-schedule did not resume radius-3 warming either.
+
+**What was done:** Changed the radius-3 gate in `src/screens/roomRenderChunkWarmScheduler.ts::_runSlice` to defer (`_queue.push(_queue.shift()!)`, i.e. move to the back) instead of discarding, reusing the existing `MAX_DEFERRALS_PER_SLICE` guard already used for "not ready" deferrals so a slice with only gated radius-3 work left can't spin. This means:
+- A single poor frame no longer deletes radius-3 work; it resumes automatically once frame time/quality recover, on the very next slice, without a new room transition.
+- Radius-1/2 tasks are unaffected — the gate only ever applies to `task.radius >= 3`, so transition-critical work is never delayed behind deferred radius-3 tasks.
+- Added a `deferredRadius3` stat (`PrewarmStats`, reset each `scheduleChunkPrewarms` call) so the deferral is observable instead of being indistinguishable from "task never existed".
+
+Deliberately left unchanged (no demonstrated gap): the memory-budget eviction pass, the reduced one-chunk idle budget under poor frame time, and the idle-timeout early-return-on-poor-frame branch.
+
+**Tests:** Rewrote the discard-oriented radius-3 test in `src/tests/roomRenderChunkWarmScheduler.test.ts` to assert deferral (task stays queued, `deferredRadius3` increments) under both poor frame time and med quality. Added a same-schedule recovery test (poor frame → recovers → task still present, `pausedForFrameTime` clears, no new schedule call) and an oscillating good/bad frame-time test proving the task survives repeated flips without the slice hanging.
+
+**Not done / follow-up:** No live-browser frame-time profiling was captured — this was a deterministic code/test-level audit per the task's constraints. Recommended manual check: drive a real transient frame hitch (or use `__dwBenchPingPong`/`__dwTransitionStats`) and confirm the debug panel's `deferredRadius3`/`pausedForFrameTime`/`queueLength` stats behave as expected, and that radius-3 chunks visibly finish warming shortly after a frame-time spike passes.
+
+**Validation:** Focused suite 16/16 pass, full suite 2677/2677 pass, `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 558 — Consolidate Challenge Field / TimeStop Field into a Canonical "Fields" Palette Category
 
 **Why:** Two editor palette bugs: `challenge_field` lived under the `triggers` category (not a field-like grouping), and the dedicated `timeStop` category rendered a completely empty palette despite `timestop_field` existing in `PALETTE_ITEMS`.
