@@ -398,6 +398,44 @@ The following area-based systems remain and were not changed in this pass:
 - **DEV scan fixed:** The DEV-only `bgWallGrid.reduce((n, v) => n + v, 0)` full-grid pass has been removed. `occupiedCells` is now counted during the painting loop (increment only when the target cell was previously 0), avoiding a second full-grid scan in the debug path.
 - **Constraint:** `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` directly (line ~215). Any sparse path requires a compatibility adapter.
 - **Recommended next step:** If memory pressure from very large rooms becomes a concern, wrap `bgWallGrid` behind a `BgWallGridView` interface that picks dense vs. sparse based on a `DENSE_BG_GRID_MAX_CELLS = 65536` threshold. Gate behind the `65536` area check already logged in DEV.
+- **Audit closed (Todo.md, not currently justified):** Measured every current official campaign room (`ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/*_room.json`, `size` field, sorted by cell count):
+
+  | room | w × h | cells | dense bytes |
+  |---|---|---|---|
+  | overgrown_shaft | 17×48 | 816 | 0.8 KB |
+  | dark_teleporter | 30×30 | 900 | 0.9 KB |
+  | skating | 59×20 | 1,180 | 1.2 KB |
+  | Cozy_Chamber | 40×30 | 1,200 | 1.2 KB |
+  | darkening_hall | 60×20 | 1,200 | 1.2 KB |
+  | crimson_throne | 40×40 | 1,600 | 1.6 KB |
+  | mysterious_curiosity | 70×25 | 1,750 | 1.7 KB |
+  | lava_tube | 24×80 | 1,920 | 1.9 KB |
+  | bend | 40×50 | 2,000 | 2.0 KB |
+  | ice_hall | 80×28 | 2,240 | 2.2 KB |
+  | first_light | 50×50 | 2,500 | 2.4 KB |
+  | interesting_room | 80×40 | 3,200 | 3.1 KB |
+  | boss_radiant_tether | 58×58 | 3,364 | 3.3 KB |
+  | lobby | 58×58 | 3,364 | 3.3 KB |
+  | pipe | 50×70 | 3,500 | 3.4 KB |
+  | darkest_cave | 80×50 | 4,000 | 3.9 KB |
+  | the_squeeze | 40×100 | 4,000 | 3.9 KB |
+  | w1_room1 | 38×118 | 4,484 | 4.4 KB |
+  | a_big_ask | 80×80 | 6,400 | 6.3 KB |
+  | long_hall | 240×30 | 7,200 | 7.0 KB |
+  | dark_depths | 90×90 | 8,100 | 7.9 KB |
+  | dark_tunnel | 120×70 | 8,400 | 8.2 KB |
+  | mysterious_hub | 80×120 | 9,600 | 9.4 KB |
+  | seal_chamber | 120×80 | 9,600 | 9.4 KB |
+  | magma_corridor | 160×80 | 12,800 | 12.5 KB |
+  | the_icicle | 100×140 | 14,000 | 13.7 KB |
+  | the_fall | 60×234 | 14,040 | 13.7 KB |
+  | tall_shaft | 60×240 | 14,400 | 14.1 KB |
+  | the_coast | 166×100 | 16,600 | 16.2 KB |
+  | overgrown_chasm | 200×120 | 24,000 | 23.4 KB |
+  | underwater_lake | 300×161 | 48,300 | 47.2 KB |
+  | **chasm (largest)** | 200×300 | **60,000** | **58.6 KB** |
+
+  All 33 official rooms are measured exactly (`size` field, `Uint8Array` is 1 byte/cell with zero per-element JS overhead — this is an exact figure, not an estimate). No room reaches the existing DEV `65536`-cell log threshold; `chasm` is the closest at 91.6% of it. `bgWallGrid` is a single instance per `WorldState`/`ResidentWorld` (reallocated only on a cell-count change, never cloned or duplicated — confirmed via `src/sim/world.ts`, `src/screens/gameLoadRoomPhases.ts`, `src/screens/residentWorldBuilder.ts`). Worst-case aggregate for `MAX_RESIDENTS_BASELINE = 16` (`src/screens/residentRoomManager.ts:322`) simultaneously resident rooms, using the 16 largest rooms above as a deliberately pessimistic upper bound (real BFS-adjacency resident sets won't cluster the largest rooms together), sums to ≈262,924 bytes ≈ 256.8 KB — negligible next to per-room sprite/texture/wall-template caches. Direct hot-path consumer: `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` by raw numeric index, so any future sparse form must preserve O(1) indexed lookup (typed array / numeric key, not string-keyed `Map`/`Set`) per the existing constraint noted above. **Decision: dense/sparse `BgWallGridView` adapter is not currently justified** — added complexity with no measured or calculated benefit. Reopen only if either: (a) an official room's `widthBlocks * heightBlocks` exceeds ~65,536 cells (64 KB dense), or (b) profiling shows aggregate resident-set `bgWallGrid` memory reaching low single-digit MB in practice. No source changes made for this audit; see `docs/Todo.md` for the closed item.
 
 ### 2. `rebuildNavSolidGrid` in `snakeAi.ts`
 
