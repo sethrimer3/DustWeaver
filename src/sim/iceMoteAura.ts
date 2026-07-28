@@ -29,10 +29,17 @@ import { ParticleKind } from './particles/kinds';
 // ── Tuning constants ──────────────────────────────────────────────────────────
 
 /** Freeze radius in world units (1 wu = 1 virtual pixel at zoom 1.0). */
-export const ICE_MOTE_FREEZE_RADIUS_WORLD = 48;
+export const ICE_MOTE_FREEZE_RADIUS_WORLD = 80;
 
-/** Thaw delay in ms after a zone leaves the freeze radius (or motes unequip). */
-export const ICE_MOTE_THAW_DELAY_MS = 600;
+/**
+ * Fixed lifetime of a frozen zone, in simulation milliseconds.  The sim runs
+ * at a fixed 16.666ms tick (60 Hz — see tick.ts), so 1000ms is exactly 60
+ * ticks.  This is driven by world.dtMs (accumulated only when tick() runs),
+ * never wall-clock time, so pause and deterministic replay are unaffected.
+ * Once a zone freezes this timer runs to completion regardless of whether
+ * the player remains within the freeze radius the whole time.
+ */
+export const ICE_MOTE_FREEZE_LIFETIME_MS = 1000;
 
 /**
  * Maximum number of water zones that can be simultaneously frozen.
@@ -62,10 +69,17 @@ interface IceMoteAuraState {
    */
   readonly slotToZone: Int16Array;
   /**
-   * Per-zone thaw countdown in ms.  > 0 while counting down.  0 = not thawing.
-   * Indexed by zone index (not slot index).
+   * Per-zone elapsed-frozen time in ms, counting up from 0 the instant the
+   * zone freezes.  Runs to ICE_MOTE_FREEZE_LIFETIME_MS unconditionally —
+   * continued proximity does NOT reset it.  Indexed by zone index.
    */
-  readonly thawTimers: Float32Array;
+  readonly frozenElapsedMs: Float32Array;
+  /**
+   * True while a zone is in its post-thaw cooldown: it has thawed but has
+   * not yet left the freeze radius, so it cannot be re-frozen.  Cleared the
+   * moment the zone is found outside the radius.  Indexed by zone index.
+   */
+  readonly postThawCooldown: Uint8Array;
 }
 
 const _aura: IceMoteAuraState = {
@@ -74,7 +88,8 @@ const _aura: IceMoteAuraState = {
   frozenSlotCount: 0,
   zoneToSlot:     new Map<number, number>(),
   slotToZone:     new Int16Array(ICE_MOTE_MAX_FROZEN_ZONES).fill(-1),
-  thawTimers:     new Float32Array(MAX_WATER_ZONES),
+  frozenElapsedMs: new Float32Array(MAX_WATER_ZONES),
+  postThawCooldown: new Uint8Array(MAX_WATER_ZONES),
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -90,7 +105,8 @@ export function resetIceMoteAuraForRoom(world: WorldState): void {
   _aura.slotToZone.fill(-1);
   _aura.frozenSlotCount = 0;
   _aura.isActive = false;
-  _aura.thawTimers.fill(0);
+  _aura.frozenElapsedMs.fill(0);
+  _aura.postThawCooldown.fill(0);
   world.frozenWaterZoneMask.fill(0);
   _aura.baseWallCount = world.wallCount;
   // Liquid bodies will rebuild naturally on the next getLiquidBodies() call
@@ -111,54 +127,52 @@ export function tickIceMoteAura(world: WorldState): void {
     _aura.isActive = active;
   }
 
-  if (!active) {
-    // Advance thaw timers for all currently frozen zones.
-    // Iterate backwards over slotToZone so that _thawZone's slot compaction
-    // (swap-with-last) never disturbs indices we haven't visited yet.
-    for (let s = _aura.frozenSlotCount - 1; s >= 0; s--) {
-      const zi = _aura.slotToZone[s];
-      _aura.thawTimers[zi] += dt;
-      if (_aura.thawTimers[zi] >= ICE_MOTE_THAW_DELAY_MS) {
-        _thawZone(world, zi);
-      }
-    }
-    return;
-  }
-
-  // ── Ice Motes are equipped; player is alive ───────────────────────────────
-
-  const px  = player!.positionXWorld;
-  const py  = player!.positionYWorld;
-  const r2  = ICE_MOTE_FREEZE_RADIUS_WORLD * ICE_MOTE_FREEZE_RADIUS_WORLD;
-
-  // ── Advance thaw timers for zones outside the radius ─────────────────────
+  // ── Unconditionally advance the fixed lifetime of every frozen zone ──────
+  // Continued proximity never resets or extends this timer — it always runs
+  // to exactly ICE_MOTE_FREEZE_LIFETIME_MS from the tick it froze on.
   // Iterate backwards over slotToZone so that _thawZone's slot compaction
   // (swap-with-last) never disturbs indices we haven't visited yet.
   for (let s = _aura.frozenSlotCount - 1; s >= 0; s--) {
     const zi = _aura.slotToZone[s];
-    const rx  = world.waterZoneXWorld[zi];
-    const ry  = world.waterZoneYWorld[zi];
-    const rw  = world.waterZoneWWorld[zi];
-    const rh  = world.waterZoneHWorld[zi];
-    if (_distSqToRect(px, py, rx, ry, rw, rh) <= r2) {
-      // Still inside radius — cancel any pending thaw.
-      _aura.thawTimers[zi] = 0;
-    } else {
-      // Outside radius — advance thaw timer.
-      _aura.thawTimers[zi] += dt;
-      if (_aura.thawTimers[zi] >= ICE_MOTE_THAW_DELAY_MS) {
-        _thawZone(world, zi);
+    _aura.frozenElapsedMs[zi] += dt;
+    if (_aura.frozenElapsedMs[zi] >= ICE_MOTE_FREEZE_LIFETIME_MS) {
+      _thawZone(world, zi);
+    }
+  }
+
+  // ── Post-thaw cooldown clearing: a thawed zone becomes eligible to freeze
+  //    again only once it is found outside the freeze radius (prevents
+  //    instant re-freeze while the player never left range). ────────────────
+  if (player !== undefined) {
+    const px0 = player.positionXWorld;
+    const py0 = player.positionYWorld;
+    const r02 = ICE_MOTE_FREEZE_RADIUS_WORLD * ICE_MOTE_FREEZE_RADIUS_WORLD;
+    for (let i = 0; i < world.waterZoneCount; i++) {
+      if (_aura.postThawCooldown[i] !== 1) continue;
+      const rx = world.waterZoneXWorld[i];
+      const ry = world.waterZoneYWorld[i];
+      const rw = world.waterZoneWWorld[i];
+      const rh = world.waterZoneHWorld[i];
+      if (_distSqToRect(px0, py0, rx, ry, rw, rh) > r02) {
+        _aura.postThawCooldown[i] = 0;
       }
     }
   }
 
-  // ── Freeze newly-in-range water zones ────────────────────────────────────
+  if (!active) return;
+
+  // ── Ice Motes are equipped; player is alive — freeze newly-in-range water zones ──
+  const px  = player!.positionXWorld;
+  const py  = player!.positionYWorld;
+  const r2  = ICE_MOTE_FREEZE_RADIUS_WORLD * ICE_MOTE_FREEZE_RADIUS_WORLD;
+
   const usedSlots = _aura.frozenSlotCount;
   const available = ICE_MOTE_MAX_FROZEN_ZONES - usedSlots; // remaining capacity
   let newFreezes = 0;
 
   for (let i = 0; i < world.waterZoneCount && newFreezes < available; i++) {
     if (world.frozenWaterZoneMask[i] === 1) continue; // already frozen
+    if (_aura.postThawCooldown[i] === 1) continue; // must leave radius first
 
     const rx  = world.waterZoneXWorld[i];
     const ry  = world.waterZoneYWorld[i];
@@ -241,7 +255,7 @@ function _freezeZone(world: WorldState, zi: number): void {
   _aura.frozenSlotCount++;
   world.wallCount = _aura.baseWallCount + _aura.frozenSlotCount;
   world.frozenWaterZoneMask[zi] = 1;
-  _aura.thawTimers[zi] = 0;
+  _aura.frozenElapsedMs[zi] = 0;
 
   markLiquidBodiesDirty();
 }
@@ -293,7 +307,10 @@ function _thawZone(world: WorldState, zi: number): void {
   _aura.frozenSlotCount--;
   world.wallCount = _aura.baseWallCount + _aura.frozenSlotCount;
   world.frozenWaterZoneMask[zi] = 0;
-  _aura.thawTimers[zi] = 0;
+  _aura.frozenElapsedMs[zi] = 0;
+  // Enter post-thaw cooldown: this zone cannot re-freeze until it is
+  // observed outside the freeze radius at least once.
+  _aura.postThawCooldown[zi] = 1;
 
   markLiquidBodiesDirty();
 }
