@@ -18,7 +18,7 @@
  *   - Backs off or pauses when recent frame times are poor.
  *   - Cancelled and restarted on every room transition.
  *
- * BUILD 394
+ * BUILD 561
  */
 
 import type { RoomDef, TransitionDirection } from '../levels/roomDef';
@@ -302,6 +302,13 @@ export interface PrewarmStats {
   totalPrewarmMemoryKB: number;
   /** Memory budget for the current quality tier (KB).  0 when scheduler not yet started. */
   memoryBudgetKB: number;
+  /**
+   * Radius-3 tasks deferred (moved to the back of the queue, not discarded)
+   * this schedule because quality was not 'high' or frame time was poor.
+   * Resets each schedule. A deferred task remains eligible to build once
+   * quality/frame time recover, without waiting for a new room transition.
+   */
+  deferredRadius3: number;
   /** Outcome of the most recent room transition. */
   lastTransitionOutcome: TransitionOutcome;
   /**
@@ -334,6 +341,7 @@ let _stats: PrewarmStats = {
   totalEvictions:          0,
   totalPrewarmMemoryKB:    0,
   memoryBudgetKB:          0,
+  deferredRadius3:         0,
   lastTransitionOutcome:   'none' as TransitionOutcome,
   lastTransitionDiagnostic: null,
 };
@@ -565,7 +573,7 @@ export function scheduleChunkPrewarms(
   evictStalePrewarmedChunks(keepIds, getQuality());
 
   // Reset per-schedule deferred counters so they reflect only the new schedule.
-  _stats = { ..._stats, deferredNotReady: 0, deferredSpritesNotReady: 0 };
+  _stats = { ..._stats, deferredNotReady: 0, deferredSpritesNotReady: 0, deferredRadius3: 0 };
 
   // Kick off the first idle callback.
   _idleHandle = _scheduleIdle(_onIdle);
@@ -746,7 +754,7 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
   // Remove from the keep-set so the scheduler's next eviction pass does not
   // inadvertently protect it, and so that scheduleChunkPrewarms will re-add it.
   _keepIds.delete(roomId);
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(`[chunkPrewarm:invalidate] evicted chunks for ${roomId}`);
   }
 }
@@ -1032,6 +1040,7 @@ function _runSlice(deadline: IdleDeadline): void {
   let chunksSkipped = 0;
   let deferredNotReady        = _stats.deferredNotReady;
   let deferredSpritesNotReady = _stats.deferredSpritesNotReady;
+  let deferredRadius3         = _stats.deferredRadius3;
   // How many not-ready tasks we've skipped over in this slice.
   // When this reaches MAX_DEFERRALS_PER_SLICE the slice stops so we don't
   // loop through the entire queue when everything is blocked.
@@ -1045,9 +1054,16 @@ function _runSlice(deadline: IdleDeadline): void {
 
     const task = _queue[0];
 
-    // Skip radius-3 rooms on low/med quality or poor frame time.
+    // Defer (not discard) radius-3 rooms on low/med quality or poor frame time.
+    // Moving to the back — rather than dropping the task — lets radius-3
+    // warming resume automatically once quality returns to 'high' or frame
+    // time recovers, without waiting for the next room transition to
+    // re-schedule it from scratch.
     if (task.radius >= 3 && RADIUS3_HIGH_QUALITY_ONLY && (quality !== 'high' || framePoor)) {
-      _queue.shift();
+      deferredRadius3++;
+      _queue.push(_queue.shift()!);
+      deferralCountThisSlice++;
+      if (deferralCountThisSlice >= MAX_DEFERRALS_PER_SLICE) break;
       continue;
     }
 
@@ -1163,6 +1179,7 @@ function _runSlice(deadline: IdleDeadline): void {
     bgCacheMisses:           _stats.bgCacheMisses,
     deferredNotReady:        deferredNotReady,
     deferredSpritesNotReady: deferredSpritesNotReady,
+    deferredRadius3:         deferredRadius3,
   };
 
   // Schedule next slice if there's more work.

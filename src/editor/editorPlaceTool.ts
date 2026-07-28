@@ -128,14 +128,14 @@ export function placeAtCursor(state: EditorState): boolean {
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
-    item.category === 'timeStop' ||
+    item.isTimeStopFieldItem === 1 ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   if (isBrushable && state.brushMode === 'fill') {
     let fillKind: FillKind = 'tile';
     if (item.category === 'liquids') {
       fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
-    } else if (item.category === 'timeStop') {
+    } else if (item.isTimeStopFieldItem === 1) {
       fillKind = 'timeStop';
     }
     const cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
@@ -215,7 +215,7 @@ export function evaluateBrushOperation(state: EditorState): BrushOperationResult
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
-    item.category === 'timeStop' ||
+    item.isTimeStopFieldItem === 1 ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1);
 
   // Rect-brush first click: only an anchor gets recorded, nothing is placed
@@ -230,7 +230,7 @@ export function evaluateBrushOperation(state: EditorState): BrushOperationResult
     let fillKind: FillKind = 'tile';
     if (item.category === 'liquids') {
       fillKind = item.id === 'lava_zone' ? 'lava' : 'water';
-    } else if (item.category === 'timeStop') {
+    } else if (item.isTimeStopFieldItem === 1) {
       fillKind = 'timeStop';
     }
     cells = getFillBrushCells(room, state.cursorBlockX, state.cursorBlockY, fillKind);
@@ -333,7 +333,7 @@ export function wouldPlacementSucceedAt(
   }
 
   // ── TimeStop Field layer ────────────────────────────────────────────────
-  if (item.category === 'timeStop') {
+  if (item.isTimeStopFieldItem === 1) {
     const wBlock = item.defaultWidthBlocks ?? 1;
     const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return false;
@@ -383,6 +383,36 @@ export function wouldPlacementSucceedAt(
       return canPlacePhantasmalTileAt(room, bx, by) ? true : 'occupied';
     }
 
+    // Crumble ("Cracked") modifier: checked BEFORE the plain isSpikeItem
+    // branch below so that placing a spike palette item while the Cracked
+    // modifier is active creates a crumble spike (EditorCrumbleBlock with
+    // spikeDirection/spikeSize — see handleCrumbleModifierToggle's inverse
+    // conversion) instead of silently placing an ordinary, unbreakable spike.
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
+      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
+      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
+      const crumbles = room.crumbleBlocks ?? [];
+      const overlapsCrumble = crumbles.some(b => {
+        const bw = b.wBlock ?? 1;
+        const bh = b.hBlock ?? 1;
+        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
+               by < b.yBlock + bh && by + crumbleH > b.yBlock;
+      });
+      if (overlapsCrumble) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return 'occupied';
+      if (item.isSpikeItem === 1) {
+        const spikeSizeBlocks = (item.spikeSize ?? '1x1') === '2x2' ? 2 : 1;
+        const overlapsSpike = (room.spikes ?? []).some(sp => {
+          const spSize = sp.size === '2x2' ? 2 : 1;
+          return bx < sp.xBlock + spSize && bx + spikeSizeBlocks > sp.xBlock &&
+                 by < sp.yBlock + spSize && by + spikeSizeBlocks > sp.yBlock;
+        });
+        if (overlapsSpike) return 'occupied';
+      }
+      return true;
+    }
+
     if (item.isSpikeItem === 1) {
       const spikeSize = item.spikeSize ?? '1x1';
       const spikeW = getPlacementWidth(item, state.placementRotationSteps);
@@ -400,24 +430,17 @@ export function wouldPlacementSucceedAt(
       return true;
     }
 
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
-      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
-      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
-      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
-      const crumbles = room.crumbleBlocks ?? [];
-      const overlapsCrumble = crumbles.some(b => {
-        const bw = b.wBlock ?? 1;
-        const bh = b.hBlock ?? 1;
-        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
-               by < b.yBlock + bh && by + crumbleH > b.yBlock;
-      });
-      if (overlapsCrumble) return 'occupied';
-      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return 'occupied';
-      return true;
-    }
-
+    // Falling modifier is only representable for plain rectangular blocks —
+    // EditorFallingBlock has no ramp/stairs/pillar/spike shape fields (each
+    // tile is always a plain square), so stairs/smooth-ramp/half-pillar/spike
+    // palette items never reach this branch even if a falling modifier is
+    // pending (the Block Modifier panel hides those checkboxes for such
+    // items — see editorUI.ts's supportsFallingModifier).
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
+      item.isPlatformItem !== 1 &&
+      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
+      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
       const fallingW = getPlacementWidth(item, state.placementRotationSteps);
@@ -672,7 +695,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
   // ── TimeStop Field layer ────────────────────────────────────────────────
   // Non-solid paintable 1×1 tiles, independent of the water/lava layer.
   // Painting the same cell twice is idempotent — no duplicates created.
-  if (item.category === 'timeStop') {
+  if (item.isTimeStopFieldItem === 1) {
     const wBlock = item.defaultWidthBlocks ?? 1;
     const hBlock = item.defaultHeightBlocks ?? 1;
     if (!rectFitsInsideRoom(room, bx, by, wBlock, hBlock)) return;
@@ -798,6 +821,85 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
+    // Crumble ("Cracked") modifier: checked BEFORE the plain isSpikeItem
+    // branch below so that placing a spike palette item while the Cracked
+    // modifier is active creates a crumble spike (with spikeDirection/
+    // spikeSize set, mirroring handleCrumbleModifierToggle's inverse
+    // conversion in editorPropertyChange.ts) instead of silently placing an
+    // ordinary, unbreakable spike that ignores the active modifier.
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
+      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
+
+      let crumbleRamp: 0 | 1 | 2 | 3 | undefined;
+      if (item.isRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      let crumbleStairs: 0 | 1 | 2 | 3 | undefined;
+      if (item.isStairsItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleStairs = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      let crumbleSmoothRamp: 0 | 1 | 2 | 3 | undefined;
+      if (item.isSmoothRampItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleSmoothRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
+      const crumblePillar: 0 | 1 | undefined = item.isPillarHalfWidthItem === 1 ? 1 : undefined;
+
+      // Direction follows the same 90°-CW rotation steps used for ramps/
+      // platforms/plain spikes: 0=up, 1=right, 2=down, 3=left (see
+      // _spikeDirRotStep in render/hazards.ts).
+      const spikeDirections: readonly ('up' | 'right' | 'down' | 'left')[] = ['up', 'right', 'down', 'left'];
+      const crumbleSpikeDirection = item.isSpikeItem === 1
+        ? spikeDirections[state.placementRotationSteps % 4]
+        : undefined;
+      const crumbleSpikeSize = item.isSpikeItem === 1 ? (item.spikeSize ?? '1x1') : undefined;
+
+      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return;
+
+      const crumbles = room.crumbleBlocks ?? [];
+      const overlapsCrumble = crumbles.some(b => {
+        const bw = b.wBlock ?? 1;
+        const bh = b.hBlock ?? 1;
+        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
+               by < b.yBlock + bh && by + crumbleH > b.yBlock;
+      });
+      if (overlapsCrumble) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return;
+      if (item.isSpikeItem === 1) {
+        const spikeSizeBlocks = crumbleSpikeSize === '2x2' ? 2 : 1;
+        const overlapsSpike = (room.spikes ?? []).some(sp => {
+          const spSize = sp.size === '2x2' ? 2 : 1;
+          return bx < sp.xBlock + spSize && bx + spikeSizeBlocks > sp.xBlock &&
+                 by < sp.yBlock + spSize && by + spikeSizeBlocks > sp.yBlock;
+        });
+        if (overlapsSpike) return;
+      }
+
+      if (!room.crumbleBlocks) room.crumbleBlocks = [];
+      room.crumbleBlocks.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        wBlock: crumbleW,
+        hBlock: crumbleH,
+        rampOrientation: crumbleRamp,
+        stairsOrientation: crumbleStairs,
+        smoothRampOrientation: crumbleSmoothRamp,
+        isPillarHalfWidthFlag: crumblePillar,
+        variant: state.pendingCrumbleVariant,
+        blockTheme: placementBlockTheme,
+        spikeDirection: crumbleSpikeDirection,
+        spikeSize: crumbleSpikeSize,
+      });
+      return;
+    }
+
     if (item.isSpikeItem === 1) {
       const spikeSize = item.spikeSize ?? '1x1';
       const spikeW = getPlacementWidth(item, state.placementRotationSteps);
@@ -830,62 +932,18 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
-      const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
-      const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
-
-      let crumbleRamp: 0 | 1 | 2 | 3 | undefined;
-      if (item.isRampItem === 1) {
-        const base = state.placementRotationSteps % 4;
-        crumbleRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
-      }
-
-      let crumbleStairs: 0 | 1 | 2 | 3 | undefined;
-      if (item.isStairsItem === 1) {
-        const base = state.placementRotationSteps % 4;
-        crumbleStairs = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
-      }
-
-      let crumbleSmoothRamp: 0 | 1 | 2 | 3 | undefined;
-      if (item.isSmoothRampItem === 1) {
-        const base = state.placementRotationSteps % 4;
-        crumbleSmoothRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
-      }
-
-      const crumblePillar: 0 | 1 | undefined = item.isPillarHalfWidthItem === 1 ? 1 : undefined;
-
-      if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return;
-
-      const crumbles = room.crumbleBlocks ?? [];
-      const overlapsCrumble = crumbles.some(b => {
-        const bw = b.wBlock ?? 1;
-        const bh = b.hBlock ?? 1;
-        return bx < b.xBlock + bw && bx + crumbleW > b.xBlock &&
-               by < b.yBlock + bh && by + crumbleH > b.yBlock;
-      });
-      if (overlapsCrumble) return;
-      if (rectOverlapsFallingBlocks(room, bx, by, crumbleW, crumbleH)) return;
-
-      if (!room.crumbleBlocks) room.crumbleBlocks = [];
-      room.crumbleBlocks.push({
-        uid: allocateUid(state),
-        xBlock: bx,
-        yBlock: by,
-        wBlock: crumbleW,
-        hBlock: crumbleH,
-        rampOrientation: crumbleRamp,
-        stairsOrientation: crumbleStairs,
-        smoothRampOrientation: crumbleSmoothRamp,
-        isPillarHalfWidthFlag: crumblePillar,
-        variant: state.pendingCrumbleVariant,
-        blockTheme: placementBlockTheme,
-      });
-      return;
-    }
-
     // ── Falling block tiles ──────────────────────────────────────────────────
+    // Falling modifier is only representable for plain rectangular blocks —
+    // EditorFallingBlock has no ramp/stairs/pillar/spike shape fields (each
+    // tile is always a plain square), so stairs/smooth-ramp/half-pillar/spike
+    // palette items never reach this branch even with a falling modifier
+    // pending (the Block Modifier panel hides those checkboxes for such
+    // items — see editorUI.ts's supportsFallingModifier).
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
+      item.isPlatformItem !== 1 &&
+      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
+      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
       const variant = item.fallingBlockVariant ?? (

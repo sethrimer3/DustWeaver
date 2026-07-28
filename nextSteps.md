@@ -8,6 +8,65 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 561 — Radius-3 Render Chunk Warming: Defer Instead of Discard Under Poor Frame Time
+
+**Why:** Todo item asked to audit/harden radius-3 idle chunk prewarming's frame-time adaptivity. `roomRenderChunkWarmScheduler.ts` already had the adaptive gating (`FRAME_TIME_PAUSE_THRESHOLD_MS = 20`, `RADIUS3_HIGH_QUALITY_ONLY`, reduced one-chunk-per-idle budget under poor frame time), but `_runSlice`'s gate for radius-3 tasks called `_queue.shift()` on a gated task — permanently deleting it. A single anomalously slow frame, or being on 'med' quality for even one slice, silently threw away radius-3 prewarm work; it could only be recreated by a brand-new room transition (`scheduleChunkPrewarms`), and a quality change from medium→high mid-schedule did not resume radius-3 warming either.
+
+**What was done:** Changed the radius-3 gate in `src/screens/roomRenderChunkWarmScheduler.ts::_runSlice` to defer (`_queue.push(_queue.shift()!)`, i.e. move to the back) instead of discarding, reusing the existing `MAX_DEFERRALS_PER_SLICE` guard already used for "not ready" deferrals so a slice with only gated radius-3 work left can't spin. This means:
+- A single poor frame no longer deletes radius-3 work; it resumes automatically once frame time/quality recover, on the very next slice, without a new room transition.
+- Radius-1/2 tasks are unaffected — the gate only ever applies to `task.radius >= 3`, so transition-critical work is never delayed behind deferred radius-3 tasks.
+- Added a `deferredRadius3` stat (`PrewarmStats`, reset each `scheduleChunkPrewarms` call) so the deferral is observable instead of being indistinguishable from "task never existed".
+
+Deliberately left unchanged (no demonstrated gap): the memory-budget eviction pass, the reduced one-chunk idle budget under poor frame time, and the idle-timeout early-return-on-poor-frame branch.
+
+**Tests:** Rewrote the discard-oriented radius-3 test in `src/tests/roomRenderChunkWarmScheduler.test.ts` to assert deferral (task stays queued, `deferredRadius3` increments) under both poor frame time and med quality. Added a same-schedule recovery test (poor frame → recovers → task still present, `pausedForFrameTime` clears, no new schedule call) and an oscillating good/bad frame-time test proving the task survives repeated flips without the slice hanging.
+
+**Not done / follow-up:** No live-browser frame-time profiling was captured — this was a deterministic code/test-level audit per the task's constraints. Recommended manual check: drive a real transient frame hitch (or use `__dwBenchPingPong`/`__dwTransitionStats`) and confirm the debug panel's `deferredRadius3`/`pausedForFrameTime`/`queueLength` stats behave as expected, and that radius-3 chunks visibly finish warming shortly after a frame-time spike passes.
+
+**Validation:** Focused suite 16/16 pass, full suite 2677/2677 pass, `npm run build` clean, `npm run lint` clean.
+
+---
+
+## BUILD 558 — Consolidate Challenge Field / TimeStop Field into a Canonical "Fields" Palette Category
+
+**Why:** Two editor palette bugs: `challenge_field` lived under the `triggers` category (not a field-like grouping), and the dedicated `timeStop` category rendered a completely empty palette despite `timestop_field` existing in `PALETTE_ITEMS`.
+
+**Root cause of the empty TimeStop palette:** `editorUI.ts`'s palette-rendering code gated its generic 2-column preview grid behind a hand-maintained allowlist of category names (`usePreviewGrid`). `'timeStop'` had simply been left off that list, so the category tab existed and had one item, but nothing was ever appended to the DOM for it — a silent, structurally-undetectable omission.
+
+**What was done:**
+1. Added a canonical `fields` entry to `PALETTE_CATEGORIES`/`PALETTE_CATEGORY_LABELS` (label "Fields") in `src/editor/editorPaletteItems.ts`, positioned right after `triggers`.
+2. Moved both `challenge_field` and `timestop_field` palette items to `category: 'fields'`. Removed the `timeStop` category entirely (id, label, and its `CATEGORY_DEFAULT_LAYER` entry in `src/editor/editorLayers.ts`, which now maps `fields: 'fields'`).
+3. Since `challenge_field` and `timestop_field` now share one category, every `item.category === 'timeStop'` brush/preview/placement check (in `editorPlaceTool.ts`, `editorDragDimensionOverlay.ts`, `editorPlacementPreviewDrawer.ts`) was changed to key off `item.isTimeStopFieldItem === 1` instead, so TimeStop-Field-specific brush/fill behavior doesn't leak onto Challenge Field placement. `FillKind`'s unrelated `'timeStop'` string literal (`editorBrush.ts`) was left untouched.
+4. Replaced `editorUI.ts`'s `usePreviewGrid` allowlist with a default-on/opt-out check (`state.activeCategory !== 'customBlocks'`) — every category renders the generic preview grid now except `customBlocks` (dynamic registry-driven UI with no `PALETTE_ITEMS` entries; `blocks` never reaches this code path at all, having its own earlier branch). This structurally prevents a future category from ever silently rendering empty the way `timeStop` did.
+5. Added `src/editor/editorWorkspacePreferences.ts::sanitizeActiveCategory` with a `LEGACY_CATEGORY_ALIASES` table (`timeStop → fields`) so a persisted pre-refactor `activeCategory` normalizes cleanly instead of producing a blank palette or an invalid state; any other unknown/garbage stored category also now safely falls back to the default rather than being blindly cast.
+6. Added `src/tests/editorFieldsPaletteCategory.test.ts` (10 tests): canonical category existence/label, retirement of `timeStop`, both field items' category, legacy/garbage `activeCategory` normalization on load, valid-category round-trip, live placement of both field types post-move, and a regression guard that no `PALETTE_ITEMS` category can silently require special-case rendering treatment beyond `blocks`/`customBlocks`.
+
+**Not done / follow-up:** No live-browser manual verification was performed (no DOM/canvas harness available in this pass) — validated at the data/state layer only (palette construction, layer mapping, placement, persistence). A manual smoke test (open the editor, select the Fields category tab, confirm both Challenge Field and TimeStop Field cards render and are placeable) is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2637/2637 tests pass (includes the new `editorFieldsPaletteCategory.test.ts` suite), `npm run build` clean, `npm run lint` clean.
+
+---
+
+## BUILD 557 — Grapple-Release Gold Motes: Natural Wall Collision + Rapid-Regrapple Persistence
+
+**Why:** `releaseGrapple` converted the 10 active chain slots into free-flying unowned `ParticleKind.Gold` motes on release, but two bugs undercut the intended "gold motes scatter and settle" feel: (1) `applyWallForces` only exempted unowned `ParticleKind.Golden` from the soft 18-world-unit pre-contact repulsion field, so released Gold motes got pushed around before ever touching a wall; (2) the very next `fireGrapple()` call reinitializes the same fixed chain-slot indices, so a quick re-grapple immediately erased the previous release burst mid-flight.
+
+**What was done:**
+1. Added a dedicated released-mote pool: `GRAPPLE_RELEASE_POOL_GROUPS = 3` and `GRAPPLE_RELEASE_POOL_CAPACITY = GRAPPLE_SEGMENT_COUNT * 3 = 30` in `src/sim/clusters/grappleShared.ts`. `initGrappleChainParticles` (`src/sim/clusters/grapple.ts`) allocates these 30 slots contiguously right after the 10 active chain slots, starting fully dead (`isAliveFlag = 0`), and records the pool's start index.
+2. New `GrappleWorldState` fields (`src/sim/worldGrappleState.ts`): `grappleReleaseStartIndex` (pool start, -1 until allocated) and `grappleReleaseBurstCounter` (increments once per actual release; `% GRAPPLE_RELEASE_POOL_GROUPS` picks which of the 3 fixed 10-slot groups the next burst writes into — deterministic round-robin, so a 4th overlapping release evicts the oldest group).
+3. `releaseGrapple` now kills the active chain slots (`isAliveFlag = 0`) instead of turning them into the visible burst, and writes the burst (position copied from the chain slot, same deterministic spread/speed/jump-off-bias math as before) into the current round-robin group of the release pool. Firing a new grapple only reinitializes the 10 active chain slots — it never touches the release pool, so up to 3 overlapping release bursts persist and animate simultaneously.
+4. `src/sim/particles/walls.ts::applyWallForces`: added a second unowned-particle exemption for `ParticleKind.Gold` (alongside the pre-existing `Golden` exemption), so released motes get zero pre-contact wall force and travel freely until actual surface contact.
+5. `src/sim/particles/walls.ts::applyWallBounce`: added `GRAPPLE_RELEASE_BOUNCE_DAMPING = 0.50`, applied only when the bouncing particle is unowned `ParticleKind.Gold`; all other particles keep the existing `WALL_BOUNCE_DAMPING = 0.60`.
+6. Verified by code audit (no changes needed) that released motes were already correctly excluded from binding (`binding.ts` only binds particles owned by the player entity ID), dust/mote counts, and resident-room transfer capture (`playerTransfer.ts` skips `ownerEntityId === -1` and `isTransientFlag === 1` particles) — the pre-existing `ownerEntityId = -1` / `isTransientFlag = 1` values on released motes already satisfied this.
+7. Added release-pool field resets to the existing grapple-state reset points in `src/screens/gameLoadRoomPhases.ts` (room load) and `src/screens/gameRoomChallenge.ts` (challenge return), alongside the pre-existing `grappleParticleStartIndex = -1` reset.
+8. Added `src/tests/grappleReleaseMotes.test.ts` (7 tests): dedicated-pool allocation distinct from chain slots; chain-slot death + correct unowned/transient/Gold burst spawn on release; simultaneous persistence of 3 overlapping release bursts; deterministic 4th-burst round-robin eviction; zero wall-force while near-but-not-touching a wall; exact 50% reflected speed on wall contact; unaffected 60% damping for an ordinary (non-Gold or owned) particle.
+
+**Not done / follow-up:** No live-browser manual verification was performed (no DOM/canvas harness in this environment) — validated at the simulation/physics layer only. A manual smoke test (fire a grapple near a wall, release mid-swing to confirm motes fly freely and bounce naturally on contact, then rapidly re-grapple 2-3 times in quick succession to confirm each release's motes keep animating independently rather than vanishing) is recommended before considering this fully battle-tested in a live session.
+
+**Validation:** 2628/2628 tests pass (2621 pre-existing + 7 new), `npm run build` clean, `npm run lint` clean.
+
+---
+
 ## BUILD 553 — Migrate Bow and Sword Weaves to Canonical Mote Ownership and Remove Legacy Ordered Mote Queue
 
 **Why:** Bow Weave and Sword Weave are active gameplay abilities that were historically coupled to the obsolete ordered combat-mote queue (`orderedMoteQueue.ts`) and physical orbit particles (`world.moteSlotParticleIndex`, `world.behaviorMode`). The intended goal is to eliminate the legacy ordered combat-mote queue while preserving Bow, Sword, and Shield Weaves as authoritative gameplay abilities built on canonical player health.
@@ -307,15 +366,21 @@ asset and register the URL in `ITEM_SPRITE_URL` inside `editorPalettePreview.ts`
 - `enemy_dust_leech` — procedural oval
 - `enemy_radiant_web` — procedural circle
 
-### Crumble blocks and falling blocks (PaletteItem slots not yet in PALETTE_ITEMS)
+### Crumble blocks and falling blocks — superseded by the Block Modifier system (BUILD 559)
 
-`PaletteItem` declares `isCrumbleBlockItem` and `isFallingBlockItem` flags, and
-`makeBlockPreviewShapeCss` in `editorUIHelpers.ts` already has switch-cases for
-`crumble_block`, `crumble_block_2x2`, `crumble_ramp_*` IDs.  However, no
-corresponding entries exist in `PALETTE_ITEMS` in `editorDropdownData.ts`.
-When crumble / falling-block palette items are eventually added, their preview
-shapes are already implemented — just add the item to `PALETTE_ITEMS` and the
-blocks grid will pick them up automatically.
+This note is stale as of BUILD 559. `isCrumbleBlockItem`/`isFallingBlockItem`
+palette flags still exist on `PaletteItem` for forward compatibility, but no
+`PALETTE_ITEMS` entry sets them — the actual editor UX is `editorUI.ts`'s
+"Block Modifier" panel (Cracked / Falling: Tough / Sensitive / Crumbling),
+which lets any eligible `blocks`-category item (1x1/2x2 blocks, stairs, smooth
+ramps, half-width pillars, spikes) be placed as a crumble or falling variant
+without a separate palette card. Standalone crumble/falling palette entries
+were deliberately NOT added — see the Todo.md entry for this item for the
+full investigation and the two placement-layer bugs (spike crumble routing,
+stale-modifier platform leakage) found and fixed in the process. The Falling
+modifier is restricted to plain 1x1/2x2 blocks only, since `EditorFallingBlock`
+has no ramp/stairs/pillar/spike shape fields (unlike `EditorCrumbleBlock`,
+which does and fully supports crumble spikes — see `crumbleSpikes.test.ts`).
 
 
 ---
@@ -333,6 +398,44 @@ The following area-based systems remain and were not changed in this pass:
 - **DEV scan fixed:** The DEV-only `bgWallGrid.reduce((n, v) => n + v, 0)` full-grid pass has been removed. `occupiedCells` is now counted during the painting loop (increment only when the target cell was previously 0), avoiding a second full-grid scan in the debug path.
 - **Constraint:** `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` directly (line ~215). Any sparse path requires a compatibility adapter.
 - **Recommended next step:** If memory pressure from very large rooms becomes a concern, wrap `bgWallGrid` behind a `BgWallGridView` interface that picks dense vs. sparse based on a `DENSE_BG_GRID_MAX_CELLS = 65536` threshold. Gate behind the `65536` area check already logged in DEV.
+- **Audit closed (Todo.md, not currently justified):** Measured every current official campaign room (`ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS/*_room.json`, `size` field, sorted by cell count):
+
+  | room | w × h | cells | dense bytes |
+  |---|---|---|---|
+  | overgrown_shaft | 17×48 | 816 | 0.8 KB |
+  | dark_teleporter | 30×30 | 900 | 0.9 KB |
+  | skating | 59×20 | 1,180 | 1.2 KB |
+  | Cozy_Chamber | 40×30 | 1,200 | 1.2 KB |
+  | darkening_hall | 60×20 | 1,200 | 1.2 KB |
+  | crimson_throne | 40×40 | 1,600 | 1.6 KB |
+  | mysterious_curiosity | 70×25 | 1,750 | 1.7 KB |
+  | lava_tube | 24×80 | 1,920 | 1.9 KB |
+  | bend | 40×50 | 2,000 | 2.0 KB |
+  | ice_hall | 80×28 | 2,240 | 2.2 KB |
+  | first_light | 50×50 | 2,500 | 2.4 KB |
+  | interesting_room | 80×40 | 3,200 | 3.1 KB |
+  | boss_radiant_tether | 58×58 | 3,364 | 3.3 KB |
+  | lobby | 58×58 | 3,364 | 3.3 KB |
+  | pipe | 50×70 | 3,500 | 3.4 KB |
+  | darkest_cave | 80×50 | 4,000 | 3.9 KB |
+  | the_squeeze | 40×100 | 4,000 | 3.9 KB |
+  | w1_room1 | 38×118 | 4,484 | 4.4 KB |
+  | a_big_ask | 80×80 | 6,400 | 6.3 KB |
+  | long_hall | 240×30 | 7,200 | 7.0 KB |
+  | dark_depths | 90×90 | 8,100 | 7.9 KB |
+  | dark_tunnel | 120×70 | 8,400 | 8.2 KB |
+  | mysterious_hub | 80×120 | 9,600 | 9.4 KB |
+  | seal_chamber | 120×80 | 9,600 | 9.4 KB |
+  | magma_corridor | 160×80 | 12,800 | 12.5 KB |
+  | the_icicle | 100×140 | 14,000 | 13.7 KB |
+  | the_fall | 60×234 | 14,040 | 13.7 KB |
+  | tall_shaft | 60×240 | 14,400 | 14.1 KB |
+  | the_coast | 166×100 | 16,600 | 16.2 KB |
+  | overgrown_chasm | 200×120 | 24,000 | 23.4 KB |
+  | underwater_lake | 300×161 | 48,300 | 47.2 KB |
+  | **chasm (largest)** | 200×300 | **60,000** | **58.6 KB** |
+
+  All 33 official rooms are measured exactly (`size` field, `Uint8Array` is 1 byte/cell with zero per-element JS overhead — this is an exact figure, not an estimate). No room reaches the existing DEV `65536`-cell log threshold; `chasm` is the closest at 91.6% of it. `bgWallGrid` is a single instance per `WorldState`/`ResidentWorld` (reallocated only on a cell-count change, never cloned or duplicated — confirmed via `src/sim/world.ts`, `src/screens/gameLoadRoomPhases.ts`, `src/screens/residentWorldBuilder.ts`). Worst-case aggregate for `MAX_RESIDENTS_BASELINE = 16` (`src/screens/residentRoomManager.ts:322`) simultaneously resident rooms, using the 16 largest rooms above as a deliberately pessimistic upper bound (real BFS-adjacency resident sets won't cluster the largest rooms together), sums to ≈262,924 bytes ≈ 256.8 KB — negligible next to per-room sprite/texture/wall-template caches. Direct hot-path consumer: `src/sim/clusters/snakeAi.ts` reads `world.bgWallGrid[idx]` by raw numeric index, so any future sparse form must preserve O(1) indexed lookup (typed array / numeric key, not string-keyed `Map`/`Set`) per the existing constraint noted above. **Decision: dense/sparse `BgWallGridView` adapter is not currently justified** — added complexity with no measured or calculated benefit. Reopen only if either: (a) an official room's `widthBlocks * heightBlocks` exceeds ~65,536 cells (64 KB dense), or (b) profiling shows aggregate resident-set `bgWallGrid` memory reaching low single-digit MB in practice. No source changes made for this audit; see `docs/Todo.md` for the closed item.
 
 ### 2. `rebuildNavSolidGrid` in `snakeAi.ts`
 
@@ -750,7 +853,7 @@ Confirmed in code: `roomRenderChunkWarmScheduler.ts` line 666 checks `entry.bloc
 
 ---
 
-### 3. Add real global/LRU eviction for prewarmed chunks (PARTIALLY DONE — BUILD 405)
+### 3. Add real global/LRU eviction for prewarmed chunks (DONE — BUILD 405, closed BUILD 560)
 
 Quality-tier memory budgets (`PREWARM_MEMORY_BUDGET_KB`) and radius-based eviction exist in the scheduler.
 
@@ -760,7 +863,7 @@ Also in BUILD 405:
 - `prewarmWallChunksForRoom` and `prewarmBgChunksForRoom` now return `PrewarmChunkResult { rebuilt, skipped, totalChunks, dirtyChunks }` instead of a raw `number`.  Done detection in both the scheduler and `tickEntryWarm` now checks `rebuilt === 0 && skipped === 0`.
 - `PrewarmStats` gains `chunksSkippedLastSlice` and `memoryBudgetKB` for debug panel visibility.
 
-What remains deferred:
+**BUILD 560 closure**: Re-audited the full lifecycle (creation, accounting, stale-set eviction, budget eviction, adoption/removal, invalidation, schedule restart, quality changes, stats reporting) against the Todo item asking for "an LRU or memory cap." The existing radius/size-ordered per-quality-budget policy was retained rather than replaced with timestamp-based LRU: prewarmed rooms are never "accessed" in the LRU sense (they're speculatively built, then either adopted once or discarded), so BFS radius to the current room is a materially better recency proxy than any real access timestamp would be. Fixed one real defect: `invalidateRoomChunkPrewarm` unconditionally read `import.meta.env.DEV`, which throws when called outside a Vite-provided `import.meta.env`; changed to `import.meta.env?.DEV`, matching the guard pattern already used in `src/debug/perfFreezeProfiler.ts`. Added 10 focused tests to `src/tests/roomRenderChunkWarmScheduler.test.ts` (bg-only rooms, combined wall+bg accounting, dual-store stale eviction, active-room protection over budget, per-quality budget selection, eviction-stats stability across repeated calls, post-slice enforcement, invalidate+re-queue, and keep-set protection for completed nearby rooms). No other defects found. 2675/2675 tests pass; build and lint clean.
 
 ---
 

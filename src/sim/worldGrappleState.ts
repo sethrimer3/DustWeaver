@@ -71,6 +71,21 @@ export interface GrappleWorldState {
    */
   grappleParticleStartIndex: number;
   /**
+   * Start index in the particle buffer of the dedicated released-mote pool
+   * (GRAPPLE_RELEASE_POOL_CAPACITY slots, allocated immediately after the
+   * active chain slots). -1 if not yet allocated. These slots hold gold
+   * motes released by releaseGrapple() so a subsequent grapple fire never
+   * overwrites/erases the previous release burst mid-flight.
+   */
+  grappleReleaseStartIndex: number;
+  /**
+   * Counts every grapple release that actually spawned a burst. Used to pick
+   * which of the 3 fixed release-pool groups (of GRAPPLE_SEGMENT_COUNT slots
+   * each) the next burst writes into, round-robin — so up to 3 overlapping
+   * release bursts persist simultaneously and only a 4th evicts the oldest.
+   */
+  grappleReleaseBurstCounter: number;
+  /**
    * Number of consecutive ticks the jump button has been held while the grapple
    * is active.  Used for tap-vs-hold detection:
    *   • ≤ GRAPPLE_JUMP_TAP_THRESHOLD_TICKS on release → tap → release grapple
@@ -395,6 +410,8 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleAttachFxXWorld:                 0.0,
     grappleAttachFxYWorld:                 0.0,
     grappleParticleStartIndex:             -1,
+    grappleReleaseStartIndex:              -1,
+    grappleReleaseBurstCounter:            0,
     grappleJumpHeldTickCount:              0,
     hasGrappleChargeFlag:                  1,
     grappleInputMode:                      GrappleInputMode.Hold,

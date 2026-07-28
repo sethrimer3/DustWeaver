@@ -11,7 +11,7 @@ import {
   BLOCK_THEMES, BACKGROUND_OPTIONS,
   BlockTheme, SONG_OPTIONS, RoomSongId,
   RoomEdge, EditorUICallbacks, BrushMode, BlockPlacementModifier,
-  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant,
+  CRUMBLE_VARIANT_OPTIONS, CrumbleVariant, PaletteItem,
 } from './editorState';
 import {
   addDimField,
@@ -755,17 +755,18 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   blockModifierTitle.style.cssText = 'font-size: 11px; color: #8fc8ff; margin-bottom: 6px; font-weight: bold;';
   blockModifierDiv.appendChild(blockModifierTitle);
   const modifierInputs: HTMLInputElement[] = [];
-  const modifierOptions: { id: BlockPlacementModifier; label: string; help: string }[] = [
+  const fallingModifierRows: HTMLLabelElement[] = [];
+  const modifierOptions: { id: BlockPlacementModifier; label: string; help: string; isFalling?: boolean }[] = [
     { id: 'cracked', label: 'Cracked',
       help: 'Places a crumble block: cracks on the first hit, then breaks apart on the second.' },
     { id: 'tough', label: 'Falling: Tough',
-      help: 'Falling block that only drops when hit by a strong downward force or a downward grapple pull.' },
+      help: 'Falling block that only drops when hit by a strong downward force or a downward grapple pull.', isFalling: true },
     { id: 'sensitive', label: 'Falling: Sensitive',
-      help: 'Falling block that drops from almost any contact.' },
+      help: 'Falling block that drops from almost any contact.', isFalling: true },
     { id: 'crumbling', label: 'Falling: Crumbling',
-      help: 'Falling block that drops like Sensitive, then disappears once it reaches full fall speed.' },
+      help: 'Falling block that drops like Sensitive, then disappears once it reaches full fall speed.', isFalling: true },
   ];
-  function makeModifierRow(id: BlockPlacementModifier, label: string, help: string): void {
+  function makeModifierRow(id: BlockPlacementModifier, label: string, help: string, isFalling?: boolean): void {
     const row = document.createElement('label');
     row.style.cssText = 'display: flex; align-items: center; gap: 6px; margin: 3px 0; font-size: 11px; cursor: pointer;';
     const input = document.createElement('input');
@@ -788,8 +789,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     helpIcon.addEventListener('click', (e) => e.preventDefault());
     row.appendChild(helpIcon);
     blockModifierDiv.appendChild(row);
+    if (isFalling) fallingModifierRows.push(row);
   }
-  for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label, opt.help);
+  for (const opt of modifierOptions) makeModifierRow(opt.id, opt.label, opt.help, opt.isFalling);
+
+  // The Falling modifier only produces plain rectangular EditorFallingBlock
+  // tiles (no ramp/stairs/pillar/spike shape fields exist on that type), so
+  // it is hidden for any shaped block item — those items still support the
+  // Cracked (crumble) modifier, which does carry ramp/stairs/pillar/spike
+  // shape fields on EditorCrumbleBlock. Keep in sync with the placement-time
+  // guard in editorPlaceTool.ts's falling-modifier branch.
+  function supportsFallingModifier(item: PaletteItem): boolean {
+    return item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
+      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1;
+  }
+  let lastFallingModifierSupported: boolean | null = null;
 
   // ── Background modifier + subordinate "Blocks Ambient Light" checkbox ─────
   // Background is mutually exclusive with Cracked/Falling: it must never
@@ -1298,20 +1312,18 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
           }
         }
 
-        // Categories that get a visual 2-column preview grid
-        const usePreviewGrid = (
-          state.activeCategory === 'specialBlocks' ||
-          state.activeCategory === 'enemies' ||
-          state.activeCategory === 'triggers' ||
-          state.activeCategory === 'collectables' ||
-          state.activeCategory === 'environment' ||
-          state.activeCategory === 'dust' ||
-          state.activeCategory === 'objects' ||
-          state.activeCategory === 'lighting' ||
-          state.activeCategory === 'liquids' ||
-          state.activeCategory === 'ropes' ||
-          state.activeCategory === 'guidePaths'
-        );
+        // Every non-'blocks' category (handled separately above via its own
+        // `if` branch, so it never reaches this code) gets the generic
+        // 2-column preview grid by default. 'customBlocks' is the only
+        // opt-out: its cards come from the dynamic custom-block registry
+        // (built above), not from a `PALETTE_ITEMS` filter, so there's
+        // nothing in `items` for it to render here.
+        //
+        // This is deliberately a default-on/opt-out design (not an allowlist)
+        // so a brand new category can never silently render an empty
+        // palette just because it was left off a list — see
+        // editorPaletteItems.test.ts's coverage assertion.
+        const usePreviewGrid = state.activeCategory !== 'customBlocks';
 
         if (usePreviewGrid) {
           const grid = document.createElement('div');
@@ -1367,6 +1379,22 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       blockModifierDiv.style.display = isModifierEligible ? '' : 'none';
     }
     if (isModifierEligible) {
+      const fallingSupported = supportsFallingModifier(item as PaletteItem);
+      if (fallingSupported !== lastFallingModifierSupported) {
+        lastFallingModifierSupported = fallingSupported;
+        for (const row of fallingModifierRows) row.style.display = fallingSupported ? '' : 'none';
+        // A shaped item (stairs/smooth ramp/half-pillar/spike) can never
+        // place a falling block — see editorPlaceTool.ts's matching guard.
+        // Drop a stale falling selection back to 'none' rather than leaving
+        // hidden UI silently armed for the next placement.
+        if (!fallingSupported && (
+          state.pendingBlockPlacementModifier === 'tough' ||
+          state.pendingBlockPlacementModifier === 'sensitive' ||
+          state.pendingBlockPlacementModifier === 'crumbling'
+        )) {
+          callbacks?.onBlockPlacementModifierChange('none');
+        }
+      }
       // Only touch modifier checkbox/select DOM when the modifier state
       // signature changed (not on every frame regardless of change).
       const blockModifierSig = computeBlockModifierSig(state);
@@ -1462,6 +1490,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       lastCategorySig = '';
       lastBlockModifierSig = '';
       lastModifierEligible = null;
+      lastFallingModifierSupported = null;
       lastInspectorIdentitySig = { uid: -1, type: '', count: 0, dialogueEntryCount: -1 };
       lastRenderedRoomId = '';
       lastRenderedWidthBlocks = -1;

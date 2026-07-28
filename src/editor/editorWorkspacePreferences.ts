@@ -17,7 +17,7 @@
  */
 
 import { LAYER_IDS, type LayerId, type EditorLayersState, createDefaultEditorLayers } from './editorLayers';
-import type { PaletteCategory } from './editorPaletteItems';
+import { PALETTE_CATEGORIES, type PaletteCategory } from './editorPaletteItems';
 import type { BrushMode } from './editorDropdownData';
 import {
   defaultPanelLayout, normalizePanelLayout, type EditorPanelLayout,
@@ -94,6 +94,24 @@ function isValidLayerId(v: unknown): v is LayerId {
   return typeof v === 'string' && (LAYER_IDS as readonly string[]).includes(v);
 }
 
+/**
+ * Legacy palette-category ids retired from `PALETTE_CATEGORIES` map to their
+ * replacement here, so a stored `activeCategory` from an older build
+ * normalizes instead of producing a blank/unknown palette on load.
+ *
+ * `timeStop` was folded into the canonical `fields` category (which also now
+ * holds `challenge_field`) — see editorPaletteItems.ts.
+ */
+const LEGACY_CATEGORY_ALIASES: Readonly<Record<string, PaletteCategory>> = {
+  timeStop: 'fields',
+};
+
+function sanitizeActiveCategory(v: unknown, fallback: PaletteCategory): PaletteCategory {
+  if (typeof v !== 'string') return fallback;
+  const aliased = LEGACY_CATEGORY_ALIASES[v] ?? v;
+  return (PALETTE_CATEGORIES as readonly string[]).includes(aliased) ? (aliased as PaletteCategory) : fallback;
+}
+
 function sanitizeLayerPrefs(v: unknown): EditorWorkspaceLayerPrefs | null {
   if (typeof v !== 'object' || v === null) return null;
   const o = v as Record<string, unknown>;
@@ -130,7 +148,7 @@ function sanitize(raw: unknown): EditorWorkspacePreferences {
     version: EDITOR_WORKSPACE_PREFS_VERSION,
     layers,
     layerPanelCollapsed: typeof o.layerPanelCollapsed === 'boolean' ? o.layerPanelCollapsed : fallback.layerPanelCollapsed,
-    activeCategory: typeof o.activeCategory === 'string' ? (o.activeCategory as PaletteCategory) : fallback.activeCategory,
+    activeCategory: sanitizeActiveCategory(o.activeCategory, fallback.activeCategory),
     brushMode: VALID_BRUSH_MODES.includes(o.brushMode as BrushMode) ? (o.brushMode as BrushMode) : fallback.brushMode,
     // v1 → v2: the single `sidebarScrollTop` becomes the LEFT sidebar's, and
     // the right sidebar defaults to 0. A v2 record's own

@@ -68,6 +68,8 @@ export function updateRoomChallengeElements(world: WorldState, progress?: Player
     world.isGrappleActiveFlag = 0;
     world.isGrappleZipActiveFlag = 0;
     world.grappleParticleStartIndex = -1;
+    world.grappleReleaseStartIndex = -1;
+    world.grappleReleaseBurstCounter = 0;
     world.grappleCarryBlockIndex = -1;
   }
 

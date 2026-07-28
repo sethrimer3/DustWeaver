@@ -382,6 +382,8 @@ function resetRoomScopedSimState(world: WorldState): void {
   world.isGrappleStuckFlag        = 0;
   world.hasGrappleChargeFlag      = 1;
   world.grappleParticleStartIndex = -1;
+  world.grappleReleaseStartIndex  = -1;
+  world.grappleReleaseBurstCounter = 0;
 }
 
 /** Sanitizes the player's weave loadout against current progress. */

@@ -38,7 +38,7 @@ export function getActiveEditorDragRect(state: EditorState): EditorDragRect | nu
     item.category === 'blocks' ||
     item.category === 'specialBlocks' ||
     item.category === 'liquids' ||
-    item.category === 'timeStop' ||
+    item.isTimeStopFieldItem === 1 ||
     (item.category === 'lighting' && item.isAmbientLightBlockerItem === 1)
   );
   const preview = getPlacementPreview(state);

@@ -26,6 +26,16 @@ export const GRAPPLE_MAX_LENGTH_WORLD = INFLUENCE_RADIUS_WORLD;
 /** Number of Gold particles that form the visible chain between player and anchor. */
 export const GRAPPLE_SEGMENT_COUNT = 10;
 
+/**
+ * Number of release-pool groups kept alive simultaneously. Each group holds
+ * GRAPPLE_SEGMENT_COUNT released motes from one grapple release; a 4th
+ * overlapping release evicts the oldest group (deterministic round-robin).
+ */
+export const GRAPPLE_RELEASE_POOL_GROUPS = 3;
+
+/** Total dedicated pool capacity for released grapple motes. */
+export const GRAPPLE_RELEASE_POOL_CAPACITY = GRAPPLE_SEGMENT_COUNT * GRAPPLE_RELEASE_POOL_GROUPS;
+
 /** Duration of the sparkle burst effect on attach (ticks). */
 export const GRAPPLE_ATTACH_FX_TICKS = 14;
 
@@ -282,13 +292,23 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
   // Let the visible chain break into free-flying motes instead of vanishing.
   // Each mote continues away from the player's release position toward the
   // grapple anchor, with a small deterministic spread and individual fade.
+  //
+  // Released motes are written into a dedicated release-pool group rather
+  // than reusing the active chain slots directly: the active chain slots
+  // (world.grappleParticleStartIndex..+GRAPPLE_SEGMENT_COUNT) are immediately
+  // reinitialised by the next fireGrapple() call, so writing the release
+  // burst there would erase it the instant the player re-grapples. The
+  // dedicated pool has GRAPPLE_RELEASE_POOL_GROUPS groups of
+  // GRAPPLE_SEGMENT_COUNT slots and round-robins across them, so up to
+  // GRAPPLE_RELEASE_POOL_GROUPS overlapping release bursts persist
+  // simultaneously and only the next one evicts the oldest group.
   if (shouldRetractFromActiveGrapple && world.grappleParticleStartIndex >= 0) {
-    const start = world.grappleParticleStartIndex;
+    const chainStart = world.grappleParticleStartIndex;
     const player = world.clusters[0];
     let farthestParticleDistance = 0.0;
     if (isJumpOff && player !== undefined) {
       for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
-        const idx = start + i;
+        const idx = chainStart + i;
         const playerDx = world.positionXWorld[idx] - player.positionXWorld;
         const playerDy = world.positionYWorld[idx] - player.positionYWorld;
         farthestParticleDistance = Math.max(
@@ -298,13 +318,18 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
       }
     }
 
+    const releasePoolStart = world.grappleReleaseStartIndex;
+    const hasReleasePool = releasePoolStart >= 0;
+    const groupIndex = world.grappleReleaseBurstCounter % GRAPPLE_RELEASE_POOL_GROUPS;
+    const groupStart = releasePoolStart + groupIndex * GRAPPLE_SEGMENT_COUNT;
+
     for (let i = 0; i < GRAPPLE_SEGMENT_COUNT; i++) {
-      const idx = start + i;
-      const dx = world.grappleAnchorXWorld - world.positionXWorld[idx];
-      const dy = world.grappleAnchorYWorld - world.positionYWorld[idx];
+      const chainIdx = chainStart + i;
+      const dx = world.grappleAnchorXWorld - world.positionXWorld[chainIdx];
+      const dy = world.grappleAnchorYWorld - world.positionYWorld[chainIdx];
       const distance = Math.sqrt(dx * dx + dy * dy);
       const baseAngle = distance > 1e-6 ? Math.atan2(dy, dx) : 0.0;
-      const seed = (world.noiseTickSeed[idx] ^ world.tick ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0;
+      const seed = (world.noiseTickSeed[chainIdx] ^ world.tick ^ Math.imul(i + 1, 0x9e3779b1)) >>> 0;
       const angle = baseAngle + (grappleReleaseNoise(seed) * 2.0 - 1.0) * GRAPPLE_RELEASE_SPREAD_RAD;
       let dirX = Math.cos(angle);
       let dirY = Math.sin(angle);
@@ -312,8 +337,8 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
         + grappleReleaseNoise(seed ^ 0xa511e9b3) * GRAPPLE_RELEASE_SPEED_RANGE_WORLD_PER_SEC;
 
       if (isJumpOff && player !== undefined && farthestParticleDistance > 1e-6) {
-        const playerDx = world.positionXWorld[idx] - player.positionXWorld;
-        const playerDy = world.positionYWorld[idx] - player.positionYWorld;
+        const playerDx = world.positionXWorld[chainIdx] - player.positionXWorld;
+        const playerDy = world.positionYWorld[chainIdx] - player.positionYWorld;
         const playerDistance = Math.sqrt(playerDx * playerDx + playerDy * playerDy);
         const proximity = 1.0 - Math.min(1.0, playerDistance / farthestParticleDistance);
         const downBias = proximity * GRAPPLE_JUMP_RELEASE_MAX_DOWN_BIAS;
@@ -327,16 +352,32 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
         speed *= 1.0 + proximity * GRAPPLE_JUMP_RELEASE_MAX_SPEED_BOOST;
       }
 
-      world.velocityXWorld[idx] = dirX * speed;
-      world.velocityYWorld[idx] = dirY * speed;
-      world.forceX[idx] = 0.0;
-      world.forceY[idx] = 0.0;
-      world.ageTicks[idx] = 0.0;
-      world.lifetimeTicks[idx] = GRAPPLE_RELEASE_FADE_MIN_TICKS
+      // The active chain slot's job is done — kill it so the old chain
+      // never renders alongside the released burst.
+      world.isAliveFlag[chainIdx] = 0;
+      world.velocityXWorld[chainIdx] = 0.0;
+      world.velocityYWorld[chainIdx] = 0.0;
+
+      if (!hasReleasePool) continue;
+      const releaseIdx = groupStart + i;
+      world.positionXWorld[releaseIdx] = world.positionXWorld[chainIdx];
+      world.positionYWorld[releaseIdx] = world.positionYWorld[chainIdx];
+      world.velocityXWorld[releaseIdx] = dirX * speed;
+      world.velocityYWorld[releaseIdx] = dirY * speed;
+      world.forceX[releaseIdx] = 0.0;
+      world.forceY[releaseIdx] = 0.0;
+      world.ageTicks[releaseIdx] = 0.0;
+      world.lifetimeTicks[releaseIdx] = GRAPPLE_RELEASE_FADE_MIN_TICKS
         + grappleReleaseNoise(seed ^ 0x63d83595) * GRAPPLE_RELEASE_FADE_TICK_RANGE;
-      world.behaviorMode[idx] = 0;
-      world.ownerEntityId[idx] = -1;
-      world.isAliveFlag[idx] = 1;
+      world.behaviorMode[releaseIdx] = 0;
+      world.ownerEntityId[releaseIdx] = -1;
+      world.kindBuffer[releaseIdx] = world.kindBuffer[chainIdx];
+      world.isTransientFlag[releaseIdx] = 1;
+      world.isAliveFlag[releaseIdx] = 1;
+    }
+
+    if (hasReleasePool) {
+      world.grappleReleaseBurstCounter = world.grappleReleaseBurstCounter + 1;
     }
   }
 
