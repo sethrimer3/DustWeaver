@@ -388,7 +388,7 @@ export function wouldPlacementSucceedAt(
     // modifier is active creates a crumble spike (EditorCrumbleBlock with
     // spikeDirection/spikeSize — see handleCrumbleModifierToggle's inverse
     // conversion) instead of silently placing an ordinary, unbreakable spike.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
       if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
@@ -438,6 +438,7 @@ export function wouldPlacementSucceedAt(
     // items — see editorUI.ts's supportsFallingModifier).
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
+      item.isPlatformItem !== 1 &&
       item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
       item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
@@ -826,7 +827,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     // spikeSize set, mirroring handleCrumbleModifierToggle's inverse
     // conversion in editorPropertyChange.ts) instead of silently placing an
     // ordinary, unbreakable spike that ignores the active modifier.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
 
@@ -940,6 +941,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     // items — see editorUI.ts's supportsFallingModifier).
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
+      item.isPlatformItem !== 1 &&
       item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
       item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
