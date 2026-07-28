@@ -535,7 +535,7 @@ export function scheduleChunkPrewarms(
   const currentRoomDef = roomRegistry.get(currentRoom.id);
   if (currentRoomDef === undefined) {
     // Should not happen in practice; currentRoom is always registered.
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.warn('[chunkPrewarm] currentRoom not found in registry:', currentRoom.id);
     }
     return { cancel(): void {} };
@@ -606,7 +606,7 @@ export function scheduleChunkPrewarms(
       const idx = _queue.findIndex(t => t.radius === 1 && t.transitionDir === dominant);
       if (idx > 0) {
         _queue.unshift(_queue.splice(idx, 1)[0]);
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
           console.log(
             `[chunkPrewarm] velocity-ordered: ${_queue[0].roomId} (${dominant}) moved to front` +
             ` (vx=${vx.toFixed(1)} vy=${vy.toFixed(1)})`,
@@ -681,7 +681,7 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   if (idx > 0) {
     // Move existing task to the front.
     _queue.unshift(_queue.splice(idx, 1)[0]);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(`[chunkPrewarm:ensure] ${roomId} moved to front (${reason})`);
     }
     if (_idleHandle === 0 && !_cancelled) {
@@ -705,7 +705,7 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   if (_roomRegistry === null) return;
   const room = _roomRegistry.get(roomId);
   if (room === undefined) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(`[chunkPrewarm:ensure] ${roomId} not in registry — skip (${reason})`);
     }
     return;
@@ -715,7 +715,7 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   const hasBg     = (room.backgroundBlocks?.length ?? 0) > 0;
   const bgReady   = !hasBg || getPrewarmBgRoomStats(roomId) !== null;
   if (wallReady && bgReady) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(`[chunkPrewarm:ensure] ${roomId} already warmed — skip (${reason})`);
     }
     return;
@@ -766,7 +766,7 @@ export function ensureChunkPrewarmQueued(roomId: string, reason: EnsureQueuedRea
   // Add to the keep-set so the next eviction pass does not remove newly created data.
   _keepIds.add(roomId);
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(`[chunkPrewarm:ensure] ${roomId} created new task at front (${reason})`);
   }
 
@@ -906,7 +906,7 @@ export function addZoneEntryViewportTasks(
   }
 
   if (added > 0) {
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(`[chunkPrewarm:zone] addZoneEntryViewportTasks: added ${added} tasks`);
     }
     if (_idleHandle === 0 && !_cancelled) {
@@ -943,7 +943,7 @@ export function adoptPrewarmedChunksForRoom(
   const wallHit = wallResult.status === 'adopted';
   const bgHit   = bgResult.status === 'adopted';
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     if (wallHit || bgHit) {
       console.log(`[chunkPrewarm] adopted chunks for ${room.id}: wall=${wallResult.status} bg=${bgResult.status}`);
     } else if (wallResult.status !== 'missing' || bgResult.status !== 'missing') {

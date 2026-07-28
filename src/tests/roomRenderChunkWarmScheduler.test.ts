@@ -12,6 +12,8 @@ import {
   evictStalePrewarmedChunks,
   invalidateRoomChunkPrewarm,
   runChunkPrewarmSliceNow,
+  ensureChunkPrewarmQueued,
+  addZoneEntryViewportTasks,
   getPrewarmStats,
 } from '../screens/roomRenderChunkWarmScheduler';
 import {
@@ -589,6 +591,353 @@ test('evictStalePrewarmedChunks handles zero-memory candidates without evicting 
     // implementation only if a snapshot was created — verify it wasn't spuriously
     // evicted as stale (it's within keep set) nor for budget (budget not exceeded).
     assert.equal(getPrewarmStats().evictedThisPass, 0, 'No eviction should occur when under budget');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+// ── Part 1: authoritative priority independent of queue membership ───────────
+
+test('authoritative priority metadata survives task completion (a completed room leaving the queue is not misclassified)', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    // Simulate room1/room2 having already completed and left `_queue` — the
+    // scheduler's "room no longer in registry" branch is the one safe,
+    // zero-side-effect way to make a task leave the queue in this test
+    // harness (the real chunk-builder pulls in Vite-only `import.meta.env`
+    // APIs that are unavailable under the plain Node test runner; see
+    // `timeStopFieldAudit.test.ts` for the same constraint elsewhere in this
+    // suite). This exercises exactly the property under test: `_queue`
+    // membership changing must not affect `_roomPriority`, regardless of
+    // *why* a task left the queue.
+    registry.delete('room1');
+    registry.delete('room2');
+    runChunkPrewarmSliceNow(50);
+    registry.set('room1', room1);
+    registry.set('room2', room2);
+    assert.equal(getPrewarmStats().queueLength, 1, 'room1 and room2 tasks should leave the queue, leaving only room3');
+
+    // room3 (radius 3, still queued) has by far the most memory; room2
+    // (radius 2, completed, out of the queue) is next; room1 (radius 1,
+    // completed, out of the queue) has the least. If completion caused
+    // room1/room2 to be misclassified (e.g. defaulted to "unknown" or
+    // radius-3), eviction order would not match their true radius.
+    getOrCreatePrewarmWallCache('room1', 'k1').stats.memoryEstimateKB = 3000;
+    getOrCreatePrewarmWallCache('room2', 'k2').stats.memoryEstimateKB = 3000;
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 3000;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('room3'), false, 'Still-queued radius-3 room should be evicted first');
+    assert.equal(hasPrewarmedWallChunks('room2'), false, 'Completed radius-2 room (out of queue) should be evicted next, ranked by its true radius');
+    assert.equal(hasPrewarmedWallChunks('room1'), true, 'Completed radius-1 room (out of queue) must survive — not misclassified as radius-3/unknown');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('scheduleChunkPrewarms restart clears stale priority metadata from the prior neighbourhood', () => {
+  clearAllRenderSnapshots();
+  const roomX = room('roomX', []);
+  const a0 = room('a0', [tx('east', 'roomX')]);
+  const registryA = new Map<string, RoomDef>([['a0', a0], ['roomX', roomX]]);
+  const runtimeCache = new RoomRuntimeCache();
+  let handle = scheduleChunkPrewarms(a0, registryA, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  handle.cancel();
+  clearAllRenderSnapshots();
+
+  // A completely unrelated neighbourhood that never references roomX.
+  const b3 = room('b3', []);
+  const b2 = room('b2', [tx('east', 'b3')]);
+  const b1 = room('b1', [tx('east', 'b2')]);
+  const b0 = room('b0', [tx('east', 'b1')]);
+  const registryB = new Map<string, RoomDef>([['b0', b0], ['b1', b1], ['b2', b2], ['b3', b3]]);
+  handle = scheduleChunkPrewarms(b0, registryB, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    // roomX is stale (simulating a leftover cache entry from the previous
+    // schedule); b1 is a genuine radius-1 room in the CURRENT schedule.
+    // roomX alone is enough to push memory over budget, so removing it is
+    // sufficient to satisfy the budget without touching b1.
+    getOrCreatePrewarmWallCache('roomX', 'kx').stats.memoryEstimateKB = 6000;
+    getOrCreatePrewarmWallCache('b1', 'k1').stats.memoryEstimateKB = 100;
+
+    evictStalePrewarmedChunks(new Set(['b0', 'b1', 'b2', 'b3', 'roomX']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('roomX'), false, 'Stale room from the prior schedule should rank as unknown/lowest value and be evicted first');
+    assert.equal(hasPrewarmedWallChunks('b1'), true, 'Genuine radius-1 room from the current schedule should survive');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('invalidateRoomChunkPrewarm clears authoritative priority so stale metadata cannot protect the room later', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    invalidateRoomChunkPrewarm('room1');
+
+    // Simulate a leftover cache entry reappearing for room1 without a fresh
+    // schedule; its priority metadata was cleared by invalidation, so it
+    // must not be protected as if it were still radius 1.
+    getOrCreatePrewarmWallCache('room1', 'k1r').stats.memoryEstimateKB = 6000;
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 100;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('room1'), false, 'Invalidated room should not be protected by stale radius-1 priority');
+    assert.equal(hasPrewarmedWallChunks('room3'), true, 'Currently-tracked genuine radius-3 room should survive relative to the invalidated/unknown room');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('ensureChunkPrewarmQueued assigns radius-1 priority to a newly created task', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const roomZ = room('roomZ', []); // unreachable via transitions from room0
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3], ['roomZ', roomZ],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    // roomZ is outside the BFS neighbourhood, so it has no priority entry
+    // until ensureChunkPrewarmQueued explicitly creates one.
+    ensureChunkPrewarmQueued('roomZ', 'manual');
+
+    getOrCreatePrewarmWallCache('roomZ', 'kz').stats.memoryEstimateKB = 500;
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 5000;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3', 'roomZ']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('room3'), false, 'Genuine radius-3 room should be evicted before the ensure-queued radius-1 room');
+    assert.equal(hasPrewarmedWallChunks('roomZ'), true, 'ensureChunkPrewarmQueued should track roomZ at radius-1 priority');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('addZoneEntryViewportTasks assigns a lower priority than radius-1 work', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const roomZ = room('roomZ', []);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3], ['roomZ', roomZ],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    addZoneEntryViewportTasks(['roomZ'], registry, 800, 600, 1);
+
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 4000;
+    getOrCreatePrewarmWallCache('roomZ', 'kz').stats.memoryEstimateKB = 4000;
+    getOrCreatePrewarmWallCache('room1', 'k1').stats.memoryEstimateKB = 100;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3', 'roomZ']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('room3'), false, 'Genuine radius-3 room should be evicted');
+    assert.equal(hasPrewarmedWallChunks('roomZ'), false, 'Zone-entry task should be evicted before radius-1 work, at or below radius-2 value');
+    assert.equal(hasPrewarmedWallChunks('room1'), true, 'Genuine radius-1 room should survive relative to the zone-entry task');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('evictStalePrewarmedChunks treats truly unknown/non-scheduled cached rooms as lower value than a genuine radius-3 room', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
+  try {
+    // 'ghost' was never part of any BFS/ensure/zone task in this schedule.
+    getOrCreatePrewarmWallCache('ghost', 'kg').stats.memoryEstimateKB = 5000;
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 100;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3', 'ghost']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('ghost'), false, 'Unknown/non-scheduled room should be evicted before a genuine radius-3 room');
+    assert.equal(hasPrewarmedWallChunks('room3'), true, 'Genuine radius-3 room should survive relative to an unknown room');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+// ── Part 2: quality-tier suspension vs temporary frame-time deferral ─────────
+
+test('quality-tier suspension resumes automatically on quality recovery within the same schedule, with no duplicates', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  let quality: 'low' | 'med' | 'high' = 'high';
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => quality, () => 10, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 0);
+    assert.equal(getPrewarmStats().queueLength, 3);
+
+    // High -> medium: radius-3 is suspended out of the active queue;
+    // radius-1/2 remain eligible and untouched.
+    quality = 'med';
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1);
+    assert.equal(getPrewarmStats().queueLength, 2, 'radius-1/2 remain active while radius-3 is suspended');
+
+    // Medium -> high, with NO new scheduleChunkPrewarms call (no room transition).
+    quality = 'high';
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 0);
+    assert.equal(getPrewarmStats().queueLength, 3, 'radius-3 resumes into the active queue on quality recovery');
+
+    // High -> medium again, then repeated reads at the SAME stable tier must
+    // not create duplicate suspended entries.
+    quality = 'med';
+    runChunkPrewarmSliceNow(50);
+    runChunkPrewarmSliceNow(50);
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1, 'repeated quality reads at a stable tier must not duplicate the suspended task');
+    assert.equal(getPrewarmStats().queueLength, 2);
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('active queue processing stops once only suspended radius-3 work remains, and resumes without a room transition', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  let quality: 'low' | 'med' | 'high' = 'high';
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => quality, () => 10, 800, 600, 1);
+  try {
+    // Simulate room1/room2 having already completed and left the queue (see
+    // the "authoritative priority metadata survives task completion" test
+    // above for why the registry-removal technique is used instead of
+    // running the real, Vite-only chunk builder under this test runner).
+    registry.delete('room1');
+    registry.delete('room2');
+    runChunkPrewarmSliceNow(50);
+    registry.set('room1', room1);
+    registry.set('room2', room2);
+    assert.equal(getPrewarmStats().queueLength, 1, 'only room3 remains queued');
+
+    // Drop to medium quality: room3 is suspended, emptying the active queue.
+    quality = 'med';
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().queueLength, 0, 'active queue is empty once the only remaining task is suspended radius-3 work');
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1);
+
+    // Recover to high quality with no new scheduleChunkPrewarms call.
+    quality = 'high';
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 0);
+    assert.equal(getPrewarmStats().queueLength, 1, 'room3 resumes into the active queue without a room transition');
+  } finally {
+    handle.cancel();
+    clearAllRenderSnapshots();
+  }
+});
+
+test('cancellation prevents suspended radius-3 work from resuming', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+
+  let quality: 'low' | 'med' | 'high' = 'med';
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => quality, () => 10, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1);
+
+    handle.cancel();
+    quality = 'high';
+    runChunkPrewarmSliceNow(50);
+
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1, 'a cancelled schedule must not resume suspended work');
+    assert.equal(getPrewarmStats().queueLength, 2, 'active queue must remain exactly as it was at cancellation time');
+  } finally {
+    clearAllRenderSnapshots();
+  }
+});
+
+test('evictStalePrewarmedChunks ranks a suspended (out-of-queue) radius-3 room by its authoritative priority, not queue membership', () => {
+  clearAllRenderSnapshots();
+  const room3 = room('room3', []);
+  const room2 = room('room2', [tx('east', 'room3')]);
+  const room1 = room('room1', [tx('east', 'room2')]);
+  const room0 = room('room0', [tx('east', 'room1')]);
+  const registry = new Map<string, RoomDef>([
+    ['room0', room0], ['room1', room1], ['room2', room2], ['room3', room3],
+  ]);
+  const runtimeCache = new RoomRuntimeCache();
+  const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'med', () => 10, 800, 600, 1);
+  try {
+    runChunkPrewarmSliceNow(50);
+    assert.equal(getPrewarmStats().suspendedRadius3Count, 1, 'room3 should be suspended (out of _queue) at medium quality');
+
+    getOrCreatePrewarmWallCache('room1', 'k1').stats.memoryEstimateKB = 100;
+    getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 5000;
+
+    evictStalePrewarmedChunks(new Set(['room0', 'room1', 'room2', 'room3']), 'low');
+
+    assert.equal(hasPrewarmedWallChunks('room3'), false, 'Suspended radius-3 room must still be ranked/evicted as radius-3 via authoritative priority');
+    assert.equal(hasPrewarmedWallChunks('room1'), true);
   } finally {
     handle.cancel();
     clearAllRenderSnapshots();
