@@ -54,7 +54,7 @@ High-confidence from current docs:
 - Radius-3 chunk warming is not fully adaptive yet; it gates primarily on high graphics mode and could be improved with frame-time gating.
 - Prewarm panel exposure in pause-menu debug UI may still be missing.
 - Editor palette previews for some enemies remain procedural until assets are added.
-- Crumble/falling block palette entries may still be absent from `PALETTE_ITEMS`.
+- (Resolved BUILD 559) Crumble/falling block palette entries were investigated and deliberately not added — superseded by the Block Modifier panel in `editorUI.ts`, which lets any eligible block item place as crumble or falling. See `docs/Todo.md`.
 - CI build smoke testing is not documented as present; adding GitHub Actions for `npm ci && npm run build` remains a likely follow-up.
 
 User-known issues to verify before editing:

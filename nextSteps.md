@@ -347,15 +347,21 @@ asset and register the URL in `ITEM_SPRITE_URL` inside `editorPalettePreview.ts`
 - `enemy_dust_leech` — procedural oval
 - `enemy_radiant_web` — procedural circle
 
-### Crumble blocks and falling blocks (PaletteItem slots not yet in PALETTE_ITEMS)
+### Crumble blocks and falling blocks — superseded by the Block Modifier system (BUILD 559)
 
-`PaletteItem` declares `isCrumbleBlockItem` and `isFallingBlockItem` flags, and
-`makeBlockPreviewShapeCss` in `editorUIHelpers.ts` already has switch-cases for
-`crumble_block`, `crumble_block_2x2`, `crumble_ramp_*` IDs.  However, no
-corresponding entries exist in `PALETTE_ITEMS` in `editorDropdownData.ts`.
-When crumble / falling-block palette items are eventually added, their preview
-shapes are already implemented — just add the item to `PALETTE_ITEMS` and the
-blocks grid will pick them up automatically.
+This note is stale as of BUILD 559. `isCrumbleBlockItem`/`isFallingBlockItem`
+palette flags still exist on `PaletteItem` for forward compatibility, but no
+`PALETTE_ITEMS` entry sets them — the actual editor UX is `editorUI.ts`'s
+"Block Modifier" panel (Cracked / Falling: Tough / Sensitive / Crumbling),
+which lets any eligible `blocks`-category item (1x1/2x2 blocks, stairs, smooth
+ramps, half-width pillars, spikes) be placed as a crumble or falling variant
+without a separate palette card. Standalone crumble/falling palette entries
+were deliberately NOT added — see the Todo.md entry for this item for the
+full investigation and the two placement-layer bugs (spike crumble routing,
+stale-modifier platform leakage) found and fixed in the process. The Falling
+modifier is restricted to plain 1x1/2x2 blocks only, since `EditorFallingBlock`
+has no ramp/stairs/pillar/spike shape fields (unlike `EditorCrumbleBlock`,
+which does and fully supports crumble spikes — see `crumbleSpikes.test.ts`).
 
 
 ---
