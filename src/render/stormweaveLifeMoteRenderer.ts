@@ -7,6 +7,7 @@ import { getEffectiveShieldArcLengthWorld, type ShieldWeaveState } from '../sim/
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getMoteTypeVisual, shadeRgb, rgbToHex, type MoteRgb } from '../sim/motes/moteTypeConfig';
 import { CONSTELLATION_LINK_QUALITY, ConstellationLinkTracker } from './stormweaveConstellationLinks';
+import { ParticleKind } from '../sim/particles/kinds';
 
 const FULL_CIRCLE_EPSILON = 1e-6;
 
@@ -142,6 +143,59 @@ function renderRibbonPass(
   }
 }
 
+/**
+ * Draws the Ice-specific shield silhouette: a forward-facing half-hexagon
+ * (a regular hexagon cut through the midpoints of its two "side" edges along
+ * the axis perpendicular to the facing direction). The flat cut edge is the
+ * open/back side facing the player; the angular point faces the current aim
+ * direction (`directionAngleRad`). Straight edges only, oriented for the full
+ * 360° aim range — this replaces the dot-arc crescent for Ice only; all other
+ * mote types keep the existing crescent rendering untouched.
+ */
+function renderIceShieldHexagon(
+  ctx: CanvasRenderingContext2D,
+  shield: ShieldWeaveState,
+  offsetXPx: number,
+  offsetYPx: number,
+  scalePx: number,
+  palette: StormweaveMotePalette,
+): void {
+  const r = shield.radiusWorld;
+  if (r <= 0) return;
+  const angle = shield.directionAngleRad;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  // Local-frame half-hexagon vertices (+x = forward/aim direction):
+  //   apex at (r, 0); shoulders at (r/2, ±r*sin60); flat back edge at x=0.
+  const half = r * Math.sin(Math.PI / 3);
+  const localPoints: Array<[number, number]> = [
+    [0, half],
+    [r * 0.5, half],
+    [r, 0],
+    [r * 0.5, -half],
+    [0, -half],
+  ];
+  const toScreen = (lx: number, ly: number): [number, number] => {
+    const wx = shield.centerXWorld + lx * cos - ly * sin;
+    const wy = shield.centerYWorld + lx * sin + ly * cos;
+    return [wx * scalePx + offsetXPx, wy * scalePx + offsetYPx];
+  };
+  ctx.beginPath();
+  localPoints.forEach(([lx, ly], i) => {
+    const [px, py] = toScreen(lx, ly);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  });
+  ctx.closePath();
+  ctx.globalAlpha = 0.34;
+  ctx.fillStyle = palette.shieldCrescentHex;
+  ctx.fill();
+  ctx.globalAlpha = 0.78;
+  ctx.strokeStyle = palette.shieldCrescentCenterHex;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
 /** Pixel-snapped, allocation-light Canvas renderer for Stormweave life motes. */
 export function renderStormweaveLifeMotes(
   ctx: CanvasRenderingContext2D,
@@ -193,6 +247,11 @@ export function renderStormweaveLifeMotes(
     }
   }
   if (shield.isActive) {
+    if (selectedDustKind === ParticleKind.Ice) {
+      // Ice-specific shield silhouette: forward-facing half-hexagon instead
+      // of the default dot-arc crescent. See renderIceShieldHexagon.
+      renderIceShieldHexagon(ctx, shield, offsetXPx, offsetYPx, scalePx, palette);
+    } else {
     // The visible crescent grows as motes lock into their slots, not merely
     // from their existence following the player - it lags the gameplay arc
     // (which sizes/blocks immediately from the full mote count) until each
@@ -215,6 +274,7 @@ export function renderStormweaveLifeMotes(
       ctx.globalAlpha = 0.78;
       ctx.fillStyle = palette.shieldCrescentCenterHex;
       ctx.fillRect(x, y, 1, 1);
+    }
     }
     if (shield.impactTicksLeft > 0) {
       const impactAlpha = shield.impactTicksLeft / 12;

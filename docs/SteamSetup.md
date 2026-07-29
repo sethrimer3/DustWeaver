@@ -61,15 +61,16 @@ against a running Steam client with the game launched through Steam:
   the in-game browser and confirm state stays consistent.
 - Verify `WORKSHOP_AUTHOR` and `WORKSHOP_SUBSCRIBER` achievements unlock on
   publish/subscribe respectively.
+- Subscribe to and download a real Workshop item, then press "Play" in the
+  in-game Workshop browser and confirm it loads and plays through to
+  completion. Also verify the localized error states surface correctly and
+  leave the menu usable: an item still downloading (not yet installed), an
+  item removed from Steam between listing and Play, and a manually corrupted
+  package (missing `workshop-meta.json` or `.dwcampaign.json`, or an
+  unsupported `formatVersion`).
 
 ## 5. Known gaps left for the Steam integration pass
 
-- Playing an installed Workshop item's campaign directly from
-  `workshopBrowser.ts` is not yet wired into the existing `CampaignSource`
-  loader — installed items currently only support subscribe/unsubscribe and
-  publish from the browser UI. Wiring "Play" requires mapping a Workshop
-  item's downloaded folder into a `CampaignSource` the way local imported
-  campaigns already work in `src/levels/campaignSource.ts`.
 - The publish dialog (title/description/tags) referenced in the design is
   simplified to reuse whatever `WorkshopPackageManifest` the caller
   supplies; a dedicated input form for authoring metadata in
