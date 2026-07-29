@@ -340,6 +340,9 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     if (settingsEl.style.display !== 'none') {
       buildSettingsUI(settingsEl, showMenuFromSettings, (v) => music.setVolume(v));
     }
+    if (customCampaignsEl.style.display !== 'none') {
+      void buildCustomCampaignsUI(customCampaignsEl, callbacks, showMenuFromCustomCampaigns);
+    }
   });
 
   // ── Animation loop ───────────────────────────────────────────────────────

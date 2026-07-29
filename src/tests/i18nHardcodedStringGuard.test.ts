@@ -23,6 +23,7 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const GUARDED_FILES: readonly string[] = [
   'src/ui/mainMenu.ts',
   'src/ui/mainMenuSaveSlots.ts',
+  'src/ui/mainMenuCustomCampaigns.ts',
   'src/ui/mainMenuSettings.ts',
   'src/ui/mainMenuSettingsLanguage.ts',
   'src/ui/pauseMenu.ts',

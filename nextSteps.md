@@ -1747,3 +1747,75 @@ activation — links currently still render between shield-locked motes on
 their ring, which is allowed by the Todo's acceptance criteria but wasn't
 weighed against alternative "suppress during shield" behavior.
   `editorRoomBuilder.ts` never mention `panelLayout`.
+
+## Localization / i18n (BUILD 568)
+
+New subsystem: `src/i18n/` (`types.ts`, `interpolate.ts`, `plural.ts`,
+`locales.ts`, `preference.ts`, `runtime.ts`, `domText.ts`, `canvasText.ts`,
+`index.ts`, `catalogs/en.ts`, `catalogs/es.ts`).
+
+Contracts a follow-up agent must not "fix" blindly:
+- `TranslationKey` is DERIVED from `EN_CATALOG` (`as const satisfies
+  Record<string, CatalogEntry>`). Adding a key is a one-line edit in
+  `catalogs/en.ts`; there is no codegen step and there must never be one.
+- Fallback is PER KEY, not per catalog: `es` deliberately omits keys that are
+  identical in Spanish. Those omissions are declared in
+  `ES_INTENTIONALLY_UNTRANSLATED`, and the parity test in
+  `src/tests/i18nRuntime.test.ts` fails on any *undeclared* omission. Do not
+  "fix" parity by copying English strings into `es.ts`.
+- Pluralization is in-house (`plural.ts`), NOT `Intl.PluralRules`, because ICU
+  data varies by platform/Electron version and the repo requires deterministic
+  behaviour. `en` and `es` are listed separately even though they share the
+  one/other rule.
+- The preference lives ONLY in localStorage `dustweaver-locale`
+  (legacy `dustweaver-language` is migrated forward and deleted). It is never
+  written to save slots, campaign JSON, or room data —
+  `src/tests/i18nSimIsolation.test.ts` pins this.
+- `formatRunTimer` in `saveSlots.ts` is intentionally NOT localized (run times
+  are compared/submitted); only `formatPlayTimeMs` / `formatLastPlayed` are.
+- `getUiFontFamily()` appends a broad system stack after `Cinzel`, which lacks
+  many accented/non-Latin glyphs. New player-facing UI should use it rather
+  than hard-coding `'Cinzel', serif`.
+- `resolveTextAnchor` takes logical `start`/`end` (not left/right) and
+  `LocaleDescriptor.direction` already exists, so adding an RTL locale should
+  not require touching `t(...)` call sites. No shipped locale is RTL yet.
+
+Migrated screens (guarded by `src/tests/i18nHardcodedStringGuard.test.ts`):
+main menu, save slots + assist-mode dialog, custom campaigns (list, import,
+create dialog), main-menu settings incl. the new Language tab
+(`src/ui/mainMenuSettingsLanguage.ts`), pause menu, death screen, character
+select, weave loadout, world map, loading overlay, the canvas control-hint in
+`gameRenderDeviceOverlay.ts`, and the editor save-changes dialog + editor
+header/action bar.
+
+NOT migrated yet (deliberately out of scope for this pass — add each file to
+`GUARDED_FILES` in the guard test as it is done):
+- The bulk of `src/editor/editorUI.ts` (inspector, palette, layers, lighting,
+  export panels) and the other `editor*` panel modules. Note the nine
+  `createCollapsibleSection('...')` section titles are pinned as string
+  literals by `editorUISidebars.test.ts` and `editorUISessionState.test.ts`;
+  localizing them requires updating those structural guard tests too.
+- `src/ui/mainMenuSettingsKeybindings.ts` (key names / rebind prompts).
+- `src/ui/debugPanel.ts`, `renderProfiler`, and other debug-only text —
+  intentionally English-only.
+- Skill-tomb menus (`skillTombMenu.ts`, `skillTombLoadout.ts`,
+  `skillTombWorldMap.ts`) and `performanceWarningDialog.ts`.
+- Dialogue overlay chrome (`src/render/ui/dialogueOverlayRenderer.ts`). The
+  dialogue body itself is player-authored campaign content and must stay
+  untranslated unless a localized-content schema is added to the campaign
+  format.
+
+Manual verification performed (Vite dev server + Browser pane): the i18n module
+was driven directly in the real browser bundle — runtime switching, per-key
+English fallback, invalid-locale fallback, plural selection, persistence to
+`localStorage['dustweaver-locale']`, live DOM re-binding, the canvas font stack
+(accepted by the real Canvas2D parser; accented Spanish measures normally, no
+tofu), and width-budgeted truncation of the translated control hint all behaved
+as specified. The rendered menus themselves could NOT be checked: the sandboxed
+Browser pane reports `document.hidden === true`, so requestAnimationFrame never
+fires and the title screen stays on the frame preloader. A follow-up agent with
+a real browser/desktop build should still confirm: Spanish
+labels do not clip the fixed-width main-menu buttons or the pause-menu panel;
+accented glyphs render (not tofu) in both DOM and the canvas control hint;
+switching language from the settings Language tab visibly updates the menu
+behind it without a restart; and the choice survives an app restart.

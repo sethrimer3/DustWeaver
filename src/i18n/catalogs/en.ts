@@ -201,9 +201,6 @@ export const EN_CATALOG = {
   // ── Loading / errors ──────────────────────────────────────────────────────
   'loading.default': 'Loading...',
   'loading.zoneProgress': 'Loading zone {zone}: {built} / {total}',
-  'error.roomLoadFailed': 'Could not load that room. Returning to the main menu.',
-  'error.campaignLoadFailed': 'Could not load that campaign.',
-  'error.savePersistFailed': 'Your progress could not be saved. Storage may be full.',
 
   // ── HUD / gameplay prompts (canvas-rendered) ──────────────────────────────
   'hud.controlHintKeyboard':
@@ -251,25 +248,10 @@ export const EN_CATALOG = {
   'editor.confirmQuestion': 'Confirm?',
   'editor.devRoomChecks': 'Dev Room Checks',
   'editor.brushLabel': 'Brush:',
-  'editor.brushSection': 'Brush',
   'editor.edgeResizeTitle': 'Add / Remove Row or Column',
   'editor.saveChangesQuestion': 'Save Changes?',
   'editor.yes': 'YES',
   'editor.no': 'NO',
-  'editor.roomCount': {
-    one: '{count} room',
-    other: '{count} rooms',
-  },
-
-  // ── Plural examples used by real UI ───────────────────────────────────────
-  'campaign.roomsRemaining': {
-    one: '{count} room remaining',
-    other: '{count} rooms remaining',
-  },
-  'campaign.saveSlotsUsed': {
-    one: '{count} save slot in use',
-    other: '{count} save slots in use',
-  },
 } as const satisfies Record<string, CatalogEntry>;
 
 /** Every valid translation key in the game. Derived — never hand-maintained. */

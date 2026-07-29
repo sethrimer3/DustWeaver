@@ -126,7 +126,8 @@ test('every translated string is non-empty and leaks no raw keys in either local
     setLocale(locale);
     for (const key of ALL_TRANSLATION_KEYS) {
       const value = t(key, { count: 2, number: 1, value: 'x', name: 'x', state: 'x',
-        hours: 1, minutes: 1, zone: 1, built: 1, total: 1, translated: 1 });
+        hours: 1, minutes: 1, zone: 1, built: 1, total: 1, translated: 1,
+        level: 1, creator: 'x', title: 'x', errors: 'x', error: 'x' });
       assert.ok(value.length > 0, `empty render for ${key} in ${locale}`);
       assert.notEqual(value, key, `raw key leaked for ${key} in ${locale}`);
     }
@@ -173,20 +174,21 @@ test('plural rules select singular for 1 and plural otherwise', () => {
 
 test('plural catalog entries render the right form with the count interpolated', () => {
   freshEnglish();
-  assert.equal(tPlural('campaign.roomsRemaining', 1), '1 room remaining');
-  assert.equal(tPlural('campaign.roomsRemaining', 0), '0 rooms remaining');
-  assert.equal(tPlural('campaign.roomsRemaining', 5), '5 rooms remaining');
+  // worldMap.subtitle is a real in-UI plural (dust slot count on the zone map).
+  assert.equal(tPlural('worldMap.subtitle', 1, { level: 3 }), 'Player Level 3  |  1 dust slot');
+  assert.equal(tPlural('worldMap.subtitle', 0, { level: 3 }), 'Player Level 3  |  0 dust slots');
+  assert.equal(tPlural('worldMap.subtitle', 5, { level: 3 }), 'Player Level 3  |  5 dust slots');
   setLocale('es');
-  assert.equal(tPlural('campaign.roomsRemaining', 1), 'Queda 1 sala');
-  assert.equal(tPlural('campaign.roomsRemaining', 4), 'Quedan 4 salas');
+  assert.equal(tPlural('worldMap.subtitle', 1, { level: 3 }), 'Nivel de jugador 3  |  1 ranura de polvo');
+  assert.equal(tPlural('worldMap.subtitle', 4, { level: 3 }), 'Nivel de jugador 3  |  4 ranuras de polvo');
   freshEnglish();
 });
 
 test('plural selection is deterministic across repeated calls', () => {
   freshEnglish();
-  const first = tPlural('editor.roomCount', 3);
+  const first = tPlural('worldMap.subtitle', 3, { level: 1 });
   for (let i = 0; i < 25; i++) {
-    assert.equal(tPlural('editor.roomCount', 3), first);
+    assert.equal(tPlural('worldMap.subtitle', 3, { level: 1 }), first);
   }
 });
 

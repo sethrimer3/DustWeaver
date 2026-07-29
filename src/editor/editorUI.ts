@@ -462,7 +462,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     brushBtns.push(btn);
     brushRow.appendChild(btn);
   }
-  const brushSection = createCollapsibleSection(t('editor.brushSection'), { key: 'brush' });
+  const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
   brushSection.body.appendChild(brushRow);
   const roomDimDiv = document.createElement('div');
 

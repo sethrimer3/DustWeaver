@@ -194,10 +194,6 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   // Loading / errors
   'loading.default': 'Cargando...',
   'loading.zoneProgress': 'Cargando zona {zone}: {built} / {total}',
-  'error.roomLoadFailed': 'No se pudo cargar esa sala. Volviendo al menú principal.',
-  'error.campaignLoadFailed': 'No se pudo cargar esa campaña.',
-  'error.savePersistFailed':
-    'No se pudo guardar tu progreso. Puede que el almacenamiento esté lleno.',
 
   // HUD
   'hud.controlHintKeyboard':
@@ -243,24 +239,10 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'editor.confirmQuestion': '¿Confirmar?',
   'editor.devRoomChecks': 'Comprobaciones de sala',
   'editor.brushLabel': 'Pincel:',
-  'editor.brushSection': 'Pincel',
   'editor.edgeResizeTitle': 'Añadir / quitar fila o columna',
   'editor.saveChangesQuestion': '¿Guardar los cambios?',
   'editor.yes': 'SÍ',
   'editor.no': 'NO',
-  'editor.roomCount': {
-    one: '{count} sala',
-    other: '{count} salas',
-  },
-
-  'campaign.roomsRemaining': {
-    one: 'Queda {count} sala',
-    other: 'Quedan {count} salas',
-  },
-  'campaign.saveSlotsUsed': {
-    one: '{count} partida en uso',
-    other: '{count} partidas en uso',
-  },
 };
 
 /**
