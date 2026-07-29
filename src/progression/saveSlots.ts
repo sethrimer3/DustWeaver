@@ -10,6 +10,8 @@ import { migrateLegacyWeaveUnlocks } from './weaveMigration';
 // Presentation-only: used by the two display formatters at the bottom of this
 // file. Save serialisation and the slot schema stay locale-independent.
 import { getLocale, t } from '../i18n';
+import { getPlatformAdapter } from '../platform';
+import { isAchievementId, type AchievementId } from '../platform/achievementIds';
 
 /** Total number of save slots. */
 export const SAVE_SLOT_COUNT = 3;
@@ -41,6 +43,12 @@ export interface SaveSlotData {
    * This flag cannot be disabled once set.
    */
   assistMode: boolean;
+  /**
+   * Achievement IDs unlocked in this save. Reconciled bidirectionally with
+   * the platform adapter (Steam or fake) on game load — see
+   * `reconcileSaveSlotAchievements`.
+   */
+  unlockedAchievements: string[];
 }
 
 /** Returns the localStorage key for a given slot index. */
@@ -91,6 +99,10 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (typeof parsed.assistMode !== 'boolean') {
       parsed.assistMode = false;
     }
+    // Migrate achievements field (added for Steam Achievements support).
+    if (!Array.isArray(parsed.unlockedAchievements)) {
+      parsed.unlockedAchievements = [];
+    }
     return parsed;
   } catch {
     return null;
@@ -124,7 +136,28 @@ export function createNewSaveSlot(assistMode = false): SaveSlotData {
     runTimerMs: 0,
     checkpointRunTimerMs: 0,
     assistMode,
+    unlockedAchievements: [],
   };
+}
+
+/**
+ * Reconciles a save slot's `unlockedAchievements` against the platform
+ * adapter (Steam or fake), bidirectionally: achievements present in the
+ * save but not on the platform are unlocked there, and achievements
+ * unlocked on the platform but missing from the save are added to it.
+ * Mutates `data.unlockedAchievements` in place. Call once at game-load time.
+ */
+export async function reconcileSaveSlotAchievements(data: SaveSlotData): Promise<void> {
+  const adapter = getPlatformAdapter();
+  const platformStatuses = await adapter.getAllAchievementStatuses();
+  const platformUnlocked = new Set(platformStatuses.filter((s) => s.unlocked).map((s) => s.id));
+  const saveUnlocked = new Set(data.unlockedAchievements.filter(isAchievementId));
+
+  const toUnlockOnPlatform: AchievementId[] = [...saveUnlocked].filter((id) => !platformUnlocked.has(id));
+  await Promise.all(toUnlockOnPlatform.map((id) => adapter.unlockAchievement(id)));
+
+  const merged = new Set<string>([...saveUnlocked, ...platformUnlocked]);
+  data.unlockedAchievements = [...merged];
 }
 
 /**

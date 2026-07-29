@@ -1,3 +1,5 @@
+import { onMoteCountChanged } from '../progression/achievementTracker';
+
 /** Number of current-life motes granted by one Dust Container. */
 export const MOTES_PER_DUST_CONTAINER = 4;
 
@@ -48,6 +50,7 @@ export function grantPlayerMotes(player: PlayerMoteLifeState, moteCount: number)
   const before = Math.min(getPlayerMoteCount(player), capacity);
   const grant = normalizeMoteCount(moteCount);
   player.healthPoints = Math.min(capacity, before + grant);
+  onMoteCountChanged(player.healthPoints);
   return player.healthPoints - before;
 }
 
@@ -65,6 +68,7 @@ export function grantOverhealthMotes(player: PlayerMoteLifeState, moteCount: num
   const grant = normalizeMoteCount(moteCount);
   const before = normalizeMoteCount(player.healthPoints);
   player.healthPoints = before + grant;
+  onMoteCountChanged(player.healthPoints);
   return grant;
 }
 

@@ -131,3 +131,31 @@ contextBridge.exposeInMainWorld('dustweaverElectron', {
   validateRoomCacheFiles: (campaignId, isOfficialCampaign) =>
     ipcRenderer.invoke('dw:validate-room-cache-files', campaignId, isOfficialCampaign),
 });
+
+/**
+ * Platform-services bridge used by src/platform/rendererPlatform.ts and
+ * src/workshop/rendererWorkshopAdapter.ts. Generic `invoke(channel, payload)`
+ * — the channel names themselves (dw:platform-*, dw:workshop-*) are the
+ * allowlisted, typed surface defined in src/platform/ipcBridge.ts.
+ */
+const PLATFORM_CHANNELS = new Set([
+  'dw:platform-unlock-achievement',
+  'dw:platform-get-achievement',
+  'dw:platform-get-all-achievements',
+  'dw:platform-store-stats',
+  'dw:platform-get-persona-name',
+  'dw:workshop-publish',
+  'dw:workshop-get-items',
+  'dw:workshop-subscribe',
+  'dw:workshop-unsubscribe',
+  'dw:workshop-install-path',
+]);
+
+contextBridge.exposeInMainWorld('electronPlatform', {
+  invoke: (channel, payload) => {
+    if (!PLATFORM_CHANNELS.has(channel)) {
+      return Promise.resolve({ ok: false, error: `Unknown platform channel: ${channel}` });
+    }
+    return ipcRenderer.invoke(channel, payload);
+  },
+});

@@ -9,6 +9,9 @@ const {
   validateRoomCacheOnDisk,
   exportCampaignToDisk,
 } = require("./campaignExport.cjs");
+const { registerPlatformIpcHandlers } = require("./platformBridge.cjs");
+
+registerPlatformIpcHandlers();
 
 protocol.registerSchemesAsPrivileged([
   {

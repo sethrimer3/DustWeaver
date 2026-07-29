@@ -1,4 +1,5 @@
 import { createWorldState } from '../sim/world';
+import { onRoomCleared } from '../progression/achievementTracker';
 import { ParticleKind } from '../sim/particles/kinds';
 import { tick } from '../sim/tick';
 import { createRng } from '../sim/rng';
@@ -896,6 +897,7 @@ export function startGameScreen(
   // Track explored rooms
   if (progress && !progress.exploredRoomIds.includes(currentRoom.id)) {
     progress.exploredRoomIds.push(currentRoom.id);
+    onRoomCleared();
   }
 
   // Initial room load — use saved spawn point if returning to a save.

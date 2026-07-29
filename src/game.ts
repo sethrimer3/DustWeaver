@@ -27,6 +27,8 @@ import type { ExportProgressModal } from './editor/editorExportProgressModal';
 import type { GameScreenRunOptions } from './screens/gameScreen';
 import { analyzeCampaignComplexityCached, formatCampaignComplexityWarningMessage } from './levels/roomComplexity';
 import { showPerformanceWarningDialog } from './ui/performanceWarningDialog';
+import { onWeaveEquipped } from './progression/achievementTracker';
+import { reconcileSaveSlotAchievements } from './progression/saveSlots';
 
 
 export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void {
@@ -93,6 +95,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
           activeSaveData = saveData;
           progress = saveData.progress;
           sessionStartMs = performance.now();
+          void reconcileSaveSlotAchievements(saveData);
           // Returning player (has explored rooms): skip straight to gameplay
           if (progress.exploredRoomIds.length > 0) {
             navigate('gameplay', progress.loadout);
@@ -120,6 +123,7 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
         onConfirm: (chosenLoadout, chosenWeaveLoadout) => {
           progress.loadout = chosenLoadout.slice();
           progress.weaveLoadout = chosenWeaveLoadout;
+          onWeaveEquipped();
           navigate('gameplay', chosenLoadout);
         },
         onCancel: () => navigate('mainMenu'),
