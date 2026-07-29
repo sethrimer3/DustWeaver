@@ -12,6 +12,8 @@ import type { EditableCampaignSession } from '../editor/editableCampaignSession'
 import { createNewCampaignSession, sanitizeCampaignId, createSessionFromPackedCampaign } from '../editor/editableCampaignSession';
 import { applyLocalePresentation, getUiFontFamily, t } from '../i18n';
 import { showWorkshopBrowser } from './workshopBrowser';
+import { loadCampaignSourceForWorkshopItem } from '../workshop/workshopCampaignLoader';
+import type { WorkshopItem } from '../workshop/types';
 
 /** Escapes text before it is spliced into an innerHTML template. */
 function escapeHtml(value: string): string {
@@ -77,11 +79,14 @@ export async function buildCustomCampaignsUI(
     letter-spacing: 0.07em; margin-bottom: 0.8rem; margin-left: 0.6rem; transition: all 0.2s;
   `;
   workshopBtn.addEventListener('click', () => {
-    // Installed Workshop items are downloaded to disk; wiring "Play" into the
-    // existing CampaignSource loader is left for the filesystem-backed
-    // Electron integration (see docs/SteamSetup.md) — the browser here
-    // covers subscribe/unsubscribe/publish against the platform adapter.
-    void showWorkshopBrowser(container, {}, () => {});
+    let closeWorkshopBrowser: (() => void) | null = null;
+    void showWorkshopBrowser(container, {
+      onPlayItem: (item: WorkshopItem) => {
+        void handlePlayWorkshopItem(item, callbacks, () => closeWorkshopBrowser?.());
+      },
+    }, () => {}).then((close) => {
+      closeWorkshopBrowser = close;
+    });
   });
   container.appendChild(workshopBtn);
 
@@ -324,6 +329,28 @@ export async function buildCustomCampaignsUI(
   });
   backBtn.addEventListener('click', onBack);
   container.appendChild(backBtn);
+}
+
+/**
+ * Handles the Workshop browser's "Play" button: validates and loads the
+ * installed item as a `CampaignSource`, then routes it through the exact
+ * same `onPlayCustomCampaign` flow local custom campaigns already use. Any
+ * failure (still downloading, missing install path, unreadable/malformed
+ * package, or the item having been removed) shows a localized error and
+ * leaves the Workshop browser open and usable — it never throws.
+ */
+async function handlePlayWorkshopItem(
+  item: WorkshopItem,
+  callbacks: CustomCampaignCallbacks,
+  closeWorkshopBrowser: () => void,
+): Promise<void> {
+  const result = await loadCampaignSourceForWorkshopItem(item);
+  if (!result.ok) {
+    alert(t('workshop.playFailed', { title: item.title, error: result.message }));
+    return;
+  }
+  closeWorkshopBrowser();
+  callbacks.onPlayCustomCampaign?.(result.source);
 }
 
 // ─── Create New Campaign dialog ───────────────────────────────────────────────

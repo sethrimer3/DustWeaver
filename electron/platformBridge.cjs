@@ -10,6 +10,8 @@
  * safe no-op/in-memory response instead of throwing.
  */
 const { ipcMain } = require("electron");
+const fs = require("fs");
+const path = require("path");
 
 const ACHIEVEMENT_IDS = [
   "FIRST_WEAVE",
@@ -189,6 +191,72 @@ function registerPlatformIpcHandlers() {
       }
       const item = fallbackWorkshopItems.get(steamPublishedFileId);
       return { ok: true, installPath: item ? item.localPath || null : null };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  // Reads an installed Workshop package's workshop-meta.json + *.dwcampaign.json
+  // + a full file listing (for src/workshop/packageValidator.ts) from disk.
+  // Mirrors src/workshop/steamWorkshopAdapter.ts::readInstalledWorkshopPackageFromDisk
+  // — duplicated here (like every other Workshop handler in this file) because
+  // this module runs unbundled and cannot import the TS module.
+  ipcMain.handle("dw:workshop-read-package", async (_event, { localPath }) => {
+    try {
+      let resolvedRoot;
+      try {
+        resolvedRoot = fs.realpathSync(path.resolve(localPath));
+      } catch {
+        return { ok: false, error: `Workshop install directory not found: "${localPath}"` };
+      }
+      if (!fs.existsSync(resolvedRoot) || !fs.statSync(resolvedRoot).isDirectory()) {
+        return { ok: false, error: `Workshop install directory not found: "${localPath}"` };
+      }
+
+      const files = [];
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir)) {
+          const fullPath = path.join(dir, entry);
+          // Resolve symlinks and verify the real path never escapes the
+          // installed package root before trusting its stat/contents.
+          const realFullPath = fs.realpathSync(fullPath);
+          if (!(realFullPath === resolvedRoot || realFullPath.startsWith(resolvedRoot + path.sep))) {
+            continue;
+          }
+          const stat = fs.statSync(realFullPath);
+          if (stat.isDirectory()) {
+            walk(fullPath);
+          } else if (stat.isFile()) {
+            const relPath = path.relative(resolvedRoot, fullPath).split(path.sep).join("/");
+            files.push({ path: relPath, sizeBytes: stat.size });
+          }
+        }
+      };
+      walk(resolvedRoot);
+
+      const manifestFile = files.find((f) => f.path === "workshop-meta.json");
+      if (!manifestFile) {
+        return { ok: false, error: `Workshop package at "${localPath}" is missing workshop-meta.json` };
+      }
+      let manifest;
+      try {
+        manifest = JSON.parse(fs.readFileSync(path.join(resolvedRoot, "workshop-meta.json"), "utf8"));
+      } catch (err) {
+        return { ok: false, error: `Workshop package at "${localPath}" has an invalid workshop-meta.json: ${String(err && err.message ? err.message : err)}` };
+      }
+
+      const campaignFiles = files.filter((f) => f.path.toLowerCase().endsWith(".dwcampaign.json"));
+      if (campaignFiles.length === 0) {
+        return { ok: false, error: `Workshop package at "${localPath}" contains no .dwcampaign.json file` };
+      }
+      let campaignData;
+      try {
+        campaignData = JSON.parse(fs.readFileSync(path.join(resolvedRoot, campaignFiles[0].path), "utf8"));
+      } catch (err) {
+        return { ok: false, error: `Workshop package at "${localPath}" has an invalid campaign file: ${String(err && err.message ? err.message : err)}` };
+      }
+
+      return { ok: true, manifest, campaignData, files };
     } catch (err) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }

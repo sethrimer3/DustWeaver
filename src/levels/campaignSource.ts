@@ -9,9 +9,11 @@
  *   - bundled-folder-campaign:   ASSETS/CAMPAIGNS/<ID>/ + manifest.json
  *   - bundled-packed-campaign:   ASSETS/CAMPAIGNS/CUSTOM/<id>.dwcampaign.json
  *   - imported-browser-campaign: user-imported via file picker, stored in localStorage
+ *   - workshop-campaign:         installed Steam Workshop item, mapped via
+ *                                `../workshop/workshopCampaignLoader.ts`
  *
  * Placeholder (not implemented):
- *   - external-folder-campaign:  future Steam/native CustomCampaigns/ folder
+ *   - external-folder-campaign:  future non-Workshop native CustomCampaigns/ folder
  */
 
 import type { CampaignMeta } from './campaigns';
@@ -29,7 +31,9 @@ export type CampaignSourceKind =
   | 'bundled-folder-campaign'
   | 'bundled-packed-campaign'
   | 'imported-browser-campaign'
-  /** Placeholder for future Steam/native filesystem scanning. Not yet implemented. */
+  /** Installed Steam Workshop item, mapped by workshopCampaignLoader.ts. */
+  | 'workshop-campaign'
+  /** Placeholder for future non-Workshop native filesystem scanning. Not yet implemented. */
   | 'external-folder-campaign';
 
 /**

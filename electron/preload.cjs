@@ -149,6 +149,7 @@ const PLATFORM_CHANNELS = new Set([
   'dw:workshop-subscribe',
   'dw:workshop-unsubscribe',
   'dw:workshop-install-path',
+  'dw:workshop-read-package',
 ]);
 
 contextBridge.exposeInMainWorld('electronPlatform', {

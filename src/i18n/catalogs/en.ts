@@ -100,6 +100,7 @@ export const EN_CATALOG = {
   'workshop.play': 'Play',
   'workshop.subscribe': 'Subscribe',
   'workshop.unsubscribe': 'Unsubscribe',
+  'workshop.playFailed': 'Failed to play "{title}": {error}',
 
   // ── New-campaign dialog ───────────────────────────────────────────────────
   'newCampaign.title': 'Create New Campaign',

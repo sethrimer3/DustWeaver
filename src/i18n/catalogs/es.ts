@@ -92,6 +92,7 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'workshop.play': 'Jugar',
   'workshop.subscribe': 'Suscribirse',
   'workshop.unsubscribe': 'Cancelar suscripción',
+  'workshop.playFailed': 'Error al jugar "{title}": {error}',
 
   // New-campaign dialog
   'newCampaign.title': 'Crear campaña nueva',
