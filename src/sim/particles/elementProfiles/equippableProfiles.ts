@@ -332,6 +332,38 @@ export const CRYSTAL: ElementProfile = {
   regenerationRateTicks: 100,
 };
 
+/**
+ * Fire Dust — the equippable ember mote (ParticleKind.FireDust). Distinct from
+ * the internal `FIRE` profile above (ParticleKind.Fire, used for lava/ember
+ * VFX): gentler and quicker so it reads as "subtle drifting embers" rather
+ * than a chaotic fire burst — mild upward drift, mild random horizontal
+ * drift, low instability (no rapid frame-to-frame direction buzzing), and a
+ * short lifetime so particles fade/disappear quickly.
+ */
+export const FIRE_DUST: ElementProfile = {
+  massKg:               0.5,
+  drag:                 1.4,
+  attractionStrength:   0.9,
+  orbitalStrength:      18.0,
+  orbitRadiusWorld:     3.0,
+  noiseAmplitude:       10.0,   // mild random horizontal drift
+  instability:          0.06,   // low — avoids rapid random frame-to-frame buzzing
+  curlStrength:         3.0,
+  diffusion:            1.2,
+  upwardBias:           14.0,   // subtle upward drift (embers rising)
+  cohesion:             0.3,
+  separation:           0.45,
+  alignment:            0.2,
+  lifetimeBaseTicks:    130,    // quick fade / disappearance
+  lifetimeVarianceTicks: 40,
+  temperature:          0.85,
+  stability:            0.55,
+  toughness:            1.5,
+  attackPower:          1.5,
+  maxPopulationCount:   20,
+  regenerationRateTicks: 60,
+};
+
 /** Void — drifting ring-shaped particles, slow decay, gravitational pull. */
 export const VOID: ElementProfile = {
   massKg:               0.8,

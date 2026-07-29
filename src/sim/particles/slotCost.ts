@@ -35,6 +35,7 @@ const SLOT_COSTS: number[] = [
   1, // Stone      (17) — legacy
   0, // Gold       (18) — non-equippable grapple-chain placeholder
   0, // Light      (19) — non-equippable boss light-chain placeholder
+  1, // FireDust   (20) — equippable fire mote
 ];
 
 if (SLOT_COSTS.length !== PARTICLE_KIND_COUNT) {

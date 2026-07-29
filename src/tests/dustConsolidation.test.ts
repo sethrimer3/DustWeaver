@@ -66,11 +66,13 @@ test('save restore keeps Light Dust and strips legacy removed player dust', () =
   assert.deepEqual(restored?.progress.weaveLoadout.primary.boundDust, [ParticleKind.Light]);
 });
 
-test('campaign starting dust accepts legacy Golden and the five approved kinds only', () => {
+test('campaign starting dust accepts legacy Golden and the six approved kinds only', () => {
   const progress = createDefaultProgress();
   applyCampaignStartingOptions(progress, {
     roomId: 'start', xBlock: 0, yBlock: 0,
-    startingDustTypes: ['Physical', 'Ice', 'Nature', 'Void', 'Light', 'Fire'],
+    // 'Fire' (internal lava/ember kind, not equippable) must be silently
+    // ignored; 'FireDust' is the equippable Fire mote and should unlock.
+    startingDustTypes: ['Physical', 'Ice', 'Nature', 'Void', 'Light', 'Fire', 'FireDust'],
   }, 'fresh');
   assert.deepEqual(progress.unlockedDustKinds, [...EQUIPPABLE_KINDS]);
 });

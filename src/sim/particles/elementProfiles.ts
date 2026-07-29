@@ -20,7 +20,7 @@ import type { ElementProfile } from './elementProfileTypes';
 
 import {
   GOLDEN, FIRE, ICE, LIGHTNING, POISON, ARCANE, WIND, HOLY,
-  SHADOW, METAL, EARTH, NATURE, CRYSTAL, VOID,
+  SHADOW, METAL, EARTH, NATURE, CRYSTAL, VOID, FIRE_DUST,
 } from './elementProfiles/equippableProfiles';
 
 import {
@@ -54,6 +54,7 @@ export const ELEMENT_PROFILES: ElementProfile[] = [
   STONE,      // 17 — ParticleKind.Stone
   GOLD,       // 18 — ParticleKind.Gold
   LIGHT,      // 19 — ParticleKind.Light
+  FIRE_DUST,  // 20 — ParticleKind.FireDust
 ];
 
 /** Returns the profile for `kind`, falling back to Golden if out of range. */
