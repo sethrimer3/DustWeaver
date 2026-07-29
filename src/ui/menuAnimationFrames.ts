@@ -60,6 +60,36 @@ async function loadDecodedImage(url: string): Promise<HTMLImageElement> {
   }
 }
 
+/**
+ * Verifies a URL is loadable without forcing a full synchronous raster decode.
+ * Used for the animated-webp fallback: unlike the per-frame canvas path, an
+ * <img> can display/animate a WebP progressively, so calling decode() here
+ * would just compete for decode memory right when the frame preload above may
+ * have already exhausted it (observed as spurious EncodingErrors).
+ */
+async function probeImageLoadable(url: string): Promise<void> {
+  const image = new Image();
+  image.alt = '';
+  image.src = url;
+  try {
+    if (!image.complete) {
+      await new Promise<void>((resolve, reject) => {
+        image.addEventListener('load', () => resolve(), { once: true });
+        image.addEventListener('error', () => reject(new Error('Image load event reported an error.')), { once: true });
+      });
+    }
+    if (image.naturalWidth === 0 || image.naturalHeight === 0) {
+      throw new Error('Image loaded without drawable dimensions.');
+    }
+  } catch (error) {
+    console.error(`[menu-animation] Failed to load ${url}`, error);
+    throw { url, error };
+  } finally {
+    image.remove();
+    image.src = '';
+  }
+}
+
 function releaseImages(images: readonly (HTMLImageElement | undefined)[]): void {
   for (const image of images) {
     if (image === undefined) continue;
@@ -159,16 +189,14 @@ async function loadFrameSource(
 
 async function loadAnimatedWebpSource(): Promise<MenuAnimationSource> {
   try {
-    const normalProbe = await loadDecodedImage(MENU_ANIMATION_ASSETS.normalUrl);
-    releaseImages([normalProbe]);
+    await probeImageLoadable(MENU_ANIMATION_ASSETS.normalUrl);
   } catch (failure) {
     console.error('[menu-animation] Normal animated WebP fallback failed.', failure);
     return { kind: 'static' };
   }
 
   try {
-    const blurredProbe = await loadDecodedImage(MENU_ANIMATION_ASSETS.blurredUrl);
-    releaseImages([blurredProbe]);
+    await probeImageLoadable(MENU_ANIMATION_ASSETS.blurredUrl);
     return {
       kind: 'animated-webp',
       normalUrl: MENU_ANIMATION_ASSETS.normalUrl,

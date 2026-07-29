@@ -212,7 +212,7 @@ describe('pre-existing velocity above threshold is preserved', () => {
 // 5. Fast-fall still uses a hard cap
 // ──────────────────────────────────────────────────────────────────────────────
 
-describe('fast-fall mode retains hard cap', () => {
+describe('fast-fall mode', () => {
   test('committing fast-fall while above fastFallCap clamps to fastFallCap', () => {
     const { world, player } = makeAirborneWorld();
     player.velocityYWorld = FAST_MAX_FALL_WORLD_PER_SEC + 50;
@@ -227,24 +227,21 @@ describe('fast-fall mode retains hard cap', () => {
     );
   });
 
-  test('fast-fall entering from threshold goes up to fastFallCap, not beyond', () => {
-    const { world, player } = makeAirborneWorld();
-    player.velocityYWorld = NORMAL_MAX_FALL_WORLD_PER_SEC;
-    world.playerCrouchHeldFlag = 1; // triggers fast-fall mode
+  test('holding down does not enter fast-fall or change the natural fall curve', () => {
+    const neutral = makeAirborneWorld();
+    const holdingDown = makeAirborneWorld();
+    neutral.player.velocityYWorld = NORMAL_MAX_FALL_WORLD_PER_SEC;
+    holdingDown.player.velocityYWorld = NORMAL_MAX_FALL_WORLD_PER_SEC;
+    holdingDown.world.playerMoveInputDyWorld = 1;
+    holdingDown.world.playerCrouchHeldFlag = 1;
 
-    // Run many ticks
     for (let i = 0; i < 200; i++) {
-      applyPlayerGravityAndJump(player, world, DT_SEC);
+      applyPlayerGravityAndJump(neutral.player, neutral.world, DT_SEC);
+      applyPlayerGravityAndJump(holdingDown.player, holdingDown.world, DT_SEC);
     }
 
-    assert.ok(
-      player.velocityYWorld <= FAST_MAX_FALL_WORLD_PER_SEC + 1e-6,
-      `fast-fall should not exceed fastFallCap; got ${player.velocityYWorld}`,
-    );
-    assert.ok(
-      player.velocityYWorld > NORMAL_MAX_FALL_WORLD_PER_SEC,
-      `fast-fall should exceed the stage-1 threshold`,
-    );
+    assert.equal(holdingDown.player.isFastFallModeFlag, 0);
+    assert.equal(holdingDown.player.velocityYWorld, neutral.player.velocityYWorld);
   });
 });
 

@@ -120,10 +120,10 @@ export function applyPlayerGravityAndJump(
     const fastFallCap       = ov(debugSpeedOverrides.fastFallCapWorld,   FAST_MAX_FALL_WORLD_PER_SEC);
     const longFallAccel     = ov(debugSpeedOverrides.longFallAccelWorld,  LONG_FALL_ACCEL_WORLD_PER_SEC2);
 
-    // Enter committed fast-fall mode when holding down while falling.
-    // Use crouch-held input as the authoritative "down" signal because
-    // playerMoveInputDyWorld is not guaranteed on keyboard movement paths.
-    const isHoldingDown = world.playerMoveInputDyWorld > 0 || world.playerCrouchHeldFlag === 1;
+    // Temporarily disabled: down input must not commit the player to fast-fall.
+    // Keep the fast-fall implementation intact so the mechanic can be restored
+    // without changing crouch or grapple-retraction input behavior.
+    const isHoldingDown = false;
     if (isHoldingDown) {
       cluster.isFastFallModeFlag = 1;
     }
