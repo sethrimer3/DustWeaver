@@ -1,0 +1,224 @@
+/**
+ * English catalog — the AUTHORITATIVE source of truth.
+ *
+ * Every translation key in the game exists here, and `TranslationKey` is derived
+ * from this object. Adding a key here immediately makes it available (and
+ * type-checked) everywhere; other locales fall back to this catalog per key.
+ *
+ * Editing guidance for translators / contributors:
+ *  - Keys are dotted, grouped by screen: `mainMenu.*`, `pause.*`, `hud.*`, ...
+ *  - `{placeholder}` markers must be preserved verbatim in translations.
+ *  - Entries written as `{ one: '...', other: '...' }` are plural entries and
+ *    are selected by the `count` parameter.
+ *  - NEVER put internal ids, asset paths, enum values, save-schema identifiers,
+ *    debug-only identifiers, or player-authored campaign text in here.
+ */
+
+import type { CatalogEntry } from '../types';
+
+export const EN_CATALOG = {
+  // ── Common ────────────────────────────────────────────────────────────────
+  'common.back': 'Back',
+  'common.cancel': 'Cancel',
+  'common.confirm': 'Confirm',
+  'common.on': 'On',
+  'common.off': 'Off',
+  'common.unknown': 'Unknown',
+  'common.delete': 'DELETE',
+  'common.deleteEmphatic': 'DELETE!',
+  'common.percent': '{value}%',
+
+  // ── Main menu ─────────────────────────────────────────────────────────────
+  'mainMenu.title': 'DustWeaver',
+  'mainMenu.pressAnyKey': 'Press any key',
+  'mainMenu.play': 'Play',
+  'mainMenu.settings': 'Settings',
+  'mainMenu.customCampaigns': 'Custom Campaigns',
+  'mainMenu.exit': 'Exit',
+  'mainMenu.build': 'Build {number}',
+  'mainMenu.discord': 'Discord',
+  'mainMenu.discordAria': 'Join the DustWeaver Discord server',
+
+  // ── Save slots ────────────────────────────────────────────────────────────
+  'saveSlots.heading': 'Select Save Slot',
+  'saveSlots.slotLabel': 'Save Slot {number}',
+  'saveSlots.empty': '— Empty —',
+  'saveSlots.playTime': 'Play Time: {value}',
+  'saveSlots.lastPlayed': 'Last Played: {value}',
+  'saveSlots.assistBadge': 'Assist',
+  'saveSlots.deleteAria': 'Delete Save Slot {number}',
+  'saveSlots.deletePrompt': 'DELETE Save File?',
+  'saveSlots.deleteConfirm': 'Are you sure?',
+  'saveSlots.playTimeUnderMinute': '< 1m',
+  'saveSlots.playTimeHoursMinutes': '{hours}h {minutes}m',
+  'saveSlots.playTimeHours': '{hours}h',
+  'saveSlots.playTimeMinutes': '{minutes}m',
+
+  // ── Assist mode dialog ────────────────────────────────────────────────────
+  'assistMode.title': 'Assist Mode',
+  'assistMode.description':
+    'Assist Mode allows unlimited air grapples — you can grapple repeatedly without '
+    + 'touching the ground first. This cannot be turned off for this save.',
+  'assistMode.note': 'Saves with Assist Mode enabled are labelled "Assist".',
+  'assistMode.normal': 'Normal Mode',
+  'assistMode.enable': 'Enable Assist Mode',
+
+  // ── Settings (main menu) ──────────────────────────────────────────────────
+  'settings.title': 'Settings',
+  'settings.tab.audio': 'Audio',
+  'settings.tab.visual': 'Visual',
+  'settings.tab.gameplay': 'Gameplay',
+  'settings.tab.keybindings': 'Keybindings',
+  'settings.tab.language': 'Language',
+  'settings.audio.musicVolume': 'Music Volume',
+  'settings.audio.music': 'Music',
+  'settings.audio.sfxVolume': 'Sound Effects Volume',
+  'settings.audio.sfx': 'Sound Effects',
+  'settings.visual.quality': 'Quality',
+  'settings.visual.qualityLow': 'Low',
+  'settings.visual.qualityMed': 'Med',
+  'settings.visual.qualityHigh': 'High',
+  'settings.visual.resolution': 'Resolution',
+  'settings.visual.misc': 'Misc',
+  'settings.visual.spriteAtlases': 'Use sprite atlases (experimental)',
+  'settings.visual.spriteAtlasesHardDisabled':
+    'Currently hard-disabled internally while legacy room rendering remains active.',
+  'settings.visual.spriteAtlasesHint':
+    'Reload or re-enter the room after changing this for a clean test.',
+  'settings.visual.offensiveDustOutline': 'Offensive Dust Outline: {state}',
+  'settings.visual.momentumTrail': 'Momentum Combat Golden Trail: {state}',
+  'settings.gameplay.edgeGlowOpacity': 'Grapple Surface Highlight Opacity',
+  'settings.gameplay.highlightOpacity': 'Highlight Opacity',
+  'settings.gameplay.influenceHighlightWidth': 'Influence Highlight Width',
+  'settings.gameplay.highlightWidth': 'Highlight Width',
+  'settings.gameplay.influenceCircleOpacity': 'Influence Circle Opacity',
+  'settings.gameplay.circleOpacity': 'Circle Opacity',
+  'settings.gameplay.controls': 'Controls',
+  'settings.gameplay.doubleJumpToGrapple': 'Double-jump to grapple',
+  'settings.gameplay.pixelSpeedometer': 'Pixel speedometer',
+  'settings.gameplay.totalSpeed': 'Total speed',
+  'settings.gameplay.horizontalSpeed': 'Horizontal speed',
+  'settings.gameplay.verticalSpeed': 'Vertical speed',
+  'settings.gameplay.speedGraph': 'Speed graph',
+  'settings.gameplay.speedGraphOpacity': 'Speed Graph Opacity',
+  'settings.gameplay.speedometerOnPlayer': 'Speedometer on player',
+  'settings.gameplay.speedometerOnTop': 'Speedometer at top',
+  'settings.gameplay.speedometerBoth': 'Speedometer on both',
+  'settings.gameplay.speedrunTimer': 'Speedrun timer',
+  'settings.gameplay.advancedWallJumps': 'Advanced Wall Jumps',
+  'settings.gameplay.advancedWallJumpsTooltip':
+    'When off (default), pressing jump next to a wall always wall-jumps, even with no '
+    + 'directional input held. When on, a wall jump requires deliberate intent: '
+    + 'wall-sliding, pressing away from the wall, or having been falling in the air for a moment.',
+
+  // ── Language selector ─────────────────────────────────────────────────────
+  'language.heading': 'Language',
+  'language.description':
+    'Changes apply immediately and are remembered the next time you play. '
+    + 'Text without a translation falls back to English.',
+  'language.selectAria': 'Select interface language',
+  'language.systemDefault': 'System default ({name})',
+  'language.coverage': '{translated} of {total} lines translated',
+
+  // ── Pause menu ────────────────────────────────────────────────────────────
+  'pause.title': 'PAUSED',
+  'pause.resume': 'Resume',
+  'pause.options': 'Options',
+  'pause.debugOn': 'Debug On',
+  'pause.debugOff': 'Debug Off',
+  'pause.worldEditor': 'World Editor',
+  'pause.exitToMainMenu': 'Exit to Main Menu',
+  'pause.confirmExit': 'Confirm Exit?',
+  'pause.tab.sound': 'Sound',
+  'pause.tab.graphics': 'Graphics',
+  'pause.tab.gameplay': 'Gameplay',
+  'pause.sound.music': 'Music',
+  'pause.sound.sfx': 'SFX',
+  'pause.gameplay.momentumCombat': 'Momentum Combat',
+  'pause.gameplay.airCurrentsDebug': 'Air Currents (debug)',
+  'pause.gameplay.airCurrentsDebugTooltip':
+    'Draws arrows over the room showing the live wind field created by player and enemy '
+    + 'movement. Only visible while Debug mode is on.',
+  'pause.gameplay.prewarmPanelDebug': 'Prewarm Panel (debug)',
+  'pause.gameplay.prewarmPanelDebugTooltip':
+    'Displays real-time render chunk prewarm statistics and background warming queue '
+    + 'status. Only active while Debug mode is on.',
+  'pause.graphics.worldView': 'World View',
+  'pause.graphics.renderAdjacentRooms': 'RENDER ADJACENT ROOMS',
+  'pause.graphics.cameraAlwaysCentered': 'CAMERA ALWAYS CENTERED',
+  'pause.graphics.spriteAtlasesHardDisabled':
+    'Hard-disabled internally while legacy rendering remains active.',
+  'pause.graphics.spriteAtlasesHint': 'Reload or re-enter the room after changing this.',
+  'pause.graphics.reachableEdgeGlowOpacity': 'Reachable Edge Glow Opacity',
+
+  // ── Death screen ──────────────────────────────────────────────────────────
+  'death.title': 'Dusts...',
+  'death.returnToLastSave': 'Return to Last Save',
+  'death.returnToMainMenu': 'Return to Main Menu',
+
+  // ── Loading / errors ──────────────────────────────────────────────────────
+  'loading.default': 'Loading...',
+  'loading.zoneProgress': 'Loading zone {zone}: {built} / {total}',
+  'error.roomLoadFailed': 'Could not load that room. Returning to the main menu.',
+  'error.campaignLoadFailed': 'Could not load that campaign.',
+  'error.savePersistFailed': 'Your progress could not be saved. Storage may be full.',
+
+  // ── HUD / gameplay prompts (canvas-rendered) ──────────────────────────────
+  'hud.controlHintKeyboard':
+    'A/D=walk  |  W/Space/↑=jump  |  Click=attack  |  Hold=block  |  '
+    + 'Hold Left Click=grapple  |  ESC=menu',
+  'hud.controlHintTouch':
+    'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  '
+    + '2nd finger hold=block  |  TAP MENU to return',
+
+  // ── Character select ──────────────────────────────────────────────────────
+  'characterSelect.title': 'Select Character',
+  'characterSelect.hint': '← A/D or Arrow Keys to select · Enter to confirm →',
+
+  // ── Weave loadout ─────────────────────────────────────────────────────────
+  'loadout.title': 'Weaver Loadout',
+  'loadout.subtitle': 'Level {level}  |  Your dust collection.',
+  'loadout.noDustUnlocked': 'No dust unlocked yet.',
+  'loadout.back': '← Back',
+  'loadout.enterBattle': '⚔ Enter Battle',
+
+  // ── World map ─────────────────────────────────────────────────────────────
+  'worldMap.title': 'Zone Map',
+  'worldMap.subtitle': {
+    one: 'Player Level {level}  |  {count} dust slot',
+    other: 'Player Level {level}  |  {count} dust slots',
+  },
+  'worldMap.zone1': 'Zone 1 — The Tideworn Keep',
+  'worldMap.zone2': 'Zone 2 — The Volcanic Depths',
+  'worldMap.zone2LockedHint': '(Complete Zone 1 to unlock)',
+  'worldMap.bossSuffix': '{name} — Boss Battle!',
+  'worldMap.hint': 'Complete levels to unlock new ones',
+
+  // ── Campaign editor ───────────────────────────────────────────────────────
+  'editor.title': 'World Editor',
+  'editor.save': 'Save',
+  'editor.exit': 'Exit Editor',
+  'editor.playtest': 'Playtest',
+  'editor.unsavedChanges': 'You have unsaved changes.',
+  'editor.roomCount': {
+    one: '{count} room',
+    other: '{count} rooms',
+  },
+
+  // ── Plural examples used by real UI ───────────────────────────────────────
+  'campaign.roomsRemaining': {
+    one: '{count} room remaining',
+    other: '{count} rooms remaining',
+  },
+  'campaign.saveSlotsUsed': {
+    one: '{count} save slot in use',
+    other: '{count} save slots in use',
+  },
+} as const satisfies Record<string, CatalogEntry>;
+
+/** Every valid translation key in the game. Derived — never hand-maintained. */
+export type TranslationKey = keyof typeof EN_CATALOG;
+
+/** Runtime list of all keys (used by catalog-parity tests). */
+export const ALL_TRANSLATION_KEYS: readonly TranslationKey[] =
+  Object.keys(EN_CATALOG) as TranslationKey[];

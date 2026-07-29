@@ -1702,4 +1702,48 @@ Known design decisions a follow-up agent should not "fix" blindly:
   materializing somewhere unreachable.
 - Panel layout is workspace-only state: never campaign JSON, never room-dirty,
   never an undo/history entry. A guard test asserts `roomJson.ts` and
+  `editorRoomBuilder.ts` never mention `panelLayout` (see original list above).
+
+## Stormweave constellation links (BUILD 567)
+
+Added render-only "constellation" lines between nearby canonical Stormweave
+life motes (`src/render/stormweaveConstellationLinks.ts`, wired into
+`src/render/stormweaveLifeMoteRenderer.ts`).
+
+Design notes for a follow-up agent:
+- Pair selection is a per-mote top-K nearest-neighbor union (mote i's
+  selection can include a pair that j alone chose, and vice versa), not a
+  mutual/intersection kNN graph. This means the per-mote degree cap in tests
+  is `maxNeighborsPerMote * 2`, not `maxNeighborsPerMote` — this is
+  intentional (keeps the effect visually richer near clusters) but worth
+  knowing before "fixing" a perceived cap violation.
+- Frame-to-frame stability near the neighbor-cap boundary uses a ranking-only
+  hysteresis (`CONSTELLATION_LINK_HYSTERESIS_FACTOR`, applied to the sort key
+  only, never to the rendered opacity) rather than persisted mote identity,
+  because `StormweaveLifeMotes` has no stable per-mote ID across
+  reconcile()/count changes (see `src/sim/stormweave/lifeMotes.ts`). The
+  `ConstellationLinkTracker` is keyed off the mote-cloud instance via a
+  `WeakMap` in the renderer, so it's naturally render-local and never
+  serialized.
+- Quality tiers: high (3-neighbor cap, 4–11 world-unit band, max opacity
+  0.18), med (2-neighbor cap, 3–7 world units, max opacity 0.12), low
+  (disabled). Thresholds were chosen to look plausible against
+  `STORMWEAVE_RESTING_REGION_WORLD = 15` and the existing trail/glow sizing
+  in `lifeMotes.ts`, but were not visually tuned in a live browser — see
+  below.
+
+Why manual visual verification wasn't done here: this repo has no
+jsdom/DOM/canvas test harness, and the sandboxed Browser pane reports
+`document.hidden === true` with no compositing, so `requestAnimationFrame`
+never fires and the game canvas cannot actually be driven or screenshotted
+here (same limitation noted in the editor-panel-docking section above). A
+follow-up agent with a real browser/device should manually verify: line
+thinness/subtlety at several mote counts (low, mid, near the 48 cap), across
+a few dust types (palette-derived color should visibly differ per type),
+across zoom levels (pixel-snapping should stay crisp), and across all three
+graphics-quality tiers (confirm med is visibly cheaper/sparser than high and
+low shows no lines at all). Also worth an eyeball check of Shield Weave
+activation — links currently still render between shield-locked motes on
+their ring, which is allowed by the Todo's acceptance criteria but wasn't
+weighed against alternative "suppress during shield" behavior.
   `editorRoomBuilder.ts` never mention `panelLayout`.

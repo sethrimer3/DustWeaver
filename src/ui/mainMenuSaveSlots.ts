@@ -16,6 +16,16 @@ import {
   formatLastPlayed,
   type SaveSlotData,
 } from '../progression/saveSlots';
+import { getUiFontFamily, t } from '../i18n';
+
+/** Escapes text before it is spliced into an innerHTML template. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 export interface SaveSlotsCallbacks {
   onPlay: (slotIndex: number, saveData: SaveSlotData) => void;
@@ -41,7 +51,7 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
   `;
 
   const titleEl = document.createElement('div');
-  titleEl.textContent = 'Assist Mode';
+  titleEl.textContent = t('assistMode.title');
   titleEl.style.cssText = `
     color: #80c8f8; font-size: 1.1rem; letter-spacing: 0.1em;
     text-transform: uppercase; margin-bottom: 0.7rem;
@@ -49,9 +59,7 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
   panelEl.appendChild(titleEl);
 
   const descEl = document.createElement('div');
-  descEl.textContent =
-    'Assist Mode allows unlimited air grapples — you can grapple repeatedly without '
-    + 'touching the ground first. This cannot be turned off for this save.';
+  descEl.textContent = t('assistMode.description');
   descEl.style.cssText = `
     color: rgba(212,168,75,0.8); font-size: 0.82rem; line-height: 1.5;
     letter-spacing: 0.04em; margin-bottom: 0.95rem;
@@ -59,7 +67,7 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
   panelEl.appendChild(descEl);
 
   const noteEl = document.createElement('div');
-  noteEl.textContent = 'Saves with Assist Mode enabled are labelled "Assist".';
+  noteEl.textContent = t('assistMode.note');
   noteEl.style.cssText = `
     color: rgba(255,255,255,0.4); font-size: 0.75rem; letter-spacing: 0.04em;
     margin-bottom: 1.1rem;
@@ -71,11 +79,11 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
   panelEl.appendChild(actionsEl);
 
   const normalBtn = document.createElement('button');
-  normalBtn.textContent = 'Normal Mode';
+  normalBtn.textContent = t('assistMode.normal');
   normalBtn.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.45);
     color: #d4a84b; padding: 0.5rem 1.1rem; font-size: 0.85rem;
-    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    font-family: ${getUiFontFamily()}; cursor: pointer; letter-spacing: 0.07em;
     border-radius: 2px;
   `;
   normalBtn.addEventListener('mouseenter', () => {
@@ -93,11 +101,11 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
   actionsEl.appendChild(normalBtn);
 
   const assistBtn = document.createElement('button');
-  assistBtn.textContent = 'Enable Assist Mode';
+  assistBtn.textContent = t('assistMode.enable');
   assistBtn.style.cssText = `
     background: rgba(30,80,140,0.35); border: 1px solid rgba(80,160,220,0.65);
     color: #80c8f8; padding: 0.5rem 1.1rem; font-size: 0.85rem;
-    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    font-family: ${getUiFontFamily()}; cursor: pointer; letter-spacing: 0.07em;
     border-radius: 2px;
   `;
   assistBtn.addEventListener('mouseenter', () => {
@@ -116,11 +124,11 @@ function showAssistModeDialog(container: HTMLElement, onConfirm: (enableAssist: 
 
   // Cancel button: closes the dialog without creating a save.
   const cancelBtn2 = document.createElement('button');
-  cancelBtn2.textContent = 'Cancel';
+  cancelBtn2.textContent = t('common.cancel');
   cancelBtn2.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.25);
     color: rgba(212,168,75,0.55); padding: 0.5rem 1.1rem; font-size: 0.85rem;
-    font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.07em;
+    font-family: ${getUiFontFamily()}; cursor: pointer; letter-spacing: 0.07em;
     border-radius: 2px;
   `;
   cancelBtn2.addEventListener('mouseenter', () => {
@@ -149,7 +157,7 @@ export function buildSaveSlotUI(
   container.innerHTML = '';
 
   const heading = document.createElement('h2');
-  heading.textContent = 'Select Save Slot';
+  heading.textContent = t('saveSlots.heading');
   heading.style.cssText = `
     color: #d4a84b; font-size: clamp(1.25rem, 4vh, 1.8rem);
     margin: 0 0 clamp(0.1rem, 1vh, 0.6rem);
@@ -172,7 +180,7 @@ export function buildSaveSlotUI(
     `;
 
     const promptEl = document.createElement('div');
-    promptEl.textContent = 'DELETE Save File?';
+    promptEl.textContent = t('saveSlots.deletePrompt');
     promptEl.style.cssText = `
       color: #d4a84b; font-size: 1rem; letter-spacing: 0.08em; margin-bottom: 0.9rem;
       text-transform: uppercase;
@@ -184,11 +192,11 @@ export function buildSaveSlotUI(
     panelEl.appendChild(actionsEl);
 
     const cancelBtn = document.createElement('button');
-    cancelBtn.textContent = 'Cancel';
+    cancelBtn.textContent = t('common.cancel');
     cancelBtn.style.cssText = `
       background: transparent; border: 1px solid rgba(212,168,75,0.35);
       color: rgba(212,168,75,0.7); padding: 0.45rem 1rem; font-size: 0.85rem;
-      font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.06em;
+      font-family: ${getUiFontFamily()}; cursor: pointer; letter-spacing: 0.06em;
     `;
     cancelBtn.addEventListener('click', () => {
       if (confirmOverlayEl.parentElement !== null) {
@@ -198,11 +206,11 @@ export function buildSaveSlotUI(
     actionsEl.appendChild(cancelBtn);
 
     const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = 'DELETE';
+    deleteBtn.textContent = t('common.delete');
     deleteBtn.style.cssText = `
       background: rgba(115,0,0,0.35); border: 1px solid rgba(225,88,88,0.65);
       color: #ffb3b3; padding: 0.45rem 1rem; font-size: 0.85rem;
-      font-family: 'Cinzel', serif; cursor: pointer; letter-spacing: 0.06em;
+      font-family: ${getUiFontFamily()}; cursor: pointer; letter-spacing: 0.06em;
     `;
     actionsEl.appendChild(deleteBtn);
 
@@ -210,8 +218,8 @@ export function buildSaveSlotUI(
     deleteBtn.addEventListener('click', () => {
       if (!hasConfirmedDeletion) {
         hasConfirmedDeletion = true;
-        promptEl.textContent = 'Are you sure?';
-        deleteBtn.textContent = 'DELETE!';
+        promptEl.textContent = t('saveSlots.deleteConfirm');
+        deleteBtn.textContent = t('common.deleteEmphatic');
         return;
       }
       deleteSaveSlot(slotIndex);
@@ -243,7 +251,7 @@ export function buildSaveSlotUI(
     slotBtn.style.cssText = `
       background: rgba(0,0,0,0.5); border: 1px solid rgba(212,168,75,0.3);
       color: #d4a84b; padding: clamp(0.55rem, 2.2vh, 1.2rem) 2rem;
-      font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
+      font-family: ${getUiFontFamily()}; font-weight: 400; cursor: pointer; transition: all 0.25s;
       border-radius: 3px; min-width: 0; flex: 1; text-align: center;
     `;
 
@@ -255,26 +263,26 @@ export function buildSaveSlotUI(
             color: #80c8f8; font-size: 0.65rem; letter-spacing: 0.08em;
             padding: 0.1em 0.4em; border-radius: 2px; vertical-align: middle;
             text-transform: uppercase;
-          ">Assist</span>`
+          ">${escapeHtml(t('saveSlots.assistBadge'))}</span>`
         : '';
       slotBtn.innerHTML = `
         <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 400;">
-          Save Slot ${i + 1}${assistBadge}
+          ${escapeHtml(t('saveSlots.slotLabel', { number: i + 1 }))}${assistBadge}
         </div>
         <div style="font-size: 0.8rem; color: rgba(212,168,75,0.65); letter-spacing: 0.05em;">
-          Play Time: ${formatPlayTimeMs(slotData.playTimeMs)}
+          ${escapeHtml(t('saveSlots.playTime', { value: formatPlayTimeMs(slotData.playTimeMs) }))}
         </div>
         <div style="font-size: 0.8rem; color: rgba(212,168,75,0.5); letter-spacing: 0.05em; margin-top: 0.15rem;">
-          Last Played: ${formatLastPlayed(slotData.lastPlayedIso)}
+          ${escapeHtml(t('saveSlots.lastPlayed', { value: formatLastPlayed(slotData.lastPlayedIso) }))}
         </div>
       `;
     } else {
       slotBtn.innerHTML = `
         <div style="font-size: 1.1rem; letter-spacing: 0.1em; margin-bottom: 0.4rem; font-weight: 400;">
-          Save Slot ${i + 1}
+          ${escapeHtml(t('saveSlots.slotLabel', { number: i + 1 }))}
         </div>
         <div style="font-size: 0.8rem; color: rgba(212,168,75,0.4); letter-spacing: 0.05em;">
-          — Empty —
+          ${escapeHtml(t('saveSlots.empty'))}
         </div>
       `;
     }
@@ -307,11 +315,12 @@ export function buildSaveSlotUI(
 
     const deleteSlotBtn = document.createElement('button');
     deleteSlotBtn.textContent = 'x';
-    deleteSlotBtn.title = `Delete Save Slot ${slotIndex + 1}`;
+    deleteSlotBtn.title = t('saveSlots.deleteAria', { number: slotIndex + 1 });
+    deleteSlotBtn.setAttribute('aria-label', deleteSlotBtn.title);
     deleteSlotBtn.style.cssText = `
       width: 44px; min-width: 44px; border-radius: 3px; border: 1px solid rgba(225,88,88,0.6);
       background: rgba(90,0,0,0.42); color: #ffb3b3; cursor: pointer;
-      font-family: 'Cinzel', serif; font-size: 1rem; text-transform: uppercase;
+      font-family: ${getUiFontFamily()}; font-size: 1rem; text-transform: uppercase;
     `;
     deleteSlotBtn.addEventListener('mouseenter', () => {
       deleteSlotBtn.style.background = 'rgba(130,0,0,0.5)';
@@ -332,11 +341,11 @@ export function buildSaveSlotUI(
 
   // Back button
   const backBtn = document.createElement('button');
-  backBtn.textContent = 'Back';
+  backBtn.textContent = t('common.back');
   backBtn.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.25);
     color: rgba(212,168,75,0.6); padding: clamp(0.4rem, 1.4vh, 0.6rem) 2.5rem; font-size: 0.9rem;
-    font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+    font-family: ${getUiFontFamily()}; cursor: pointer; transition: all 0.25s;
     border-radius: 2px; letter-spacing: 0.1em; margin-top: clamp(0.1rem, 1vh, 0.5rem);
   `;
   backBtn.addEventListener('mouseenter', () => {

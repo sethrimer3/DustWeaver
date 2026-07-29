@@ -20,6 +20,13 @@ import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 import { getPreloadedMenuAnimationSource, MENU_ANIMATION_FPS } from './menuAnimationFrames';
 import { createMusicManager } from '../audio/musicManager';
 import { getMusicVolume } from './renderSettings';
+import {
+  applyLocalePresentation,
+  createLocaleBindings,
+  getUiFontFamily,
+  initI18n,
+  type TranslationKey,
+} from '../i18n';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -46,6 +53,10 @@ export interface MainMenuCallbacks {
 export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): () => void {
   // ── State ────────────────────────────────────────────────────────────────
   let isDestroyed = false;
+  // Resolve the startup locale (stored preference → platform → English) before
+  // any label is built. Idempotent, so re-entering the menu is free.
+  initI18n();
+  const i18n = createLocaleBindings();
   const menuAnimationSource = getPreloadedMenuAnimationSource();
 
   // ── Preload frames ───────────────────────────────────────────────────────
@@ -73,8 +84,10 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     position: absolute; top: 0; left: 0; width: 100%; height: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
     overflow-y: auto; box-sizing: border-box; padding: clamp(0.5rem, 2vh, 1.5rem) 1rem;
-    color: #fff; font-family: 'Cinzel', serif; z-index: 1;
+    color: #fff; font-family: ${getUiFontFamily()}; z-index: 1;
   `;
+  // Keeps `dir` and the locale font stack in sync (RTL-ready, glyph-safe).
+  i18n.onLocaleChange(() => { applyLocalePresentation(container); });
 
   // ── Title element (fades in) ─────────────────────────────────────────────
   const titleEl = document.createElement('div');
@@ -82,18 +95,23 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     text-align: center; opacity: 0; margin-block: auto;
     transition: opacity 2s ease-in;
   `;
-  titleEl.innerHTML = `
-    <h1 style="
-      font-size: 4.5rem; color: #d4a84b;
-      text-shadow: 0 0 40px rgba(212,168,75,0.5), 0 0 80px rgba(212,168,75,0.25);
-      margin-bottom: 0.3rem; letter-spacing: 0.08em; font-weight: 400;
-      text-transform: uppercase;
-    ">DustWeaver</h1>
-    <p style="
-      color: rgba(212,168,75,0.55); font-size: 0.95rem; letter-spacing: 0.18em;
-      text-transform: uppercase; margin-top: 0; font-weight: 400;
-    ">Press any key</p>
+  const titleHeadingEl = document.createElement('h1');
+  titleHeadingEl.style.cssText = `
+    font-size: 4.5rem; color: #d4a84b;
+    text-shadow: 0 0 40px rgba(212,168,75,0.5), 0 0 80px rgba(212,168,75,0.25);
+    margin-bottom: 0.3rem; letter-spacing: 0.08em; font-weight: 400;
+    text-transform: uppercase;
   `;
+  i18n.bindText(titleHeadingEl, 'mainMenu.title');
+  titleEl.appendChild(titleHeadingEl);
+
+  const titleHintEl = document.createElement('p');
+  titleHintEl.style.cssText = `
+    color: rgba(212,168,75,0.55); font-size: 0.95rem; letter-spacing: 0.18em;
+    text-transform: uppercase; margin-top: 0; font-weight: 400;
+  `;
+  i18n.bindText(titleHintEl, 'mainMenu.pressAnyKey');
+  titleEl.appendChild(titleHintEl);
   container.appendChild(titleEl);
 
   // ── Menu options container (hidden initially) ────────────────────────────
@@ -128,7 +146,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   container.appendChild(customCampaignsEl);
 
   const buildBadgeEl = document.createElement('div');
-  buildBadgeEl.textContent = `Build ${BUILD_NUMBER}`;
+  i18n.bindText(buildBadgeEl, 'mainMenu.build', { number: BUILD_NUMBER });
   buildBadgeEl.style.cssText = `
     position: absolute; top: 1rem; left: 1rem;
     background: rgba(0,0,0,0.45); border: 1px solid rgba(212,168,75,0.35);
@@ -140,12 +158,12 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   const discordBtn = document.createElement('button');
   discordBtn.type = 'button';
-  discordBtn.textContent = 'Discord';
-  discordBtn.setAttribute('aria-label', 'Join the DustWeaver Discord server');
+  i18n.bindText(discordBtn, 'mainMenu.discord');
+  i18n.bindAttribute(discordBtn, 'aria-label', 'mainMenu.discordAria');
   discordBtn.style.cssText = `
     display: none; position: absolute; right: 1rem; bottom: 1rem;
     background: rgba(88,101,242,0.82); border: 1px solid rgba(255,255,255,0.28);
-    color: #fff; padding: 0.65rem 1rem; font: 600 0.85rem 'Cinzel', serif;
+    color: #fff; padding: 0.65rem 1rem; font: 600 0.85rem ${getUiFontFamily()};
     letter-spacing: 0.08em; border-radius: 4px; cursor: pointer;
     text-transform: uppercase; transition: background 0.2s, transform 0.2s;
   `;
@@ -168,13 +186,13 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   container.appendChild(discordBtn);
 
   // ── Build menu buttons ───────────────────────────────────────────────────
-  function createMenuButton(label: string, onClick: () => void): HTMLButtonElement {
+  function createMenuButton(labelKey: TranslationKey, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.textContent = label;
+    i18n.bindText(btn, labelKey);
     btn.style.cssText = `
       background: transparent; border: 1px solid rgba(212,168,75,0.4);
       color: #d4a84b; padding: 0.9rem 4rem; font-size: 1.2rem;
-      font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer; transition: all 0.25s;
+      font-family: ${getUiFontFamily()}; font-weight: 400; cursor: pointer; transition: all 0.25s;
       border-radius: 2px; letter-spacing: 0.14em; text-transform: uppercase;
       min-width: 280px;
     `;
@@ -192,10 +210,10 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     return btn;
   }
 
-  const btnPlay = createMenuButton('Play', showSaveSlots);
-  const btnSettings = createMenuButton('Settings', showSettings);
-  const btnCustomCampaigns = createMenuButton('Custom Campaigns', showCustomCampaigns);
-  const btnExit = createMenuButton('Exit', () => {
+  const btnPlay = createMenuButton('mainMenu.play', showSaveSlots);
+  const btnSettings = createMenuButton('mainMenu.settings', showSettings);
+  const btnCustomCampaigns = createMenuButton('mainMenu.customCampaigns', showCustomCampaigns);
+  const btnExit = createMenuButton('mainMenu.exit', () => {
     window.close();
   });
 
@@ -310,6 +328,20 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     }, 300);
   }
 
+  // ── Live language switching ──────────────────────────────────────────────
+  // Sub-screens are built imperatively, so a locale change re-builds whichever
+  // one is currently mounted. Buttons on the root menu are bound individually
+  // above and update themselves. Nothing here changes navigation or focus
+  // handling, so keyboard/controller behaviour is unaffected.
+  i18n.onLocaleChange(() => {
+    if (saveSlotsEl.style.display !== 'none') {
+      buildSaveSlotUI(saveSlotsEl, callbacks, showMenuFromSlots);
+    }
+    if (settingsEl.style.display !== 'none') {
+      buildSettingsUI(settingsEl, showMenuFromSettings, (v) => music.setVolume(v));
+    }
+  });
+
   // ── Animation loop ───────────────────────────────────────────────────────
   // ── Mount & start ────────────────────────────────────────────────────────
   root.appendChild(animatedBackground.element);
@@ -331,6 +363,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
   // ── Cleanup ──────────────────────────────────────────────────────────────
   return () => {
     isDestroyed = true;
+    i18n.dispose();
     music.dispose();
     window.removeEventListener('keydown', onAnyKey);
     container.removeEventListener('click', onAnyClick);

@@ -6,8 +6,23 @@ import {
 import { getEffectiveShieldArcLengthWorld, type ShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getMoteTypeVisual, shadeRgb, rgbToHex, type MoteRgb } from '../sim/motes/moteTypeConfig';
+import { CONSTELLATION_LINK_QUALITY, ConstellationLinkTracker } from './stormweaveConstellationLinks';
 
 const FULL_CIRCLE_EPSILON = 1e-6;
+
+// Keyed by mote-cloud instance so each canonical `StormweaveLifeMotes` gets
+// its own render-local hysteresis state, without that state ever touching
+// simulation/save data.
+const constellationTrackers = new WeakMap<StormweaveLifeMotes, ConstellationLinkTracker>();
+
+function getConstellationTracker(motes: StormweaveLifeMotes): ConstellationLinkTracker {
+  let tracker = constellationTrackers.get(motes);
+  if (!tracker) {
+    tracker = new ConstellationLinkTracker();
+    constellationTrackers.set(motes, tracker);
+  }
+  return tracker;
+}
 
 /** Mixes `c` toward white by `amount` (0 = unchanged, 1 = pure white), clamped. */
 function mixWithWhite(c: MoteRgb, amount: number): MoteRgb {
@@ -140,6 +155,34 @@ export function renderStormweaveLifeMotes(
 ): void {
   ctx.save();
   const palette = buildStormweaveMotePalette(selectedDustKind);
+  const linkConfig = CONSTELLATION_LINK_QUALITY[graphicsQuality];
+  if (linkConfig && motes.moteCount >= 2) {
+    const tracker = getConstellationTracker(motes);
+    const links = tracker.computeLinks(
+      motes.moteCount,
+      (index) => motes.getMote(index)!.xWorld,
+      (index) => motes.getMote(index)!.yWorld,
+      linkConfig,
+    );
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = palette.trailMainHex;
+    for (const link of links) {
+      if (link.opacity <= 0) continue;
+      const a = motes.getMote(link.a)!;
+      const b = motes.getMote(link.b)!;
+      const xa = Math.round(a.xWorld * scalePx + offsetXPx);
+      const ya = Math.round(a.yWorld * scalePx + offsetYPx);
+      const xb = Math.round(b.xWorld * scalePx + offsetXPx);
+      const yb = Math.round(b.yWorld * scalePx + offsetYPx);
+      ctx.globalAlpha = link.opacity;
+      ctx.beginPath();
+      ctx.moveTo(xa, ya);
+      ctx.lineTo(xb, yb);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
   if (graphicsQuality === 'high') {
     const sizing = getStormweaveTrailSizing(motes.trailIntensity);
     ctx.globalCompositeOperation = 'lighter';
