@@ -709,7 +709,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Scene-light visibility-polygon lighting pass ─────────────────────────
   // Renders designer-placed scene lights (softGlow / spotlight / floodlight /
   // backlight / sunray) with optional raytraced shadow polygons.
-  renderSceneLightingPass(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
+  renderSceneLightingPass(ctx, currentRoom, snapshot, FIXED_DT_MS * 0.001, ox, oy, zoom, virtualWidthPx, virtualHeightPx, nowMs);
 
   // ── The Herald — Void Sphere gravitational-lensing distortion ────────────
   // Applied last (reads back everything drawn above: tiles, walls, entities,

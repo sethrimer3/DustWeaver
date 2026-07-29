@@ -128,6 +128,7 @@ import {
   PlayerDeathDustEffect,
   triggerPlayerDeathDustFromSprite,
 } from '../render/playerDeathDust';
+import { resetPlayerLuminantLight } from './gamePlayerLuminantLight';
 import {
   getCharacterSprites,
   getPlayerSprite,
@@ -372,6 +373,7 @@ export function startGameScreen(
     while (!result.done) result = gen.next();
     dustContainerPickupEffect.reset();
     playerDeathDust.reset();
+    resetPlayerLuminantLight();
   }
 
   /**
