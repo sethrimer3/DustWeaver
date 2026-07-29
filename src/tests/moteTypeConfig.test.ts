@@ -51,6 +51,22 @@ test('trail colour follows the selected mote type (body hue == trail hue)', () =
   }
 });
 
+test('Fire Dust has the expected red-orange/hot-orange palette and is equippable', () => {
+  assert.ok(EQUIPPABLE_KINDS.includes(ParticleKind.FireDust));
+  const cfg = getMoteTypeConfig(ParticleKind.FireDust);
+  assert.equal(cfg.name, 'Fire Dust');
+  assert.deepEqual(cfg.visual.body, { r: 0.9, g: 0.33, b: 0.08 });
+  assert.deepEqual(cfg.visual.glow, { r: 1.0, g: 0.72, b: 0.18 });
+  assert.deepEqual(cfg.visual.trail, cfg.visual.body);
+  assert.deepEqual(cfg.visual.particle, cfg.visual.body);
+});
+
+test('Fire Dust (equippable) is distinct from the internal Fire/lava VFX kind', () => {
+  assert.notEqual(ParticleKind.FireDust, ParticleKind.Fire);
+  assert.equal(hasMoteTypeConfig(ParticleKind.Fire), false);
+  assert.equal(getMoteTypeConfig(ParticleKind.Fire).kind, ParticleKind.Golden);
+});
+
 test('renderer colour tables stay in sync with the centralized config', () => {
   // The scattered KIND_COLOR_* tables are now sourced from moteTypeConfig for
   // equippable player kinds; assert they match so the two never drift apart.

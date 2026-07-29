@@ -23,10 +23,13 @@ export enum ParticleKind {
   // Special / ability particles
   Gold      = 18,  // Grappling hook chain — bright golden diamond sparkles
   Light     = 19,  // Boss light chains and collectible Light Dust share this value
+  // ── New equippable mote kinds appended after the stable legacy block ───────
+  FireDust  = 20,  // Fire Dust — collectible/equippable ember mote (distinct from
+                   // the internal `Fire` = 1 lava/ember VFX kind, which is untouched)
 }
 
 /** Total number of defined kinds — keep in sync with the enum above. */
-export const PARTICLE_KIND_COUNT = 20;
+export const PARTICLE_KIND_COUNT = 21;
 
 /**
  * Ordered list of particle kinds that players can collect and equip.
@@ -39,13 +42,14 @@ export const EQUIPPABLE_KINDS: readonly ParticleKind[] = [
   ParticleKind.Nature,
   ParticleKind.Void,
   ParticleKind.Light,
+  ParticleKind.FireDust,
 ];
 
 /**
  * Number of kinds that players can equip.
  * Equals EQUIPPABLE_KINDS.length; use this for iteration counts.
  */
-export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 5
+export const EQUIPPABLE_PARTICLE_KIND_COUNT = EQUIPPABLE_KINDS.length; // 6
 
 /** True only for dust kinds that may appear in player progression/loadouts. */
 export function isEquippableParticleKind(kind: unknown): kind is ParticleKind {
@@ -89,6 +93,7 @@ export const KIND_SHAPE: ParticleShape[] = [
   ParticleShape.Triangle, // Stone — jagged triangle fragment
   ParticleShape.Diamond,  // Gold  — bright sparkle diamond
   ParticleShape.Circle,   // Light — radiant boss glow
+  ParticleShape.Triangle, // FireDust — equippable fire mote, flickering triangle
 ];
 
 /** Returns the rendered shape for the given kind index, defaulting to Circle. */

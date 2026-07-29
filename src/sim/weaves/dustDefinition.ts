@@ -46,6 +46,10 @@ export const DUST_DEFINITIONS: ReadonlyMap<ParticleKind, DustDefinition> = new M
   [ParticleKind.Nature, { id: ParticleKind.Nature, displayName: 'Nature Dust', nickname: 'Verdant Dust', slotCost: 1, colorHex: '#44cc44', description: 'Living green motes associated with growth and organic energy.', spriteUrl: 'SPRITES/DUST/DustTypes/VerdantMote.png' }],
   [ParticleKind.Void, { id: ParticleKind.Void, displayName: 'Void Dust', slotCost: 1, colorHex: '#220044', description: 'Unstable dark motes associated with absence, distortion, and the beyond.', spriteUrl: 'SPRITES/DUST/DustTypes/VoidMote.png' }],
   [ParticleKind.Light, { id: ParticleKind.Light, displayName: 'Light Dust', nickname: 'Luminant Dust', slotCost: 1, colorHex: '#fff4b0', description: 'Radiant motes that emit illumination and push back darkness.', spriteUrl: 'SPRITES/DUST/DustTypes/LuminantMote.png' }],
+  // No spriteUrl yet — no pixel-art asset exists for Fire Dust; the loadout UI
+  // falls back to a colour swatch (see skillTombLoadout.ts) rather than risk a
+  // missing-asset load error. Add spriteUrl once SPRITES/DUST/DustTypes/FireMote.png exists.
+  [ParticleKind.FireDust, { id: ParticleKind.FireDust, displayName: 'Fire Dust', nickname: 'Ember Dust', slotCost: 1, colorHex: '#e65515', description: 'Hot ember motes associated with heat and burning light.' }],
 ]);
 
 /**

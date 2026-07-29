@@ -60,6 +60,7 @@ const STYLES: ParticleStyle[] = [
   { colorHex: '#888899', radiusPx: 1 }, // Stone     — cool grey
   { colorHex: '#ffd700', radiusPx: 1 }, // Gold      — bright golden yellow
   { colorHex: '#fffde0', radiusPx: 1.5 }, // Light   — radiant white-gold
+  { colorHex: '#e65515', radiusPx: 1 }, // FireDust  — equippable red-orange fire mote
 ];
 
 const FALLBACK_STYLE: ParticleStyle = STYLES[0];
@@ -97,6 +98,7 @@ export const KIND_COLOR_R = new Float32Array([
   0.53, // Stone     — cool grey
   1.00, // Gold      — bright golden yellow
   1.00, // Light     — radiant white-gold
+  0.90, // FireDust  — red-orange fire mote (synced below from moteTypeConfig)
 ]);
 
 /** Green component of each kind's neon colour (Float32, indexed by ParticleKind). */
@@ -121,6 +123,7 @@ export const KIND_COLOR_G = new Float32Array([
   0.53, // Stone
   0.84, // Gold
   0.99, // Light
+  0.33, // FireDust (synced below from moteTypeConfig)
 ]);
 
 /** Blue component of each kind's neon colour (Float32, indexed by ParticleKind). */
@@ -145,6 +148,7 @@ export const KIND_COLOR_B = new Float32Array([
   0.60, // Stone
   0.00, // Gold
   0.88, // Light
+  0.08, // FireDust (synced below from moteTypeConfig)
 ]);
 
 // ── Sync equippable player-mote colours from the centralized config ──────────
@@ -163,6 +167,7 @@ for (const kind of [
   ParticleKind.Nature,
   ParticleKind.Void,
   ParticleKind.Light,
+  ParticleKind.FireDust,
 ]) {
   if (!hasMoteTypeConfig(kind)) continue;
   const trail = getMoteTypeVisual(kind).trail;

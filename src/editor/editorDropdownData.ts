@@ -58,7 +58,7 @@ export const SCENE_LIGHT_TYPE_OPTIONS: readonly { id: LightType; label: string }
 
 /** Canonical list of ParticleKind string values available for editor dropdowns. */
 export const DUST_KIND_OPTIONS: readonly string[] = [
-  'Golden', 'Ice', 'Nature', 'Void', 'Light',
+  'Golden', 'Ice', 'Nature', 'Void', 'Light', 'FireDust',
 ];
 
 export const ROPE_DESTRUCTIBILITY_OPTIONS: ReadonlyArray<{ id: RopeDestructibility; label: string }> = [

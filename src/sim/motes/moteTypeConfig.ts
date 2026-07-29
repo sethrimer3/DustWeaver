@@ -158,6 +158,20 @@ const MOTE_TYPE_CONFIGS: Partial<Record<ParticleKind, MoteTypeConfig>> = {
     },
     projectile: { ...GOLD_DUST_PROJECTILE },
   },
+  [ParticleKind.FireDust]: {
+    kind: ParticleKind.FireDust,
+    name: 'Fire Dust',
+    visual: {
+      // Red-orange body, hot orange/yellow glow — dark red / pale highlight tones
+      // are layered in by the renderers (shield leading edge, ember drift, etc.).
+      body: rgb(0.9, 0.33, 0.08),
+      glow: rgb(1.0, 0.72, 0.18),
+      trail: rgb(0.9, 0.33, 0.08),
+      particle: rgb(0.9, 0.33, 0.08),
+    },
+    // Inherits Gold Dust projectile behaviour; Fire has no bespoke gameplay behaviour.
+    projectile: { ...GOLD_DUST_PROJECTILE },
+  },
 };
 
 /** The default mote type. Gold Dust retains the legacy gold aesthetic. */

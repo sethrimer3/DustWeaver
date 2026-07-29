@@ -71,7 +71,9 @@ export interface CampaignSpawnData {
   /**
    * Optional list of collectible dust type names the player starts with.
    * Names must match the string keys in the ParticleKind name map
-   * (e.g., "Golden", "Fire", "Ice", "Void").
+   * (e.g., "Golden", "Ice", "Void", "FireDust" for the equippable fire mote —
+   * note "Fire" alone refers to the internal lava/ember VFX kind, not the
+   * equippable Fire Dust mote).
    * Unknown names are silently ignored.
    */
   startingDustTypes?: string[];
@@ -388,8 +390,8 @@ export function validateSavedCampaign(data: unknown): string[] {
         validateIdArray('startingDustTypes', s['startingDustTypes'], id => {
           // Recognized legacy/internal names remain structurally loadable so
           // old campaigns reach the starting-options sanitizer. The editor
-          // emits only DUST_KIND_OPTIONS, and application grants only the five
-          // equippable kinds.
+          // emits only DUST_KIND_OPTIONS, and application grants only the
+          // equippable kinds (see EQUIPPABLE_KINDS in sim/particles/kinds.ts).
           return stringToParticleKind(id) !== null;
         });
         validateIdArray('startingWeaves', s['startingWeaves'], id => WEAVE_REGISTRY.has(id));

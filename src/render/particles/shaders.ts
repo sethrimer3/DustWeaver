@@ -50,6 +50,7 @@ const _iceColorLiteral    = hasMoteTypeConfig(ParticleKind.Ice)    ? _glslKindCo
 const _natureColorLiteral = hasMoteTypeConfig(ParticleKind.Nature) ? _glslKindColorLiteral(ParticleKind.Nature) : 'vec3(0.27, 0.80, 0.27)';
 const _voidColorLiteral   = hasMoteTypeConfig(ParticleKind.Void)   ? _glslKindColorLiteral(ParticleKind.Void)   : 'vec3(0.13, 0.00, 0.20)';
 const _lightColorLiteral  = hasMoteTypeConfig(ParticleKind.Light)  ? _glslKindColorLiteral(ParticleKind.Light)  : 'vec3(1.00, 0.99, 0.88)';
+const _fireDustColorLiteral = hasMoteTypeConfig(ParticleKind.FireDust) ? _glslKindColorLiteral(ParticleKind.FireDust) : 'vec3(0.90, 0.33, 0.08)';
 
 /** Vertex shader: clip-space transform + per-element point-size modulation. */
 export const PARTICLE_VERTEX_SHADER_SRC = `
@@ -144,6 +145,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return vec3(0.53, 0.53, 0.60);  // Stone     — cool grey
     if (ki == 18) return vec3(1.00, 0.84, 0.00);  // Gold      — bright golden yellow
     if (ki == 19) return ${_lightColorLiteral};  // Light     — radiant white-gold
+    if (ki == 20) return ${_fireDustColorLiteral};  // FireDust  — red-orange fire mote
     return ${_goldenColorLiteral};                // Golden  — bright golden yellow
   }
 
@@ -170,6 +172,7 @@ export const PARTICLE_FRAGMENT_SHADER_SRC = `
     if (ki == 17) return 3.0; // Stone     → Triangle (rocky, jagged)
     if (ki == 18) return 1.0; // Gold      → Diamond (sparkle)
     if (ki == 19) return 0.0; // Light     → Circle (radiant glow)
+    if (ki == 20) return 3.0; // FireDust  → Triangle (flickering flame)
     return 2.0;               // Golden  → Square (gold dust mote)
   }
 

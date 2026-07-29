@@ -74,6 +74,7 @@ test('WebGL shader source embeds a body-colour literal generated from the centra
   assert.ok(PARTICLE_FRAGMENT_SHADER_SRC.includes(`if (ki == 11) return ${toGlslLiteral(ParticleKind.Nature)};`), 'Nature body literal generated from config');
   assert.ok(PARTICLE_FRAGMENT_SHADER_SRC.includes(`if (ki == 13) return ${toGlslLiteral(ParticleKind.Void)};`), 'Void body literal generated from config');
   assert.ok(PARTICLE_FRAGMENT_SHADER_SRC.includes(`if (ki == 19) return ${toGlslLiteral(ParticleKind.Light)};`), 'Light body literal generated from config');
+  assert.ok(PARTICLE_FRAGMENT_SHADER_SRC.includes(`if (ki == 20) return ${toGlslLiteral(ParticleKind.FireDust)};`), 'FireDust body literal generated from config');
   assert.ok(PARTICLE_FRAGMENT_SHADER_SRC.includes(`return ${toGlslLiteral(ParticleKind.Golden)};`), 'Golden (default-fallback) body literal generated from config');
 });
 

@@ -10,17 +10,19 @@ import { EQUIPPABLE_KINDS, ParticleKind } from '../sim/particles/kinds';
 import { isAvailablePlayerLightDust } from '../screens/gameLightDustIllumination';
 import { loadSaveSlot, saveSaveSlot } from '../progression/saveSlots';
 
-test('player dust roster contains exactly the five approved kinds in display order', () => {
+test('player dust roster contains exactly the six approved kinds in display order', () => {
   assert.deepEqual(EQUIPPABLE_KINDS, [
     ParticleKind.Golden,
     ParticleKind.Ice,
     ParticleKind.Nature,
     ParticleKind.Void,
     ParticleKind.Light,
+    ParticleKind.FireDust,
   ]);
-  assert.deepEqual(DUST_KIND_OPTIONS, ['Golden', 'Ice', 'Nature', 'Void', 'Light']);
-  assert.equal(DUST_DEFINITIONS.size, 5);
+  assert.deepEqual(DUST_KIND_OPTIONS, ['Golden', 'Ice', 'Nature', 'Void', 'Light', 'FireDust']);
+  assert.equal(DUST_DEFINITIONS.size, 6);
   assert.equal(DUST_DEFINITIONS.get(ParticleKind.Light)?.nickname, 'Luminant Dust');
+  assert.equal(DUST_DEFINITIONS.get(ParticleKind.FireDust)?.nickname, 'Ember Dust');
 });
 
 test('Golden retains legacy numeric zero and legacy Physical strings migrate', () => {

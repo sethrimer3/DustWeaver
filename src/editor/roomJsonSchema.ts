@@ -31,6 +31,8 @@ const KIND_NAME_MAP: Record<string, ParticleKind> = {
   Lava:      ParticleKind.Lava,
   Stone:     ParticleKind.Stone,
   Light:     ParticleKind.Light,
+  // Equippable Fire mote (distinct from the internal 'Fire' = lava/ember VFX kind above).
+  FireDust:  ParticleKind.FireDust,
 };
 
 const KIND_ENUM_TO_NAME: Record<number, string> = {};

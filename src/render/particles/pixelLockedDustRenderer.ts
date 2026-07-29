@@ -56,7 +56,8 @@ const GLINT_KIND_MASK = (
   (1 << ParticleKind.Metal)    |
   (1 << ParticleKind.Crystal)  |
   (1 << ParticleKind.Gold)     |
-  (1 << ParticleKind.Light)
+  (1 << ParticleKind.Light)    |
+  (1 << ParticleKind.FireDust)
 );
 
 // ---------------------------------------------------------------------------
@@ -138,6 +139,8 @@ const KIND_PALETTE_RAMPS: string[][] = [
   ['#886600', '#ccaa00', '#ffcc00', '#fff0aa'],
   // Light (19) — radiant boss glow
   ['#887755', '#ccbb99', '#fffaee', '#ffffff'],
+  // FireDust (20) — equippable fire mote (overwritten below from moteTypeConfig)
+  ['#5c1500', '#992d0a', '#e65515', '#ffcf88'],
 ];
 
 // ── Sync equippable player-mote body/glint tones from the centralized config ─
@@ -155,6 +158,7 @@ for (const kind of [
   ParticleKind.Nature,
   ParticleKind.Void,
   ParticleKind.Light,
+  ParticleKind.FireDust,
 ]) {
   if (!hasMoteTypeConfig(kind)) continue;
   const visual = getMoteTypeVisual(kind);
