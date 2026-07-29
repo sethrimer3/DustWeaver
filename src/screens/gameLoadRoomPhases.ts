@@ -128,6 +128,7 @@ import {
 } from '../levels/roomFileLoader';
 import * as FP from '../debug/perfFreezeProfiler';
 import { resetIceMoteAuraForRoom } from '../sim/iceMoteAura';
+import { resetIceFrostForRoom } from '../sim/iceFrost';
 import { getStormweaveMoteCount } from '../sim/stormweave/lifeMotes';
 import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
@@ -874,6 +875,7 @@ export function* makeLoadRoomPhases(
     FP.recordLoadPhaseStep('E:hazards', import.meta.env.DEV ? performance.now() - _t0 : 0);
   }
   resetIceMoteAuraForRoom(world);
+  resetIceFrostForRoom();
   {
     const _t0 = import.meta.env.DEV ? performance.now() : 0;
     loadRoomRopes(world, room);

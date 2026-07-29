@@ -73,6 +73,7 @@ import { tickKineticBlocks } from './kineticBlocks/kineticBlockSim';
 import { tickGrappleCarryBlocks } from './grappleCarryBlocks';
 import { tickZipMoveBlocks } from './zipMoveBlocks/zipMoveBlockSim';
 import { tickIceMoteAura } from './iceMoteAura';
+import { tickIceFrostAnimation } from './iceFrost';
 import { tickPixelMaterials } from './pixelMaterials/pixelMaterialTick';
 import { syncPixelMaterialSolidGeometry } from './pixelMaterials/pixelMaterialSolidSync';
 import { applyMovementWindToPixelMaterials } from './pixelMaterials/pixelMaterialMovementWind';
@@ -110,6 +111,7 @@ export function tick(world: WorldState): void {
   // -0.2. Ice Mote freeze aura — update frozen water zone walls BEFORE
   //        computePlayerWaterState so the frozen mask is current this tick.
   tickIceMoteAura(world);
+  tickIceFrostAnimation(world.dtMs);
 
   // -0.1. Pre-compute water state so playerMovement reads correct flag this tick.
   //        (applyHazards runs after movement and re-applies physics, but the flag

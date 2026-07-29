@@ -56,6 +56,9 @@ import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { MomentumTrail } from '../render/clusters/momentumTrail';
 import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
+import { renderIceFrostDecals } from '../render/effects/iceFrostRenderer';
+import { processPendingIceFrostImpacts } from '../sim/iceFrost';
+import { getWallLayoutCache } from '../render/walls/blockWallLayoutCache';
 import type { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
 import type { PlayerDeathDustEffect } from '../render/playerDeathDust';
 import type { ClusterSnapshot } from '../render/clusterSnapshotTypes';
@@ -520,6 +523,15 @@ export function renderFrame(r: RenderFrameContext): void {
   renderChallengeTotems(ctx, world.challengeMode, world.clusters[0]?.positionXWorld ?? 0, world.clusters[0]?.positionYWorld ?? 0, ox, oy, zoom, nowMs);
   renderPhantasmalTiles(ctx, world, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   renderUltraIceSparkles(ctx, snapshot.walls, nowMs, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
+
+  // ── Ice arrow frost decals (cosmetic, riding on exposed tile surfaces) ───
+  {
+    const surfaceExposureMap = getWallLayoutCache(
+      snapshot.walls, BLOCK_SIZE_SMALL, currentRoom.widthBlocks, currentRoom.heightBlocks,
+    ).surfaceExposureMap;
+    processPendingIceFrostImpacts(surfaceExposureMap);
+    renderIceFrostDecals(ctx, ox, oy, zoom);
+  }
   renderRopes(ctx, snapshot, ox, oy, zoom, virtualWidthPx, virtualHeightPx);
   if (renderProfiler !== undefined && isDebugMode) {
     renderProfiler.updateChunkStats(getChunkCacheStats());

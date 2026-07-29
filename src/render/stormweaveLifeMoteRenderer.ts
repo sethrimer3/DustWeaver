@@ -152,7 +152,12 @@ function renderRibbonPass(
  * 360° aim range — this replaces the dot-arc crescent for Ice only; all other
  * mote types keep the existing crescent rendering untouched.
  */
-function renderIceShieldHexagon(
+/** True when `selectedDustKind` should render the Ice half-hexagon shield silhouette instead of the default crescent. */
+export function isIceShieldSilhouette(selectedDustKind: number): boolean {
+  return selectedDustKind === ParticleKind.Ice;
+}
+
+export function renderIceShieldHexagon(
   ctx: CanvasRenderingContext2D,
   shield: ShieldWeaveState,
   offsetXPx: number,
@@ -247,7 +252,7 @@ export function renderStormweaveLifeMotes(
     }
   }
   if (shield.isActive) {
-    if (selectedDustKind === ParticleKind.Ice) {
+    if (isIceShieldSilhouette(selectedDustKind)) {
       // Ice-specific shield silhouette: forward-facing half-hexagon instead
       // of the default dot-arc crescent. See renderIceShieldHexagon.
       renderIceShieldHexagon(ctx, shield, offsetXPx, offsetYPx, scalePx, palette);

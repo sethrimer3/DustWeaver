@@ -58,6 +58,8 @@ import { MAX_HIT_REGISTRY_SLOTS } from './weaveHitRegistryConfig';
 import { segmentPointDistanceSq, applyRoutedWeaveDamage } from './weaveCollisionUtils';
 import { getMoteTypeProjectile } from '../motes/moteTypeConfig';
 import { nextFloatRange } from '../rng';
+import { ParticleKind } from '../particles/kinds';
+import { recordIceArrowFrostImpact } from '../iceFrost';
 import { computeShieldCenterWorld, WorldPoint } from './shieldGeometry';
 
 // ── Phases ───────────────────────────────────────────────────────────────────
@@ -606,7 +608,11 @@ export function tickBowArrowOutbound(world: WorldState): boolean {
 
   const hit = stepDist > 1e-6 ? raycastWalls(world, frontX, frontY, dirX, dirY, stepDist) : null;
   if (hit !== null) {
-    _resolveBounce(world, hit.normalX, hit.normalY, hit.t);
+    if (world.bowArrowDustKind === ParticleKind.Ice) {
+      _resolveIceStick(world, hit.normalX, hit.normalY, hit.t, hit.x, hit.y);
+    } else {
+      _resolveBounce(world, hit.normalX, hit.normalY, hit.t);
+    }
     return true;
   }
 
@@ -684,6 +690,33 @@ function _resolveEnemyHit(world: WorldState, clusterIndex: number): void {
   );
 
   _releaseWithCurvedPeel(world, dirX, dirY);
+}
+
+/**
+ * Ice-arrow terrain impact: unlike `_resolveBounce`, the arrow does not
+ * reflect — it ends its outbound flight at the struck surface, registers a
+ * cosmetic frost impact there (see `sim/iceFrost.ts`), and gently releases
+ * its motes back to Storm along the surface normal (the same "hand back to
+ * Storm" shape every other resolution path uses; no reflection angle is
+ * computed since there is no bounce).
+ */
+function _resolveIceStick(
+  world: WorldState,
+  normalX: number, normalY: number, hitT: number,
+  hitXWorld: number, hitYWorld: number,
+): void {
+  const dirX = world.bowArrowDirXWorld;
+  const dirY = world.bowArrowDirYWorld;
+
+  const advance = Math.max(0, hitT - BOW_ARROW_WALL_BACKOFF_WORLD);
+  world.bowArrowTravelPx += advance;
+  const cx = world.bowArrowOriginXWorld + dirX * world.bowArrowTravelPx;
+  const cy = world.bowArrowOriginYWorld + dirY * world.bowArrowTravelPx;
+  _placeArrowLine(world, cx, cy, dirX, dirY);
+
+  recordIceArrowFrostImpact(hitXWorld, hitYWorld);
+
+  _releaseWithCurvedPeel(world, normalX, normalY);
 }
 
 /** Reflects the group off a wall (biased-random) and releases motes to Storm. */
