@@ -62,7 +62,7 @@ export function loadStoredLocale(): LocaleId | null {
   const store = getStorage();
   if (store === null) return null;
 
-  let current: string | null = null;
+  let current: string | null;
   try {
     current = store.getItem(LOCALE_STORAGE_KEY);
   } catch {
@@ -72,7 +72,7 @@ export function loadStoredLocale(): LocaleId | null {
   if (normalized !== null) return normalized;
 
   // Migration path: pull the legacy key forward exactly once.
-  let legacy: string | null = null;
+  let legacy: string | null;
   try {
     legacy = store.getItem(LEGACY_LOCALE_STORAGE_KEY);
   } catch {

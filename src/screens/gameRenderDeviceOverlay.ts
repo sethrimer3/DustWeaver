@@ -23,6 +23,7 @@ import { getAirCurrentsDebugLegendText } from '../render/pixelMaterials/airCurre
 import { getAirCurrentsDebugEnabled } from '../ui/renderSettings';
 import type { EditorRenderMask } from '../editor/editorRenderMask';
 import { isLayerVisibleInMask } from '../editor/editorRenderMask';
+import { localizedCanvasFont, tCanvas } from '../i18n';
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
@@ -186,12 +187,20 @@ export function renderDeviceOverlay(r: DeviceOverlayContext): void {
 
   // ── Control hints ─────────────────────────────────────────────────────────
   if (isDebugMode) {
-    const controlHintText = IS_TOUCH_DEVICE
-      ? 'L.thumb L/R=walk  |  L.thumb up=jump  |  2nd finger tap=attack  |  2nd finger hold=block  |  TAP MENU to return'
-      : 'A/D=walk  |  W/Space/↑=jump  |  Click=attack  |  Hold=block  |  Hold Left Click=grapple  |  ESC=menu';
     deviceCtx.fillStyle = 'rgba(255,255,255,0.3)';
-    deviceCtx.font = '12px monospace';
+    // Locale-aware font stack so accented / non-Latin glyphs render instead of tofu.
+    deviceCtx.font = localizedCanvasFont(12);
+    // Translated hints vary a lot in length — truncate rather than overflow the canvas.
+    const controlHintText = tCanvas(
+      deviceCtx,
+      IS_TOUCH_DEVICE ? 'hud.controlHintTouch' : 'hud.controlHintKeyboard',
+      { maxWidthPx: canvas.width - 16 },
+    );
     const hintWidthPx = deviceCtx.measureText(controlHintText).width;
-    deviceCtx.fillText(controlHintText, (canvas.width - hintWidthPx) / 2, canvas.height - 10);
+    deviceCtx.fillText(
+      controlHintText,
+      Math.round((canvas.width - hintWidthPx) / 2),
+      canvas.height - 10,
+    );
   }
 }

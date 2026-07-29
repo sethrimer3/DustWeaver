@@ -7,6 +7,9 @@
 
 import { PlayerProgress, createDefaultProgress, sanitizePlayerDustProgress } from './playerProgress';
 import { migrateLegacyWeaveUnlocks } from './weaveMigration';
+// Presentation-only: used by the two display formatters at the bottom of this
+// file. Save serialisation and the slot schema stay locale-independent.
+import { getLocale, t } from '../i18n';
 
 /** Total number of save slots. */
 export const SAVE_SLOT_COUNT = 3;
@@ -155,13 +158,15 @@ export function formatRunTimer(ms: number): string {
  */
 export function formatPlayTimeMs(ms: number): string {
   const totalMinutes = Math.floor(ms / 60_000);
-  if (totalMinutes < 1) return '< 1m';
+  if (totalMinutes < 1) return t('saveSlots.playTimeUnderMinute');
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   if (hours > 0) {
-    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    return minutes > 0
+      ? t('saveSlots.playTimeHoursMinutes', { hours, minutes })
+      : t('saveSlots.playTimeHours', { hours });
   }
-  return `${minutes}m`;
+  return t('saveSlots.playTimeMinutes', { minutes });
 }
 
 /**
@@ -171,12 +176,12 @@ export function formatPlayTimeMs(ms: number): string {
 export function formatLastPlayed(isoString: string): string {
   try {
     const d = new Date(isoString);
-    return d.toLocaleDateString(undefined, {
+    return d.toLocaleDateString(getLocale(), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
   } catch {
-    return 'Unknown';
+    return t('common.unknown');
   }
 }

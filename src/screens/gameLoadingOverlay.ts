@@ -14,6 +14,7 @@
  */
 
 import { renderLoadingGodRays } from '../render/effects/loadingGodRays';
+import { getUiFontFamily, t } from '../i18n';
 import { LOADING_BACKGROUND_ASSETS } from '../ui/animatedAssetPaths';
 
 /** How often (ms) the readiness callback is polled to avoid per-frame DOM reads. */
@@ -75,7 +76,7 @@ export class GameLoadingOverlay {
       'align-items:center',
       'justify-content:center',
       'z-index:9999',
-      "font-family:'Cinzel',serif",
+      `font-family:${getUiFontFamily()}`,
       'font-size:1rem',
       'color:rgba(212,168,75,0.85)',
       'pointer-events:none',
@@ -154,14 +155,18 @@ export class GameLoadingOverlay {
       'align-items:center',
       'justify-content:center',
       'z-index:9999',
-      "font-family:'Cinzel',serif",
+      `font-family:${getUiFontFamily()}`,
       'font-size:1rem',
       'color:rgba(212,168,75,0.85)',
       'pointer-events:none',
       'overflow:hidden',
       `transition:opacity ${(this.fadeDurationMs / 1000).toFixed(1)}s`,
     ].join(';');
-    this.populateLoadingOverlay(div, false, `Loading zone ${worldNumber}: 0 / ${totalRooms}`);
+    this.populateLoadingOverlay(
+      div,
+      false,
+      t('loading.zoneProgress', { zone: worldNumber, built: 0, total: totalRooms }),
+    );
 
     this.uiRoot.appendChild(div);
     this.el = div;
@@ -181,7 +186,7 @@ export class GameLoadingOverlay {
     if (this.el === null) return;
     const label = this.el.querySelector<HTMLElement>('[data-zone-progress]');
     if (label !== null) {
-      label.textContent = `Loading zone ${worldNumber}: ${built} / ${total}`;
+      label.textContent = t('loading.zoneProgress', { zone: worldNumber, built, total });
     }
   }
 
@@ -284,7 +289,7 @@ export class GameLoadingOverlay {
     if (isTextless) return;
 
     const label = document.createElement('div');
-    label.textContent = zoneText ?? 'Loading...';
+    label.textContent = zoneText ?? t('loading.default');
     if (zoneText !== undefined) {
       label.setAttribute('data-zone-progress', '1');
     }

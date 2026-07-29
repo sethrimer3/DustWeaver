@@ -1,3 +1,5 @@
+import { getUiFontFamily, t } from '../i18n';
+
 /**
  * Shared UI component helpers.
  *
@@ -57,7 +59,7 @@ export function makeButton(text: string, onClick: () => void): HTMLButtonElement
     width: 260px;
     margin: 0 auto 14px auto;
     padding: 14px 0;
-    font-family: 'Cinzel', serif;
+    font-family: ${getUiFontFamily()};
     font-size: 1.15rem;
     color: ${GOLD};
     background: rgba(30,28,22,0.85);
@@ -91,7 +93,7 @@ export function makeSlider(
   const row = document.createElement('div');
   row.style.cssText = `
     display: flex; align-items: center; justify-content: space-between;
-    margin: 14px 0; font-family: 'Cinzel', serif; color: ${GOLD};
+    margin: 14px 0; font-family: ${getUiFontFamily()}; color: ${GOLD};
     font-size: 0.95rem;
   `;
 
@@ -109,13 +111,13 @@ export function makeSlider(
   `;
 
   const valLabel = document.createElement('span');
-  valLabel.textContent = `${Math.round(initialValue * 100)}%`;
+  valLabel.textContent = t('common.percent', { value: Math.round(initialValue * 100) });
   valLabel.style.minWidth = '44px';
   valLabel.style.textAlign = 'right';
 
   slider.addEventListener('input', () => {
     const v = parseInt(slider.value, 10);
-    valLabel.textContent = `${v}%`;
+    valLabel.textContent = t('common.percent', { value: v });
     onChange(v / 100);
   });
 
@@ -157,7 +159,7 @@ export function makeCheckboxRow(
   const text = document.createElement('span');
   text.textContent = label;
   text.style.cssText = `
-    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+    font-family: ${getUiFontFamily()}; color: ${GOLD}; font-size: 0.88rem;
     cursor: pointer; letter-spacing: 0.4px;
   `;
 
@@ -178,7 +180,7 @@ export function makeCheckboxRow(
     hint.style.cssText = `
       display: inline-flex; align-items: center; justify-content: center;
       width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto;
-      font-family: 'Cinzel', serif; font-size: 0.7rem; font-weight: 700;
+      font-family: ${getUiFontFamily()}; font-size: 0.7rem; font-weight: 700;
       color: rgba(212,168,75,0.85); border: 1px solid rgba(212,168,75,0.5);
       background: rgba(0,0,0,0.25); cursor: help;
     `;
@@ -204,7 +206,7 @@ export function makeTabButton(
   btn.style.cssText = `
     flex: 1;
     padding: 10px 0;
-    font-family: 'Cinzel', serif;
+    font-family: ${getUiFontFamily()};
     font-size: 1rem;
     color: ${isActive ? '#fff' : GOLD};
     background: ${isActive ? 'rgba(212,168,75,0.2)' : 'transparent'};

@@ -63,6 +63,48 @@ export const EN_CATALOG = {
   'assistMode.normal': 'Normal Mode',
   'assistMode.enable': 'Enable Assist Mode',
 
+  // ── Custom campaigns (campaign selection) ─────────────────────────────────
+  // Campaign titles, creator names, and descriptions are player-authored and are
+  // never translated — only the surrounding chrome is.
+  'customCampaigns.heading': 'Custom Campaigns',
+  'customCampaigns.createNew': '✦ Create New Campaign',
+  'customCampaigns.import': '📥 Import Campaign (.dwcampaign.json)',
+  'customCampaigns.loading': 'Loading campaigns…',
+  'customCampaigns.emptyTitle': 'No custom campaigns found.',
+  'customCampaigns.emptyHint':
+    'Add <code>.dwcampaign.json</code> files to <code>ASSETS/CAMPAIGNS/CUSTOM/</code> '
+    + 'or import a campaign file above.',
+  'customCampaigns.badgeBundledFolder': 'Built-in folder',
+  'customCampaigns.badgePacked': 'Packed campaign',
+  'customCampaigns.badgeImported': 'Imported',
+  'customCampaigns.byCreator': 'By {creator}',
+  'customCampaigns.unknownCreator': 'Unknown',
+  'customCampaigns.initialRoomAlt': 'Initial room preview',
+  'customCampaigns.play': '▶ Play',
+  'customCampaigns.edit': '🛠 Edit',
+  'customCampaigns.editLoading': 'Loading…',
+  'customCampaigns.export': '📤 Export JSON',
+  'customCampaigns.exporting': 'Exporting…',
+  'customCampaigns.delete': '🗑 Delete',
+  'customCampaigns.deleteConfirm': 'Delete imported campaign "{title}"?',
+  'customCampaigns.invalidFile': 'Invalid campaign file:\n{errors}',
+  'customCampaigns.loadForEditFailed': 'Failed to load campaign for editing: {error}',
+  'customCampaigns.exportFailed': 'Failed to export campaign: {error}',
+  'customCampaigns.listFailed': 'Could not list campaigns: {error}',
+
+  // ── New-campaign dialog ───────────────────────────────────────────────────
+  'newCampaign.title': 'Create New Campaign',
+  'newCampaign.id': 'Campaign ID',
+  'newCampaign.idHint': 'lowercase letters, numbers, _ and - only',
+  'newCampaign.campaignTitle': 'Campaign Title',
+  'newCampaign.creator': 'Creator',
+  'newCampaign.description': 'Description',
+  'newCampaign.initialRoomId': 'Initial Room ID',
+  'newCampaign.zoneName': 'Zone Name',
+  'newCampaign.roomWidth': 'Initial Room Width (blocks)',
+  'newCampaign.roomHeight': 'Initial Room Height (blocks)',
+  'newCampaign.create': 'Create & Open Editor',
+
   // ── Settings (main menu) ──────────────────────────────────────────────────
   'settings.title': 'Settings',
   'settings.tab.audio': 'Audio',
@@ -173,6 +215,11 @@ export const EN_CATALOG = {
 
   // ── Character select ──────────────────────────────────────────────────────
   'characterSelect.title': 'Select Character',
+  // Display names only — the internal character ids are never translated.
+  'characterSelect.name.knight': 'Knight',
+  'characterSelect.name.demonFox': 'Demon Fox',
+  'characterSelect.name.princess': 'Princess',
+  'characterSelect.name.outcast': 'Outcast',
   'characterSelect.hint': '← A/D or Arrow Keys to select · Enter to confirm →',
 
   // ── Weave loadout ─────────────────────────────────────────────────────────
@@ -195,11 +242,20 @@ export const EN_CATALOG = {
   'worldMap.hint': 'Complete levels to unlock new ones',
 
   // ── Campaign editor ───────────────────────────────────────────────────────
-  'editor.title': 'World Editor',
-  'editor.save': 'Save',
-  'editor.exit': 'Exit Editor',
-  'editor.playtest': 'Playtest',
-  'editor.unsavedChanges': 'You have unsaved changes.',
+  // Leading glyphs are part of the button design and are kept in translations.
+  'editor.customCampaignTitle': '🛠 Custom Campaign Editor',
+  'editor.zoneEditorTitle': '🛠 Zone Editor',
+  'editor.saveAndTest': '▶ Save & Test',
+  'editor.save': '✔ Save',
+  'editor.cancel': '✕ Cancel',
+  'editor.confirmQuestion': 'Confirm?',
+  'editor.devRoomChecks': 'Dev Room Checks',
+  'editor.brushLabel': 'Brush:',
+  'editor.brushSection': 'Brush',
+  'editor.edgeResizeTitle': 'Add / Remove Row or Column',
+  'editor.saveChangesQuestion': 'Save Changes?',
+  'editor.yes': 'YES',
+  'editor.no': 'NO',
   'editor.roomCount': {
     one: '{count} room',
     other: '{count} rooms',

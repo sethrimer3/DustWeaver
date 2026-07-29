@@ -49,6 +49,7 @@ import {
 } from '../render/atlases/spriteAtlasConfig';
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, makeCheckboxRow, GOLD, PANEL_BORDER } from './helpers';
+import { applyLocalePresentation, createLocaleBindings, getUiFontFamily, t } from '../i18n';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ function makeQualityButton(
     flex: 1;
     padding: 10px 6px;
     margin: 0 4px;
-    font-family: 'Cinzel', serif;
+    font-family: ${getUiFontFamily()};
     font-size: 0.95rem;
     color: ${isActive ? '#fff' : GOLD};
     background: ${isActive ? 'rgba(212,168,75,0.3)' : 'rgba(30,28,22,0.7)'};
@@ -114,6 +115,8 @@ export function showPauseMenu(
   state: PauseMenuState,
   callbacks: PauseMenuCallbacks,
 ): () => void {
+  const i18n = createLocaleBindings();
+
   // ── Overlay ───────────────────────────────────────────────────────────────
   const overlay = document.createElement('div');
   overlay.style.cssText = `
@@ -139,9 +142,9 @@ export function showPauseMenu(
 
   // ── Title ─────────────────────────────────────────────────────────────────
   const title = document.createElement('h2');
-  title.textContent = 'PAUSED';
+  i18n.bindText(title, 'pause.title');
   title.style.cssText = `
-    font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 1.6rem;
+    font-family: ${getUiFontFamily()}; color: ${GOLD}; font-size: 1.6rem;
     margin: 0 0 28px 0; letter-spacing: 3px;
     text-shadow: 0 0 12px rgba(212,168,75,0.4);
   `;
@@ -160,15 +163,15 @@ export function showPauseMenu(
     const tabBar = document.createElement('div');
     tabBar.style.cssText = `display: flex; margin-bottom: 16px; border-bottom: 1px solid ${PANEL_BORDER};`;
 
-    const soundTab = makeTabButton('Sound', activeTab === 'sound', () => {
+    const soundTab = makeTabButton(t('pause.tab.sound'), activeTab === 'sound', () => {
       activeTab = 'sound';
       buildOptionsContent();
     });
-    const graphicsTab = makeTabButton('Graphics', activeTab === 'graphics', () => {
+    const graphicsTab = makeTabButton(t('pause.tab.graphics'), activeTab === 'graphics', () => {
       activeTab = 'graphics';
       buildOptionsContent();
     });
-    const gameplayTab = makeTabButton('Gameplay', activeTab === 'gameplay', () => {
+    const gameplayTab = makeTabButton(t('pause.tab.gameplay'), activeTab === 'gameplay', () => {
       activeTab = 'gameplay';
       buildOptionsContent();
     });
@@ -179,21 +182,21 @@ export function showPauseMenu(
 
     if (activeTab === 'sound') {
       // Music volume slider
-      const musicSlider = makeSlider('Music', state.musicVolume, (v) => {
+      const musicSlider = makeSlider(t('pause.sound.music'), state.musicVolume, (v) => {
         state.musicVolume = v;
         setMusicVolume(v);
       });
       optionsPanel.appendChild(musicSlider);
 
       // SFX volume slider
-      const sfxSlider = makeSlider('SFX', state.sfxVolume, (v) => {
+      const sfxSlider = makeSlider(t('pause.sound.sfx'), state.sfxVolume, (v) => {
         state.sfxVolume = v;
         setSfxVolume(v);
       });
       optionsPanel.appendChild(sfxSlider);
     } else if (activeTab === 'gameplay') {
       optionsPanel.appendChild(
-        makeCheckboxRow('Momentum Combat', state.combatMode === 'momentum', (enabled) => {
+        makeCheckboxRow(t('pause.gameplay.momentumCombat'), state.combatMode === 'momentum', (enabled) => {
           const mode: CombatMode = enabled ? 'momentum' : 'legacy';
           state.combatMode = mode;
           setCombatMode(mode);
@@ -201,42 +204,42 @@ export function showPauseMenu(
         }),
       );
       optionsPanel.appendChild(
-        makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
+        makeCheckboxRow(t('settings.gameplay.doubleJumpToGrapple'), getDoubleJumpToGrappleEnabled(), (enabled) => {
           setDoubleJumpToGrappleEnabled(enabled);
         }),
       );
       optionsPanel.appendChild(
         makeCheckboxRow(
-          'Advanced Wall Jumps',
+          t('settings.gameplay.advancedWallJumps'),
           getAdvancedWallJumpsEnabled(),
           (enabled) => { setAdvancedWallJumpsEnabled(enabled); },
-          'When off (default), pressing jump next to a wall always wall-jumps, even with no directional input held. When on, a wall jump requires deliberate intent: wall-sliding, pressing away from the wall, or having been falling in the air for a moment.',
+          t('settings.gameplay.advancedWallJumpsTooltip'),
         ),
       );
       if (state.isDebugOn) {
         optionsPanel.appendChild(
           makeCheckboxRow(
-            'Air Currents (debug)',
+            t('pause.gameplay.airCurrentsDebug'),
             getAirCurrentsDebugEnabled(),
             (enabled) => { setAirCurrentsDebugEnabled(enabled); },
-            'Draws arrows over the room showing the live wind field created by player and enemy movement. Only visible while Debug mode is on.',
+            t('pause.gameplay.airCurrentsDebugTooltip'),
           ),
         );
         optionsPanel.appendChild(
           makeCheckboxRow(
-            'Prewarm Panel (debug)',
+            t('pause.gameplay.prewarmPanelDebug'),
             debugPanelVisibility.prewarm,
             (enabled) => { setDebugPanelVisible('prewarm', enabled); },
-            'Displays real-time render chunk prewarm statistics and background warming queue status. Only active while Debug mode is on.',
+            t('pause.gameplay.prewarmPanelDebugTooltip'),
           ),
         );
       }
     } else {
       // Graphics quality buttons
       const qualityLabel = document.createElement('div');
-      qualityLabel.textContent = 'Quality';
+      qualityLabel.textContent = t('settings.visual.quality');
       qualityLabel.style.cssText = `
-        font-family: 'Cinzel', serif; color: ${GOLD};
+        font-family: ${getUiFontFamily()}; color: ${GOLD};
         font-size: 0.95rem; margin-bottom: 12px;
       `;
       optionsPanel.appendChild(qualityLabel);
@@ -244,17 +247,17 @@ export function showPauseMenu(
       const btnRow = document.createElement('div');
       btnRow.style.cssText = `display: flex; justify-content: center;`;
 
-      const lowBtn = makeQualityButton('Low', state.graphicsQuality === 'low', () => {
+      const lowBtn = makeQualityButton(t('settings.visual.qualityLow'), state.graphicsQuality === 'low', () => {
         state.graphicsQuality = 'low';
         setGraphicsQuality('low');
         buildOptionsContent();
       });
-      const medBtn = makeQualityButton('Med', state.graphicsQuality === 'med', () => {
+      const medBtn = makeQualityButton(t('settings.visual.qualityMed'), state.graphicsQuality === 'med', () => {
         state.graphicsQuality = 'med';
         setGraphicsQuality('med');
         buildOptionsContent();
       });
-      const highBtn = makeQualityButton('High', state.graphicsQuality === 'high', () => {
+      const highBtn = makeQualityButton(t('settings.visual.qualityHigh'), state.graphicsQuality === 'high', () => {
         state.graphicsQuality = 'high';
         setGraphicsQuality('high');
         buildOptionsContent();
@@ -266,9 +269,9 @@ export function showPauseMenu(
 
       // World View preset buttons
       const worldViewLabel = document.createElement('div');
-      worldViewLabel.textContent = 'World View';
+      worldViewLabel.textContent = t('pause.graphics.worldView');
       worldViewLabel.style.cssText = `
-        font-family: 'Cinzel', serif; color: ${GOLD};
+        font-family: ${getUiFontFamily()}; color: ${GOLD};
         font-size: 0.95rem; margin: 18px 0 12px 0;
       `;
       optionsPanel.appendChild(worldViewLabel);
@@ -294,7 +297,7 @@ export function showPauseMenu(
       const wvHint = document.createElement('div');
       wvHint.textContent = activePreset.description;
       wvHint.style.cssText = `
-        font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
+        font-family: ${getUiFontFamily()}; color: rgba(212,168,75,0.65);
         font-size: 0.72rem; text-align: center; margin-top: 6px;
       `;
       optionsPanel.appendChild(wvHint);
@@ -306,12 +309,12 @@ export function showPauseMenu(
       // parent (parent && child) — see getEffectiveRenderAdjacentRooms().
       const adjacentReveal = createSlideReveal(state.alwaysCenterCamera);
       adjacentReveal.content.appendChild(
-        makeCheckboxRow('RENDER ADJACENT ROOMS', getRenderAdjacentRooms(), (enabled) => {
+        makeCheckboxRow(t('pause.graphics.renderAdjacentRooms'), getRenderAdjacentRooms(), (enabled) => {
           setRenderAdjacentRooms(enabled);
         }),
       );
       optionsPanel.appendChild(
-        makeCheckboxRow('CAMERA ALWAYS CENTERED', state.alwaysCenterCamera, (enabled) => {
+        makeCheckboxRow(t('pause.graphics.cameraAlwaysCentered'), state.alwaysCenterCamera, (enabled) => {
           state.alwaysCenterCamera = enabled;
           setAlwaysCenterCamera(enabled);
           // Reveal/hide the child without altering its stored checked state.
@@ -337,17 +340,17 @@ export function showPauseMenu(
       atlasCheckbox.checked = atlasEnabled;
       atlasCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
       const atlasLabel = document.createElement('span');
-      atlasLabel.textContent = 'Use sprite atlases (experimental)';
+      atlasLabel.textContent = t('settings.visual.spriteAtlases');
       atlasLabel.style.cssText = `
-        font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+        font-family: ${getUiFontFamily()}; color: ${GOLD}; font-size: 0.88rem;
         cursor: pointer; letter-spacing: 0.4px;
       `;
       const atlasHint = document.createElement('div');
       atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
-        ? 'Hard-disabled internally while legacy rendering remains active.'
-        : 'Reload or re-enter the room after changing this.';
+        ? t('pause.graphics.spriteAtlasesHardDisabled')
+        : t('pause.graphics.spriteAtlasesHint');
       atlasHint.style.cssText = `
-        font-family: 'Cinzel', serif; color: rgba(212,168,75,0.65);
+        font-family: ${getUiFontFamily()}; color: rgba(212,168,75,0.65);
         font-size: 0.72rem; text-align: center; margin: -2px 0 10px 0;
       `;
       atlasCheckbox.addEventListener('change', () => {
@@ -356,8 +359,8 @@ export function showPauseMenu(
         atlasRow.style.borderColor = `rgba(212,168,75,${enabled ? '0.55' : '0.25'})`;
         atlasRow.style.background = `rgba(212,168,75,${enabled ? '0.12' : '0.04'})`;
         atlasHint.textContent = getSpriteAtlasConfigState().hardDisableActive
-          ? 'Hard-disabled internally while legacy rendering remains active.'
-          : 'Reload or re-enter the room after changing this.';
+          ? t('pause.graphics.spriteAtlasesHardDisabled')
+          : t('pause.graphics.spriteAtlasesHint');
       });
       atlasRow.appendChild(atlasCheckbox);
       atlasRow.appendChild(atlasLabel);
@@ -366,21 +369,21 @@ export function showPauseMenu(
 
       // Visual effect opacity sliders
       const edgeGlowSlider = makeSlider(
-        'Reachable Edge Glow Opacity',
+        t('pause.graphics.reachableEdgeGlowOpacity'),
         getReachableEdgeGlowOpacity(),
         (v) => { setReachableEdgeGlowOpacity(v); },
       );
       optionsPanel.appendChild(edgeGlowSlider);
 
       const influenceWidthSlider = makeSlider(
-        'Influence Highlight Width',
+        t('settings.gameplay.influenceHighlightWidth'),
         getInfluenceHighlightWidth(),
         (v) => { setInfluenceHighlightWidth(v); },
       );
       optionsPanel.appendChild(influenceWidthSlider);
 
       const influenceCircleSlider = makeSlider(
-        'Influence Circle Opacity',
+        t('settings.gameplay.influenceCircleOpacity'),
         getInfluenceCircleOpacity(),
         (v) => { setInfluenceCircleOpacity(v); },
       );
@@ -402,9 +405,9 @@ export function showPauseMenu(
       speedometerCheckbox.checked = speedometerEnabled;
       speedometerCheckbox.style.cssText = `width: 18px; height: 18px; cursor: pointer; accent-color: ${GOLD};`;
       const speedometerLabel = document.createElement('span');
-      speedometerLabel.textContent = 'Pixel speedometer';
+      speedometerLabel.textContent = t('settings.gameplay.pixelSpeedometer');
       speedometerLabel.style.cssText = `
-        font-family: 'Cinzel', serif; color: ${GOLD}; font-size: 0.88rem;
+        font-family: ${getUiFontFamily()}; color: ${GOLD}; font-size: 0.88rem;
         cursor: pointer; letter-spacing: 0.4px;
       `;
       speedometerCheckbox.addEventListener('change', () => {
@@ -416,24 +419,29 @@ export function showPauseMenu(
       speedometerRow.appendChild(speedometerLabel);
       optionsPanel.appendChild(speedometerRow);
       const speedometerOptions = createSlideReveal(speedometerEnabled);
-      speedometerOptions.content.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
-      speedometerOptions.content.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
-      speedometerOptions.content.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+      speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.totalSpeed'), getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+      speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.horizontalSpeed'), getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+      speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.verticalSpeed'), getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
       const speedGraphEnabled = getPixelSpeedGraphEnabled();
       const speedGraphOptions = createSlideReveal(speedGraphEnabled);
-      speedometerOptions.content.appendChild(makeCheckboxRow('Speed graph', speedGraphEnabled, (enabled) => {
+      speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.speedGraph'), speedGraphEnabled, (enabled) => {
           setPixelSpeedGraphEnabled(enabled);
           speedGraphOptions.setExpanded(enabled);
         }));
-      speedGraphOptions.content.appendChild(makeSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+      speedGraphOptions.content.appendChild(makeSlider(t('settings.gameplay.speedGraphOpacity'), getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
       speedometerOptions.content.appendChild(speedGraphOptions.element);
       const placementSelect = document.createElement('select');
       placementSelect.style.cssText = `
           display: block; width: 100%; margin: 0 0 8px 0; padding: 8px 10px;
           color: ${GOLD}; background: rgba(30,28,22,0.9); border: 1px solid ${PANEL_BORDER};
-          border-radius: 4px; font-family: 'Cinzel', serif; cursor: pointer;
+          border-radius: 4px; font-family: ${getUiFontFamily()}; cursor: pointer;
         `;
-      for (const [value, label] of [['over-player', 'Speedometer on player'], ['on-top', 'Speedometer at top'], ['both', 'Speedometer on both']] as const) {
+      const placementOptions: readonly [ 'over-player' | 'on-top' | 'both', string ][] = [
+          ['over-player', t('settings.gameplay.speedometerOnPlayer')],
+          ['on-top', t('settings.gameplay.speedometerOnTop')],
+          ['both', t('settings.gameplay.speedometerBoth')],
+        ];
+      for (const [value, label] of placementOptions) {
           const option = document.createElement('option');
           option.value = value;
           option.textContent = label;
@@ -445,11 +453,11 @@ export function showPauseMenu(
         });
       speedometerOptions.content.appendChild(placementSelect);
       optionsPanel.appendChild(speedometerOptions.element);
-      optionsPanel.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
+      optionsPanel.appendChild(makeCheckboxRow(t('settings.gameplay.speedrunTimer'), getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     }
 
     // Back button
-    const backBtn = makeButton('Back', () => {
+    const backBtn = makeButton(t('common.back'), () => {
       optionsPanel.style.display = 'none';
       mainButtons.style.display = 'block';
     });
@@ -461,7 +469,7 @@ export function showPauseMenu(
   const mainButtons = document.createElement('div');
 
   // Resume (top)
-  const resumeBtn = makeButton('Resume', () => {
+  const resumeBtn = makeButton(t('pause.resume'), () => {
     destroy();
     callbacks.onResume();
   });
@@ -470,7 +478,7 @@ export function showPauseMenu(
 
 
   // Options
-  const optionsBtn = makeButton('Options', () => {
+  const optionsBtn = makeButton(t('pause.options'), () => {
     mainButtons.style.display = 'none';
     optionsPanel.style.display = 'block';
     buildOptionsContent();
@@ -478,17 +486,18 @@ export function showPauseMenu(
   mainButtons.appendChild(optionsBtn);
 
   // Debug toggle
+  const debugLabel = (): string => t(state.isDebugOn ? 'pause.debugOff' : 'pause.debugOn');
   const debugBtn = makeButton(
-    state.isDebugOn ? 'Debug Off' : 'Debug On',
+    debugLabel(),
     () => {
       callbacks.onToggleDebug();
-      debugBtn.textContent = state.isDebugOn ? 'Debug Off' : 'Debug On';
+      debugBtn.textContent = debugLabel();
     },
   );
   mainButtons.appendChild(debugBtn);
 
   // World Editor — jumps straight into the editor without requiring Debug mode
-  const worldEditorBtn = makeButton('World Editor', () => {
+  const worldEditorBtn = makeButton(t('pause.worldEditor'), () => {
     destroy();
     callbacks.onOpenWorldEditor();
   });
@@ -498,10 +507,10 @@ export function showPauseMenu(
   // Exit to Main Menu (bottom) — requires a second click for confirmation
   let exitConfirmPending = false;
   let exitConfirmTimerId: ReturnType<typeof setTimeout> | undefined;
-  const exitBtn = makeButton('Exit to Main Menu', () => {
+  const exitBtn = makeButton(t('pause.exitToMainMenu'), () => {
     if (!exitConfirmPending) {
       exitConfirmPending = true;
-      exitBtn.textContent = 'Confirm Exit?';
+      exitBtn.textContent = t('pause.confirmExit');
       exitBtn.style.color = '#ff6b6b';
       exitBtn.style.borderColor = '#ff6b6b';
       // Auto-cancel confirmation after 3 seconds if the player doesn't confirm
@@ -511,7 +520,7 @@ export function showPauseMenu(
         if (exitConfirmPending) {
           exitConfirmPending = false;
           exitConfirmTimerId = undefined;
-          exitBtn.textContent = 'Exit to Main Menu';
+          exitBtn.textContent = t('pause.exitToMainMenu');
           exitBtn.style.color = '';
           exitBtn.style.borderColor = '';
         }
@@ -528,6 +537,19 @@ export function showPauseMenu(
   overlay.appendChild(container);
   root.appendChild(overlay);
 
+  // ── Live language switching ───────────────────────────────────────────────
+  // Re-labels the persistent buttons and rebuilds the options sub-panel when it
+  // is open. Focus/ESC handling is untouched.
+  i18n.onLocaleChange(() => {
+    applyLocalePresentation(container);
+    resumeBtn.textContent = t('pause.resume');
+    optionsBtn.textContent = t('pause.options');
+    debugBtn.textContent = debugLabel();
+    worldEditorBtn.textContent = t('pause.worldEditor');
+    if (!exitConfirmPending) exitBtn.textContent = t('pause.exitToMainMenu');
+    if (optionsPanel.style.display !== 'none') buildOptionsContent();
+  });
+
   // ── ESC to close ──────────────────────────────────────────────────────────
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape') {
@@ -539,6 +561,7 @@ export function showPauseMenu(
   window.addEventListener('keydown', onKey);
 
   function destroy(): void {
+    i18n.dispose();
     window.removeEventListener('keydown', onKey);
     if (exitConfirmTimerId !== undefined) {
       clearTimeout(exitConfirmTimerId);

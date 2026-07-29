@@ -119,6 +119,7 @@ export interface EditorUI {
 // Re-export shared types so consumers that already import from editorUI.ts
 // continue to work without change.
 export type { RoomEdge, EditorUICallbacks } from './editorState';
+import { t } from '../i18n';
 
 export function createEditorUI(root: HTMLElement, campaignTitle?: string | null): EditorUI {
   let callbacks: EditorUICallbacks | null = null;
@@ -268,14 +269,14 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   // never be interpreted as markup.
   const title = document.createElement('div');
   if (campaignTitle) {
-    title.appendChild(document.createTextNode('🛠 Custom Campaign Editor'));
+    title.appendChild(document.createTextNode(t('editor.customCampaignTitle')));
     title.appendChild(document.createElement('br'));
     const subtitle = document.createElement('span');
     subtitle.style.cssText = 'font-size: 11px; color: #ffcc66; font-weight: normal;';
     subtitle.textContent = campaignTitle;
     title.appendChild(subtitle);
   } else {
-    title.textContent = '🛠 Zone Editor';
+    title.textContent = t('editor.zoneEditorTitle');
   }
   title.style.cssText = `font-size: 15px; color: ${ACCENT_GOLD}; margin-bottom: 12px; font-weight: bold;`;
   leftContentGroup.appendChild(title);
@@ -284,7 +285,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   const confirmCancelBar = document.createElement('div');
   confirmCancelBar.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
 
-  const confirmBtn = makeBtn('▶ Save & Test', () => callbacks?.onConfirm());
+  const confirmBtn = makeBtn(t('editor.saveAndTest'), () => callbacks?.onConfirm());
   confirmBtn.style.cssText += `
     flex: 1.35; padding: 8px 4px; font-size: 11px;
     background: rgba(212,168,75,0.4); border-color: ${ACCENT_GOLD}; color: ${ACCENT_GOLD};
@@ -292,9 +293,9 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   confirmCancelBar.appendChild(confirmBtn);
 
   let isCancelConfirmationPending = false;
-  const saveBtn = makeBtn('✔ Save', () => {
+  const saveBtn = makeBtn(t('editor.save'), () => {
     isCancelConfirmationPending = false;
-    cancelBtn.textContent = '✕ Cancel';
+    cancelBtn.textContent = t('editor.cancel');
     callbacks?.onSave();
   });
   saveBtn.style.cssText += `
@@ -303,10 +304,10 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   `;
   confirmCancelBar.appendChild(saveBtn);
 
-  const cancelBtn = makeBtn('✕ Cancel', () => {
+  const cancelBtn = makeBtn(t('editor.cancel'), () => {
     if (!isCancelConfirmationPending) {
       isCancelConfirmationPending = true;
-      cancelBtn.textContent = 'Confirm?';
+      cancelBtn.textContent = t('editor.confirmQuestion');
       return;
     }
     callbacks?.onCancel();
@@ -392,7 +393,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
       padding: 6px 8px; margin-bottom: 10px; background: rgba(35,25,0,0.3);
     `;
     const devToolsTitle = document.createElement('div');
-    devToolsTitle.textContent = 'Dev Room Checks';
+    devToolsTitle.textContent = t('editor.devRoomChecks');
     devToolsTitle.style.cssText = 'font-size: 11px; color: #ffcc66; margin-bottom: 6px; font-weight: bold;';
     devToolsDiv.appendChild(devToolsTitle);
 
@@ -442,7 +443,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     display: flex; gap: 4px; margin-bottom: 10px; align-items: center;
   `;
   const brushLabel = document.createElement('span');
-  brushLabel.textContent = 'Brush:';
+  brushLabel.textContent = t('editor.brushLabel');
   brushLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); min-width: 38px;`;
   brushRow.appendChild(brushLabel);
 
@@ -461,7 +462,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     brushBtns.push(btn);
     brushRow.appendChild(btn);
   }
-  const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
+  const brushSection = createCollapsibleSection(t('editor.brushSection'), { key: 'brush' });
   brushSection.body.appendChild(brushRow);
   const roomDimDiv = document.createElement('div');
 
@@ -470,7 +471,7 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   edgeResizeDiv.style.cssText = `margin-top: 6px;`;
 
   const edgeResizeTitle = document.createElement('div');
-  edgeResizeTitle.textContent = 'Add / Remove Row or Column';
+  edgeResizeTitle.textContent = t('editor.edgeResizeTitle');
   edgeResizeTitle.style.cssText = `font-size: 10px; color: rgba(241,231,203,0.5); margin-bottom: 4px;`;
   edgeResizeDiv.appendChild(edgeResizeTitle);
 

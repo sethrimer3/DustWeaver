@@ -14,6 +14,8 @@
 
 import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 import { getPreloadedMenuAnimationSource, MENU_ANIMATION_FPS } from './menuAnimationFrames';
+import { applyLocalePresentation, createLocaleBindings, getUiFontFamily } from '../i18n';
+import type { TranslationKey } from '../i18n';
 
 export interface DeathScreenCallbacks {
   onReturnToLastSave: () => void;
@@ -24,6 +26,7 @@ export function showDeathScreen(
   root: HTMLElement,
   callbacks: DeathScreenCallbacks,
 ): () => void {
+  const i18n = createLocaleBindings();
   const menuAnimationSource = getPreloadedMenuAnimationSource();
   const animatedBackground = createMenuAnimatedBackground({
     source: menuAnimationSource,
@@ -64,9 +67,9 @@ export function showDeathScreen(
 
   // Title text
   const titleEl = document.createElement('div');
-  titleEl.textContent = 'Dusts...';
+  i18n.bindText(titleEl, 'death.title');
   titleEl.style.cssText = `
-    font-family: 'Cinzel', serif; font-weight: 400;
+    font-family: ${getUiFontFamily()}; font-weight: 400;
     font-size: 3.5rem; color: #d4a84b;
     text-shadow: 0 0 40px rgba(212,168,75,0.5), 0 0 80px rgba(212,168,75,0.25);
     letter-spacing: 0.08em;
@@ -74,13 +77,13 @@ export function showDeathScreen(
   content.appendChild(titleEl);
 
   // Helper to create death menu buttons
-  function createDeathButton(label: string, onClick: () => void): HTMLButtonElement {
+  function createDeathButton(labelKey: TranslationKey, onClick: () => void): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.textContent = label;
+    i18n.bindText(btn, labelKey);
     btn.style.cssText = `
       background: rgba(30,28,22,0.85); border: 1px solid rgba(212,168,75,0.4);
       color: #d4a84b; padding: 0.9rem 3rem; font-size: 1.1rem;
-      font-family: 'Cinzel', serif; font-weight: 400; cursor: pointer;
+      font-family: ${getUiFontFamily()}; font-weight: 400; cursor: pointer;
       transition: all 0.25s; border-radius: 2px;
       letter-spacing: 0.12em; min-width: 280px;
     `;
@@ -98,19 +101,20 @@ export function showDeathScreen(
     return btn;
   }
 
-  const btnLastSave = createDeathButton('Return to Last Save', () => {
+  const btnLastSave = createDeathButton('death.returnToLastSave', () => {
     destroy();
     callbacks.onReturnToLastSave();
   });
   content.appendChild(btnLastSave);
 
-  const btnMainMenu = createDeathButton('Return to Main Menu', () => {
+  const btnMainMenu = createDeathButton('death.returnToMainMenu', () => {
     destroy();
     callbacks.onReturnToMainMenu();
   });
   content.appendChild(btnMainMenu);
 
   overlay.appendChild(content);
+  i18n.onLocaleChange(() => { applyLocalePresentation(content); });
 
   // ── Animation loop ─────────────────────────────────────────────────────────
   // ── Mount ──────────────────────────────────────────────────────────────────
@@ -123,6 +127,7 @@ export function showDeathScreen(
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
   function destroy(): void {
+    i18n.dispose();
     animatedBackground.destroy();
     if (overlay.parentElement) overlay.parentElement.removeChild(overlay);
   }

@@ -52,6 +52,14 @@ import {
   setSpriteAtlasUseSetting,
 } from '../render/atlases/spriteAtlasConfig';
 import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
+import {
+  getAvailableLocales,
+  getLocale,
+  getUiFontFamily,
+  setLocale,
+  t,
+} from '../i18n';
+import { buildLanguageTab } from './mainMenuSettingsLanguage';
 
 /**
  * Builds the settings panel into `settingsEl` and attaches a back button
@@ -88,7 +96,7 @@ export function buildSettingsUI(
   const panelHeading = document.createElement('div');
   panelHeading.style.cssText = `
     padding: 20px 28px 0 28px;
-    font-family: 'Cinzel', serif;
+    font-family: ${getUiFontFamily()};
     color: #d4a84b;
     font-size: 1.4rem;
     letter-spacing: 0.12em;
@@ -96,11 +104,11 @@ export function buildSettingsUI(
     text-shadow: 0 0 16px rgba(212,168,75,0.3);
     margin-bottom: 4px;
   `;
-  panelHeading.textContent = 'Settings';
+  panelHeading.textContent = t('settings.title');
   panel.appendChild(panelHeading);
 
   // ── Tab bar ────────────────────────────────────────────────────────────
-  type SettingsTab = 'audio' | 'visual' | 'gameplay' | 'keybindings';
+  type SettingsTab = 'audio' | 'visual' | 'gameplay' | 'keybindings' | 'language';
   let activeSettingsTab: SettingsTab = 'audio';
 
   const tabBar = document.createElement('div');
@@ -113,10 +121,11 @@ export function buildSettingsUI(
   `;
 
   const TAB_LABELS: { id: SettingsTab; label: string }[] = [
-    { id: 'audio',       label: 'Audio'       },
-    { id: 'visual',      label: 'Visual'       },
-    { id: 'gameplay',    label: 'Gameplay'     },
-    { id: 'keybindings', label: 'Keybindings'  },
+    { id: 'audio',       label: t('settings.tab.audio')       },
+    { id: 'visual',      label: t('settings.tab.visual')      },
+    { id: 'gameplay',    label: t('settings.tab.gameplay')    },
+    { id: 'keybindings', label: t('settings.tab.keybindings') },
+    { id: 'language',    label: t('settings.tab.language')    },
   ];
 
   const tabButtons: Partial<Record<SettingsTab, HTMLButtonElement>> = {};
@@ -144,7 +153,7 @@ export function buildSettingsUI(
     btn.style.cssText = `
       flex: 1;
       padding: 10px 4px;
-      font-family: 'Cinzel', serif;
+      font-family: ${getUiFontFamily()};
       font-size: 0.85rem;
       letter-spacing: 0.06em;
       border: none;
@@ -181,7 +190,7 @@ export function buildSettingsUI(
     const el = document.createElement('div');
     el.textContent = text;
     el.style.cssText = `
-      font-family: 'Cinzel', serif;
+      font-family: ${getUiFontFamily()};
       color: rgba(212,168,75,0.55);
       font-size: 0.75rem;
       letter-spacing: 0.1em;
@@ -200,7 +209,7 @@ export function buildSettingsUI(
     const row = document.createElement('div');
     row.style.cssText = `
       display: flex; align-items: center; gap: 12px;
-      font-family: 'Cinzel', serif; color: #d4a84b;
+      font-family: ${getUiFontFamily()}; color: #d4a84b;
       font-size: 0.9rem; margin-bottom: 12px;
     `;
     const lbl = document.createElement('span');
@@ -215,12 +224,12 @@ export function buildSettingsUI(
     slider.style.cssText = `flex: 1; accent-color: #d4a84b; cursor: pointer;`;
 
     const valLbl = document.createElement('span');
-    valLbl.textContent = `${Math.round(initialValue * 100)}%`;
+    valLbl.textContent = t('common.percent', { value: Math.round(initialValue * 100) });
     valLbl.style.cssText = `min-width: 40px; text-align: right; font-size: 0.85rem;`;
 
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);
-      valLbl.textContent = `${v}%`;
+      valLbl.textContent = t('common.percent', { value: v });
       onChangeFn(v / 100);
     });
 
@@ -244,7 +253,7 @@ export function buildSettingsUI(
       -webkit-appearance: none;
       width: 100%;
       padding: 10px 40px 10px 14px;
-      font-family: 'Cinzel', serif;
+      font-family: ${getUiFontFamily()};
       font-size: 0.9rem;
       color: #d4a84b;
       background: rgba(20,18,12,0.9);
@@ -299,7 +308,7 @@ export function buildSettingsUI(
     row.style.cssText = `
       display: flex; align-items: center; gap: 10px;
       width: 100%; padding: 10px 14px; margin-bottom: 8px;
-      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      font-family: ${getUiFontFamily()}; font-size: 0.88rem; letter-spacing: 0.05em;
       cursor: pointer; border-radius: 4px;
       border: 1px solid rgba(212,168,75,${initialValue ? '0.7' : '0.3'});
       background: rgba(212,168,75,${initialValue ? '0.12' : '0'});
@@ -332,7 +341,7 @@ export function buildSettingsUI(
       hint.style.cssText = `
         display: inline-flex; align-items: center; justify-content: center;
         width: 16px; height: 16px; border-radius: 50%; flex: 0 0 auto;
-        font-family: 'Cinzel', serif; font-size: 0.7rem; font-weight: 700;
+        font-family: ${getUiFontFamily()}; font-size: 0.7rem; font-weight: 700;
         color: rgba(212,168,75,0.85); border: 1px solid rgba(212,168,75,0.5);
         background: rgba(0,0,0,0.25); cursor: help;
       `;
@@ -347,16 +356,16 @@ export function buildSettingsUI(
   function buildAudioTab(): void {
     tabContent.innerHTML = '';
 
-    const musicLbl = makeLabel('Music Volume');
+    const musicLbl = makeLabel(t('settings.audio.musicVolume'));
     musicLbl.style.marginTop = '4px';
     tabContent.appendChild(musicLbl);
-    tabContent.appendChild(makeSettingsSlider('Music', getMusicVolume(), (v) => {
+    tabContent.appendChild(makeSettingsSlider(t('settings.audio.music'), getMusicVolume(), (v) => {
       setMusicVolume(v);
       onMusicVolumeChange?.(v);
     }));
 
-    tabContent.appendChild(makeLabel('Sound Effects Volume'));
-    tabContent.appendChild(makeSettingsSlider('Sound Effects', getSfxVolume(), (v) => {
+    tabContent.appendChild(makeLabel(t('settings.audio.sfxVolume')));
+    tabContent.appendChild(makeSettingsSlider(t('settings.audio.sfx'), getSfxVolume(), (v) => {
       setSfxVolume(v);
     }));
   }
@@ -366,13 +375,13 @@ export function buildSettingsUI(
   function buildVisualTab(): void {
     tabContent.innerHTML = '';
 
-    const qualityLbl = makeLabel('Quality');
+    const qualityLbl = makeLabel(t('settings.visual.quality'));
     qualityLbl.style.marginTop = '4px';
     tabContent.appendChild(qualityLbl);
     const qualityOptions: { value: string; label: string }[] = [
-      { value: 'low',  label: 'Low'  },
-      { value: 'med',  label: 'Med'  },
-      { value: 'high', label: 'High' },
+      { value: 'low',  label: t('settings.visual.qualityLow')  },
+      { value: 'med',  label: t('settings.visual.qualityMed')  },
+      { value: 'high', label: t('settings.visual.qualityHigh') },
     ];
     const qualityDropdown = makeStyledDropdown(
       qualityOptions,
@@ -381,7 +390,7 @@ export function buildSettingsUI(
     );
     tabContent.appendChild(qualityDropdown);
 
-    tabContent.appendChild(makeLabel('Resolution'));
+    tabContent.appendChild(makeLabel(t('settings.visual.resolution')));
     const resOptions = getRenderSizeOptions();
     const resOptionsMapped: { value: string; label: string }[] = [];
     for (let i = 0; i < resOptions.length; i++) {
@@ -394,13 +403,13 @@ export function buildSettingsUI(
     );
     tabContent.appendChild(resDropdown);
 
-    tabContent.appendChild(makeLabel('Misc'));
+    tabContent.appendChild(makeLabel(t('settings.visual.misc')));
     const atlasEnabled = getSpriteAtlasUseSetting();
     const atlasRow = document.createElement('label');
     atlasRow.style.cssText = `
       display: flex; align-items: center; gap: 10px;
       width: 100%; padding: 10px 14px; margin-bottom: 8px;
-      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      font-family: ${getUiFontFamily()}; font-size: 0.88rem; letter-spacing: 0.05em;
       cursor: pointer; border-radius: 4px;
       border: 1px solid rgba(212,168,75,${atlasEnabled ? '0.7' : '0.3'});
       background: rgba(212,168,75,${atlasEnabled ? '0.12' : '0'});
@@ -412,11 +421,11 @@ export function buildSettingsUI(
     atlasCheckbox.checked = atlasEnabled;
     atlasCheckbox.style.cssText = 'width: 18px; height: 18px; cursor: pointer; accent-color: #d4a84b; flex: 0 0 auto;';
     const atlasText = document.createElement('span');
-    atlasText.textContent = 'Use sprite atlases (experimental)';
+    atlasText.textContent = t('settings.visual.spriteAtlases');
     const atlasHint = document.createElement('div');
     atlasHint.style.cssText = `
       margin: -2px 0 10px 28px;
-      font-family: 'Cinzel', serif;
+      font-family: ${getUiFontFamily()};
       color: rgba(212,168,75,0.55);
       font-size: 0.72rem;
       letter-spacing: 0.04em;
@@ -425,8 +434,8 @@ export function buildSettingsUI(
     const updateAtlasHint = (): void => {
       const state = getSpriteAtlasConfigState();
       atlasHint.textContent = state.hardDisableActive
-        ? 'Currently hard-disabled internally while legacy room rendering remains active.'
-        : 'Reload or re-enter the room after changing this for a clean test.';
+        ? t('settings.visual.spriteAtlasesHardDisabled')
+        : t('settings.visual.spriteAtlasesHint');
     };
     atlasCheckbox.addEventListener('change', () => {
       const enabled = atlasCheckbox.checked;
@@ -445,18 +454,20 @@ export function buildSettingsUI(
     const outlineBtn = document.createElement('button');
     outlineBtn.style.cssText = `
       width: 100%; padding: 10px 14px; margin-bottom: 10px;
-      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      font-family: ${getUiFontFamily()}; font-size: 0.88rem; letter-spacing: 0.05em;
       text-align: left; cursor: pointer; border-radius: 4px;
       transition: background 0.15s, border-color 0.15s;
       border: 1px solid rgba(212,168,75,${outlineEnabled ? '0.7' : '0.3'});
       background: rgba(212,168,75,${outlineEnabled ? '0.12' : '0'});
       color: #d4a84b;
     `;
-    outlineBtn.textContent = `Offensive Dust Outline: ${outlineEnabled ? 'On' : 'Off'}`;
+    const outlineLabel = (on: boolean): string =>
+      t('settings.visual.offensiveDustOutline', { state: t(on ? 'common.on' : 'common.off') });
+    outlineBtn.textContent = outlineLabel(outlineEnabled);
     outlineBtn.addEventListener('click', () => {
       const nowEnabled = !isOffensiveDustOutlineEnabled();
       setOffensiveDustOutlineEnabled(nowEnabled);
-      outlineBtn.textContent = `Offensive Dust Outline: ${nowEnabled ? 'On' : 'Off'}`;
+      outlineBtn.textContent = outlineLabel(nowEnabled);
       outlineBtn.style.borderColor = `rgba(212,168,75,${nowEnabled ? '0.7' : '0.3'})`;
       outlineBtn.style.background = `rgba(212,168,75,${nowEnabled ? '0.12' : '0'})`;
     });
@@ -466,18 +477,20 @@ export function buildSettingsUI(
     const trailBtn = document.createElement('button');
     trailBtn.style.cssText = `
       width: 100%; padding: 10px 14px; margin-bottom: 10px;
-      font-family: 'Cinzel', serif; font-size: 0.88rem; letter-spacing: 0.05em;
+      font-family: ${getUiFontFamily()}; font-size: 0.88rem; letter-spacing: 0.05em;
       text-align: left; cursor: pointer; border-radius: 4px;
       transition: background 0.15s, border-color 0.15s;
       border: 1px solid rgba(212,168,75,${trailEnabled ? '0.7' : '0.3'});
       background: rgba(212,168,75,${trailEnabled ? '0.12' : '0'});
       color: #d4a84b;
     `;
-    trailBtn.textContent = `Momentum Combat Golden Trail: ${trailEnabled ? 'On' : 'Off'}`;
+    const trailLabel = (on: boolean): string =>
+      t('settings.visual.momentumTrail', { state: t(on ? 'common.on' : 'common.off') });
+    trailBtn.textContent = trailLabel(trailEnabled);
     trailBtn.addEventListener('click', () => {
       const nowEnabled = !isMomentumTrailEnabled();
       setMomentumTrailEnabled(nowEnabled);
-      trailBtn.textContent = `Momentum Combat Golden Trail: ${nowEnabled ? 'On' : 'Off'}`;
+      trailBtn.textContent = trailLabel(nowEnabled);
       trailBtn.style.borderColor = `rgba(212,168,75,${nowEnabled ? '0.7' : '0.3'})`;
       trailBtn.style.background = `rgba(212,168,75,${nowEnabled ? '0.12' : '0'})`;
     });
@@ -489,57 +502,62 @@ export function buildSettingsUI(
   function buildGameplayTab(): void {
     tabContent.innerHTML = '';
 
-    const glowLbl = makeLabel('Grapple Surface Highlight Opacity');
+    const glowLbl = makeLabel(t('settings.gameplay.edgeGlowOpacity'));
     glowLbl.style.marginTop = '4px';
     tabContent.appendChild(glowLbl);
     tabContent.appendChild(
-      makeSettingsSlider('Highlight Opacity', getReachableEdgeGlowOpacity(), (v) => {
+      makeSettingsSlider(t('settings.gameplay.highlightOpacity'), getReachableEdgeGlowOpacity(), (v) => {
         setReachableEdgeGlowOpacity(v);
       }),
     );
 
-    tabContent.appendChild(makeLabel('Influence Highlight Width'));
+    tabContent.appendChild(makeLabel(t('settings.gameplay.influenceHighlightWidth')));
     tabContent.appendChild(
-      makeSettingsSlider('Highlight Width', getInfluenceHighlightWidth(), (v) => {
+      makeSettingsSlider(t('settings.gameplay.highlightWidth'), getInfluenceHighlightWidth(), (v) => {
         setInfluenceHighlightWidth(v);
       }),
     );
 
-    tabContent.appendChild(makeLabel('Influence Circle Opacity'));
+    tabContent.appendChild(makeLabel(t('settings.gameplay.influenceCircleOpacity')));
     tabContent.appendChild(
-      makeSettingsSlider('Circle Opacity', getInfluenceCircleOpacity(), (v) => {
+      makeSettingsSlider(t('settings.gameplay.circleOpacity'), getInfluenceCircleOpacity(), (v) => {
         setInfluenceCircleOpacity(v);
       }),
     );
 
-    tabContent.appendChild(makeLabel('Controls'));
+    tabContent.appendChild(makeLabel(t('settings.gameplay.controls')));
     tabContent.appendChild(
-      makeCheckboxRow('Double-jump to grapple', getDoubleJumpToGrappleEnabled(), (enabled) => {
+      makeCheckboxRow(t('settings.gameplay.doubleJumpToGrapple'), getDoubleJumpToGrappleEnabled(), (enabled) => {
         setDoubleJumpToGrappleEnabled(enabled);
       }),
     );
     const speedometerEnabled = getPixelSpeedometerEnabled();
     const speedometerOptions = createSlideReveal(speedometerEnabled);
     tabContent.appendChild(
-      makeCheckboxRow('Pixel speedometer', speedometerEnabled, (enabled) => {
+      makeCheckboxRow(t('settings.gameplay.pixelSpeedometer'), speedometerEnabled, (enabled) => {
         setPixelSpeedometerEnabled(enabled);
         speedometerOptions.setExpanded(enabled);
       }),
     );
-    speedometerOptions.content.appendChild(makeCheckboxRow('Total speed', getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
-    speedometerOptions.content.appendChild(makeCheckboxRow('Horizontal speed', getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
-    speedometerOptions.content.appendChild(makeCheckboxRow('Vertical speed', getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
+    speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.totalSpeed'), getPixelSpeedometerTotalEnabled(), setPixelSpeedometerTotalEnabled));
+    speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.horizontalSpeed'), getPixelSpeedometerHorizontalEnabled(), setPixelSpeedometerHorizontalEnabled));
+    speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.verticalSpeed'), getPixelSpeedometerVerticalEnabled(), setPixelSpeedometerVerticalEnabled));
     const speedGraphEnabled = getPixelSpeedGraphEnabled();
     const speedGraphOptions = createSlideReveal(speedGraphEnabled);
-    speedometerOptions.content.appendChild(makeCheckboxRow('Speed graph', speedGraphEnabled, (enabled) => {
+    speedometerOptions.content.appendChild(makeCheckboxRow(t('settings.gameplay.speedGraph'), speedGraphEnabled, (enabled) => {
         setPixelSpeedGraphEnabled(enabled);
         speedGraphOptions.setExpanded(enabled);
       }));
-    speedGraphOptions.content.appendChild(makeSettingsSlider('Speed Graph Opacity', getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
+    speedGraphOptions.content.appendChild(makeSettingsSlider(t('settings.gameplay.speedGraphOpacity'), getPixelSpeedGraphOpacity(), setPixelSpeedGraphOpacity));
     speedometerOptions.content.appendChild(speedGraphOptions.element);
     const placementSelect = document.createElement('select');
-    placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: 'Cinzel', serif;`;
-    for (const [value, label] of [['over-player', 'Speedometer on player'], ['on-top', 'Speedometer at top'], ['both', 'Speedometer on both']] as const) {
+    placementSelect.style.cssText = `width: 100%; padding: 8px 10px; margin-bottom: 12px; background: rgba(20,18,14,0.9); color: #d4a84b; border: 1px solid rgba(212,168,75,0.35); border-radius: 4px; font-family: ${getUiFontFamily()};`;
+    const placementOptions: readonly [ 'over-player' | 'on-top' | 'both', string ][] = [
+        ['over-player', t('settings.gameplay.speedometerOnPlayer')],
+        ['on-top', t('settings.gameplay.speedometerOnTop')],
+        ['both', t('settings.gameplay.speedometerBoth')],
+      ];
+    for (const [value, label] of placementOptions) {
         const option = document.createElement('option');
         option.value = value;
         option.textContent = label;
@@ -551,11 +569,11 @@ export function buildSettingsUI(
       });
     speedometerOptions.content.appendChild(placementSelect);
     tabContent.appendChild(speedometerOptions.element);
-    tabContent.appendChild(makeCheckboxRow('Speedrun timer', getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
+    tabContent.appendChild(makeCheckboxRow(t('settings.gameplay.speedrunTimer'), getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
     tabContent.appendChild(
-      makeCheckboxRow('Advanced Wall Jumps', getAdvancedWallJumpsEnabled(), (enabled) => {
+      makeCheckboxRow(t('settings.gameplay.advancedWallJumps'), getAdvancedWallJumpsEnabled(), (enabled) => {
         setAdvancedWallJumpsEnabled(enabled);
-      }, 'When off (default), pressing jump next to a wall always wall-jumps, even with no directional input held. When on, a wall jump requires deliberate intent: wall-sliding, pressing away from the wall, or having been falling in the air for a moment.'),
+      }, t('settings.gameplay.advancedWallJumpsTooltip')),
     );
   }
 
@@ -565,6 +583,15 @@ export function buildSettingsUI(
     if (activeSettingsTab === 'audio')       buildAudioTab();
     else if (activeSettingsTab === 'visual') buildVisualTab();
     else if (activeSettingsTab === 'gameplay') buildGameplayTab();
+    else if (activeSettingsTab === 'language') {
+      buildLanguageTab(tabContent, {
+        getLocale,
+        setLocale,
+        locales: getAvailableLocales(),
+        makeLabel,
+        makeStyledDropdown,
+      });
+    }
     else                                     buildKeybindingsTab(tabContent);
   }
 
@@ -573,11 +600,11 @@ export function buildSettingsUI(
 
   // ── Back button ────────────────────────────────────────────────────────
   const backBtn = document.createElement('button');
-  backBtn.textContent = 'Back';
+  backBtn.textContent = t('common.back');
   backBtn.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.25);
     color: rgba(212,168,75,0.6); padding: 0.6rem 2.5rem; font-size: 0.9rem;
-    font-family: 'Cinzel', serif; cursor: pointer; transition: all 0.25s;
+    font-family: ${getUiFontFamily()}; cursor: pointer; transition: all 0.25s;
     border-radius: 2px; letter-spacing: 0.1em; margin-top: 1rem;
   `;
   backBtn.addEventListener('mouseenter', () => {

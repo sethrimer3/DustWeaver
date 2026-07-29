@@ -5,6 +5,7 @@
  */
 
 import type { EditorRoomData } from './editorState';
+import { t } from '../i18n';
 
 /**
  * Deep-clones an EditorRoomData object using structuredClone.
@@ -40,7 +41,7 @@ export function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo
   `;
 
   const question = document.createElement('div');
-  question.textContent = 'Save Changes?';
+  question.textContent = t('editor.saveChangesQuestion');
   question.style.cssText = `
     font-size: 16px; font-weight: bold; color: #f1e7cb; letter-spacing: 0.05em;
   `;
@@ -50,7 +51,7 @@ export function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo
   btnRow.style.cssText = 'display: flex; gap: 16px;';
 
   const yesBtn = document.createElement('button');
-  yesBtn.textContent = 'YES';
+  yesBtn.textContent = t('editor.yes');
   yesBtn.style.cssText = `
     min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
     font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;
@@ -66,7 +67,7 @@ export function showSaveChangesDialog(root: HTMLElement, onYes: () => void, onNo
   });
 
   const noBtn = document.createElement('button');
-  noBtn.textContent = 'NO';
+  noBtn.textContent = t('editor.no');
   noBtn.style.cssText = `
     min-width: 90px; padding: 10px 20px; font-size: 14px; font-weight: bold;
     font-family: 'Cinzel', monospace; cursor: pointer; border-radius: 4px;

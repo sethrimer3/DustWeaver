@@ -3,6 +3,7 @@ import { WORLD1_LEVELS } from '../levels/world1';
 import { WORLD2_LEVELS } from '../levels/world2';
 import { LevelDef } from '../levels/levelDef';
 import { DecorativeParticleBackground } from '../render/decorativeParticles';
+import { t, tPlural } from '../i18n';
 
 export interface WorldMapCallbacks {
   onStartLevel: (progress: PlayerProgress, level: LevelDef) => void;
@@ -64,7 +65,7 @@ function buildWorldGrid(
       btn.addEventListener('mouseenter', () => {
         btn.style.background = 'rgba(0,0,0,0.75)';
         btn.style.boxShadow = `0 0 22px ${tc.glow}`;
-        msgEl.textContent = lvl.name + (isBoss ? ' — Boss Battle!' : '');
+        msgEl.textContent = isBoss ? t('worldMap.bossSuffix', { name: lvl.name }) : lvl.name;
       });
       btn.addEventListener('mouseleave', () => {
         btn.style.background = 'rgba(0,0,0,0.55)';
@@ -109,10 +110,10 @@ export function showWorldMap(
   header.style.cssText = 'text-align: center; margin-bottom: 1rem; z-index: 1;';
   header.innerHTML = `
     <h2 style="font-size:2rem; color:#00cfff; text-shadow:0 0 18px #00cfff; margin:0 0 0.25rem;">
-      Zone Map
+      ${t('worldMap.title')}
     </h2>
     <p style="color:#88aacc; font-size:0.85rem; margin:0;">
-      Player Level ${progress.level} &nbsp;|&nbsp; ${progress.dustSlots} dust slots
+      ${tPlural('worldMap.subtitle', progress.dustSlots, { level: progress.level })}
     </p>
   `;
   el.appendChild(header);
@@ -126,7 +127,7 @@ export function showWorldMap(
   w1Header.style.cssText = 'text-align:center; margin-bottom:0.6rem; z-index:1;';
   w1Header.innerHTML = `
     <h3 style="font-size:1.2rem; color:#33aaff; text-shadow:0 0 10px #33aaff; margin:0;">
-      Zone 1 — The Tideworn Keep
+      ${t('worldMap.zone1')}
     </h3>
   `;
   el.appendChild(w1Header);
@@ -141,7 +142,7 @@ export function showWorldMap(
   const w2Unlocked = (progress.world2UnlockedCount ?? 0) > 0;
   w2Header.innerHTML = `
     <h3 style="font-size:1.2rem; color:${w2Unlocked ? '#ff6622' : '#555'}; text-shadow:${w2Unlocked ? '0 0 10px #ff6622' : 'none'}; margin:0;">
-      Zone 2 — The Volcanic Depths${w2Unlocked ? '' : ' <span style="font-size:0.8rem; color:#555;">(Complete Zone 1 to unlock)</span>'}
+      ${t('worldMap.zone2')}${w2Unlocked ? '' : ` <span style="font-size:0.8rem; color:#555;">${t('worldMap.zone2LockedHint')}</span>`}
     </h3>
   `;
   el.appendChild(w2Header);
@@ -155,7 +156,7 @@ export function showWorldMap(
     margin-top: 1.2rem; color: rgba(255,255,255,0.25);
     font-size: 0.75rem; z-index: 1;
   `;
-  hint.textContent = 'Complete levels to unlock new ones';
+  hint.textContent = t('worldMap.hint');
   el.appendChild(hint);
 
   root.appendChild(bg.canvas);

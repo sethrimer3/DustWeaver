@@ -13,6 +13,7 @@ import {
   createDefaultWeaveLoadout,
 } from '../sim/weaves/playerLoadout';
 import { getDustDefinition } from '../sim/weaves/dustDefinition';
+import { t } from '../i18n';
 
 export interface LoadoutCallbacks {
   onConfirm: (loadout: ParticleKind[], weaveLoadout: PlayerWeaveLoadout) => void;
@@ -52,9 +53,9 @@ export function showLoadoutScreen(
   const header = document.createElement('div');
   header.style.cssText = 'text-align:center; margin-bottom:18px; width:100%;';
   header.innerHTML = `
-    <h2 style="font-size:1.6rem; color:#ffd700; margin:0 0 4px;">Weaver Loadout</h2>
+    <h2 style="font-size:1.6rem; color:#ffd700; margin:0 0 4px;">${t('loadout.title')}</h2>
     <p style="color:#888; font-size:0.8rem; margin:0;">
-      Level ${progress.level} &nbsp;|&nbsp; Your dust collection.
+      ${t('loadout.subtitle', { level: progress.level })}
     </p>
   `;
   el.appendChild(header);
@@ -70,7 +71,7 @@ export function showLoadoutScreen(
   if (availableKinds.length === 0) {
     const emptyMsg = document.createElement('div');
     emptyMsg.style.cssText = 'color:#777; font-size:0.8rem; text-align:center; padding:20px 0;';
-    emptyMsg.textContent = 'No dust unlocked yet.';
+    emptyMsg.textContent = t('loadout.noDustUnlocked');
     dustListEl.appendChild(emptyMsg);
   } else {
     for (const kind of availableKinds) {
@@ -103,7 +104,7 @@ export function showLoadoutScreen(
   root.appendChild(actionBar);
 
   const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = '← Back';
+  cancelBtn.textContent = t('loadout.back');
   cancelBtn.style.cssText = `
     background: transparent; border: 2px solid #555; color: #aaa;
     padding: 10px 22px; font-size: 0.9rem; font-family: 'Cinzel', serif;
@@ -114,7 +115,7 @@ export function showLoadoutScreen(
 
   const startBtn = document.createElement('button');
   startBtn.id = 'loadout-start-btn';
-  startBtn.textContent = '⚔ Enter Battle';
+  startBtn.textContent = t('loadout.enterBattle');
   startBtn.style.cssText = `
     background: transparent; border: 2px solid #ffd700; color: #ffd700;
     padding: 10px 28px; font-size: 0.95rem; font-family: 'Cinzel', serif;

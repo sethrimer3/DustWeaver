@@ -57,6 +57,46 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'assistMode.normal': 'Modo normal',
   'assistMode.enable': 'Activar modo asistido',
 
+  // Custom campaigns
+  'customCampaigns.heading': 'Campañas personalizadas',
+  'customCampaigns.createNew': '✦ Crear campaña nueva',
+  'customCampaigns.import': '📥 Importar campaña (.dwcampaign.json)',
+  'customCampaigns.loading': 'Cargando campañas…',
+  'customCampaigns.emptyTitle': 'No se han encontrado campañas personalizadas.',
+  'customCampaigns.emptyHint':
+    'Añade archivos <code>.dwcampaign.json</code> a <code>ASSETS/CAMPAIGNS/CUSTOM/</code> '
+    + 'o importa un archivo de campaña más arriba.',
+  'customCampaigns.badgeBundledFolder': 'Carpeta incluida',
+  'customCampaigns.badgePacked': 'Campaña empaquetada',
+  'customCampaigns.badgeImported': 'Importada',
+  'customCampaigns.byCreator': 'Por {creator}',
+  'customCampaigns.unknownCreator': 'Desconocido',
+  'customCampaigns.initialRoomAlt': 'Vista previa de la sala inicial',
+  'customCampaigns.play': '▶ Jugar',
+  'customCampaigns.edit': '🛠 Editar',
+  'customCampaigns.editLoading': 'Cargando…',
+  'customCampaigns.export': '📤 Exportar JSON',
+  'customCampaigns.exporting': 'Exportando…',
+  'customCampaigns.delete': '🗑 Borrar',
+  'customCampaigns.deleteConfirm': '¿Borrar la campaña importada «{title}»?',
+  'customCampaigns.invalidFile': 'Archivo de campaña no válido:\n{errors}',
+  'customCampaigns.loadForEditFailed': 'No se pudo cargar la campaña para editarla: {error}',
+  'customCampaigns.exportFailed': 'No se pudo exportar la campaña: {error}',
+  'customCampaigns.listFailed': 'No se pudieron listar las campañas: {error}',
+
+  // New-campaign dialog
+  'newCampaign.title': 'Crear campaña nueva',
+  'newCampaign.id': 'ID de la campaña',
+  'newCampaign.idHint': 'solo minúsculas, números, _ y -',
+  'newCampaign.campaignTitle': 'Título de la campaña',
+  'newCampaign.creator': 'Autor',
+  'newCampaign.description': 'Descripción',
+  'newCampaign.initialRoomId': 'ID de la sala inicial',
+  'newCampaign.zoneName': 'Nombre de la zona',
+  'newCampaign.roomWidth': 'Ancho de la sala inicial (bloques)',
+  'newCampaign.roomHeight': 'Alto de la sala inicial (bloques)',
+  'newCampaign.create': 'Crear y abrir el editor',
+
   // Settings
   'settings.title': 'Ajustes',
   'settings.tab.audio': 'Audio',
@@ -169,6 +209,10 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
 
   // Character select
   'characterSelect.title': 'Selecciona personaje',
+  'characterSelect.name.knight': 'Caballero',
+  'characterSelect.name.demonFox': 'Zorro demonio',
+  'characterSelect.name.princess': 'Princesa',
+  'characterSelect.name.outcast': 'Marginado',
   'characterSelect.hint': '← A/D o flechas para elegir · Intro para confirmar →',
 
   // Weave loadout
@@ -191,11 +235,19 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'worldMap.hint': 'Completa niveles para desbloquear otros nuevos',
 
   // Editor
-  'editor.title': 'Editor de mundos',
-  'editor.save': 'Guardar',
-  'editor.exit': 'Salir del editor',
-  'editor.playtest': 'Probar',
-  'editor.unsavedChanges': 'Tienes cambios sin guardar.',
+  'editor.customCampaignTitle': '🛠 Editor de campañas personalizadas',
+  'editor.zoneEditorTitle': '🛠 Editor de zonas',
+  'editor.saveAndTest': '▶ Guardar y probar',
+  'editor.save': '✔ Guardar',
+  'editor.cancel': '✕ Cancelar',
+  'editor.confirmQuestion': '¿Confirmar?',
+  'editor.devRoomChecks': 'Comprobaciones de sala',
+  'editor.brushLabel': 'Pincel:',
+  'editor.brushSection': 'Pincel',
+  'editor.edgeResizeTitle': 'Añadir / quitar fila o columna',
+  'editor.saveChangesQuestion': '¿Guardar los cambios?',
+  'editor.yes': 'SÍ',
+  'editor.no': 'NO',
   'editor.roomCount': {
     one: '{count} sala',
     other: '{count} salas',
