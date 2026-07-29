@@ -477,7 +477,7 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Background blocks (visual-only, rendered behind sunbeams and walls) ───
   // Life motes occupy the back-most world layer: tiles and the player occlude
   // them, while their simulation deliberately remains collision-free.
-  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom, world.shieldWeave, graphicsQuality);
+  renderStormweaveLifeMotes(ctx, stormweaveLifeMotes, ox, oy, zoom, world.shieldWeave, graphicsQuality, world.selectedDustKind);
 
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_BG_BLOCKS);
   renderBackgroundBlocks(ctx, currentRoom, ox, oy, zoom, virtualWidthPx, virtualHeightPx);

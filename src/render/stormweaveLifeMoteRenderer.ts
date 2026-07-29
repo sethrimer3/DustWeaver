@@ -5,8 +5,71 @@ import {
 } from '../sim/stormweave/lifeMotes';
 import { getEffectiveShieldArcLengthWorld, type ShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import type { GraphicsQuality } from '../ui/renderSettings';
+import { getMoteTypeVisual, shadeRgb, rgbToHex, type MoteRgb } from '../sim/motes/moteTypeConfig';
 
 const FULL_CIRCLE_EPSILON = 1e-6;
+
+/** Mixes `c` toward white by `amount` (0 = unchanged, 1 = pure white), clamped. */
+function mixWithWhite(c: MoteRgb, amount: number): MoteRgb {
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  const a = clamp(amount);
+  return {
+    r: clamp(c.r + (1 - c.r) * a),
+    g: clamp(c.g + (1 - c.g) * a),
+    b: clamp(c.b + (1 - c.b) * a),
+  };
+}
+
+/**
+ * Fully-resolved hex-string palette for one frame's worth of canonical
+ * Stormweave life-mote rendering, derived once per render call from the
+ * centralized `moteTypeConfig.ts` visual for the selected dust kind. Pure and
+ * allocation-cheap (a handful of string conversions) — never per-mote,
+ * per-trail-point, or per-frame-loop-iteration work.
+ */
+export interface StormweaveMotePalette {
+  /** Solid mote body fill. */
+  bodyHex: string;
+  /** Bright one-pixel mote highlight/glint. */
+  highlightHex: string;
+  /** Additive glow: broad, low-alpha outer bloom. */
+  glowOuterHex: string;
+  /** Additive glow: smaller, brighter inner bloom. */
+  glowInnerHex: string;
+  /** Ribbon trail: broad low-alpha outer glow pass. */
+  trailOuterHex: string;
+  /** Ribbon trail: main colour pass. */
+  trailMainHex: string;
+  /** Ribbon trail: bright core pass. */
+  trailCoreHex: string;
+  /** Shield Weave crescent: broad arc point colour. */
+  shieldCrescentHex: string;
+  /** Shield Weave crescent: bright one-pixel center. */
+  shieldCrescentCenterHex: string;
+  /** Shield Weave impact flash: strongly brightened/desaturated but tinted. */
+  shieldImpactHex: string;
+}
+
+/**
+ * Builds the full hex-string palette for `kind` from its centralized
+ * `moteTypeConfig.ts` visual. Pure — no canvas/DOM — so it's directly
+ * unit-testable without mocking `CanvasRenderingContext2D`.
+ */
+export function buildStormweaveMotePalette(kind: number): StormweaveMotePalette {
+  const visual = getMoteTypeVisual(kind);
+  return {
+    bodyHex: rgbToHex(visual.body),
+    highlightHex: rgbToHex(mixWithWhite(visual.glow, 0.5)),
+    glowOuterHex: rgbToHex(shadeRgb(visual.trail, 0.85)),
+    glowInnerHex: rgbToHex(visual.glow),
+    trailOuterHex: rgbToHex(shadeRgb(visual.trail, 0.5)),
+    trailMainHex: rgbToHex(visual.trail),
+    trailCoreHex: rgbToHex(mixWithWhite(visual.glow, 0.35)),
+    shieldCrescentHex: rgbToHex(shadeRgb(visual.trail, 0.75)),
+    shieldCrescentCenterHex: rgbToHex(visual.glow),
+    shieldImpactHex: rgbToHex(mixWithWhite(visual.glow, 0.7)),
+  };
+}
 
 function renderRibbonPass(
   ctx: CanvasRenderingContext2D,
@@ -73,15 +136,17 @@ export function renderStormweaveLifeMotes(
   scalePx: number,
   shield: ShieldWeaveState,
   graphicsQuality: GraphicsQuality,
+  selectedDustKind: number,
 ): void {
   ctx.save();
+  const palette = buildStormweaveMotePalette(selectedDustKind);
   if (graphicsQuality === 'high') {
     const sizing = getStormweaveTrailSizing(motes.trailIntensity);
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < motes.moteCount; i++) {
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, '#b75b08', 0.13);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, '#e9a521', 0.37);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, '#fff0a3', 0.74);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, palette.trailOuterHex, 0.13);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, palette.trailMainHex, 0.37);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, palette.trailCoreHex, 0.74);
     }
   }
   if (shield.isActive) {
@@ -102,10 +167,10 @@ export function renderStormweaveLifeMotes(
       const x = Math.round((shield.centerXWorld + Math.cos(angle) * shield.radiusWorld) * scalePx + offsetXPx);
       const y = Math.round((shield.centerYWorld + Math.sin(angle) * shield.radiusWorld) * scalePx + offsetYPx);
       ctx.globalAlpha = 0.34;
-      ctx.fillStyle = '#b87318';
+      ctx.fillStyle = palette.shieldCrescentHex;
       ctx.fillRect(x - 1, y - 1, 3, 3);
       ctx.globalAlpha = 0.78;
-      ctx.fillStyle = '#ffe58a';
+      ctx.fillStyle = palette.shieldCrescentCenterHex;
       ctx.fillRect(x, y, 1, 1);
     }
     if (shield.impactTicksLeft > 0) {
@@ -113,7 +178,7 @@ export function renderStormweaveLifeMotes(
       const x = Math.round(shield.impactXWorld * scalePx + offsetXPx);
       const y = Math.round(shield.impactYWorld * scalePx + offsetYPx);
       ctx.globalAlpha = impactAlpha;
-      ctx.fillStyle = '#fffbd6';
+      ctx.fillStyle = palette.shieldImpactHex;
       ctx.fillRect(x - 2, y, 5, 1);
       ctx.fillRect(x, y - 2, 1, 5);
     }
@@ -127,21 +192,21 @@ export function renderStormweaveLifeMotes(
       const radius = sizing.headGlowRadius * scalePx;
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.07 + motes.trailIntensity * 0.06;
-      ctx.fillStyle = '#d77d12';
+      ctx.fillStyle = palette.glowOuterHex;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 0.16 + motes.trailIntensity * 0.09;
-      ctx.fillStyle = '#f2b632';
+      ctx.fillStyle = palette.glowInnerHex;
       ctx.beginPath();
       ctx.arc(x, y, radius * 0.55, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = '#ffd451';
+    ctx.fillStyle = palette.bodyHex;
     ctx.fillRect(x - 1, y - 1, 2, 2);
-    ctx.fillStyle = '#fff7c2';
+    ctx.fillStyle = palette.highlightHex;
     ctx.fillRect(x, y, 1, 1);
   });
   ctx.restore();

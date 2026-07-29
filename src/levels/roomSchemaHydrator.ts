@@ -23,6 +23,7 @@ import type {
   RoomJsonSkillTomb,
   RoomJsonDustSkillTomb,
   RoomJsonSpike,
+  RoomJsonLaser,
   RoomJsonSpringboard,
   RoomJsonZone,
   RoomJsonBreakableBlock,
@@ -478,6 +479,9 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
     xBlock: x, yBlock: y, direction: dir, size: size ?? '1x1',
     blockTheme: themeId !== undefined ? blockThemeRefToTheme(themeId) : undefined,
   }) as RoomJsonSpike);
+  if (saved.lasers)         json.lasers          = saved.lasers.map(([x, y, dir]) => ({
+    xBlock: x, yBlock: y, direction: dir,
+  }) as RoomJsonLaser);
   if (saved.springboards)   json.springboards    = saved.springboards.map(([x, y]) => ({ xBlock: x, yBlock: y }) as RoomJsonSpringboard);
 
   // Water zones: prefer compact `waterLayer` (v3+); fall back to legacy `waterZones`.

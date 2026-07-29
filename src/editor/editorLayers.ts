@@ -130,6 +130,7 @@ const ELEMENT_TYPE_LAYER: Readonly<Record<SelectedElementType, LayerId>> = {
   timeStopField: 'fields',
   crumbleBlock: 'dynamicGeometry',
   spike: 'hazards',
+  laser: 'hazards',
   bouncePad: 'dynamicGeometry',
   kineticBlock: 'dynamicGeometry',
   grappleCarryBlock: 'dynamicGeometry',
@@ -181,6 +182,7 @@ const CATEGORY_DEFAULT_LAYER: Readonly<Record<PaletteCategory, LayerId>> = {
 const PALETTE_ITEM_LAYER_OVERRIDES: Readonly<Record<string, LayerId>> = {
   spike_1x1: 'hazards',
   spike_2x2: 'hazards',
+  laser_emitter: 'hazards',
   phantasmal_block: 'terrain',
   ice_block_1x1: 'terrain',
   ice_block_2x2: 'terrain',

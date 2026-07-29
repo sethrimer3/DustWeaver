@@ -283,6 +283,97 @@ export function recordShieldImpact(state: ShieldWeaveState, xWorld: number, yWor
   state.impactTicksLeft = SHIELD_IMPACT_TICKS;
 }
 
+/** Result of a ray/segment intersection against the active shield arc's circular surface. */
+export interface ShieldArcRayHit {
+  /** Distance along the ray from its origin to the contact point (world units). */
+  distanceWorld: number;
+  xWorld: number;
+  yWorld: number;
+  /** Outward unit normal at the contact point (from shield center through contact). */
+  normalXWorld: number;
+  normalYWorld: number;
+}
+
+/**
+ * Finds the nearest point where a ray (origin + direction, direction assumed
+ * normalized) crosses the shield's active circular-arc surface, within
+ * `[0, maxDistanceWorld]`. Returns null when the shield is inactive, has no
+ * radius, the ray misses the full circle, or the nearest circle crossing
+ * falls outside the currently active angular span (i.e. the ray only crosses
+ * the *unarmed* portion of the circle).
+ *
+ * This is exact circle geometry (quadratic ray/circle intersection), not a
+ * polyline approximation — used for laser reflection, where the contact
+ * point and outward normal must be precise.
+ */
+export function getShieldArcRayHit(
+  geometry: ShieldArcGeometry,
+  originXWorld: number,
+  originYWorld: number,
+  dirXWorld: number,
+  dirYWorld: number,
+  maxDistanceWorld: number,
+): ShieldArcRayHit | null {
+  if (!geometry.isActive || geometry.radiusWorld <= 0 || geometry.angularSpanRad <= 0) return null;
+  if (maxDistanceWorld <= 0) return null;
+
+  // Normalize direction defensively (callers should already pass unit vectors).
+  const dirLen = Math.hypot(dirXWorld, dirYWorld);
+  if (dirLen < 1e-9) return null;
+  const dx = dirXWorld / dirLen;
+  const dy = dirYWorld / dirLen;
+
+  const ocx = originXWorld - geometry.centerXWorld;
+  const ocy = originYWorld - geometry.centerYWorld;
+
+  // Ray/circle intersection: |O + tD - C|^2 = r^2, with D unit length.
+  const b = 2 * (ocx * dx + ocy * dy);
+  const c = ocx * ocx + ocy * ocy - geometry.radiusWorld * geometry.radiusWorld;
+  const discriminant = b * b - 4 * c;
+  if (discriminant < 0) return null;
+
+  const sqrtDisc = Math.sqrt(discriminant);
+  const t0 = (-b - sqrtDisc) * 0.5;
+  const t1 = (-b + sqrtDisc) * 0.5;
+
+  // Check the two roots in increasing order — take the first that lands both
+  // within range and within the active arc's angular span.
+  const candidates = t0 <= t1 ? [t0, t1] : [t1, t0];
+  for (const t of candidates) {
+    if (t < 0 || t > maxDistanceWorld) continue;
+    const xWorld = originXWorld + dx * t;
+    const yWorld = originYWorld + dy * t;
+    const nx = xWorld - geometry.centerXWorld;
+    const ny = yWorld - geometry.centerYWorld;
+    const nLen = Math.hypot(nx, ny);
+    if (nLen < 1e-9) continue;
+    const normalXWorld = nx / nLen;
+    const normalYWorld = ny / nLen;
+    const angle = Math.atan2(ny, nx);
+    if (!angleIsOnShield(geometry, angle)) continue;
+    return { distanceWorld: t, xWorld, yWorld, normalXWorld, normalYWorld };
+  }
+  return null;
+}
+
+/**
+ * Reflects a normalized incoming direction off a surface normal using the
+ * standard reflection equation: `reflected = incoming - 2 * dot(incoming, normal) * normal`.
+ * Returns a normalized output vector.
+ */
+export function reflectDirection(
+  dirXWorld: number,
+  dirYWorld: number,
+  normalXWorld: number,
+  normalYWorld: number,
+): { xWorld: number; yWorld: number } {
+  const dot = dirXWorld * normalXWorld + dirYWorld * normalYWorld;
+  const rx = dirXWorld - 2 * dot * normalXWorld;
+  const ry = dirYWorld - 2 * dot * normalYWorld;
+  const len = Math.hypot(rx, ry) || 1;
+  return { xWorld: rx / len, yWorld: ry / len };
+}
+
 export function tryBlockHostileProjectile(
   state: ShieldWeaveState,
   x0World: number,

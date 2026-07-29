@@ -36,6 +36,7 @@ import type {
   EditorTimeStopField,
   EditorCrumbleBlock,
   EditorSpike,
+  EditorLaser,
   EditorBouncePad,
   EditorKineticBlock,
   EditorZipMoveBlock,
@@ -428,6 +429,13 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     blockTheme: sp.blockTheme,
   }));
 
+  const lasers: EditorLaser[] = (room.lasers ?? []).map(l => ({
+    uid: uid++,
+    xBlock: l.xBlock,
+    yBlock: l.yBlock,
+    direction: l.direction,
+  }));
+
   const bouncePads: EditorBouncePad[] = (room.bouncePads ?? []).map(b => ({
     uid: uid++,
     xBlock: b.xBlock,
@@ -609,6 +617,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       timeStopFields,
       crumbleBlocks,
       spikes,
+      lasers,
       bouncePads,
       kineticBlocks,
       zipMoveBlocks,

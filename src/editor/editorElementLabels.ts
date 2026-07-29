@@ -43,6 +43,7 @@ export function buildElementTooltipId(type: SelectedElementType, uid: number): s
     timeStopField:    'timestop_field',
     crumbleBlock:     'crumble_block',
     spike:            'spike',
+    laser:            'laser',
     bouncePad:        'bounce_pad',
     kineticBlock:     'kinetic_block',
     grappleCarryBlock:'grapple_carry_block',
@@ -156,6 +157,10 @@ export function buildElementTypeName(
       return `Spike ${sizeLabel} (${sp.direction})${themeLabel}`;
     }
     return 'Spike';
+  }
+  if (type === 'laser') {
+    const l = (room.lasers ?? []).find(x => x.uid === uid);
+    return l ? `Laser Emitter (${l.direction})` : 'Laser Emitter';
   }
   if (type === 'bouncePad') {
     const b = (room.bouncePads ?? []).find(x => x.uid === uid);

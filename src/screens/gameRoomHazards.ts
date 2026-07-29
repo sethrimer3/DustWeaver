@@ -81,6 +81,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.spikeInvulnTicks = 0;
   world.laserCount = 0;
   world.laserInvulnTicks = 0;
+  world.laserHasReflectionFlag.fill(0);
   world.springboardCount = 0;
   world.waterZoneCount = 0;
   world.lavaZoneCount = 0;

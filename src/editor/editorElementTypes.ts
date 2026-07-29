@@ -332,6 +332,23 @@ export interface EditorSpike {
   blockTheme?: BlockTheme;
 }
 
+// ── Laser emitters ────────────────────────────────────────────────────────────
+
+/**
+ * A laser emitter tile — continuously fires a beam from the center of its
+ * outward-facing edge in `direction` until the beam hits the nearest solid
+ * wall/room boundary (resolved at room-load time from real collision
+ * geometry, not authored as a fixed cosmetic length). Damages the player on
+ * contact unless deflected by an active Shield Weave arc.
+ */
+export interface EditorLaser {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  /** Direction the beam fires in. */
+  direction: import('../levels/roomDef').SpikeDirection;
+}
+
 // ── Bounce pads ───────────────────────────────────────────────────────────────
 
 /** A bounce pad block that reflects the player's velocity on contact. */
@@ -724,6 +741,8 @@ export interface EditorRoomData {
   crumbleBlocks?: EditorCrumbleBlock[];
   /** Spikes placed in this room (damage the player on contact with the base half). */
   spikes?: EditorSpike[];
+  /** Laser emitters placed in this room (continuous directional damaging beam). */
+  lasers?: EditorLaser[];
   /** Bounce pads placed in this room (reflect player velocity on contact). */
   bouncePads?: EditorBouncePad[];
   kineticBlocks?: EditorKineticBlock[];
@@ -754,7 +773,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'timeStopField' | 'crumbleBlock' | 'spike' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock' | 'fireflyJar' | 'springboard' | 'breakableBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'timeStopField' | 'crumbleBlock' | 'spike' | 'laser' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock' | 'fireflyJar' | 'springboard' | 'breakableBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

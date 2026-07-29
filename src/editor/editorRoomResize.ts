@@ -140,6 +140,11 @@ export function applyRoomDimensionChange(
     sp.yBlock = Math.min(Math.max(0, sp.yBlock), room.heightBlocks - spSize);
   }
 
+  for (const l of (room.lasers ?? [])) {
+    l.xBlock = Math.min(Math.max(0, l.xBlock), room.widthBlocks - 1);
+    l.yBlock = Math.min(Math.max(0, l.yBlock), room.heightBlocks - 1);
+  }
+
   // Clamp falling block tiles — remove any that fall outside the room
   if (room.fallingBlocks) {
     room.fallingBlocks = room.fallingBlocks.filter(
@@ -314,7 +319,7 @@ export function applyEdgeResize(
   for (const key of [
     'enemies', 'saveTombs', 'skillTombs', 'challengeTotems', 'dustContainers',
     'dustContainerPieces', 'dustBoostJars', 'dustSwarms', 'lambdaAnchors',
-    'fireflyJars', 'springboards', 'breakableBlocks', 'dustPiles', 'decorations',
+    'fireflyJars', 'springboards', 'lasers', 'breakableBlocks', 'dustPiles', 'decorations',
     'ambientLightBlockers', 'lightSources', 'fallingBlocks', 'phantasmalTiles',
     'grappleCarryBlocks',
   ] as const) {

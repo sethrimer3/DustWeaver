@@ -70,7 +70,7 @@ export const CLICK_PRIORITY_ORDER: readonly SelectedElementType[] = [
   'dustPile', 'grasshopperArea', 'fireflyArea', 'lightSource', 'sunbeam', 'sceneLight',
   'waterZone', 'lavaZone', 'timeStopField', 'crumbleBlock', 'fallingBlock', 'backgroundBlock',
   'grappleCarryBlock', 'phantasmalTile', 'dialogueTrigger', 'guideDustPath', 'bouncePad',
-  'spike', 'decoration', 'campaignSpawn', 'playerSpawn', 'customBlock', 'wall', 'ambientLightBlocker',
+  'spike', 'laser', 'decoration', 'campaignSpawn', 'playerSpawn', 'customBlock', 'wall', 'ambientLightBlocker',
 ];
 
 function walkHitCandidatesAnyLayer(

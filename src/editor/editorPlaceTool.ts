@@ -388,7 +388,7 @@ export function wouldPlacementSucceedAt(
     // modifier is active creates a crumble spike (EditorCrumbleBlock with
     // spikeDirection/spikeSize — see handleCrumbleModifierToggle's inverse
     // conversion) instead of silently placing an ordinary, unbreakable spike.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
       if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
@@ -430,6 +430,14 @@ export function wouldPlacementSucceedAt(
       return true;
     }
 
+    if (item.isLaserItem === 1) {
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return false;
+      const overlapsLaser = (room.lasers ?? []).some(l => l.xBlock === bx && l.yBlock === by);
+      if (overlapsLaser) return 'occupied';
+      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return 'occupied';
+      return true;
+    }
+
     // Falling modifier is only representable for plain rectangular blocks —
     // EditorFallingBlock has no ramp/stairs/pillar/spike shape fields (each
     // tile is always a plain square), so stairs/smooth-ramp/half-pillar/spike
@@ -440,7 +448,7 @@ export function wouldPlacementSucceedAt(
       item.category === 'blocks' &&
       item.isPlatformItem !== 1 &&
       item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
-      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
+      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 && item.isLaserItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
       const fallingW = getPlacementWidth(item, state.placementRotationSteps);
@@ -827,7 +835,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     // spikeSize set, mirroring handleCrumbleModifierToggle's inverse
     // conversion in editorPropertyChange.ts) instead of silently placing an
     // ordinary, unbreakable spike that ignores the active modifier.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
 
@@ -932,6 +940,27 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       return;
     }
 
+    if (item.isLaserItem === 1) {
+      // Direction follows the same 90°-CW rotation steps used for spikes:
+      // 0=up, 1=right, 2=down, 3=left.
+      const laserDirections: readonly ('up' | 'right' | 'down' | 'left')[] = ['up', 'right', 'down', 'left'];
+      const laserDirection = laserDirections[state.placementRotationSteps % 4];
+
+      if (!rectFitsInsideRoom(room, bx, by, 1, 1)) return;
+      const overlapsLaser = (room.lasers ?? []).some(l => l.xBlock === bx && l.yBlock === by);
+      if (overlapsLaser) return;
+      if (rectOverlapsFallingBlocks(room, bx, by, 1, 1)) return;
+
+      if (!room.lasers) room.lasers = [];
+      room.lasers.push({
+        uid: allocateUid(state),
+        xBlock: bx,
+        yBlock: by,
+        direction: laserDirection,
+      });
+      return;
+    }
+
     // ── Falling block tiles ──────────────────────────────────────────────────
     // Falling modifier is only representable for plain rectangular blocks —
     // EditorFallingBlock has no ramp/stairs/pillar/spike shape fields (each
@@ -943,7 +972,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       item.category === 'blocks' &&
       item.isPlatformItem !== 1 &&
       item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
-      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 &&
+      item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 && item.isLaserItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
       const variant = item.fallingBlockVariant ?? (

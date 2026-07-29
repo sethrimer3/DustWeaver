@@ -245,6 +245,25 @@ export interface HazardWorldState {
   /** Invulnerability cooldown ticks after laser damage. */
   laserInvulnTicks: number;
 
+  // ── Per-tick laser trace (Shield Weave reflection) ──────────────────────────
+  // Recomputed every tick in applyHazards from laserXWorld/YWorld/Direction and
+  // the current Shield Weave arc. Rendering consumes these fields directly
+  // rather than recomputing collision geometry. Index-aligned with the laser
+  // arrays above; only the first `laserCount` entries are meaningful.
+  /** 1 when this tick's beam reflected off the Shield Weave, else 0. */
+  laserHasReflectionFlag: Uint8Array;
+  /** Incoming segment end point (== shield contact point when reflecting, else the terrain hit). */
+  laserIncomingEndXWorld: Float32Array;
+  laserIncomingEndYWorld: Float32Array;
+  /** Shield contact point (valid only when laserHasReflectionFlag is 1). */
+  laserContactXWorld: Float32Array;
+  laserContactYWorld: Float32Array;
+  /** Outgoing reflected segment (valid only when laserHasReflectionFlag is 1). */
+  laserOutgoingStartXWorld: Float32Array;
+  laserOutgoingStartYWorld: Float32Array;
+  laserOutgoingEndXWorld: Float32Array;
+  laserOutgoingEndYWorld: Float32Array;
+
   // ── Springboards ───────────────────────────────────────────────────────────
   /** Number of active springboards. */
   springboardCount: number;
@@ -986,6 +1005,15 @@ export function createHazardWorldState(): HazardWorldState {
     laserDirection:                new Uint8Array(MAX_LASERS),
     laserLengthWorld:              new Float32Array(MAX_LASERS),
     laserInvulnTicks:              0,
+    laserHasReflectionFlag:        new Uint8Array(MAX_LASERS),
+    laserIncomingEndXWorld:        new Float32Array(MAX_LASERS),
+    laserIncomingEndYWorld:        new Float32Array(MAX_LASERS),
+    laserContactXWorld:            new Float32Array(MAX_LASERS),
+    laserContactYWorld:            new Float32Array(MAX_LASERS),
+    laserOutgoingStartXWorld:      new Float32Array(MAX_LASERS),
+    laserOutgoingStartYWorld:      new Float32Array(MAX_LASERS),
+    laserOutgoingEndXWorld:        new Float32Array(MAX_LASERS),
+    laserOutgoingEndYWorld:        new Float32Array(MAX_LASERS),
     springboardCount:              0,
     springboardXWorld:             new Float32Array(MAX_SPRINGBOARDS),
     springboardYWorld:             new Float32Array(MAX_SPRINGBOARDS),

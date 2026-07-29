@@ -29,8 +29,8 @@
  */
 
 import { WorldSnapshot } from '../snapshot';
-import { getDustDefinition } from '../../sim/weaves/dustDefinition';
 import { ParticleKind } from '../../sim/particles/kinds';
+import { getMoteTypeVisual, rgbToHex } from '../../sim/motes/moteTypeConfig';
 
 /** Half-size of one blade/trail mote square (virtual pixels). */
 const MOTE_HALF_PX = 1.6;
@@ -104,11 +104,11 @@ export class NewSwordWeaveRenderer {
     const reachWorld = snapshot.newSwordReachWorld;
 
     const dustKind: ParticleKind = snapshot.selectedDustKind;
-    const def = getDustDefinition(dustKind);
+    const bodyHex = rgbToHex(getMoteTypeVisual(dustKind).body);
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = def.colorHex;
+    ctx.fillStyle = bodyHex;
 
     const halfPx = MOTE_HALF_PX * zoom;
     for (let s = 0; s < TRAIL_SAMPLE_COUNT; s++) {

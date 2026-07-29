@@ -577,76 +577,91 @@ export function renderHazards(
   }
 
   // ── Lasers (pulsating red/orange/white glowing beam) ────────────────────
-  for (let i = 0; i < world.laserCount; i++) {
-    const lx = world.laserXWorld[i];
-    const ly = world.laserYWorld[i];
-    const length = world.laserLengthWorld[i];
-    const dir = world.laserDirection[i];
-
-    let beamX0World: number, beamY0World: number, beamX1World: number, beamY1World: number;
-    switch (dir) {
-      case SPIKE_DIR_UP:    beamX0World = lx; beamY0World = ly - length; beamX1World = lx; beamY1World = ly; break;
-      case SPIKE_DIR_DOWN:  beamX0World = lx; beamY0World = ly; beamX1World = lx; beamY1World = ly + length; break;
-      case SPIKE_DIR_LEFT:  beamX0World = lx - length; beamY0World = ly; beamX1World = lx; beamY1World = ly; break;
-      default:              beamX0World = lx; beamY0World = ly; beamX1World = lx + length; beamY1World = ly; break; // SPIKE_DIR_RIGHT
-    }
-
-    const sx0 = beamX0World * zoom + offsetXPx;
-    const sy0 = beamY0World * zoom + offsetYPx;
-    const sx1 = beamX1World * zoom + offsetXPx;
-    const sy1 = beamY1World * zoom + offsetYPx;
+  // Draws the sim's per-tick trace result (world.laserIncomingEndXWorld/YWorld,
+  // and — when world.laserHasReflectionFlag[i] is set — the outgoing reflected
+  // segment plus a contact flash). Rendering never recomputes collision
+  // geometry; it only consumes what applyHazards already resolved this tick.
+  const drawLaserGlowSegment = (
+    x0World: number, y0World: number, x1World: number, y1World: number, phase: number,
+  ): void => {
+    const sx0 = x0World * zoom + offsetXPx;
+    const sy0 = y0World * zoom + offsetYPx;
+    const sx1 = x1World * zoom + offsetXPx;
+    const sy1 = y1World * zoom + offsetYPx;
     const rectX = Math.min(sx0, sx1);
     const rectY = Math.min(sy0, sy1);
     const rectW = Math.max(Math.abs(sx1 - sx0), 1);
     const rectH = Math.max(Math.abs(sy1 - sy0), 1);
     const glowPad = 8 * zoom;
-    if (!isScreenRectVisible(rectX - glowPad, rectY - glowPad, rectW + glowPad * 2, rectH + glowPad * 2, vpW, vpH)) continue;
+    if (!isScreenRectVisible(rectX - glowPad, rectY - glowPad, rectW + glowPad * 2, rectH + glowPad * 2, vpW, vpH)) return;
 
-    // Slow overall pulse (breathing brightness) plus a per-beam phase offset so
-    // multiple lasers in a room don't all pulse in lockstep.
-    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.09 + i * 2.4);
-    const isHorizontal = dir === SPIKE_DIR_LEFT || dir === SPIKE_DIR_RIGHT;
+    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.09 + phase);
+    const angleRad = Math.atan2(sy1 - sy0, sx1 - sx0);
     const midXPx = (sx0 + sx1) * 0.5;
     const midYPx = (sy0 + sy1) * 0.5;
-    const halfLenPx = Math.max(rectW, rectH) * 0.5;
+    const halfLenPx = Math.hypot(sx1 - sx0, sy1 - sy0) * 0.5;
     const halfThickPx = 3 * zoom;
 
     ctx.save();
     ctx.translate(midXPx, midYPx);
+    ctx.rotate(angleRad);
 
     // Outer soft glow, widest and dimmest.
     const outerHalfThickPx = halfThickPx * (2.2 + pulse * 0.6);
-    const glowGradient = isHorizontal
-      ? ctx.createLinearGradient(0, -outerHalfThickPx, 0, outerHalfThickPx)
-      : ctx.createLinearGradient(-outerHalfThickPx, 0, outerHalfThickPx, 0);
+    const glowGradient = ctx.createLinearGradient(0, -outerHalfThickPx, 0, outerHalfThickPx);
     glowGradient.addColorStop(0,   `rgba(255,70,20,0)`);
     glowGradient.addColorStop(0.5, `rgba(255,120,30,${(0.35 + pulse * 0.25).toFixed(2)})`);
     glowGradient.addColorStop(1,   `rgba(255,70,20,0)`);
     ctx.fillStyle = glowGradient;
-    if (isHorizontal) {
-      ctx.fillRect(-halfLenPx, -outerHalfThickPx, halfLenPx * 2, outerHalfThickPx * 2);
-    } else {
-      ctx.fillRect(-outerHalfThickPx, -halfLenPx, outerHalfThickPx * 2, halfLenPx * 2);
-    }
+    ctx.fillRect(-halfLenPx, -outerHalfThickPx, halfLenPx * 2, outerHalfThickPx * 2);
 
     // Core beam: white-hot center fading to orange/red at the edges.
     const coreHalfThickPx = halfThickPx * (0.85 + pulse * 0.3);
-    const coreGradient = isHorizontal
-      ? ctx.createLinearGradient(0, -coreHalfThickPx, 0, coreHalfThickPx)
-      : ctx.createLinearGradient(-coreHalfThickPx, 0, coreHalfThickPx, 0);
+    const coreGradient = ctx.createLinearGradient(0, -coreHalfThickPx, 0, coreHalfThickPx);
     coreGradient.addColorStop(0,    `rgba(180,20,0,${(0.7 + pulse * 0.2).toFixed(2)})`);
     coreGradient.addColorStop(0.35, `rgba(255,90,0,${(0.85 + pulse * 0.15).toFixed(2)})`);
     coreGradient.addColorStop(0.5,  `rgba(255,240,210,${(0.9 + pulse * 0.1).toFixed(2)})`);
     coreGradient.addColorStop(0.65, `rgba(255,90,0,${(0.85 + pulse * 0.15).toFixed(2)})`);
     coreGradient.addColorStop(1,    `rgba(180,20,0,${(0.7 + pulse * 0.2).toFixed(2)})`);
     ctx.fillStyle = coreGradient;
-    if (isHorizontal) {
-      ctx.fillRect(-halfLenPx, -coreHalfThickPx, halfLenPx * 2, coreHalfThickPx * 2);
-    } else {
-      ctx.fillRect(-coreHalfThickPx, -halfLenPx, coreHalfThickPx * 2, halfLenPx * 2);
-    }
+    ctx.fillRect(-halfLenPx, -coreHalfThickPx, halfLenPx * 2, coreHalfThickPx * 2);
 
     ctx.restore();
+  };
+
+  for (let i = 0; i < world.laserCount; i++) {
+    const lx = world.laserXWorld[i];
+    const ly = world.laserYWorld[i];
+    const phase = i * 2.4;
+
+    // Incoming leg: emitter origin to either the terrain hit or the shield
+    // contact point (see traceLaserBeam).
+    drawLaserGlowSegment(lx, ly, world.laserIncomingEndXWorld[i], world.laserIncomingEndYWorld[i], phase);
+
+    if (world.laserHasReflectionFlag[i] === 1) {
+      // Contact flash at the shield surface.
+      const fx = world.laserContactXWorld[i] * zoom + offsetXPx;
+      const fy = world.laserContactYWorld[i] * zoom + offsetYPx;
+      const flashPulse = 0.6 + 0.4 * Math.sin(tick * 0.4 + phase);
+      const flashRadiusPx = (4 + flashPulse * 3) * zoom;
+      if (isScreenRectVisible(fx - flashRadiusPx, fy - flashRadiusPx, flashRadiusPx * 2, flashRadiusPx * 2, vpW, vpH)) {
+        const flashGradient = ctx.createRadialGradient(fx, fy, 0, fx, fy, flashRadiusPx);
+        flashGradient.addColorStop(0, `rgba(255,250,230,${(0.85 * flashPulse).toFixed(2)})`);
+        flashGradient.addColorStop(0.6, `rgba(255,150,60,${(0.5 * flashPulse).toFixed(2)})`);
+        flashGradient.addColorStop(1, 'rgba(255,90,20,0)');
+        ctx.fillStyle = flashGradient;
+        ctx.beginPath();
+        ctx.arc(fx, fy, flashRadiusPx, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Outgoing reflected leg.
+      drawLaserGlowSegment(
+        world.laserOutgoingStartXWorld[i], world.laserOutgoingStartYWorld[i],
+        world.laserOutgoingEndXWorld[i], world.laserOutgoingEndYWorld[i],
+        phase + 1.1,
+      );
+    }
   }
 
   // ── Dust boost jars ────────────────────────────────────────────────────

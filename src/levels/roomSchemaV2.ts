@@ -491,6 +491,9 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
         : [s.xBlock, s.yBlock, s.direction];
     });
   }
+  if (json.lasers && json.lasers.length > 0) {
+    out.lasers = json.lasers.map(l => [l.xBlock, l.yBlock, l.direction]);
+  }
   if (json.springboards && json.springboards.length > 0) {
     out.springboards = json.springboards.map(s => [s.xBlock, s.yBlock] as SavedPoint);
   }
@@ -886,7 +889,7 @@ export function validateRoomRoundtrip(json: RoomJsonDef): string[] {
     'lambdaAnchors', 'fireflyJars', 'springboards', 'breakableBlocks',
     'dustPiles', 'grasshopperAreas', 'fireflyAreas', 'decorations',
     'lightSources', 'sunbeams', 'sceneLights', 'fallingBlocks', 'crumbleBlocks',
-    'spikes', 'bouncePads', 'kineticBlocks', 'grappleCarryBlocks',
+    'spikes', 'lasers', 'bouncePads', 'kineticBlocks', 'grappleCarryBlocks',
     'zipMoveBlocks', 'phantasmalTiles', 'pixelMaterials', 'ropes',
     'dialogueTriggers', 'guideDustPaths', 'customBlockPlacements',
   ] as const satisfies readonly (keyof RoomJsonDef)[];

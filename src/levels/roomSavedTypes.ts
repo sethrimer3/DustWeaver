@@ -353,6 +353,8 @@ export interface SavedRoomV2 {
    * (even `'1x1'`) so the tuple stays positionally unambiguous.
    */
   spikes?: [number, number, 'up' | 'down' | 'left' | 'right', ('1x1' | '2x2')?, string?][];
+  /** Laser emitters: [xBlock, yBlock, direction]. No extra fields — beam length is derived at room-load time. */
+  lasers?: [number, number, 'up' | 'down' | 'left' | 'right'][];
   springboards?: SavedPoint[];
   /**
    * Compact water-zone coverage layer (v3+ preferred).

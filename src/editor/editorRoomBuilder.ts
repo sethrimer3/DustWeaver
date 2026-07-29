@@ -493,6 +493,11 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       size: sp.size !== '1x1' ? sp.size : undefined,
       blockTheme: sp.blockTheme,
     })),
+    lasers: (data.lasers ?? []).map(l => ({
+      xBlock: l.xBlock,
+      yBlock: l.yBlock,
+      direction: l.direction,
+    })),
     bouncePads: (data.bouncePads ?? []).map(b => ({
       xBlock: b.xBlock,
       yBlock: b.yBlock,

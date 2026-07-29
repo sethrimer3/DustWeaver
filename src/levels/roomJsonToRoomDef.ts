@@ -13,6 +13,7 @@ import type {
   RoomWallDef,
   RoomTransitionDef,
   RoomSpikeDef,
+  RoomLaserDef,
   RoomSpringboardDef,
   RoomZoneDef,
   RoomBreakableBlockDef,
@@ -179,6 +180,12 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     blockTheme: s.blockTheme,
   }));
 
+  const lasers: RoomLaserDef[] | undefined = json.lasers?.map(l => ({
+    xBlock: l.xBlock,
+    yBlock: l.yBlock,
+    direction: l.direction as SpikeDirection,
+  }));
+
   const springboards: RoomSpringboardDef[] | undefined = json.springboards?.map(s => ({
     xBlock: s.xBlock,
     yBlock: s.yBlock,
@@ -278,6 +285,7 @@ export function roomJsonDefToRoomDef(json: RoomJsonDef): RoomDef {
     room.dustContainers = json.dustContainers.map(s => ({ xBlock: s.xBlock, yBlock: s.yBlock }));
   }
   if (spikes && spikes.length > 0) room.spikes = spikes;
+  if (lasers && lasers.length > 0) room.lasers = lasers;
   if (springboards && springboards.length > 0) room.springboards = springboards;
   if (waterZones && waterZones.length > 0) room.waterZones = waterZones;
   if (lavaZones && lavaZones.length > 0) room.lavaZones = lavaZones;

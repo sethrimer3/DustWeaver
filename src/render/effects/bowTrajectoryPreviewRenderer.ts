@@ -25,8 +25,8 @@
 import { WorldSnapshot } from '../snapshot';
 import { WorldState } from '../../sim/world';
 import { raycastWalls } from '../../sim/clusters/grappleShared';
-import { getDustDefinition } from '../../sim/weaves/dustDefinition';
 import { ParticleKind } from '../../sim/particles/kinds';
+import { getMoteTypeVisual, rgbToHex } from '../../sim/motes/moteTypeConfig';
 import { SecondaryWeaveGesturePhase } from '../../input/secondaryWeaveGesture';
 import { GOLD_DUST_MAX_TRAVEL_PX } from '../../sim/motes/moteTypeConfig';
 import { BOW_ARROW_PHASE_ASSEMBLING } from '../../sim/weaves/bowArrow';
@@ -172,7 +172,7 @@ export class BowTrajectoryPreviewRenderer {
     );
 
     const dustKind: ParticleKind = snapshot.selectedDustKind;
-    const colorHex = getDustDefinition(dustKind).colorHex;
+    const colorHex = rgbToHex(getMoteTypeVisual(dustKind).trail);
 
     const x0 = origin.x * zoom + ox;
     const y0 = origin.y * zoom + oy;

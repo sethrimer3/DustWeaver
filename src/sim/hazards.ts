@@ -42,6 +42,8 @@ import {
   SHIELD_LIQUID_SKIP_MIN_SPEED_X,
 } from './stormweave/shieldLiquidSurface';
 import { recordShieldImpact } from './stormweave/shieldWeave';
+import { traceLaserBeam, distancePointToSegmentWorld, type TerrainRayCallback } from './laserTraceContract';
+import { raycastToWallWithNormal } from './clusters/radiantWebBeams';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -56,6 +58,8 @@ const LASER_DAMAGE = 2;
 const LASER_INVULN_TICKS = 60;
 /** Half-thickness of a laser beam's damaging/solid cross-section (world units). */
 const LASER_HALF_THICKNESS_WORLD = 3.0;
+/** Upper bound for a reflected beam's terrain raycast — generously larger than any room. */
+const LASER_MAX_REFLECT_RANGE_WORLD = 8192;
 
 /**
  * Minimum total speed (wu/s) required for a shallow water impact to skip off
@@ -498,42 +502,80 @@ export function applyHazards(world: WorldState): void {
   }
 
   // ── Lasers ───────────────────────────────────────────────────────────────
-  // The entire beam length is solid (collision comes from the wall added at
-  // load time — see loadRoomHazards) and damaging, unlike a spike's tip/base
-  // split, since a laser has no "safe" side.
-  if (world.laserInvulnTicks === 0) {
-    for (let i = 0; i < world.laserCount; i++) {
-      const lx = world.laserXWorld[i];
-      const ly = world.laserYWorld[i];
-      const length = world.laserLengthWorld[i];
+  // The unobstructed beam length is solid (collision comes from the wall
+  // added at load time — see loadRoomHazards) exactly like before. Every
+  // tick, each beam is re-traced against the current Shield Weave arc (see
+  // laserTraceContract.ts): if the shield is active, has at least one mote,
+  // and its real curved surface intersects the beam before the terrain hit,
+  // the beam reflects exactly once off that surface using the standard
+  // reflection equation. Contact/segment results are stored per-tick for the
+  // renderer; damage checks use segment-distance (not AABB) so an angled
+  // reflected segment is checked accurately.
+  const terrainRay: TerrainRayCallback = (ox, oy, dx, dy, maxRange) =>
+    raycastToWallWithNormal(world, ox, oy, dx, dy, maxRange);
+  const shieldGeometry = world.shieldWeave.isActive ? world.shieldWeave : undefined;
+  const playerHitRadius = Math.max(phw, phh);
 
-      let hazLeft: number, hazRight: number, hazTop: number, hazBottom: number;
-      switch (world.laserDirection[i]) {
-        case SPIKE_DIR_UP:
-          hazLeft = lx - LASER_HALF_THICKNESS_WORLD; hazRight = lx + LASER_HALF_THICKNESS_WORLD;
-          hazTop = ly - length; hazBottom = ly;
-          break;
-        case SPIKE_DIR_DOWN:
-          hazLeft = lx - LASER_HALF_THICKNESS_WORLD; hazRight = lx + LASER_HALF_THICKNESS_WORLD;
-          hazTop = ly; hazBottom = ly + length;
-          break;
-        case SPIKE_DIR_LEFT:
-          hazTop = ly - LASER_HALF_THICKNESS_WORLD; hazBottom = ly + LASER_HALF_THICKNESS_WORLD;
-          hazLeft = lx - length; hazRight = lx;
-          break;
-        default: // SPIKE_DIR_RIGHT
-          hazTop = ly - LASER_HALF_THICKNESS_WORLD; hazBottom = ly + LASER_HALF_THICKNESS_WORLD;
-          hazLeft = lx; hazRight = lx + length;
-          break;
-      }
+  for (let i = 0; i < world.laserCount; i++) {
+    const lx = world.laserXWorld[i];
+    const ly = world.laserYWorld[i];
+    const length = world.laserLengthWorld[i];
+    let dirXWorld = 0, dirYWorld = 0;
+    switch (world.laserDirection[i]) {
+      case SPIKE_DIR_UP:    dirXWorld = 0;  dirYWorld = -1; break;
+      case SPIKE_DIR_DOWN:  dirXWorld = 0;  dirYWorld = 1;  break;
+      case SPIKE_DIR_LEFT:  dirXWorld = -1; dirYWorld = 0;  break;
+      default: /* SPIKE_DIR_RIGHT */ dirXWorld = 1; dirYWorld = 0; break;
+    }
 
-      if (overlapAABB(px, py, phw, phh, hazLeft, hazTop, hazRight, hazBottom)) {
-        const sourceXWorld = Math.max(hazLeft, Math.min(px, hazRight));
-        const sourceYWorld = Math.max(hazTop, Math.min(py, hazBottom));
-        applyPlayerDamageWithKnockback(player, LASER_DAMAGE, sourceXWorld, sourceYWorld);
-        world.laserInvulnTicks = LASER_INVULN_TICKS;
-        break; // one laser hit per tick
+    const trace = traceLaserBeam(lx, ly, dirXWorld, dirYWorld, length, shieldGeometry, terrainRay, LASER_MAX_REFLECT_RANGE_WORLD);
+
+    world.laserIncomingEndXWorld[i] = trace.incoming.endXWorld;
+    world.laserIncomingEndYWorld[i] = trace.incoming.endYWorld;
+    if (trace.hasReflection && trace.reflection !== null) {
+      world.laserHasReflectionFlag[i] = 1;
+      world.laserContactXWorld[i] = trace.reflection.contactXWorld;
+      world.laserContactYWorld[i] = trace.reflection.contactYWorld;
+      world.laserOutgoingStartXWorld[i] = trace.reflection.outgoing.startXWorld;
+      world.laserOutgoingStartYWorld[i] = trace.reflection.outgoing.startYWorld;
+      world.laserOutgoingEndXWorld[i] = trace.reflection.outgoing.endXWorld;
+      world.laserOutgoingEndYWorld[i] = trace.reflection.outgoing.endYWorld;
+      recordShieldImpact(world.shieldWeave, trace.reflection.contactXWorld, trace.reflection.contactYWorld);
+    } else {
+      world.laserHasReflectionFlag[i] = 0;
+    }
+
+    if (world.laserInvulnTicks > 0) continue;
+
+    const hitRadius = LASER_HALF_THICKNESS_WORLD + playerHitRadius;
+    const incomingDistance = distancePointToSegmentWorld(
+      px, py, trace.incoming.startXWorld, trace.incoming.startYWorld, trace.incoming.endXWorld, trace.incoming.endYWorld,
+    );
+    let hitXWorld = trace.incoming.endXWorld;
+    let hitYWorld = trace.incoming.endYWorld;
+    let hit = incomingDistance <= hitRadius;
+
+    // A reflected beam's incoming leg never damages the player through the
+    // shield (the shield is the terminus of that leg); only the outgoing
+    // reflected leg — starting a small epsilon beyond the contact point — can.
+    if (trace.hasReflection && trace.reflection !== null) {
+      hit = false;
+      const outgoingDistance = distancePointToSegmentWorld(
+        px, py,
+        trace.reflection.outgoing.startXWorld, trace.reflection.outgoing.startYWorld,
+        trace.reflection.outgoing.endXWorld, trace.reflection.outgoing.endYWorld,
+      );
+      if (outgoingDistance <= hitRadius) {
+        hit = true;
+        hitXWorld = trace.reflection.outgoing.startXWorld;
+        hitYWorld = trace.reflection.outgoing.startYWorld;
       }
+    }
+
+    if (hit) {
+      applyPlayerDamageWithKnockback(player, LASER_DAMAGE, hitXWorld, hitYWorld);
+      world.laserInvulnTicks = LASER_INVULN_TICKS;
+      break; // one laser hit per tick
     }
   }
 

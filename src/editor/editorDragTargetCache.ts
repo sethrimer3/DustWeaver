@@ -84,6 +84,7 @@ export const DRAG_MOVE_KINDS: Partial<Record<SelectedElementType, DragMoveKind>>
   crumbleBlock: 'plain',
   bouncePad: 'plain',
   spike: 'plain',
+  laser: 'plain',
   fallingBlock: 'plain',
   grasshopperArea: 'plain',
   fireflyArea: 'plain',
