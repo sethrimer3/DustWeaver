@@ -1,0 +1,55 @@
+name: Add Steam todo items once
+
+on:
+  push:
+    paths:
+      - .github/workflows/add-steam-todos-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add Steam todo items
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("docs/Todo.md")
+          text = path.read_text(encoding="utf-8")
+          marker = "## Completed / superseded references"
+          if marker not in text:
+              raise SystemExit(f"Missing insertion marker: {marker}")
+
+          achievements = "- [ ] Add Steam Achievements support through a narrow platform abstraction rather than coupling gameplay systems directly to Steamworks. Define stable internal achievement IDs and unlock criteria; initialize Steam only in packaged Steam builds; make unlocks idempotent, persistent, retryable when the Steam client is temporarily unavailable, and harmless in web/dev/non-Steam builds through a no-op adapter. Route progression/gameplay events through an Electron main-process IPC boundary rather than exposing Steam APIs to renderer code. Likely areas: Electron/bootstrap and IPC, packaging/build configuration, save/progression event sources, and new platform/Steam achievement modules. Add fake-adapter tests for one-shot and cumulative achievements, relaunch persistence, duplicate unlock calls, unavailable-client recovery, and non-Steam fallback; document App ID/configuration and manually verify representative unlocks in the Steam client."
+          workshop = "- [ ] Add Steam Workshop support for publishing, updating, discovering, subscribing to, downloading, and removing user-created DustWeaver campaigns/levels. Define a versioned Workshop package and manifest format with metadata, preview image, content hashes, compatibility/migration rules, deterministic import/export, and strict path/archive/content validation. Implement Steam-only Workshop operations behind a platform adapter and Electron IPC boundary; integrate subscribed content into the existing campaign browser without overwriting local campaigns or breaking web/dev/non-Steam use. Likely areas: campaign serialization/store/browser UI, Electron main process, packaging permissions, and new platform/Steam Workshop modules. Add fake-adapter tests for publish/update, subscribe/unsubscribe, duplicate IDs, offline cached items, malformed packages, and version mismatches, plus manual Steam-client validation of the complete creator and subscriber flows."
+
+          additions = []
+          if "Add Steam Achievements support" not in text:
+              additions.append(achievements)
+          if "Add Steam Workshop support" not in text:
+              additions.append(workshop)
+
+          if additions:
+              insertion = "\n".join(additions) + "\n\n"
+              text = text.replace(marker, insertion + marker, 1)
+              path.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit todo update
+        shell: bash
+        run: |
+          if git diff --quiet -- docs/Todo.md; then
+            echo "Todo items already present."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/Todo.md
+          git commit -m "docs: add Steam achievements and Workshop todos"
+          git push
