@@ -11,6 +11,10 @@
 import { ACHIEVEMENT_IDS } from './achievementIds';
 import type { AchievementId, AchievementStatus, PlatformAdapter } from './types';
 
+// This module only ever runs in the Electron main process (Node), never in
+// the browser/renderer build, so a bare ambient `require` is safe here.
+declare const require: (id: string) => unknown;
+
 interface SteamworksClient {
   achievement: {
     activate(name: string): boolean;
@@ -22,12 +26,14 @@ interface SteamworksClient {
   init(appId?: number): unknown;
 }
 
+interface SteamworksModule {
+  init(appId?: number): SteamworksClient;
+}
+
 function loadSteamworks(appId: number | undefined): SteamworksClient | null {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const steamworks = require('steamworks.js');
-    const client: SteamworksClient = appId !== undefined ? steamworks.init(appId) : steamworks.init();
-    return client;
+    const steamworks = require('steamworks.js') as SteamworksModule;
+    return appId !== undefined ? steamworks.init(appId) : steamworks.init();
   } catch {
     return null;
   }

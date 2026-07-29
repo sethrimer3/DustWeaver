@@ -91,6 +91,15 @@ export const EN_CATALOG = {
   'customCampaigns.loadForEditFailed': 'Failed to load campaign for editing: {error}',
   'customCampaigns.exportFailed': 'Failed to export campaign: {error}',
   'customCampaigns.listFailed': 'Could not list campaigns: {error}',
+  'customCampaigns.browseWorkshop': '🌐 Browse Workshop',
+
+  // ── Steam Workshop browser ─────────────────────────────────────────────────
+  'workshop.heading': 'Steam Workshop',
+  'workshop.publish': 'Publish to Workshop',
+  'workshop.empty': 'No subscribed items yet.',
+  'workshop.play': 'Play',
+  'workshop.subscribe': 'Subscribe',
+  'workshop.unsubscribe': 'Unsubscribe',
 
   // ── New-campaign dialog ───────────────────────────────────────────────────
   'newCampaign.title': 'Create New Campaign',

@@ -83,6 +83,15 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'customCampaigns.loadForEditFailed': 'No se pudo cargar la campaña para editarla: {error}',
   'customCampaigns.exportFailed': 'No se pudo exportar la campaña: {error}',
   'customCampaigns.listFailed': 'No se pudieron listar las campañas: {error}',
+  'customCampaigns.browseWorkshop': '🌐 Explorar Workshop',
+
+  // Steam Workshop browser
+  'workshop.heading': 'Steam Workshop',
+  'workshop.publish': 'Publicar en Workshop',
+  'workshop.empty': 'Aún no hay elementos suscritos.',
+  'workshop.play': 'Jugar',
+  'workshop.subscribe': 'Suscribirse',
+  'workshop.unsubscribe': 'Cancelar suscripción',
 
   // New-campaign dialog
   'newCampaign.title': 'Crear campaña nueva',

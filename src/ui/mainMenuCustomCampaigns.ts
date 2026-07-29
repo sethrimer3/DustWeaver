@@ -11,6 +11,7 @@ import { parsePackedCampaignFromJson } from '../levels/packedCampaignLoader';
 import type { EditableCampaignSession } from '../editor/editableCampaignSession';
 import { createNewCampaignSession, sanitizeCampaignId, createSessionFromPackedCampaign } from '../editor/editableCampaignSession';
 import { applyLocalePresentation, getUiFontFamily, t } from '../i18n';
+import { showWorkshopBrowser } from './workshopBrowser';
 
 /** Escapes text before it is spliced into an innerHTML template. */
 function escapeHtml(value: string): string {
@@ -65,6 +66,24 @@ export async function buildCustomCampaignsUI(
   });
   createNewBtn.addEventListener('click', () => showCreateNewCampaignDialog(container, callbacks));
   container.appendChild(createNewBtn);
+
+  // ── Browse Workshop button ────────────────────────────────────────────────
+  const workshopBtn = document.createElement('button');
+  workshopBtn.textContent = t('customCampaigns.browseWorkshop');
+  workshopBtn.style.cssText = `
+    background: rgba(20,60,120,0.5); border: 1.5px solid #3388cc;
+    color: #66aaff; padding: 0.65rem 2rem; font-size: 0.95rem;
+    font-family: ${getUiFontFamily()}; cursor: pointer; border-radius: 2px;
+    letter-spacing: 0.07em; margin-bottom: 0.8rem; margin-left: 0.6rem; transition: all 0.2s;
+  `;
+  workshopBtn.addEventListener('click', () => {
+    // Installed Workshop items are downloaded to disk; wiring "Play" into the
+    // existing CampaignSource loader is left for the filesystem-backed
+    // Electron integration (see docs/SteamSetup.md) — the browser here
+    // covers subscribe/unsubscribe/publish against the platform adapter.
+    void showWorkshopBrowser(container, {}, () => {});
+  });
+  container.appendChild(workshopBtn);
 
   // ── Import Campaign button ───────────────────────────────────────────────
   const importBtn = document.createElement('button');
