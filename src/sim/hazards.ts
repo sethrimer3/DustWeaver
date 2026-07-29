@@ -520,7 +520,7 @@ export function applyHazards(world: WorldState): void {
     const lx = world.laserXWorld[i];
     const ly = world.laserYWorld[i];
     const length = world.laserLengthWorld[i];
-    let dirXWorld = 0, dirYWorld = 0;
+    let dirXWorld: number, dirYWorld: number;
     switch (world.laserDirection[i]) {
       case SPIKE_DIR_UP:    dirXWorld = 0;  dirYWorld = -1; break;
       case SPIKE_DIR_DOWN:  dirXWorld = 0;  dirYWorld = 1;  break;

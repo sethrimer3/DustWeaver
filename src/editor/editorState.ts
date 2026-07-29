@@ -24,7 +24,7 @@ export type { LayerId, EditorLayerState, EditorLayersState } from './editorLayer
 // Re-export element types so existing consumers need not change their imports.
 export type {
   EditorRope, EditorSceneLight, EditorWall, EditorEnemy, EditorTransition,
-  EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorBouncePad, EditorKineticBlock,
+  EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad, EditorKineticBlock,
   EditorChallengeRect, EditorChallengeTotem,
   EditorGate,
   EditorGrappleCarryBlock, EditorZipMoveBlock, EditorPhantasmalTile, EditorPixelMaterial,

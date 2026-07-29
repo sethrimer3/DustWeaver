@@ -59,6 +59,11 @@ interface ProceduralVisual {
 }
 
 const ITEM_VISUAL: Readonly<Record<string, ProceduralVisual>> = Object.freeze({
+  laser_emitter: {
+    bg: '#0a2a33',
+    extraCss: `border: 2px solid rgba(120,240,255,0.9); box-sizing: border-box;`,
+    glyph: '↑',
+  },
   // ── Enemies ────────────────────────────────────────────────────────────────
   enemy_flying_eye: {
     bg: '#1a3a88',

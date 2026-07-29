@@ -364,6 +364,100 @@ export function drawEditorSpikes(
 }
 
 // ============================================================================
+// Laser emitters
+// ============================================================================
+
+/**
+ * Approximates the unobstructed beam length (in blocks) for an editor
+ * preview by marching cell-by-cell from the emitter until it enters an
+ * authored interior wall footprint or leaves the room bounds. This is a
+ * preview-only approximation of the real runtime raycast (which also
+ * accounts for boundary walls, custom blocks, etc.) — good enough to show
+ * authors roughly where the beam will terminate without duplicating the
+ * full collision solver in the editor.
+ */
+function estimateEditorLaserRangeBlocks(
+  room: EditorRoomData,
+  xBlock: number,
+  yBlock: number,
+  direction: 'up' | 'down' | 'left' | 'right',
+): number {
+  const dx = direction === 'left' ? -1 : direction === 'right' ? 1 : 0;
+  const dy = direction === 'up' ? -1 : direction === 'down' ? 1 : 0;
+  const maxSteps = Math.max(room.widthBlocks, room.heightBlocks) + 1;
+  let cx = xBlock + 0.5;
+  let cy = yBlock + 0.5;
+  for (let step = 0; step < maxSteps; step++) {
+    cx += dx;
+    cy += dy;
+    if (cx < 0 || cy < 0 || cx > room.widthBlocks || cy > room.heightBlocks) return step + 1;
+    for (const w of room.interiorWalls) {
+      if (cx > w.xBlock && cx < w.xBlock + w.wBlock && cy > w.yBlock && cy < w.yBlock + w.hBlock) {
+        return step + 1;
+      }
+    }
+  }
+  return maxSteps;
+}
+
+export function drawEditorLasers(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  viewport?: EditorViewport,
+): void {
+  for (const l of (room.lasers ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, l.xBlock, l.yBlock, 1, 1)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('laser', l.uid);
+    const xPx = l.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = l.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = BLOCK_SIZE_SMALL * zoom;
+    const hPx = BLOCK_SIZE_SMALL * zoom;
+    const cx = xPx + wPx * 0.5;
+    const cy = yPx + hPx * 0.5;
+
+    // Emitter body: a dark housing block with a bright emitting face on the
+    // outward-facing edge.
+    const strokeAlpha = sel ? 1.0 : 0.7;
+    ctx.fillStyle = 'rgba(35,10,10,0.85)';
+    ctx.strokeStyle = `rgba(255,90,30,${strokeAlpha})`;
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+
+    ctx.fillStyle = sel ? 'rgba(255,235,200,0.95)' : 'rgba(255,150,60,0.85)';
+    const faceThickness = Math.max(2, hPx * 0.18);
+    switch (l.direction) {
+      case 'up':    ctx.fillRect(xPx, yPx, wPx, faceThickness); break;
+      case 'down':  ctx.fillRect(xPx, yPx + hPx - faceThickness, wPx, faceThickness); break;
+      case 'left':  ctx.fillRect(xPx, yPx, faceThickness, hPx); break;
+      case 'right': ctx.fillRect(xPx + wPx - faceThickness, yPx, faceThickness, hPx); break;
+    }
+
+    // Dashed preview of the unobstructed beam direction/approximate length.
+    const rangeBlocks = estimateEditorLaserRangeBlocks(room, l.xBlock, l.yBlock, l.direction);
+    const dx = l.direction === 'left' ? -1 : l.direction === 'right' ? 1 : 0;
+    const dy = l.direction === 'up' ? -1 : l.direction === 'down' ? 1 : 0;
+    const endXPx = cx + dx * rangeBlocks * BLOCK_SIZE_SMALL * zoom;
+    const endYPx = cy + dy * rangeBlocks * BLOCK_SIZE_SMALL * zoom;
+    ctx.save();
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = `rgba(255,120,40,${sel ? 0.8 : 0.5})`;
+    ctx.lineWidth = Math.max(1, zoom * 0.4);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(endXPx, endYPx);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// ============================================================================
 // Bounce pads
 // ============================================================================
 

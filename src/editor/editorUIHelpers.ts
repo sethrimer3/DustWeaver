@@ -385,6 +385,21 @@ export function makeBlockPreviewShapeCss(item: PaletteItem, theme: string): { sh
     };
   }
 
+  // Laser emitters: a bright emitter block with a beam-direction chevron.
+  if (item.isLaserItem === 1) {
+    return {
+      containerCss,
+      shapeCss: `
+        ${boxPosCss} background: rgba(40,10,10,0.85);
+        border: 1px solid rgba(255,90,30,0.9); box-sizing: border-box;
+        background-image: linear-gradient(0deg, rgba(255,240,210,0.95) 0%, rgba(255,90,0,0.9) 45%, rgba(180,20,0,0) 100%);
+        background-size: 100% 45%;
+        background-position: top;
+        background-repeat: no-repeat;
+      `,
+    };
+  }
+
   switch (itemId) {
     case 'block_1x1':
     case 'block_2x2':

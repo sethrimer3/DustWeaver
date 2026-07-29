@@ -55,6 +55,7 @@ export {
   drawEditorTimeStopFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
+  drawEditorLasers,
   drawEditorBouncePads,
   drawEditorKineticBlocks,
   drawEditorGrappleCarryBlocks,
