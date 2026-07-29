@@ -1,4 +1,24 @@
-import type { WorkshopAdapter, WorkshopItem, WorkshopPackageManifest } from './types';
+import type { WorkshopAdapter, WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from './types';
+
+/**
+ * Test/dev-only registry of installed package contents keyed by `localPath`,
+ * consulted by every fake adapter instance's `readInstalledPackage`. Real
+ * subscribe/download flows never populate this — only
+ * `registerFakeInstalledPackage` (tests) or a same-session `publish` with a
+ * matching path would. Kept module-scoped (not per-adapter-instance) so tests
+ * can register content before or after constructing the adapter under test.
+ */
+const fakeInstalledPackagesByPath = new Map<string, WorkshopInstalledPackage>();
+
+/** Test-only: registers package content to be returned by `readInstalledPackage(localPath)`. */
+export function registerFakeInstalledPackage(localPath: string, pkg: WorkshopInstalledPackage): void {
+  fakeInstalledPackagesByPath.set(localPath, pkg);
+}
+
+/** Test-only: clears all registered fake package content. */
+export function clearFakeInstalledPackages(): void {
+  fakeInstalledPackagesByPath.clear();
+}
 
 /**
  * In-memory fake `WorkshopAdapter` used by tests and non-Steam mode.
@@ -69,6 +89,14 @@ export function createFakeWorkshopAdapter(): WorkshopAdapter {
       item.installed = true;
       item.localPath = item.localPath ?? `/fake-workshop/${steamPublishedFileId}`;
       return item.localPath;
+    },
+
+    async readInstalledPackage(localPath: string): Promise<WorkshopInstalledPackage> {
+      const pkg = fakeInstalledPackagesByPath.get(localPath);
+      if (!pkg) {
+        throw new Error(`No fake Workshop package registered at "${localPath}". This is expected in web/dev builds without a real Steam install.`);
+      }
+      return pkg;
     },
   };
 }

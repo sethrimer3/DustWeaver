@@ -5,7 +5,7 @@
  * to these channels via `rendererPlatform.ts`.
  */
 import type { AchievementId, AchievementStatus } from './types';
-import type { WorkshopItem, WorkshopPackageManifest } from '../workshop/types';
+import type { WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from '../workshop/types';
 
 export const PLATFORM_UNLOCK_ACHIEVEMENT = 'dw:platform-unlock-achievement' as const;
 export const PLATFORM_GET_ACHIEVEMENT = 'dw:platform-get-achievement' as const;
@@ -18,6 +18,7 @@ export const WORKSHOP_GET_ITEMS = 'dw:workshop-get-items' as const;
 export const WORKSHOP_SUBSCRIBE = 'dw:workshop-subscribe' as const;
 export const WORKSHOP_UNSUBSCRIBE = 'dw:workshop-unsubscribe' as const;
 export const WORKSHOP_INSTALL_PATH = 'dw:workshop-install-path' as const;
+export const WORKSHOP_READ_PACKAGE = 'dw:workshop-read-package' as const;
 
 export interface PlatformUnlockAchievementRequest {
   id: AchievementId;
@@ -68,4 +69,11 @@ export interface WorkshopInstallPathRequest {
 }
 export type WorkshopInstallPathResponse =
   | { ok: true; installPath: string | null }
+  | { ok: false; error: string };
+
+export interface WorkshopReadPackageRequest {
+  localPath: string;
+}
+export type WorkshopReadPackageResponse =
+  | ({ ok: true } & WorkshopInstalledPackage)
   | { ok: false; error: string };

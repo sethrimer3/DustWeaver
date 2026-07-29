@@ -8,16 +8,18 @@ import {
   WORKSHOP_GET_ITEMS,
   WORKSHOP_INSTALL_PATH,
   WORKSHOP_PUBLISH,
+  WORKSHOP_READ_PACKAGE,
   WORKSHOP_SUBSCRIBE,
   WORKSHOP_UNSUBSCRIBE,
   type WorkshopGetItemsResponse,
   type WorkshopInstallPathResponse,
   type WorkshopPublishResponse,
+  type WorkshopReadPackageResponse,
   type WorkshopSubscribeResponse,
   type WorkshopUnsubscribeResponse,
 } from '../platform/ipcBridge';
 import type { ElectronPlatformBridge } from '../platform/rendererPlatform';
-import type { WorkshopAdapter, WorkshopItem, WorkshopPackageManifest } from './types';
+import type { WorkshopAdapter, WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from './types';
 
 export function createRendererWorkshopAdapter(): WorkshopAdapter {
   const bridge = (typeof window !== 'undefined' ? window.electronPlatform : undefined) as
@@ -66,6 +68,12 @@ export function createRendererWorkshopAdapter(): WorkshopAdapter {
       if (!response.ok) throw new Error(response.error);
       if (!response.installPath) throw new Error(`Workshop item ${steamPublishedFileId} is not installed`);
       return response.installPath;
+    },
+
+    async readInstalledPackage(localPath: string): Promise<WorkshopInstalledPackage> {
+      const response = (await bridge.invoke(WORKSHOP_READ_PACKAGE, { localPath })) as WorkshopReadPackageResponse;
+      if (!response.ok) throw new Error(response.error);
+      return { manifest: response.manifest, campaignData: response.campaignData, files: response.files };
     },
   };
 }
