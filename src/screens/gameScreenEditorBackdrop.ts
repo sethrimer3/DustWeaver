@@ -122,7 +122,7 @@ export function renderEditorBackdrop(
   // renderClusters draws exactly two families: the player (always-visible —
   // see renderClusters' own doc comment) and enemy AI entities, gated by the
   // Enemies layer via the mask param. showHitboxes follows the Debug layer.
-  renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible, undefined, undefined, false, undefined, 'med', mask);
+  renderClusters(ctx, snapshot, offsetXPx, offsetYPx, zoom, debugVisible, undefined, undefined, false, undefined, 'med', 1, mask);
   if (enemiesVisible) {
     renderGrasshoppers(ctx, snapshot, offsetXPx, offsetYPx, zoom);
   }

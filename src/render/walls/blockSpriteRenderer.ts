@@ -112,6 +112,11 @@ let _activeAmbientBlockerKeys: ReadonlySet<string> = new Set();
  */
 let _activeAmbientBlockerSig = '';
 
+/** Returns the canonical active blocker set without allocating a per-frame copy. */
+export function getActiveAmbientBlockerKeys(): ReadonlySet<string> {
+  return _activeAmbientBlockerKeys;
+}
+
 // ── Directional-lighting blend parameters ────────────────────────────────────
 let _activeDirectionalBias       = DEFAULT_DIRECTIONAL_BIAS;
 let _activeSideExposureStrength  = DEFAULT_SIDE_EXPOSURE_STRENGTH;

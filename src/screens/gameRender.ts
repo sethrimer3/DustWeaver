@@ -89,7 +89,7 @@ import {
 import { getReachableEdgeGlowOpacity, getInfluenceCircleOpacity, getInfluenceHighlightWidth } from '../ui/renderSettings';
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { renderGrappleInfluenceVisuals } from '../render/grappleInfluenceRenderer';
-import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, getActiveBackgroundLightSpill } from '../render/walls/blockSpriteRenderer';
+import { renderDarkAmbientBlockerOverlay, getActiveProceduralMaterial, setRenderViewportSize, getChunkCacheStats, getActiveBackgroundLightSpill, getActiveAmbientBlockerKeys } from '../render/walls/blockSpriteRenderer';
 import { renderBackgroundBlocks, getBgChunkCacheStats } from '../render/walls/backgroundBlockRenderer';
 import {
   drawGrappleBloom,
@@ -118,6 +118,11 @@ import { renderUltraIceSparkles } from '../render/effects/ultraIceSparkleRendere
 import { renderGrappleCarryBlocks, renderPhantasmalTiles } from '../render/grappleCarryBlockRenderer';
 import { renderChallengeFieldsAndGates, renderChallengeTotems } from '../render/challengeElementRenderer';
 import { renderGates, renderOpenGateRecesses } from '../render/gateRenderer';
+import {
+  isPlayerHitboxFullyCoveredByBlockers,
+  PlayerBlockerDimmingController,
+  playerBrightnessFromBlockerDimAmount,
+} from '../render/clusters/playerBlockerDimming';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -126,6 +131,8 @@ const FIXED_DT_MS = 16.666;
 
 /** Warm amber fill colour (RGB components) used for the optional background light-spill overlay. */
 const BACKGROUND_SPILL_RGB = '200,150,80' as const;
+
+const playerBlockerDimming = new PlayerBlockerDimmingController();
 
 // ── Public interface ───────────────────────────────────────────────────────
 
@@ -607,7 +614,25 @@ export function renderFrame(r: RenderFrameContext): void {
   // independent from the active-velocity speedometer/debug overlays.
   renderTimeStopMomentumArrow(ctx, world, playerForSunrayDust, ox, oy, zoom);
 
-  renderClusters(ctx, snapshot, ox, oy, zoom, isDebugMode, playerCloak, phantomCloak, /* isDebugCloak */ isDebugMode, momentumTrail, graphicsQuality);
+  const playerIsFullyCovered = playerForSunrayDust !== null
+    && isPlayerHitboxFullyCoveredByBlockers(playerForSunrayDust, getActiveAmbientBlockerKeys());
+  const playerSpriteBrightness = playerBrightnessFromBlockerDimAmount(
+    playerBlockerDimming.update(playerIsFullyCovered, nowMs),
+  );
+  renderClusters(
+    ctx,
+    snapshot,
+    ox,
+    oy,
+    zoom,
+    isDebugMode,
+    playerCloak,
+    phantomCloak,
+    /* isDebugCloak */ isDebugMode,
+    momentumTrail,
+    graphicsQuality,
+    playerSpriteBrightness,
+  );
   if (playerForSunrayDust !== null) {
     tickPlayerRocketChargeParticles(
       playerForSunrayDust.renderPositionXWorld,

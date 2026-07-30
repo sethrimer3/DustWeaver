@@ -113,6 +113,7 @@ export function renderClusters(
   isDebugCloak = false,
   momentumTrail?: MomentumTrail,
   graphicsQuality: GraphicsQuality = 'med',
+  playerSpriteBrightness = 1,
   mask?: EditorRenderMask | null,
 ): void {
   // `clusters` holds exactly two families: the player (always drawn — it is
@@ -294,6 +295,7 @@ export function renderClusters(
             if (cluster.isFacingLeftFlag === 1) {
               ctx.scale(-1, 1);
             }
+            ctx.filter = `brightness(${playerSpriteBrightness})`;
             ctx.globalAlpha = alpha;
             ctx.drawImage(
               outlineMask,
@@ -318,6 +320,7 @@ export function renderClusters(
         if (bounceRotationAngleRad !== 0) {
           ctx.rotate(bounceRotationAngleRad);
         }
+        ctx.filter = `brightness(${playerSpriteBrightness})`;
         // Soft golden glow halo behind the outline while invulnerable — drawn
         // as a few larger, lower-alpha copies of the outline mask (no blur
         // filter, so it stays crisp and pixel-art friendly).
