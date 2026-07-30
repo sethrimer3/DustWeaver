@@ -30,7 +30,7 @@ const HOMING_ACCEL_WORLD_PER_SEC2 = 900;
 const HOMING_MAX_SPEED_WORLD = 260;
 
 /** Mote is absorbed (removed) once within this world-unit radius of the player center. */
-const ABSORPTION_RADIUS_WORLD = 4;
+const ABSORPTION_RADIUS_WORLD = 10;
 
 export type DustContainerPickupKind = 'container' | 'shard';
 

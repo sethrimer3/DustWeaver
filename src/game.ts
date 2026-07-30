@@ -61,17 +61,6 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     saveSaveSlot(activeSlotIndex, activeSaveData);
   }
 
-  // Safety-net flush for abrupt shutdown (window close, Alt+F4, OS quit) during
-  // an active official-campaign session, so a save's outstanding in-memory
-  // corrections (e.g. the auto-Outcast assignment above) aren't lost when the
-  // player closes the app without hitting a save point or returning to the
-  // menu. The primary fix is persisting a correct value at creation time —
-  // this is defense in depth, not a substitute for that. Registered once for
-  // the app's lifetime; not tied to navigate()'s per-screen cleanup.
-  window.addEventListener('beforeunload', () => {
-    if (activeSaveData !== null) persistSaveSlot();
-  });
-
   function navigate(
     to: 'mainMenu' | 'loadout' | 'gameplay' | 'customCampaignPlay' | 'customCampaignEdit',
     loadout?: ParticleKind[],
