@@ -502,12 +502,12 @@ export const JUMP_CORNER_CORRECTION_PIXELS = 3;
 // ============================================================================
 
 /**
- * Maximum upward pop distance (world units) for the ledge lip assist.
- * If the player's feet are within this distance below a block's top edge
- * while moving horizontally into it, the player is gently placed on top.
- * Kept small to prevent stair-climbing exploits.
+ * Maximum rise (world units) for automatic step-up. One small tile is 8 wu.
  */
-export const BLOCK_POP_MAX_PIXELS = 2;
+export const BLOCK_POP_MAX_PIXELS = BLOCK_SIZE_SMALL;
+
+/** Maximum vertical distance climbed per simulation tick during step-up. */
+export const BLOCK_STEP_UP_PER_TICK_WORLD = 2;
 
 // ============================================================================
 // Enemy movement

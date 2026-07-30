@@ -60,6 +60,15 @@ reversing direction at or above walking speed — see "Skid Tech" below.
 - **Jump Buffer**
   - Duration: **6 ticks** (~**0.10s**) before landing.
 
+## Automatic Step-Up
+
+- Pressing horizontally into a rise up to **one small tile (8 world units)**
+  automatically walks the player onto it.
+- The climb advances by at most **2 world units per tick**, so a full-tile
+  step slides upward over four simulation ticks instead of popping instantly.
+- It applies only while grounded or falling, never while rising or fast-falling,
+  and only when the final position on top is clear.
+
 ## Wall Movement
 
 - **Wall Slide**

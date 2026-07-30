@@ -5,7 +5,7 @@
  * existing fast path.
  *
  * Timeline once armed and readiness gates have cleared:
- *   fading-to-black (1500ms) -> black-hold (1000ms) -> fading-to-light (1500ms) -> idle
+ *   fading-to-black (750ms) -> black-hold (500ms) -> fading-to-light (750ms) -> idle
  *
  * Gameplay (sim ticks, input, transitions, timers) is blocked during
  * fading-to-black and black-hold. It resumes on the exact frame
@@ -20,9 +20,9 @@ export type EntryFadePhase =
   | 'black-hold'
   | 'fading-to-light';
 
-export const ENTRY_FADE_TO_BLACK_MS = 1500;
-export const ENTRY_FADE_BLACK_HOLD_MS = 1000;
-export const ENTRY_FADE_TO_LIGHT_MS = 1500;
+export const ENTRY_FADE_TO_BLACK_MS = 750;
+export const ENTRY_FADE_BLACK_HOLD_MS = 500;
+export const ENTRY_FADE_TO_LIGHT_MS = 750;
 
 export interface EntryFadeState {
   phase: EntryFadePhase;
@@ -37,7 +37,7 @@ export function createEntryFadeState(): EntryFadeState {
 /**
  * Arms the sequence. Timing does not begin until `tickEntryFade` is first
  * called — callers should only call `tickEntryFade` once all loading
- * readiness gates have cleared, so the 1.5s fade-out is not silently
+ * readiness gates have cleared, so the 750ms fade-out is not silently
  * consumed by remaining load time.
  */
 export function armEntryFade(state: EntryFadeState): void {
