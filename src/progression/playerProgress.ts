@@ -148,6 +148,21 @@ export interface PlayerProgress {
  * The early progression sequence will unlock things step by step.
  */
 export function createDefaultProgress(): PlayerProgress {
+  return createProgressWithCharacter('knight');
+}
+
+/**
+ * Creates progress for a brand-new official-campaign save. The official
+ * campaign auto-selects Outcast and skips the character-select screen
+ * (see game.ts), so the very first persisted record must already say
+ * 'outcast' — otherwise a save that closes before its next checkpoint
+ * write is stuck showing the stale Knight sprite on reload.
+ */
+export function createOfficialNewProfileProgress(): PlayerProgress {
+  return createProgressWithCharacter('outcast');
+}
+
+function createProgressWithCharacter(characterId: string): PlayerProgress {
   const level = 1;
   const weaveLoadout = createDefaultWeaveLoadout();
   return {
