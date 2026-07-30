@@ -26,7 +26,7 @@ import {
  * Builds the keybindings tab content into `tabContentEl`.
  * Clears `tabContentEl.innerHTML` before building.
  */
-export function buildKeybindingsTab(tabContent: HTMLDivElement): void {
+export function buildKeybindingsTab(tabContent: HTMLDivElement): () => void {
   tabContent.innerHTML = '';
 
   type KbSubTab = 'keyboard' | 'controller';
@@ -334,7 +334,7 @@ export function buildKeybindingsTab(tabContent: HTMLDivElement): void {
       font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase;
       margin-bottom: 6px;
     `;
-    header.textContent = 'Controller (default mapping)';
+    header.textContent = 'Controller (standard mapping)';
     bindingList.appendChild(header);
 
     for (let i = 0; i < CTRL_ACTIONS.length; i++) {
@@ -350,9 +350,10 @@ export function buildKeybindingsTab(tabContent: HTMLDivElement): void {
       font-size: 0.75rem; color: rgba(212,168,75,0.35);
       letter-spacing: 0.03em; line-height: 1.5;
     `;
-    note.textContent = 'Controller rebinding is not yet supported. Shown mapping reflects standard modern controller conventions.';
+    note.textContent = 'Connected controllers work during gameplay. Use the right stick to aim; controller rebinding is not yet supported.';
     bindingList.appendChild(note);
   }
 
   buildBindingList();
+  return cancelRebind;
 }

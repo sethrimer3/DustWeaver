@@ -50,6 +50,7 @@ import {
 import { setCombatMode, type CombatMode } from '../sim/combatMode';
 import { makeButton, makeSlider, makeTabButton, makeCheckboxRow, GOLD, PANEL_BORDER } from './helpers';
 import { applyLocalePresentation, createLocaleBindings, getUiFontFamily, t } from '../i18n';
+import { buildKeybindingsTab } from './mainMenuSettingsKeybindings';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -154,9 +155,12 @@ export function showPauseMenu(
   const optionsPanel = document.createElement('div');
   optionsPanel.style.cssText = `display: none; text-align: left;`;
 
-  let activeTab: 'sound' | 'graphics' | 'gameplay' = 'sound';
+  let activeTab: 'sound' | 'graphics' | 'gameplay' | 'keybindings' = 'sound';
+  let keybindingsCleanup: (() => void) | null = null;
 
   function buildOptionsContent(): void {
+    keybindingsCleanup?.();
+    keybindingsCleanup = null;
     optionsPanel.innerHTML = '';
 
     // Tab bar
@@ -175,9 +179,14 @@ export function showPauseMenu(
       activeTab = 'gameplay';
       buildOptionsContent();
     });
+    const keybindingsTab = makeTabButton(t('settings.tab.keybindings'), activeTab === 'keybindings', () => {
+      activeTab = 'keybindings';
+      buildOptionsContent();
+    });
     tabBar.appendChild(soundTab);
     tabBar.appendChild(graphicsTab);
     tabBar.appendChild(gameplayTab);
+    tabBar.appendChild(keybindingsTab);
     optionsPanel.appendChild(tabBar);
 
     if (activeTab === 'sound') {
@@ -234,7 +243,7 @@ export function showPauseMenu(
           ),
         );
       }
-    } else {
+    } else if (activeTab === 'graphics') {
       // Graphics quality buttons
       const qualityLabel = document.createElement('div');
       qualityLabel.textContent = t('settings.visual.quality');
@@ -454,6 +463,10 @@ export function showPauseMenu(
       speedometerOptions.content.appendChild(placementSelect);
       optionsPanel.appendChild(speedometerOptions.element);
       optionsPanel.appendChild(makeCheckboxRow(t('settings.gameplay.speedrunTimer'), getSpeedrunTimerEnabled(), setSpeedrunTimerEnabled));
+    } else {
+      const keybindingsContent = document.createElement('div');
+      optionsPanel.appendChild(keybindingsContent);
+      keybindingsCleanup = buildKeybindingsTab(keybindingsContent);
     }
 
     // Back button
@@ -559,10 +572,19 @@ export function showPauseMenu(
     }
   }
   window.addEventListener('keydown', onKey);
+  function onGamepadPause(event: Event): void {
+    event.preventDefault();
+    destroy();
+    callbacks.onResume();
+  }
+  window.addEventListener('dustweaver-gamepad-pause', onGamepadPause);
 
   function destroy(): void {
     i18n.dispose();
+    keybindingsCleanup?.();
+    keybindingsCleanup = null;
     window.removeEventListener('keydown', onKey);
+    window.removeEventListener('dustweaver-gamepad-pause', onGamepadPause);
     if (exitConfirmTimerId !== undefined) {
       clearTimeout(exitConfirmTimerId);
       exitConfirmTimerId = undefined;

@@ -8,9 +8,10 @@
  */
 
 import { getUiFontFamily, t, tDynamic } from '../i18n';
+import { PLAYABLE_CHARACTER_IDS, getCharacterSpriteBasePath } from '../render/clusters/characterSpriteManifest';
 
 /** Internal character ids — never translated (used for assets and save data). */
-const CHARACTER_IDS = ['knight', 'demonFox', 'princess', 'outcast'] as const;
+const CHARACTER_IDS = PLAYABLE_CHARACTER_IDS;
 
 /**
  * Resolves the player-facing display name for an internal character id.
@@ -70,8 +71,9 @@ export function showCharacterSelect(
   // Pre-load character menu sprites for the cards (fall back to standing if no menu sprite)
   const spriteImages: HTMLImageElement[] = CHARACTER_IDS.map((id) => {
     const img = new Image();
-    const menuSpriteSrc = `SPRITES/PLAYERS/${id}/${id}_menu_sprite.png`;
-    const standingSrc   = `SPRITES/PLAYERS/${id}/${id}_standing.png`;
+    const base = getCharacterSpriteBasePath(id);
+    const menuSpriteSrc = `${base}_menu_sprite.png`;
+    const standingSrc   = `${base}_standing.png`;
     // Try the menu sprite first; fall back to standing on error.
     img.src = menuSpriteSrc;
     img.onerror = () => { img.src = standingSrc; };

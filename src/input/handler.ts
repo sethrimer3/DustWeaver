@@ -3,6 +3,8 @@ import { getKeyboardBindings, keyMatches } from './keybindings';
 
 const JOYSTICK_DEAD_ZONE_PX = 12;
 export const JOYSTICK_MAX_RADIUS_PX = 60;
+const GAMEPAD_AXIS_DEAD_ZONE = 0.2;
+const GAMEPAD_AIM_SPEED_PX_PER_SEC = 900;
 
 /** Hold < 200ms = quick attack; hold ≥ 200ms transitions to block mode. */
 const ATTACK_HOLD_THRESHOLD_MS = 200;
@@ -19,6 +21,10 @@ export interface InputState {
   isDownTriggeredFlag: boolean;
   /** True while any jump key (W / Space / ArrowUp) is physically held down. */
   isJumpHeldFlag: boolean;
+  /** True while the standard gamepad jump button is physically held. */
+  isGamepadJumpHeldFlag: boolean;
+  /** Analog horizontal movement supplied by the active gamepad. */
+  gamepadMoveX: number;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
   mouseXPx: number;
@@ -118,6 +124,8 @@ export function createInputState(): InputState {
     isJumpTriggeredFlag: false,
     isDownTriggeredFlag: false,
     isJumpHeldFlag: false,
+    isGamepadJumpHeldFlag: false,
+    gamepadMoveX: 0,
     isJoystickUpActiveFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
@@ -156,6 +164,156 @@ export function createInputState(): InputState {
     isMapKeyTriggeredFlag: false,
     isDialogueAdvanceTriggeredFlag: false,
   };
+}
+
+export interface GamepadInputSnapshot {
+  axes: readonly number[];
+  buttons: readonly { pressed: boolean; value: number }[];
+}
+
+interface GamepadPreviousState {
+  jump: boolean;
+  interact: boolean;
+  primary: boolean;
+  secondary: boolean;
+  pause: boolean;
+}
+
+const gamepadPreviousStates = new WeakMap<InputState, GamepadPreviousState>();
+
+function getGamepadPreviousState(state: InputState): GamepadPreviousState {
+  let previous = gamepadPreviousStates.get(state);
+  if (previous === undefined) {
+    previous = { jump: false, interact: false, primary: false, secondary: false, pause: false };
+    gamepadPreviousStates.set(state, previous);
+  }
+  return previous;
+}
+
+function gamepadButtonPressed(gamepad: GamepadInputSnapshot, index: number): boolean {
+  const button = gamepad.buttons[index];
+  return button !== undefined && (button.pressed || button.value > 0.5);
+}
+
+function deadZoneAxis(value: number | undefined): number {
+  if (value === undefined || Math.abs(value) < GAMEPAD_AXIS_DEAD_ZONE) return 0;
+  const sign = value < 0 ? -1 : 1;
+  return sign * (Math.abs(value) - GAMEPAD_AXIS_DEAD_ZONE) / (1 - GAMEPAD_AXIS_DEAD_ZONE);
+}
+
+/**
+ * Applies one standard-layout gamepad sample. Kept separate from navigator
+ * polling so button-edge and analog behavior can be tested deterministically.
+ */
+export function applyGamepadInputSnapshot(
+  state: InputState,
+  gamepad: GamepadInputSnapshot | null,
+  elapsedMs: number,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
+  nowMs: number,
+): void {
+  const gamepadPreviousState = getGamepadPreviousState(state);
+  if (gamepad === null) {
+    state.gamepadMoveX = 0;
+    state.isGamepadJumpHeldFlag = false;
+    if (gamepadPreviousState.primary) state.isGrappleReleaseTriggeredFlag = 1;
+    state.isMouseDownFlag = 0;
+    state.isRightMouseDownFlag = 0;
+    state.isGrappleHeldFlag = 0;
+    gamepadPreviousStates.delete(state);
+    return;
+  }
+
+  const dpadLeft = gamepadButtonPressed(gamepad, 14);
+  const dpadRight = gamepadButtonPressed(gamepad, 15);
+  state.gamepadMoveX = dpadLeft ? -1 : dpadRight ? 1 : deadZoneAxis(gamepad.axes[0]);
+
+  const aimX = deadZoneAxis(gamepad.axes[2]);
+  const aimY = deadZoneAxis(gamepad.axes[3]);
+  if (state.mouseXPx === 0 && state.mouseYPx === 0) {
+    state.mouseXPx = canvasWidthPx * 0.5;
+    state.mouseYPx = canvasHeightPx * 0.5;
+  }
+  if (aimX !== 0 || aimY !== 0) {
+    const dtSec = Math.min(Math.max(elapsedMs, 0), 50) / 1000;
+    state.mouseXPx = Math.min(canvasWidthPx, Math.max(0, state.mouseXPx + aimX * GAMEPAD_AIM_SPEED_PX_PER_SEC * dtSec));
+    state.mouseYPx = Math.min(canvasHeightPx, Math.max(0, state.mouseYPx + aimY * GAMEPAD_AIM_SPEED_PX_PER_SEC * dtSec));
+  }
+
+  const jump = gamepadButtonPressed(gamepad, 0);
+  const interact = gamepadButtonPressed(gamepad, 1);
+  const secondary = gamepadButtonPressed(gamepad, 6);
+  const primary = gamepadButtonPressed(gamepad, 7);
+  const pause = gamepadButtonPressed(gamepad, 9);
+
+  if (jump && !gamepadPreviousState.jump) state.isJumpTriggeredFlag = true;
+  state.isGamepadJumpHeldFlag = jump;
+
+  if (interact && !gamepadPreviousState.interact) {
+    state.isInteractDownFlag = true;
+    state.interactDownTimeMs = nowMs;
+    state.isInteractPressEdgeFlag = true;
+  } else if (!interact && gamepadPreviousState.interact) {
+    state.isInteractDownFlag = false;
+    state.isInteractReleaseEdgeFlag = true;
+  }
+
+  if (primary && !gamepadPreviousState.primary) {
+    state.isMouseDownFlag = 1;
+    state.mouseDownTimeMs = nowMs;
+    state.isGrappleHeldFlag = 1;
+    state.isGrappleFireTriggeredFlag = 1;
+    state.grappleAimXPx = state.mouseXPx;
+    state.grappleAimYPx = state.mouseYPx;
+  } else if (!primary && gamepadPreviousState.primary) {
+    state.isMouseDownFlag = 0;
+    state.isGrappleHeldFlag = 0;
+    state.isGrappleReleaseTriggeredFlag = 1;
+    if (state.isBlockingFlag === 0 && nowMs - state.mouseDownTimeMs < ATTACK_HOLD_THRESHOLD_MS) {
+      state.isAttackFiredFlag = 1;
+      state.attackDirXPx = state.mouseXPx;
+      state.attackDirYPx = state.mouseYPx;
+    }
+  }
+
+  if (secondary && !gamepadPreviousState.secondary) state.isGrappleZipRequestedFlag = 1;
+  state.isRightMouseDownFlag = secondary ? 1 : 0;
+
+  if (pause && !gamepadPreviousState.pause) {
+    let handledByOpenMenu = false;
+    if (typeof window !== 'undefined') {
+      const event = new CustomEvent('dustweaver-gamepad-pause', { cancelable: true });
+      window.dispatchEvent(event);
+      handledByOpenMenu = event.defaultPrevented;
+    }
+    if (!handledByOpenMenu) state.isEscapePressed = true;
+  }
+
+  gamepadPreviousState.jump = jump;
+  gamepadPreviousState.interact = interact;
+  gamepadPreviousState.primary = primary;
+  gamepadPreviousState.secondary = secondary;
+  gamepadPreviousState.pause = pause;
+}
+
+/** Polls the first connected standard gamepad and applies it to gameplay input. */
+export function pollGamepadInput(
+  state: InputState,
+  elapsedMs: number,
+  canvasWidthPx: number,
+  canvasHeightPx: number,
+  nowMs: number,
+): void {
+  const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+  let active: Gamepad | null = null;
+  for (let i = 0; i < pads.length; i++) {
+    if (pads[i]?.connected) {
+      active = pads[i];
+      break;
+    }
+  }
+  applyGamepadInputSnapshot(state, active, elapsedMs, canvasWidthPx, canvasHeightPx, nowMs);
 }
 
 function applyJoystickToKeys(state: InputState): void {
@@ -462,6 +620,7 @@ export function collectCommands(input: InputState): GameCommand[] {
   let dx = 0;
   if (input.isKeyA) dx -= 1;
   if (input.isKeyD) dx += 1;
+  if (input.gamepadMoveX !== 0) dx = input.gamepadMoveX;
   if (dx !== 0) {
     commands.push({ kind: CommandKind.MovePlayer, dx, dy: 0 });
   }

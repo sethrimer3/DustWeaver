@@ -131,7 +131,7 @@ export function buildHudDebugState(
       : 0,
     grappleInputMode:     world.grappleInputMode,
     isSkidding:           player.isSkiddingFlag === 1,
-    inputUp:    inputState.isJumpHeldFlag || inputState.isJumpTriggeredFlag,
+    inputUp:    inputState.isJumpHeldFlag || inputState.isGamepadJumpHeldFlag || inputState.isJumpTriggeredFlag,
     inputLeft:  inputState.isKeyA,
     inputRight: inputState.isKeyD,
     inputDown:  inputState.isKeyS,

@@ -35,9 +35,24 @@ export const CHARACTER_ANIMATION_FILE_SUFFIX: Readonly<Record<CharacterAnimation
   swinging: 'swinging',
 };
 
+/**
+ * Folder segment (relative to `SPRITES/PLAYERS/`) each character's sprite
+ * files actually live under. Defaults to the character's own id; characters
+ * whose art was archived into a subfolder (e.g. `BonusCharacters/`) get an
+ * explicit override here so the declared path matches reality rather than
+ * assuming a uniform `PLAYERS/${id}/` layout for every character.
+ */
+const CHARACTER_SPRITE_DIR: Readonly<Record<PlayableCharacterId, string>> = {
+  knight: 'BonusCharacters/knight',
+  demonFox: 'BonusCharacters/demonFox',
+  princess: 'BonusCharacters/princess',
+  outcast: 'outcast',
+};
+
 /** Base request path (without suffix/extension) for a character's sprite files. */
 export function getCharacterSpriteBasePath(characterId: string): string {
-  return `SPRITES/PLAYERS/${characterId}/${characterId}`;
+  const dir = CHARACTER_SPRITE_DIR[characterId as PlayableCharacterId] ?? characterId;
+  return `SPRITES/PLAYERS/${dir}/${characterId}`;
 }
 
 /**

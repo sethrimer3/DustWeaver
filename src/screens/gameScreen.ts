@@ -22,7 +22,7 @@ import { BreakEffectRenderer } from '../render/breakEffectRenderer';
 import { WeakWallJumpDebrisRenderer } from '../render/weakWallJumpDebrisRenderer';
 import { FallingBlockDustRenderer } from '../render/fallingBlocks/fallingBlockRenderer';
 import { WebGLParticleRenderer } from '../render/particles/webglRenderer';
-import { createInputState, attachInputListeners, clearAllTriggeredInputFlags } from '../input/handler';
+import { createInputState, attachInputListeners, clearAllTriggeredInputFlags, pollGamepadInput } from '../input/handler';
 import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { spawnHeraldForTesting, spawnIceWizardForTesting } from './gameEnemySpawn';
 import { ROOM_REGISTRY, STARTING_ROOM_ID } from '../levels/rooms';
@@ -963,6 +963,11 @@ export function startGameScreen(
   // Preload sprites for adjacent rooms in the background.
   preloadAdjacentRoomAssets(currentRoom);
 
+  // Decode the active character's sprite set before gameplay becomes visible,
+  // and log a diagnostic (with the character ID and failed URL) rather than
+  // leaving a silent green placeholder box if any file is missing.
+  void preloadActiveCharacterSprites(progress?.characterId ?? 'knight');
+
   // Show the zone-load overlay BEFORE the RAF loop begins so the browser paints
   // it before the first zone-build frame fires.
   {
@@ -1169,6 +1174,7 @@ export function startGameScreen(
 
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
+    pollGamepadInput(inputState, elapsedMs, canvas.width, canvas.height, timestampMs);
 
     // Reset per-frame freeze-profiler counters (works in both dev and production
     // because it also resets the production-safe sprite-bake budget counter).
@@ -1561,7 +1567,7 @@ export function startGameScreen(
       _player !== undefined && _player.isAliveFlag === 1,
       moveDx,
       jumpTriggered,
-      inputState.isJumpHeldFlag,
+      inputState.isJumpHeldFlag || inputState.isGamepadJumpHeldFlag,
     );
 
     // ── Room transition check ──────────────────────────────────────────────
@@ -1646,7 +1652,8 @@ export function startGameScreen(
     } else if (isDialogueBlockingInput) {
       inputState.isDownTriggeredFlag = false;
     }
-    world.playerJumpHeldFlag = !isDialogueBlockingInput && inputState.isJumpHeldFlag ? 1 : 0;
+    world.playerJumpHeldFlag = !isDialogueBlockingInput
+      && (inputState.isJumpHeldFlag || inputState.isGamepadJumpHeldFlag) ? 1 : 0;
 
 
     // ── Sim ticks ──────────────────────────────────────────────────────────

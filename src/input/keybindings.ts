@@ -5,9 +5,7 @@
  * Several actions also have fixed alternate keys baked into handler.ts
  * (e.g., ArrowLeft always triggers MoveLeft in addition to the bound key).
  *
- * Controller bindings are display-only in this version: the default mapping
- * is stored and shown in the UI, but runtime Gamepad API remapping is not yet
- * wired up. The structure is ready to support it.
+ * Controller bindings describe the fixed standard-layout Gamepad API mapping.
  */
 
 // ─── Keyboard actions ────────────────────────────────────────────────────────
@@ -70,7 +68,7 @@ export const CONTROLLER_ACTION_META: Record<ControllerAction, { label: string }>
 };
 
 export const DEFAULT_CONTROLLER_BINDINGS: Record<ControllerAction, string> = {
-  moveHorizontal:  'Left Stick',
+  moveHorizontal:  'Left Stick / D-Pad',
   jump:            'A / Cross',
   interact:        'B / Circle',
   primaryAction:   'RT / R2',
