@@ -13,7 +13,8 @@ Concise index for humans and token-limited agents. See root [`AGENTS.md`](../AGE
 - [`pixelMaterials.md`](pixelMaterials.md) — pixel material simulation.
 - [`zip-move-blocks.md`](zip-move-blocks.md) — zip/kinetic move-block behavior.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — compact AI-facing architecture guide.
-- [`BRANCH_RECOVERY.md`](BRANCH_RECOVERY.md) — git branch recovery notes.
+- [`BRANCH_RECOVERY.md`](BRANCH_RECOVERY.md) — historical git branch recovery notes.
+- [`AUTOSYNC_WORKFLOW.md`](AUTOSYNC_WORKFLOW.md) — main-only AI workflow and local auto-sync pause/lock protocol.
 
 ## `decisions/` — active design decisions and plans
 

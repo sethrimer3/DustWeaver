@@ -56,12 +56,16 @@ npm run desktop
 4. Run the narrowest useful validation first, then the full validation commands when practical.
 5. Report changed files, validation results, and any uncertain areas.
 
-## Branch and integration policy
+## Main-only AI and auto-sync policy
 
-- A coding task is not complete merely because its commits were pushed to a feature branch.
-- Before ending a task that changed code, ensure the work is either merged into `main` or has an open pull request targeting `main`.
-- Do not leave completed work only on an `agent/`, `codex/`, `claude/`, `copilot/`, or other feature branch without an open pull request.
-- If permissions, conflicts, failing validation, or required review prevent integration, explicitly report the branch name, commit SHA, missing integration step, and blocker. Never describe the task as complete.
-- Auto-sync or backup commits do not satisfy this integration requirement.
-- Before starting new work, check whether the current branch contains commits not merged into `main`. Preserve and integrate that work before switching branches unless the user explicitly directs otherwise.
-- The scheduled `Agent branch integration audit` is an enforcement backstop: any unmerged `agent/`, `codex/`, `claude/`, or `copilot/` branch without an open PR targeting `main` fails the workflow. Do not silence the audit by deleting unique work; merge it, open a PR, or document an explicit rejection after preserving any useful intent on `main`.
+See [`docs/AUTOSYNC_WORKFLOW.md`](docs/AUTOSYNC_WORKFLOW.md) for commands and recovery details.
+
+- All AI coding work is performed directly on `main`. Do not create, switch to, or push a feature branch, and do not open a pull request, unless the user explicitly requests it.
+- Before editing, confirm `main` is checked out. When the tree is clean, update it with a safe fast-forward-only pull.
+- Before investigation that could lead to edits, run `powershell -NoProfile -File scripts/pause-autosync.ps1`. Keep auto-sync paused through investigation, implementation, focused/full validation, commit, synchronization, and push.
+- Make one coherent commit. Synchronize safely (normally `git pull --rebase origin main`), resolve conflicts manually, and push without force to `origin/main`.
+- Resume auto-sync only after confirming the completed commit exists on `origin/main`.
+- If work is interrupted, validation fails, a conflict occurs, or push/verification fails, leave auto-sync paused and report the exact repository state. Incomplete work must remain uncommitted.
+- Never discard unrelated local changes, never force-push `main`, and never use auto-sync as the agent's final commit mechanism.
+- Work is not complete merely because it exists locally; completion requires confirmation on `origin/main`.
+- Existing feature branches are preserved until they are manually reviewed. Do not delete or merge them as part of routine AI work.

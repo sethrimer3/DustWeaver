@@ -2,6 +2,10 @@
 
 This file records deliberate recovery decisions when commit ancestry alone
 cannot distinguish missing work from superseded or intentionally rejected work.
+It is a historical recovery record, not the current development workflow. New
+AI work follows the main-only policy in `AGENTS.md` and
+`docs/AUTOSYNC_WORKFLOW.md`. Existing branches remain preserved for manual
+review; this policy change does not delete or merge them.
 
 ## 2026-07-25 recovery
 
@@ -25,6 +29,5 @@ cannot distinguish missing work from superseded or intentionally rejected work.
   migration/removal of the legacy secondary-ability controls; this recovery
   does not override that product direction.
 
-The authoritative enforcement mechanism is
-`.github/workflows/agent-branch-integration-audit.yml`, which reports and fails
-for unmerged AI-authored branches lacking an open pull request to `main`.
+The former branch-audit workflow was retired when AI development moved to
+`main`. These recorded branch decisions remain useful historical context.
