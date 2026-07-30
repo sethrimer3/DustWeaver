@@ -20,6 +20,7 @@ import { createMenuAnimatedBackground } from './menuAnimatedBackground';
 import { getPreloadedMenuAnimationSource, MENU_ANIMATION_FPS } from './menuAnimationFrames';
 import { createMusicManager } from '../audio/musicManager';
 import { getMusicVolume } from './renderSettings';
+import { createControllerMenuNavigation } from './controllerMenuNavigation';
 import {
   applyLocalePresentation,
   createLocaleBindings,
@@ -362,6 +363,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
 
   window.addEventListener('keydown', onAnyKey);
   container.addEventListener('click', onAnyClick);
+  const destroyControllerNavigation = createControllerMenuNavigation(container, transitionToMenu);
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
   return () => {
@@ -370,6 +372,7 @@ export function showMainMenu(root: HTMLElement, callbacks: MainMenuCallbacks): (
     music.dispose();
     window.removeEventListener('keydown', onAnyKey);
     container.removeEventListener('click', onAnyClick);
+    destroyControllerNavigation();
     animatedBackground.destroy();
     if (container.parentElement !== null) container.parentElement.removeChild(container);
   };

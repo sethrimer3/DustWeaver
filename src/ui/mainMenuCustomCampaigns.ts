@@ -312,6 +312,7 @@ export async function buildCustomCampaignsUI(
   }
 
   const backBtn = document.createElement('button');
+  backBtn.dataset.controllerBack = 'true';
   backBtn.textContent = t('common.back');
   backBtn.style.cssText = `
     background: transparent; border: 1px solid rgba(212,168,75,0.25);
