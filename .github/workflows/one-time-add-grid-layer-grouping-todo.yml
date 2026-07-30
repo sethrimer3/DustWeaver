@@ -1,0 +1,62 @@
+name: One-time grid-layer grouping Todo update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-time-add-grid-layer-grouping-todo.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Insert Todo item and remove this workflow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          todo_path = Path("docs/Todo.md")
+          workflow_path = Path(".github/workflows/one-time-add-grid-layer-grouping-todo.yml")
+          text = todo_path.read_text(encoding="utf-8")
+
+          item = "- [ ] Canonicalize paint-authored grid layers into compact, property-aware rectangles without changing cell-level editing semantics. Confirmed problem: clear/dark ambient-light blockers are stored and serialized as one object per cell; water, lava, and Time Stop fields support rectangle records but brush painting commonly leaves many adjacent 1x1 records; compatible background blocks may remain fragmented; falling blocks are authored per cell even though runtime later groups them. Introduce a shared deterministic occupancy-to-rectangle normalizer/greedy mesher for appropriate static layers, merging only identical behavior keys: ambient blockers by `isDarkFlag`, background blocks by `blockTheme + isLightBlockingFlag`, liquids by liquid kind, Time Stop by field kind, and falling blocks by `variant + blockTheme` only if authoring/runtime identity remains correct. Erasing any cell inside a stored rectangle must remove only that cell, split or re-mesh the remainder into a stable small set of non-overlapping rectangles, and never delete the whole aggregate; edge/corner/center erasure, repeated paint/erase, undo/redo, selection, copy/paste, resize, save/load, compact-schema hydration, and deterministic serialization must preserve exact occupied cells and properties. Normalize only the affected connected component or dirty bounds during editing where practical, plus a final canonical pass at save/export; preserve runtime geometry and viewport culling, and audit upgrading the dark-blocker renderer's cached horizontal spans to full 2D greedy rectangles. Explicitly do not coalesce local/scene lights, sunbeams, challenge/gate regions, or live powder/falling-sand particles; powder may use optional save-only compression only if it expands to byte-equivalent authored particle seeds. Likely files: `src/editor/editorElementTypes.ts`, `editorPlaceTool.ts`, `editorDeleteTool.ts`, `roomJson.ts`, `roomJsonSerializer.ts`, compact schema/hydrator code, `src/levels/roomAmbientBlockers.ts`, `src/render/darkBlockerOverlay.ts`, liquid/Time Stop caches, and focused editor/schema/render tests. Add deterministic tests for coalescing, property boundaries, center/edge/corner subtraction, no overlaps or missing cells, canonical round trips, stable UID/selection behavior, runtime parity, and substantial object-count reduction for large filled regions; document detailed audit decisions and any deliberately excluded dynamic systems in `nextSteps.md`, then run targeted tests, `npm run build`, `npm run lint`, and `npm test`; increment `BUILD_NUMBER` exactly once for code changes."
+
+          if item not in text:
+              lines = text.splitlines()
+              insert_at = None
+              for i, line in enumerate(lines):
+                  if line.startswith("- [ ] Fix Room Transition Gradient Width edits"):
+                      insert_at = i + 1
+                      break
+              if insert_at is None:
+                  for i, line in enumerate(lines):
+                      if line == "## High priority":
+                          insert_at = i + 2
+                          break
+              if insert_at is None:
+                  raise RuntimeError("Todo insertion anchor was not found; refusing to edit")
+              lines.insert(insert_at, item)
+              todo_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+          workflow_path.unlink(missing_ok=True)
+
+      - name: Commit Todo update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: add grid-layer rectangle grouping task"
+          git pull --rebase origin main
+          git push origin HEAD:main
