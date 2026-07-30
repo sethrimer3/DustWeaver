@@ -99,6 +99,39 @@ try {
     }
     Remove-Item (Join-Path $repo.Path '.git\AUTOSYNC_PAUSED') -ErrorAction SilentlyContinue
 
+    Invoke-Test 'agent leases are independent and last lease controls resume' {
+        $first = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', 'agent-one', '-Owner', 'Codex', '-Purpose', 'first task')
+        $second = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', 'agent-two', '-Owner', 'Codex', '-Purpose', 'second task')
+        Assert-True ($first.ExitCode -eq 0) $first.Output
+        Assert-True ($second.ExitCode -eq 0) $second.Output
+        $leases = Join-Path $repo.Path '.git\AUTOSYNC_PAUSE_LEASES'
+        Assert-True (Test-Path (Join-Path $leases 'agent-one.json')) 'first lease missing'
+        Assert-True (Test-Path (Join-Path $leases 'agent-two.json')) 'second lease missing'
+
+        $releaseFirst = Invoke-WorkflowScript 'resume-autosync.ps1' $repo.Path @('-LeaseId', 'agent-one')
+        Assert-True ($releaseFirst.ExitCode -eq 0) $releaseFirst.Output
+        Assert-True (-not (Test-Path (Join-Path $leases 'agent-one.json'))) 'first lease remained'
+        Assert-True (Test-Path (Join-Path $leases 'agent-two.json')) 'second lease was removed'
+        Assert-True ($releaseFirst.Output.Contains('remains paused')) 'remaining pause was not reported'
+
+        Set-Content (Join-Path $repo.Path 'leased-change.txt') 'change'
+        $head = & git -C $repo.Path rev-parse HEAD
+        $pausedResult = Invoke-WorkflowScript 'autosync.ps1' $repo.Path
+        Assert-True ($pausedResult.ExitCode -eq 0) $pausedResult.Output
+        Assert-True ((& git -C $repo.Path rev-parse HEAD) -eq $head) 'lease allowed a commit'
+        Remove-Item (Join-Path $repo.Path 'leased-change.txt')
+
+        $releaseSecond = Invoke-WorkflowScript 'resume-autosync.ps1' $repo.Path @('-LeaseId', 'agent-two')
+        Assert-True ($releaseSecond.ExitCode -eq 0) $releaseSecond.Output
+        Assert-True (-not (Test-Path (Join-Path $leases 'agent-two.json'))) 'second lease remained'
+        Assert-True ($releaseSecond.Output.Contains('is active')) 'final release did not activate auto-sync'
+    }
+    Invoke-Test 'invalid lease ID is rejected without escaping lease directory' {
+        $result = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', '..\escape')
+        Assert-True ($result.ExitCode -ne 0) 'invalid lease ID succeeded'
+        Assert-True (-not (Test-Path (Join-Path $repo.Path '.git\escape.json'))) 'invalid lease escaped its directory'
+    }
+
     Invoke-Test 'pause waits for active process and lock removal' {
         $lock = Join-Path $repo.Path '.git\AUTOSYNC_RUNNING'
         $ready = Join-Path $testRoot 'holder-ready'
@@ -263,11 +296,23 @@ try {
         $before = (& git -C $repo.Path status --porcelain) -join "`n"
         $result = Invoke-WorkflowScript 'autosync-status.ps1' $repo.Path @('-ScheduledTaskName', '\NoSuchTestTask')
         Assert-True ($result.ExitCode -eq 0) $result.Output
-        foreach ($needle in @('Repository identity: passed', 'Pause marker: present', 'Changes: staged=', 'Divergence from origin/main:', 'Git operation: none', 'Running lock:')) {
+        foreach ($needle in @('Repository identity: passed', 'Emergency pause marker: present', 'Agent pause leases:', 'Changes: staged=', 'Divergence from origin/main:', 'Git operation: none', 'Running lock:')) {
             Assert-True ($result.Output.Contains($needle)) "status missing '$needle'"
         }
         Assert-True (((& git -C $repo.Path status --porcelain) -join "`n") -eq $before) 'status mutated repository'
         Remove-Item (Join-Path $repo.Path 'status-untracked.txt')
+    }
+    Invoke-Test 'status identifies stale agent lease without removing it' {
+        $leases = Join-Path $repo.Path '.git\AUTOSYNC_PAUSE_LEASES'
+        New-Item -ItemType Directory -Path $leases -Force | Out-Null
+        @{ version=1; leaseId='stale-agent'; owner='Codex'; purpose='abandoned test'; createdUtc=[DateTime]::UtcNow.AddHours(-2).ToString('o'); repository=$repo.Path } |
+            ConvertTo-Json -Compress | Set-Content (Join-Path $leases 'stale-agent.json')
+        $result = Invoke-WorkflowScript 'autosync-status.ps1' $repo.Path @('-ScheduledTaskName', '\NoSuchTestTask', '-StaleLeaseHours', '1')
+        Assert-True ($result.ExitCode -eq 0) $result.Output
+        Assert-True ($result.Output.Contains('id=stale-agent')) 'stale lease ID missing'
+        Assert-True ($result.Output.Contains('stale=true')) 'stale lease warning missing'
+        Assert-True (Test-Path (Join-Path $leases 'stale-agent.json')) 'status removed stale lease'
+        Remove-Item (Join-Path $leases 'stale-agent.json')
     }
     Invoke-Test 'resume refuses non-main' {
         $other = Get-Item (Join-Path $testRoot 'other-branch')

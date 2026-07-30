@@ -7,9 +7,13 @@ param(
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'autosync-common.ps1')
 
-function Stop-IfPaused([string]$PauseMarker) {
-    if (Test-Path -LiteralPath $PauseMarker) {
-        Write-Host 'DustWeaver auto-sync is paused.'
+function Stop-IfPaused($Paths) {
+    $pauseState = Get-AutosyncPauseState $Paths
+    if ($pauseState.Paused) {
+        $reasons = @()
+        if ($pauseState.EmergencyPause) { $reasons += 'emergency marker' }
+        if ($pauseState.Leases.Count -gt 0) { $reasons += "$($pauseState.Leases.Count) agent lease(s)" }
+        Write-Host "DustWeaver auto-sync is paused by $($reasons -join ' and ')."
         return $true
     }
     return $false
@@ -81,7 +85,7 @@ try {
     $paths = Get-AutosyncPaths $RepositoryRoot
 
     # Gate 1: before locking or staging.
-    if (Stop-IfPaused $paths.PauseMarker) { exit 0 }
+    if (Stop-IfPaused $paths) { exit 0 }
     $lockState = Get-AutosyncLockState $paths.RunningLock
     if ($lockState.Exists) {
         Write-Host "DustWeaver auto-sync did not start: $($lockState.Detail). Locks are never removed automatically."
@@ -110,7 +114,7 @@ try {
         exit 0
     }
 
-    if (Stop-IfPaused $paths.PauseMarker) { exit 0 }
+    if (Stop-IfPaused $paths) { exit 0 }
     $branch = Get-CurrentGitBranch $RepositoryRoot
     if ($branch -ne 'main') {
         Write-Host "DustWeaver auto-sync refused to run on branch '$branch'; main is required."
@@ -132,7 +136,7 @@ try {
 
         # Gate 2: immediately before commit. If pause appeared after staging,
         # restore the exact pre-sync index; working-tree content is preserved.
-        if (Stop-IfPaused $paths.PauseMarker) {
+        if (Stop-IfPaused $paths) {
             Restore-OriginalIndex
             exit 0
         }
@@ -146,10 +150,10 @@ try {
     }
 
     # Gate 3: immediately before network synchronization and again before push.
-    if (Stop-IfPaused $paths.PauseMarker) { exit 0 }
+    if (Stop-IfPaused $paths) { exit 0 }
     Invoke-CheckedGit @('pull', '--rebase', 'origin', 'main') $RepositoryRoot $GitTimeoutSeconds | Out-Null
     if (Test-GitOperationInProgress $paths.GitDirectory) { throw 'pull left an unresolved Git operation; push is blocked' }
-    if (Stop-IfPaused $paths.PauseMarker) { exit 0 }
+    if (Stop-IfPaused $paths) { exit 0 }
     $ahead = & git -C $RepositoryRoot rev-list --count '@{u}..HEAD' 2>&1
     if ($LASTEXITCODE -ne 0) { throw "could not determine upstream divergence: $($ahead -join [Environment]::NewLine)" }
     if ([int]($ahead | Select-Object -Last 1) -gt 0) {

@@ -1,5 +1,9 @@
 [CmdletBinding()]
-param([string]$RepositoryRoot, [string]$ScheduledTaskName = '\SyncGithubRepos')
+param(
+    [string]$RepositoryRoot,
+    [string]$ScheduledTaskName = '\SyncGithubRepos',
+    [ValidateRange(1, 8760)][int]$StaleLeaseHours = 6
+)
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'autosync-common.ps1')
 try {
@@ -9,7 +13,7 @@ try {
         throw "DustWeaver repository identity check failed. Resolved path: '$($identity.RepositoryRoot)'. Detected origin: '$($identity.Remote)'."
     }
     $paths = Get-AutosyncPaths $RepositoryRoot
-    $paused = Test-Path -LiteralPath $paths.PauseMarker
+    $pauseState = Get-AutosyncPauseState $paths
     $branch = Get-CurrentGitBranch $RepositoryRoot
     $porcelain = @(& git -C $RepositoryRoot status --porcelain 2>$null)
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect working-tree details.' }
@@ -45,8 +49,21 @@ try {
         } else { $scheduledTaskState = 'not found or inaccessible' }
     } catch { $scheduledTaskState = 'not queryable' }
     Write-Host 'Repository identity: passed (sethrimer3/DustWeaver)'
-    Write-Host "Auto-sync: $(if ($paused) { 'paused' } else { 'active' })"
-    Write-Host "Pause marker: $(if ($paused) { 'present' } else { 'absent' })"
+    Write-Host "Auto-sync: $(if ($pauseState.Paused) { 'paused' } else { 'active' })"
+    Write-Host "Emergency pause marker: $(if ($pauseState.EmergencyPause) { 'present' } else { 'absent' })"
+    Write-Host "Agent pause leases: $($pauseState.Leases.Count)"
+    foreach ($leaseFile in $pauseState.Leases) {
+        $leaseId = [IO.Path]::GetFileNameWithoutExtension($leaseFile.Name)
+        try {
+            $lease = Get-Content -LiteralPath $leaseFile.FullName -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            $createdUtc = [DateTime]::Parse([string]$lease.createdUtc).ToUniversalTime()
+            $age = [DateTime]::UtcNow - $createdUtc
+            $stale = $age.TotalHours -ge $StaleLeaseHours
+            Write-Host ("Lease: id={0} owner={1} age={2:N1}h stale={3} createdUtc={4} purpose={5}" -f $leaseId, $lease.owner, $age.TotalHours, $stale.ToString().ToLowerInvariant(), $createdUtc.ToString('o'), $lease.purpose)
+        } catch {
+            Write-Host "Lease: id=$leaseId metadata=unreadable stale=unknown path=$($leaseFile.FullName)"
+        }
+    }
     Write-Host "Branch: $branch"
     Write-Host "Working tree: $(if ($dirty) { 'dirty' } else { 'clean' })"
     Write-Host "Changes: staged=$stagedCount unstaged=$unstagedCount untracked=$untrackedCount"

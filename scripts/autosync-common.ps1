@@ -66,7 +66,41 @@ function Get-AutosyncPaths {
     return @{
         GitDirectory = $gitDir
         PauseMarker = Join-Path $gitDir 'AUTOSYNC_PAUSED'
+        PauseLeasesDirectory = Join-Path $gitDir 'AUTOSYNC_PAUSE_LEASES'
         RunningLock = Join-Path $gitDir 'AUTOSYNC_RUNNING'
+    }
+}
+
+function Assert-AutosyncLeaseId {
+    param([Parameter(Mandatory)][string]$LeaseId)
+    if ($LeaseId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$') {
+        throw "Invalid auto-sync lease ID '$LeaseId'. Use 1-128 letters, numbers, dots, underscores, or hyphens, beginning with a letter or number."
+    }
+}
+
+function Get-AutosyncLeasePath {
+    param(
+        [Parameter(Mandatory)][string]$LeasesDirectory,
+        [Parameter(Mandatory)][string]$LeaseId
+    )
+    Assert-AutosyncLeaseId $LeaseId
+    return Join-Path $LeasesDirectory "$LeaseId.json"
+}
+
+function Get-AutosyncPauseLeases {
+    param([Parameter(Mandatory)][string]$LeasesDirectory)
+    if (-not (Test-Path -LiteralPath $LeasesDirectory -PathType Container)) { return @() }
+    return @(Get-ChildItem -LiteralPath $LeasesDirectory -File -Filter '*.json' -ErrorAction Stop | Sort-Object Name)
+}
+
+function Get-AutosyncPauseState {
+    param([Parameter(Mandatory)]$Paths)
+    $leases = @(Get-AutosyncPauseLeases $Paths.PauseLeasesDirectory)
+    $emergencyPause = Test-Path -LiteralPath $Paths.PauseMarker -PathType Leaf
+    return [pscustomobject]@{
+        Paused = $emergencyPause -or $leases.Count -gt 0
+        EmergencyPause = $emergencyPause
+        Leases = $leases
     }
 }
 

@@ -62,10 +62,10 @@ See [`docs/AUTOSYNC_WORKFLOW.md`](docs/AUTOSYNC_WORKFLOW.md) for commands and re
 
 - All AI coding work is performed directly on `main`. Do not create, switch to, or push a feature branch, and do not open a pull request, unless the user explicitly requests it.
 - Before editing, confirm `main` is checked out. When the tree is clean, update it with a safe fast-forward-only pull.
-- Before investigation that could lead to edits, run `powershell -NoProfile -File scripts/pause-autosync.ps1` and require exit code 0. A marker alone is insufficient: do not edit unless the helper confirms auto-sync is quiescent. Keep auto-sync paused through investigation, implementation, focused/full validation, commit, synchronization, and push.
+- Before investigation that could lead to edits, choose a unique task lease ID (for example `codex-<new-guid>`), retain that exact ID for the entire task, and run `powershell -NoProfile -File scripts/pause-autosync.ps1 -LeaseId <task-lease-id> -Owner Codex -Purpose "<short task>"`. Require exit code 0. A lease file alone is insufficient: do not edit unless the helper confirms auto-sync is quiescent. Keep your lease through investigation, implementation, focused/full validation, commit, synchronization, and push.
 - Make one coherent commit. Synchronize safely (normally `git pull --rebase origin main`), resolve conflicts manually, and push without force to `origin/main`.
-- Resume auto-sync only after confirming the completed commit exists on `origin/main`.
-- If work is interrupted, validation fails, a conflict occurs, or push/verification fails, leave auto-sync paused and report the exact repository state. Incomplete work must remain uncommitted.
+- After confirming the completed commit exists on `origin/main`, release only your task's lease with `powershell -NoProfile -File scripts/resume-autosync.ps1 -LeaseId <task-lease-id>`, then run `scripts/autosync-status.ps1`. Do not end a successful task until your lease is absent and you have reported whether other leases still keep auto-sync paused.
+- If work is interrupted, validation fails, a conflict occurs, or push/verification fails, leave your lease in place and report its exact ID plus the repository state. Incomplete work must remain uncommitted.
 - Never discard unrelated local changes, never force-push `main`, and never use auto-sync as the agent's final commit mechanism.
 - Work is not complete merely because it exists locally; completion requires confirmation on `origin/main`.
 - Existing feature branches are preserved until they are manually reviewed. Do not delete or merge them as part of routine AI work.
