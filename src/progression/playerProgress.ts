@@ -175,7 +175,7 @@ function createProgressWithCharacter(characterId: string): PlayerProgress {
     exploredRoomIds: [],
     lastSaveRoomId: null,
     lastSaveSpawnBlock: null,
-    characterId: 'knight',
+    characterId,
     unlockedDustKinds: [],
     isDevModeDustUnlocked: false,
     selectedDustKind: null,
