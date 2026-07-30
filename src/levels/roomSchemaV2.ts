@@ -618,6 +618,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     out.crumbles = json.crumbleBlocks.map(c => {
       const entry: SavedCrumble = { r: [c.xBlock, c.yBlock, c.wBlock ?? 1, c.hBlock ?? 1] };
       if (c.variant && c.variant !== 'normal') entry.v = c.variant;
+      if (c.isSecretFlag === 1) entry.secret = 1;
       if (c.rampOrientation !== undefined) entry.ramp = c.rampOrientation as 0 | 1 | 2 | 3;
       if (c.stairsOrientation !== undefined) entry.stairs = c.stairsOrientation;
       if (c.smoothRampOrientation !== undefined) entry.smoothRamp = c.smoothRampOrientation;

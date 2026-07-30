@@ -21,8 +21,8 @@ import {
   hasPrewarmedWallChunks,
 } from '../render/walls/wallChunkPrewarmStore';
 import {
-  clearAllRenderSnapshots,
-  getOrCreateSnapshot,
+  clearAllRenderBundles,
+  getOrCreateBundle,
   hasBgPrewarmData,
 } from '../render/walls/roomRenderCacheStore';
 import { RoomChunkCache } from '../render/walls/chunkRenderCache';
@@ -30,7 +30,7 @@ import { RoomRuntimeCache } from '../screens/roomRuntimeCache';
 
 /** Test helper mirroring `getOrCreatePrewarmWallCache`, but for the bg store. */
 function getOrCreatePrewarmBgCacheForTest(roomId: string, renderStateKey: string): RoomChunkCache {
-  const snap = getOrCreateSnapshot(roomId, renderStateKey);
+  const snap = getOrCreateBundle(roomId, renderStateKey);
   if (snap.bgCache === null) {
     snap.bgCache = new RoomChunkCache(true);
   }
@@ -67,7 +67,7 @@ function room(id: string, transitions: RoomTransitionDef[] = []): RoomDef {
 }
 
 test('evictStalePrewarmedChunks drops rooms outside keepSet while preserving active room', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room0 = room('room0');
   const room1 = room('room1');
   const room2 = room('room2');
@@ -97,12 +97,12 @@ test('evictStalePrewarmedChunks drops rooms outside keepSet while preserving act
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks enforces memory budget by evicting highest radius first', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -130,12 +130,12 @@ test('evictStalePrewarmedChunks enforces memory budget by evicting highest radiu
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks evicts largest memory footprint first within same radius', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room2A = room('room2A', []);
   const room2B = room('room2B', []);
   const room1 = room('room1', [tx('north', 'room2A'), tx('south', 'room2B')]);
@@ -163,12 +163,12 @@ test('evictStalePrewarmedChunks evicts largest memory footprint first within sam
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks when frame time is poor', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -224,12 +224,12 @@ test('adaptive radius-3 chunk warming defers (never discards) radius-3 tasks whe
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('adaptive radius-3 chunk warming resumes without a new room transition once frame time/quality recover', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -263,12 +263,12 @@ test('adaptive radius-3 chunk warming resumes without a new room transition once
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('adaptive radius-3 chunk warming oscillating frame time neither loses the task nor spins forever', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -294,12 +294,12 @@ test('adaptive radius-3 chunk warming oscillating frame time neither loses the t
     throw e;
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks clears background-only cached rooms (no wall data)', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room0 = room('room0');
   const room1 = room('room1');
   const registry = new Map<string, RoomDef>([
@@ -319,12 +319,12 @@ test('evictStalePrewarmedChunks clears background-only cached rooms (no wall dat
     assert.equal(hasBgPrewarmData('room1'), false, 'Background-only room outside keep set should be evicted');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks accounts combined wall+bg memory without double-counting a single room', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room2 = room('room2', []);
   const room1 = room('room1', [tx('east', 'room2')]);
   const room0 = room('room0', [tx('east', 'room1')]);
@@ -353,12 +353,12 @@ test('evictStalePrewarmedChunks accounts combined wall+bg memory without double-
     assert.equal(hasPrewarmedWallChunks('room2'), true, 'room2 should survive under budget');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks clears both wall and bg stores together for a stale room', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room0 = room('room0');
   const room1 = room('room1');
   const registry = new Map<string, RoomDef>([
@@ -379,12 +379,12 @@ test('evictStalePrewarmedChunks clears both wall and bg stores together for a st
     assert.equal(hasBgPrewarmData('room1'), false, 'Stale room bg data should be evicted in the same pass');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks never evicts the active room even when it alone exceeds budget', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room0 = room('room0');
   const registry = new Map<string, RoomDef>([['room0', room0]]);
   const runtimeCache = new RoomRuntimeCache();
@@ -398,12 +398,12 @@ test('evictStalePrewarmedChunks never evicts the active room even when it alone 
     assert.equal(hasPrewarmedWallChunks('room0'), true, 'Active room must never be evicted, even over budget');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks selects budget by quality tier (low vs high)', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room1 = room('room1');
   const room0 = room('room0', [tx('east', 'room1')]);
   const registry = new Map<string, RoomDef>([
@@ -420,7 +420,7 @@ test('evictStalePrewarmedChunks selects budget by quality tier (low vs high)', (
     assert.equal(hasPrewarmedWallChunks('room1'), false, 'room1 should be evicted under the low-quality budget');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 
   handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
@@ -430,12 +430,12 @@ test('evictStalePrewarmedChunks selects budget by quality tier (low vs high)', (
     assert.equal(hasPrewarmedWallChunks('room1'), true, 'room1 should survive under the high-quality budget');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks reports accurate eviction stats and accumulates totalEvictions', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room0 = room('room0');
   const room1 = room('room1');
   const room2 = room('room2');
@@ -463,12 +463,12 @@ test('evictStalePrewarmedChunks reports accurate eviction stats and accumulates 
     assert.equal(getPrewarmStats().totalEvictions, totalBefore + 1, 'totalEvictions should not recount already-evicted rooms');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('runChunkPrewarmSliceNow triggers post-slice budget enforcement when a slice pushes memory over budget', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room1 = room('room1');
   const room0 = room('room0', [tx('east', 'room1')]);
   const registry = new Map<string, RoomDef>([
@@ -500,12 +500,12 @@ test('runChunkPrewarmSliceNow triggers post-slice budget enforcement when a slic
     }
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('invalidateRoomChunkPrewarm evicts a room and allows it to be re-queued on the next schedule', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room1 = room('room1');
   const room0 = room('room0', [tx('east', 'room1')]);
   const registry = new Map<string, RoomDef>([
@@ -526,7 +526,7 @@ test('invalidateRoomChunkPrewarm evicts a room and allows it to be re-queued on 
     assert.equal(hasBgPrewarmData('room1'), false, 'Invalidation should clear bg prewarm data');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 
   // Re-schedule: room1 is within radius-1 again and should be queued fresh
@@ -536,12 +536,12 @@ test('invalidateRoomChunkPrewarm evicts a room and allows it to be re-queued on 
     assert.ok(getPrewarmStats().queueLength >= 1, 'room1 should be re-queued after invalidation');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks does not evict newly completed nearby rooms still within keep set', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room1 = room('room1');
   const room0 = room('room0', [tx('east', 'room1')]);
   const registry = new Map<string, RoomDef>([
@@ -562,12 +562,12 @@ test('evictStalePrewarmedChunks does not evict newly completed nearby rooms stil
     assert.equal(hasPrewarmedWallChunks('room1'), true, 'Completed nearby room within keep set must survive eviction');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks handles zero-memory candidates without evicting them unnecessarily', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room2 = room('room2', []);
   const room1 = room('room1', [tx('east', 'room2')]);
   const room0 = room('room0', [tx('east', 'room1')]);
@@ -593,14 +593,14 @@ test('evictStalePrewarmedChunks handles zero-memory candidates without evicting 
     assert.equal(getPrewarmStats().evictedThisPass, 0, 'No eviction should occur when under budget');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 // ── Part 1: authoritative priority independent of queue membership ───────────
 
 test('authoritative priority metadata survives task completion (a completed room leaving the queue is not misclassified)', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -644,19 +644,19 @@ test('authoritative priority metadata survives task completion (a completed room
     assert.equal(hasPrewarmedWallChunks('room1'), true, 'Completed radius-1 room (out of queue) must survive — not misclassified as radius-3/unknown');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('scheduleChunkPrewarms restart clears stale priority metadata from the prior neighbourhood', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const roomX = room('roomX', []);
   const a0 = room('a0', [tx('east', 'roomX')]);
   const registryA = new Map<string, RoomDef>([['a0', a0], ['roomX', roomX]]);
   const runtimeCache = new RoomRuntimeCache();
   let handle = scheduleChunkPrewarms(a0, registryA, runtimeCache, () => 'high', () => 10, 800, 600, 1);
   handle.cancel();
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
 
   // A completely unrelated neighbourhood that never references roomX.
   const b3 = room('b3', []);
@@ -679,12 +679,12 @@ test('scheduleChunkPrewarms restart clears stale priority metadata from the prio
     assert.equal(hasPrewarmedWallChunks('b1'), true, 'Genuine radius-1 room from the current schedule should survive');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('invalidateRoomChunkPrewarm clears authoritative priority so stale metadata cannot protect the room later', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -709,12 +709,12 @@ test('invalidateRoomChunkPrewarm clears authoritative priority so stale metadata
     assert.equal(hasPrewarmedWallChunks('room3'), true, 'Currently-tracked genuine radius-3 room should survive relative to the invalidated/unknown room');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('ensureChunkPrewarmQueued assigns radius-1 priority to a newly created task', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -739,12 +739,12 @@ test('ensureChunkPrewarmQueued assigns radius-1 priority to a newly created task
     assert.equal(hasPrewarmedWallChunks('roomZ'), true, 'ensureChunkPrewarmQueued should track roomZ at radius-1 priority');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('addZoneEntryViewportTasks assigns a lower priority than radius-1 work', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -769,12 +769,12 @@ test('addZoneEntryViewportTasks assigns a lower priority than radius-1 work', ()
     assert.equal(hasPrewarmedWallChunks('room1'), true, 'Genuine radius-1 room should survive relative to the zone-entry task');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks treats truly unknown/non-scheduled cached rooms as lower value than a genuine radius-3 room', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -795,14 +795,14 @@ test('evictStalePrewarmedChunks treats truly unknown/non-scheduled cached rooms 
     assert.equal(hasPrewarmedWallChunks('room3'), true, 'Genuine radius-3 room should survive relative to an unknown room');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 // ── Part 2: quality-tier suspension vs temporary frame-time deferral ─────────
 
 test('quality-tier suspension resumes automatically on quality recovery within the same schedule, with no duplicates', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -842,12 +842,12 @@ test('quality-tier suspension resumes automatically on quality recovery within t
     assert.equal(getPrewarmStats().queueLength, 2);
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('active queue processing stops once only suspended radius-3 work remains, and resumes without a room transition', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -884,12 +884,12 @@ test('active queue processing stops once only suspended radius-3 work remains, a
     assert.equal(getPrewarmStats().queueLength, 1, 'room3 resumes into the active queue without a room transition');
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('cancellation prevents suspended radius-3 work from resuming', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -912,12 +912,12 @@ test('cancellation prevents suspended radius-3 work from resuming', () => {
     assert.equal(getPrewarmStats().suspendedRadius3Count, 1, 'a cancelled schedule must not resume suspended work');
     assert.equal(getPrewarmStats().queueLength, 2, 'active queue must remain exactly as it was at cancellation time');
   } finally {
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });
 
 test('evictStalePrewarmedChunks ranks a suspended (out-of-queue) radius-3 room by its authoritative priority, not queue membership', () => {
-  clearAllRenderSnapshots();
+  clearAllRenderBundles();
   const room3 = room('room3', []);
   const room2 = room('room2', [tx('east', 'room3')]);
   const room1 = room('room1', [tx('east', 'room2')]);
@@ -940,6 +940,6 @@ test('evictStalePrewarmedChunks ranks a suspended (out-of-queue) radius-3 room b
     assert.equal(hasPrewarmedWallChunks('room1'), true);
   } finally {
     handle.cancel();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   }
 });

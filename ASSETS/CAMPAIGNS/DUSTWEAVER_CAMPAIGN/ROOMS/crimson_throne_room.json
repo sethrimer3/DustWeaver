@@ -413,8 +413,8 @@
     }
   ],
   "bakedWallTemplate": {
-    "schemaVersion": 2,
-    "sourceHash": "8473279a",
+    "schemaVersion": 1,
+    "sourceHash": "2423c7ed",
     "wallCount": 13,
     "xWorld": [
       0,
@@ -516,12 +516,16 @@
       255,
       255,
       255,
-      3,
-      3,
-      3,
-      3
+      7,
+      7,
+      7,
+      7
     ],
     "themeNames": [
+      "darkStone",
+      "overgrowth",
+      "waterStone",
+      "grayStone",
       "magma"
     ],
     "soundHardnessIndex": [
@@ -613,22 +617,6 @@
       0,
       0,
       0
-    ],
-    "rimStyleIndex": [
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535,
-      65535
-    ],
-    "rimStyles": []
+    ]
   }
 }

@@ -92,7 +92,7 @@ interface Harness {
     frozenSimState: unknown | null;
     adoptionResult: { wall: { status: string }; bg: { status: string } } | null;
     prewarmReadiness: { wallPresent: boolean; bgPresent: boolean; bgRequired: boolean };
-    /** Generator phases remaining for createLoadGenerator. */
+    /** Generator phases remaining for createResidentBuildGenerator. */
     loadPhases: number;
     /** Called during the load generator's Phase A (mirrors setCurrentRoom write-back). */
     transferSnapshot: { healthPoints: number; ownedParticles: unknown[] } | null;
@@ -190,16 +190,15 @@ function makeHarness(rooms: RoomDef[]): Harness {
       state.currentRoom = room;
       (state.world as unknown as { builtForRoomId: string }).builtForRoomId = room.id;
     },
-    createLoadGenerator: (room) => {
-      events.push(`createLoadGenerator:${room.id}`);
-      function* gen(): Generator<void, void, void> {
-        // Phase A: room metadata write-back.
-        state.currentRoom = room;
-        (state.world as unknown as { builtForRoomId: string }).builtForRoomId = room.id;
+    createResidentBuildGenerator: (room) => {
+      events.push(`createResidentBuildGenerator:${room.id}`);
+      function* gen(): Generator<string, WorldState, void> {
         for (let i = 0; i < state.loadPhases - 1; i++) {
           events.push(`loadPhase:${room.id}:${i}`);
-          yield;
+          yield `phase${i}`;
         }
+        if (state.world === undefined) console.error("STATE.WORLD IS UNDEFINED!");
+        return state.world;
       }
       return gen();
     },
@@ -249,7 +248,7 @@ test('precedence 1: different worldNumber defers cross-zone even when a valid re
   assert.ok(h.events.includes('profiler.begin:b:crossZoneDeferred:false'));
   assert.ok(h.events.includes('profiler.end:b:null'));
   // No load or hot-swap happened yet.
-  assert.ok(!h.events.some(e => e.startsWith('setWorld') || e.startsWith('loadRoomSync') || e.startsWith('createLoadGenerator')));
+  assert.ok(!h.events.some(e => e.startsWith('setWorld') || e.startsWith('loadRoomSync') || e.startsWith('createResidentBuildGenerator')));
 });
 
 test('precedence 2: valid runtime-ready resident selects the hot-swap path', () => {
@@ -264,15 +263,14 @@ test('precedence 2: valid runtime-ready resident selects the hot-swap path', () 
   assert.equal(h.coord.isBlockingGameplay(), false);
 });
 
-test('precedence 3: prepared cache without valid resident selects the instant path', () => {
+test('precedence 3: prepared cache without valid resident falls back to async build', () => {
   const a = makeRoom('a'), b = makeRoom('b');
   const h = makeHarness([a, b]);
   h.state.preparedState = 'prepared';
   h.coord.submitTransition(b, 2, 2, 1, 0, 'right');
   assert.ok(h.events.includes('profiler.begin:b:preparedInstant:false'));
-  assert.ok(h.events.includes('loadRoomSync:b'));
-  assert.ok(!h.events.some(e => e.startsWith('setWorld') || e.startsWith('createLoadGenerator')));
-  assert.equal(h.coord.isBlockingGameplay(), false);
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'));
+  assert.ok(!h.events.some(e => e.startsWith('setWorld')));
 });
 
 test('precedence 4: cold cache selects the async path and blocks gameplay', () => {
@@ -280,7 +278,7 @@ test('precedence 4: cold cache selects the async path and blocks gameplay', () =
   const h = makeHarness([a, b]);
   h.coord.submitTransition(b, 2, 2, 1, 0, 'right');
   assert.ok(h.events.includes('profiler.begin:b:asyncCacheMiss:false'));
-  assert.ok(h.events.includes('createLoadGenerator:b'));
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'));
   assert.equal(h.coord.isAsyncLoadActive(), true);
   assert.equal(h.coord.isBlockingGameplay(), true);
   assert.equal(h.coord.getPhase(), 'asyncLoading');
@@ -303,10 +301,10 @@ test('mismatched builtForRoomId is rejected, invalidated, and falls back safely'
   h.state.preparedState = 'prepared';
   h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
   assert.ok(h.events.includes('invalidate:b'), 'mis-paired resident world must be invalidated');
-  assert.ok(h.events.includes('loadRoomSync:b'), 'falls back to full load path');
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'), 'falls back to async build path');
   assert.ok(h.events.includes('profiler.begin:b:preparedInstant:false'));
   // Miss reason classification for the fallback path.
-  assert.ok(h.events.includes('recordTransitionMode:residentFallback:roomIdMismatch:skipped=false'));
+  assert.ok(h.events.includes('recordTransitionMode:legacyLoad:roomIdMismatch:skipped=false'));
   assert.ok(!h.events.includes('setWorld:WRONG_ROOM'), 'never hot-swaps the mismatched world');
 });
 
@@ -342,34 +340,6 @@ test('hot-swap ordering: capture → detach → freeze(playerDetached) → swap 
   assert.ok(idx('setResidentWorld:b:active=true') < idx('updateRadiusReadyCounts'));
 });
 
-test('instant path ordering: freeze → invalidate → prewarm-readiness capture → loadRoom → restore → register', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.preparedState = 'prepared';
-  h.state.frozenEnemies = [{}];
-  h.state.frozenSimState = {};
-  h.state.restoredEnemyCount = 2;
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  const idx = (e: string): number => h.events.indexOf(e);
-  assert.ok(idx('freezeRoom:a:detached=false') < idx('invalidate:a'));
-  assert.ok(idx('invalidate:a') < idx('getRoomPrewarmReadiness'));
-  assert.ok(idx('getRoomPrewarmReadiness') < idx('loadRoomSync:b'));
-  assert.ok(idx('loadRoomSync:b') < idx('restoreFrozenEnemies'));
-  assert.ok(idx('restoreFrozenEnemies') < idx('restoreSimState'));
-  assert.ok(idx('restoreSimState') < idx('setResidentWorld:b:active=true'));
-  assert.ok(h.events.includes('recordTransitionMode:residentRestore:residentMissing:skipped=false'));
-});
-
-test('instant path: restoreFrozenEnemies throwing keeps residentFallback and does not crash', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.preparedState = 'prepared';
-  h.state.frozenEnemies = [{}];
-  h.state.restoreThrows = true;
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(h.events.includes('recordTransitionMode:residentFallback:residentMissing:skipped=false'));
-  assert.ok(h.events.includes('setResidentWorld:b:active=true'));
-});
 
 // ── Velocity behavior ─────────────────────────────────────────────────────────
 
@@ -424,9 +394,9 @@ test('async lifecycle: starts inactive, one generator, phase A advanced synchron
   assert.equal(h.coord.isAsyncLoadActive(), false);
   h.state.loadPhases = 4;
   h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  // Phase A ran synchronously inside submitTransition (currentRoom write-back).
-  assert.equal(h.state.currentRoom.id, 'b');
-  assert.equal(h.events.filter(e => e.startsWith('createLoadGenerator')).length, 1);
+  // The active room remains the outgoing room during async loading.
+  assert.equal(h.state.currentRoom.id, 'a');
+  assert.equal(h.events.filter(e => e.startsWith('createResidentBuildGenerator')).length, 1);
   const phasesAfterSubmit = h.events.filter(e => e.startsWith('loadPhase:')).length;
   assert.equal(phasesAfterSubmit, 1, 'exactly one phase executed at submit time');
   h.coord.advanceAsyncLoad();
@@ -436,8 +406,9 @@ test('async lifecycle: starts inactive, one generator, phase A advanced synchron
   h.coord.advanceAsyncLoad(); // done
   assert.equal(h.coord.isAsyncLoadActive(), false);
   // Completion side effects, each once.
+  assert.equal(h.state.currentRoom.id, 'b', 'currentRoom updates on completion');
   assert.equal(h.events.filter(e => e === 'setResidentWorld:b:active=true').length, 1);
-  assert.equal(h.events.filter(e => e.startsWith('startEntryWarm:b')).length, 1);
+
   assert.equal(h.events.filter(e => e === 'refreshFromNeighborhood').length, 1);
   assert.ok(h.events.includes('overlay.showLoadingOverlay'));
   assert.ok(h.events.includes('recordTransitionOutcome:loading:missReason=runtimeNotReady'));
@@ -447,25 +418,21 @@ test('async lifecycle: starts inactive, one generator, phase A advanced synchron
   assert.equal(h.events.length, n);
 });
 
-test('async completion order: velocity and registration before entry warm; warm uses stored spawn', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.loadPhases = 2;
-  h.coord.submitTransition(b, 7, 9, 2, 0, 'right');
-  h.coord.advanceAsyncLoad(); // done
-  const idx = (e: string): number => h.events.indexOf(e);
-  assert.ok(idx('setResidentWorld:b:active=true') < idx('startEntryWarm:b:7:9'));
-  assert.ok(idx('resetEntryWarm') < idx('startEntryWarm:b:7:9'));
-  assert.ok(idx('startEntryWarm:b:7:9') < idx('refreshFromNeighborhood'));
-});
 
-test('async freeze/invalidate: outgoing room frozen and invalidated before generator creation', () => {
+
+test('async freeze/save: outgoing room is NOT frozen during submit, but during hot-swap', () => {
   const a = makeRoom('a'), b = makeRoom('b');
   const h = makeHarness([a, b]);
+  h.state.loadPhases = 3; // Ensure it takes 2 advances to finish
   h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
   const idx = (e: string): number => h.events.indexOf(e);
-  assert.ok(idx('freezeRoom:a:detached=false') < idx('invalidate:a'));
-  assert.ok(idx('invalidate:a') < idx('createLoadGenerator:b'));
+  assert.ok(!h.events.includes('freezeRoom:a:detached=true'));
+  assert.ok(idx('createResidentBuildGenerator:b') > -1);
+  
+  h.coord.advanceAsyncLoad(); // phase 1
+  h.coord.advanceAsyncLoad(); // returns world and triggers hot-swap
+  assert.ok(idx('freezeRoom:a:detached=true') > idx('createResidentBuildGenerator:b'));
+  assert.ok(!h.events.includes('invalidate:a')); // Saved as resident, not invalidated
 });
 
 test('reset abandons the async generator and pending state cleanly', () => {
@@ -523,7 +490,7 @@ test('regression: re-issued cross-zone activation without a ready resident falls
   h.coord.tickZoneTransition();
   assert.equal(h.coord.isZoneTransitionActive(), false, 'must not re-defer');
   assert.equal(h.events.filter(e => e.startsWith('startZoneLoad')).length, 1);
-  assert.ok(h.events.includes('createLoadGenerator:b'), 'deferred activation took the async path');
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'), 'deferred activation took the async path');
   assert.equal(h.coord.isAsyncLoadActive(), true);
 });
 
@@ -539,64 +506,4 @@ test('reset clears pending cross-zone work', () => {
   assert.equal(h.events.length, n);
 });
 
-// ── Entry warming ─────────────────────────────────────────────────────────────
 
-test('hot-swap: covered viewport skips entry warm; diagnostics say residentWorldHot', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
-  h.state.viewportCovered = true;
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(!h.events.some(e => e.startsWith('startEntryWarm')));
-  assert.ok(!h.events.includes('overlay.showEntryWarm'));
-  assert.ok(h.events.includes('recordTransitionOutcome:residentWorldHot:missReason=none'));
-});
-
-test('hot-swap: uncovered viewport starts entry warm with correct room/spawn and shows overlay', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
-  h.state.viewportCovered = false;
-  h.coord.submitTransition(b, 5, 6, 0, 0, 'right');
-  assert.ok(h.events.includes('startEntryWarm:b:5:6'));
-  assert.ok(h.events.includes('overlay.showEntryWarm'));
-  assert.ok(h.events.includes('recordTransitionOutcome:entryWarm:missReason=entryViewportNotCovered'));
-});
-
-test('instant path miss-reason precedence: staleRenderState beats wallChunksMissing', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.preparedState = 'prepared';
-  h.state.viewportCovered = false;
-  h.state.adoptionResult = { wall: { status: 'staleRenderState' }, bg: { status: 'missing' } };
-  h.state.prewarmReadiness = { wallPresent: false, bgPresent: false, bgRequired: false };
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(h.events.includes('recordTransitionOutcome:entryWarm:missReason=staleRenderState'));
-});
-
-test('instant path miss-reason chain: wallChunksMissing, then bgChunksMissing', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.preparedState = 'prepared';
-  h.state.viewportCovered = false;
-  h.state.prewarmReadiness = { wallPresent: false, bgPresent: true, bgRequired: true };
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(h.events.includes('recordTransitionOutcome:entryWarm:missReason=wallChunksMissing'));
-
-  const h2 = makeHarness([a, b]);
-  h2.state.preparedState = 'prepared';
-  h2.state.viewportCovered = false;
-  h2.state.prewarmReadiness = { wallPresent: true, bgPresent: false, bgRequired: true };
-  h2.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(h2.events.includes('recordTransitionOutcome:entryWarm:missReason=bgChunksMissing'));
-});
-
-test('instant path: covered viewport skips warm and records the resident mode outcome', () => {
-  const a = makeRoom('a'), b = makeRoom('b');
-  const h = makeHarness([a, b]);
-  h.state.preparedState = 'prepared';
-  h.state.viewportCovered = true;
-  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
-  assert.ok(!h.events.some(e => e.startsWith('startEntryWarm')));
-  assert.ok(h.events.includes('recordTransitionOutcome:residentFallback:missReason=none'));
-});

@@ -142,11 +142,13 @@ export function makeWallPrewarmCtx(
   room: RoomDef,
   wallSnapshot: WallSnapshot,
   blockerKeys: ReadonlySet<string> | undefined,
+  renderRevision: number,
 ): WallPrewarmContext {
   const p = deriveRoomRenderStateParams(room, blockerKeys);
   return {
     wallSnapshot,
     worldNumber:          p.worldNumber,
+    renderRevision,
     blockTheme:           p.blockTheme,
     lightingEffect:       p.lightingEffect,
     ambientDirection:     p.ambientDirection,

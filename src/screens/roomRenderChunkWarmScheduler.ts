@@ -24,10 +24,12 @@
 import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
-import type { PrewarmAdoptResult } from '../render/walls/roomRenderCacheStore';
+import type { PrewarmAdoptResult, DirectedEntry } from '../render/walls/roomRenderCacheStore';
+import { isWallPrewarmViewportCovered, isBgPrewarmViewportCovered, getCacheBundle } from '../render/walls/roomRenderCacheStore';
 import {
   makeWallPrewarmCtx,
   wallTemplateToSnapshot,
+  computeRoomRenderStateKey,
 } from '../render/walls/roomRenderState';
 import {
   prewarmWallChunksForRoom,
@@ -46,7 +48,7 @@ import {
   getPrewarmBgRoomStats,
 } from '../render/walls/backgroundBlockRenderer';
 import { areRoomSpritesReady } from '../render/roomAssetPreloader';
-import type { RoomRuntimeCache } from './roomRuntimeCache';
+import type { RoomRuntimeCache, RoomRuntimeEntry } from './roomRuntimeCache';
 import { isEntryFullyPrepared } from './roomRuntimeCache';
 import * as FP from '../debug/perfFreezeProfiler';
 
@@ -384,6 +386,8 @@ export function getLastAdoptionResult(): { wall: PrewarmAdoptResult; bg: Prewarm
 interface WarmTask {
   roomId: string;
   radius: number;
+  /** Explicit directed entry identity if this task is warming for a specific transition. */
+  directedEntry?: DirectedEntry;
   /** Entrance camera offset to prioritise the first-visible chunk region. */
   offsetXPx: number;
   offsetYPx: number;
@@ -860,49 +864,66 @@ export function addZoneEntryViewportTasks(
   scalePx:     number,
 ): void {
   if (_cancelled) return;
+  if (!_runtimeCache) return;
 
-  const existingIds = new Set(_queue.map(t => t.roomId));
   let added = 0;
 
-  for (const roomId of zoneRoomIds) {
-    // Skip if already in the queue (any priority).
-    if (existingIds.has(roomId)) continue;
+  for (const sourceId of zoneRoomIds) {
+    const sourceRoom = registry.get(sourceId);
+    if (!sourceRoom) continue;
+    const sourceRuntime = _runtimeCache.get(sourceId);
+    if (!sourceRuntime) continue; // should be ready
 
-    const room = registry.get(roomId);
-    if (room === undefined) continue;
+    for (let i = 0; i < sourceRoom.transitions.length; i++) {
+      const trans = sourceRoom.transitions[i];
+      if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
+      
+      const targetRoom = registry.get(trans.targetRoomId);
+      if (!targetRoom) continue;
+      
+      const targetRuntime = _runtimeCache.get(trans.targetRoomId);
+      if (!targetRuntime) continue;
+      
+      const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
+      if (!targetRenderKey) continue;
+      
+      const entry: DirectedEntry = {
+        sourceRoomId: sourceId,
+        sourceTransitionKey: `${sourceId}:${i}`,
+        targetRoomId: trans.targetRoomId,
+        targetSpawnBlock: trans.targetSpawnBlock,
+        targetRenderKey,
+        targetRenderRevision: targetRuntime.renderRevision,
+        vpWPx,
+        vpHPx,
+        scalePx
+      };
 
-    // Skip if already fully warmed.
-    const wallReady = getPrewarmWallRoomStats(roomId) !== null;
-    const hasBg     = (room.backgroundBlocks?.length ?? 0) > 0;
-    const bgReady   = !hasBg || getPrewarmBgRoomStats(roomId) !== null;
-    if (wallReady && bgReady) continue;
+      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
 
-    // Compute entry-viewport offset using the room's first transition (or zero).
-    let offsetXPx = 0;
-    let offsetYPx = 0;
-    if (room.transitions.length > 0) {
-      const off = computeEntranceOffset(room.transitions[0], vpWPx, vpHPx, scalePx);
-      offsetXPx = off.offsetXPx;
-      offsetYPx = off.offsetYPx;
+      // Check if already covered
+      const wallReady = isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx);
+      const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
+      const bgReady = !hasBg || isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx);
+      
+      if (wallReady && bgReady) continue;
+      
+      _queue.push({
+        roomId: entry.targetRoomId,
+        radius: 2,
+        directedEntry: entry,
+        offsetXPx: off.offsetXPx,
+        offsetYPx: off.offsetYPx,
+        vpWPx,
+        vpHPx,
+        scalePx,
+        transitionDir: undefined,
+        wallDone: false,
+        bgDone: false,
+      });
+      _roomPriority.set(entry.targetRoomId, Math.min(_roomPriority.get(entry.targetRoomId) ?? Infinity, 2));
+      added++;
     }
-
-    _queue.push({
-      roomId,
-      radius:    2, // treat as radius-2 priority (low, does not displace urgent tasks)
-      offsetXPx,
-      offsetYPx,
-      vpWPx,
-      vpHPx,
-      scalePx,
-      transitionDir: undefined,
-      wallDone: false,
-      bgDone:   false,
-    });
-    // Authoritative priority: only upgrade, never demote a room already
-    // tracked at a more valuable (lower) radius from the BFS schedule.
-    _roomPriority.set(roomId, Math.min(_roomPriority.get(roomId) ?? Infinity, 2));
-    existingIds.add(roomId);
-    added++;
   }
 
   if (added > 0) {
@@ -913,6 +934,75 @@ export function addZoneEntryViewportTasks(
       _idleHandle = _scheduleIdle(_onIdle);
     }
   }
+}
+
+function computeRenderStateKeyForEntry(room: RoomDef, runtime: RoomRuntimeEntry): string | null {
+  if (runtime.blockerKeys === null || runtime.blockerKeys === undefined) return null;
+  return computeRoomRenderStateKey(room, runtime.blockerKeys);
+}
+
+/**
+ * Validates that every same-zone directed transition is fully covered and ready.
+ */
+export function isZoneEntryReadinessComplete(
+  zoneRoomIds: readonly string[],
+  registry:    ReadonlyMap<string, RoomDef>,
+  vpWPx:       number,
+  vpHPx:       number,
+  scalePx:     number,
+): boolean {
+  if (!_runtimeCache) return false;
+
+  for (const sourceId of zoneRoomIds) {
+    const sourceRoom = registry.get(sourceId);
+    if (!sourceRoom) return false;
+    
+    // Check resident world / static readiness
+    const sourceRuntime = _runtimeCache.get(sourceId);
+    if (!sourceRuntime || !isEntryFullyPrepared(sourceRuntime)) return false;
+
+    // We do not check ResidentRoomManager here directly because it is checked at transition time,
+    // but the runtime logic is ready.
+
+    for (let i = 0; i < sourceRoom.transitions.length; i++) {
+      const trans = sourceRoom.transitions[i];
+      if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
+      
+      const targetRoom = registry.get(trans.targetRoomId);
+      if (!targetRoom) return false;
+
+      const targetRuntime = _runtimeCache.get(trans.targetRoomId);
+      if (!targetRuntime || !isEntryFullyPrepared(targetRuntime)) return false;
+
+      if (!areRoomSpritesReady(targetRoom)) return false;
+
+      const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
+      if (!targetRenderKey) return false;
+
+      const entry: DirectedEntry = {
+        sourceRoomId: sourceId,
+        sourceTransitionKey: `${sourceId}:${i}`,
+        targetRoomId: trans.targetRoomId,
+        targetSpawnBlock: trans.targetSpawnBlock,
+        targetRenderKey,
+        targetRenderRevision: targetRuntime.renderRevision,
+        vpWPx,
+        vpHPx,
+        scalePx
+      };
+
+      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
+
+      if (!isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        return false;
+      }
+      const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
+      if (hasBg && !isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 // ── Adoption on room entry ────────────────────────────────────────────────────
@@ -986,15 +1076,18 @@ export function evictStalePrewarmedChunks(
 ): void {
   const currentRoom = _currentRoomId;
   const evictedRoomIds = new Set<string>();
-
   // ── Step 1: drop rooms outside the keep set ───────────────────────────────
   for (const roomId of listPrewarmedWallRoomIds()) {
+    const bundle = getCacheBundle(roomId);
+    if (bundle?.pinned) continue;
     if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
       evictPrewarmedWallChunks(roomId);
       evictedRoomIds.add(roomId);
     }
   }
   for (const roomId of listPrewarmedBgRoomIds()) {
+    const bundle = getCacheBundle(roomId);
+    if (bundle?.pinned) continue;
     if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
       evictPrewarmedBgChunks(roomId);
       evictedRoomIds.add(roomId);
@@ -1008,15 +1101,6 @@ export function evictStalePrewarmedChunks(
   let totalMemKB = ws.memoryEstimateKB + bs.memoryEstimateKB;
 
   if (totalMemKB > budget) {
-    // Build a list of remaining prewarm rooms with their radius and memory.
-    // Radius comes from the authoritative `_roomPriority` map (Part 1), NOT
-    // from `_queue` membership — a completed task leaves `_queue` but its
-    // cached prewarm data remains just as valuable, so deriving radius from
-    // the queue would misclassify e.g. a completed radius-1 room as
-    // speculative radius-3. Truly unknown/non-scheduled cached rooms (never
-    // tracked by this schedule) fall back to a sentinel radius one worse
-    // than the deepest real radius, so they rank as least valuable even
-    // against a genuine radius-3 candidate.
     const UNKNOWN_ROOM_RADIUS = MAX_PREWARM_RADIUS + 1;
 
     interface EvictCandidate { roomId: string; radius: number; memKB: number }
@@ -1024,14 +1108,14 @@ export function evictStalePrewarmedChunks(
     const seen = new Set<string>();
 
     for (const roomId of listPrewarmedWallRoomIds()) {
-      if (roomId === currentRoom) continue;
+      if (roomId === currentRoom || getCacheBundle(roomId)?.pinned) continue;
       seen.add(roomId);
       const wallMem = getPrewarmWallRoomStats(roomId)?.memoryKB ?? 0;
       const bgMem   = getPrewarmBgRoomStats(roomId)?.memoryKB   ?? 0;
       candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: wallMem + bgMem });
     }
     for (const roomId of listPrewarmedBgRoomIds()) {
-      if (roomId === currentRoom || seen.has(roomId)) continue;
+      if (roomId === currentRoom || seen.has(roomId) || getCacheBundle(roomId)?.pinned) continue;
       const bgMem = getPrewarmBgRoomStats(roomId)?.memoryKB ?? 0;
       candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: bgMem });
     }
@@ -1226,7 +1310,7 @@ function _runSlice(deadline: IdleDeadline): void {
     // undefined = computed, no blockers — makeWallPrewarmCtx converts to empty Set.
     if (!task.wallDone && entry.blockerKeys !== null) {
       const wallSnap = wallTemplateToSnapshot(entry.wallTemplate);
-      const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
+      const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys, entry.renderRevision);
       const wallResult = prewarmWallChunksForRoom(
         task.roomId,
         wallCtx,

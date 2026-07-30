@@ -264,6 +264,8 @@ export interface RoomJsonCrumbleBlock {
   isPillarHalfWidthFlag?: 0 | 1;
   /** Elemental weakness variant. Defaults to `'normal'` when absent. */
   variant?: CrumbleVariant;
+  /** 1 for a Secret Block, whose damage resets on save/death respawn. */
+  isSecretFlag?: 1;
   /** Per-block theme override (defaults to room-level theme). */
   blockTheme?: BlockTheme;
   /** Compact per-block theme override used by newer JSON exports. */

@@ -469,6 +469,8 @@ export interface HazardWorldState {
   crumbleBlockYWorld: Float32Array;
   /** 1 if block is still intact, 0 if broken. */
   isCrumbleBlockActiveFlag: Uint8Array;
+  /** 1 for Secret Blocks whose damage resets on save/death respawn. */
+  isCrumbleBlockSecretFlag: Uint8Array;
   /**
    * Hits remaining: 2 = undamaged, 1 = cracked, 0 = destroyed.
    * Starts at 2; any dust particle contact decrements it once per cooldown.
@@ -1071,6 +1073,7 @@ export function createHazardWorldState(): HazardWorldState {
     crumbleBlockXWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockYWorld:            new Float32Array(MAX_CRUMBLE_BLOCKS),
     isCrumbleBlockActiveFlag:      new Uint8Array(MAX_CRUMBLE_BLOCKS),
+    isCrumbleBlockSecretFlag:      new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockHitsRemaining:     new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockHitCooldownTicks:  new Uint8Array(MAX_CRUMBLE_BLOCKS),
     crumbleBlockWallIndex:         new Int8Array(MAX_CRUMBLE_BLOCKS),

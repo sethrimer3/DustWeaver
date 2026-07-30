@@ -869,8 +869,8 @@ export function startGameScreen(
       return isEntryFullyPrepared(cacheEntry) ? 'prepared' : 'partial';
     },
     loadRoomSync: (room, spawnXBlock, spawnYBlock) => { loadRoom(room, spawnXBlock, spawnYBlock); },
-    createLoadGenerator: (room, spawnXBlock, spawnYBlock) =>
-      _makeLoadRoomPhases(room, spawnXBlock, spawnYBlock, false),
+    createResidentBuildGenerator: (room) =>
+      createResidentBuildGenerator(room, RESIDENT_CAMPAIGN_SEED, roomRuntimeCache, undefined),
     capturePlayerTransfer: (sourceWorld) => {
       handleGateRoomExit(sourceWorld);
       return capturePlayerTransferState(sourceWorld);
@@ -1112,6 +1112,7 @@ export function startGameScreen(
       requestReturnToMainMenu();
     },
     onSave: () => {
+      residentRoomManager.resetSecretBlocks(world, currentRoom.id);
       callbacks.onSave?.();
       handleGateSaveCompleted(world);
     },
@@ -1121,6 +1122,7 @@ export function startGameScreen(
       if (callbacks.onCheckpointReached) callbacks.onCheckpointReached(checkpointMs);
     },
     onRespawn: () => {
+      residentRoomManager.resetSecretBlocks(world, currentRoom.id);
       // Restore the timer to the checkpoint value and wait for player movement.
       runTimer.restoreCheckpoint();
     },

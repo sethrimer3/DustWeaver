@@ -29,38 +29,53 @@ import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface RoomRenderSnapshot {
+export interface RoomRenderCacheBundle {
   readonly roomId: string;
   /** Opaque key encoding theme + lighting + blocker set at build time. */
   renderStateKey: string;
+  /** The live render revision of the room when this bundle was built/saved. */
+  renderRevision: number;
+  /** The scale the cache chunks were built at. */
+  scalePx: number;
   /** Pre-built wall chunk canvases; null until wall prewarm runs. */
   wallCache: RoomChunkCache | null;
   /** Pre-built wall layout (shared identity object); null until wall prewarm runs. */
   wallLayout: CachedWallLayout | null;
   /** Pre-built background chunk canvases; null until bg prewarm runs. */
   bgCache: RoomChunkCache | null;
+  dirtyStatus: 'clean' | 'dirty' | 'fallback_present';
+  /** Memory usage in KB */
+  memoryKB: number;
+  /** True if this room is in the active zone and should not be evicted */
+  pinned: boolean;
+}
+
+export interface DirectedEntry {
+  sourceRoomId: string;
+  sourceTransitionKey: string;
+  targetRoomId: string;
+  targetSpawnBlock: readonly [number, number];
+  targetRenderKey: string;
+  targetRenderRevision: number;
+  vpWPx: number;
+  vpHPx: number;
+  scalePx: number;
 }
 
 /**
- * Structured result returned by `adoptPrewarmedWallChunks` and
- * `adoptPrewarmedBgChunks`.  Callers that only need a boolean can check
- * `result.status === 'adopted'`; diagnostic paths can inspect the full reason.
- *
- *  - `adopted`           — snapshot found, key matched, chunks injected.
- *  - `empty`             — snapshot found, key matched, but zero clean chunks were extracted.
- *  - `missing`           — no prewarm snapshot/cache existed for this room.
- *  - `staleRenderState`  — snapshot existed but its key did not match the current render state.
+ * Structured result returned by `detachCacheBundle`.
  */
 export type PrewarmAdoptResult =
-  | { status: 'adopted';          chunks: number }
+  | { status: 'adopted';          bundle: RoomRenderCacheBundle }
   | { status: 'empty' }
   | { status: 'missing' }
-  | { status: 'staleRenderState'; snapshotKey: string; currentKey: string };
+  | { status: 'staleRenderState'; snapshotKey: string; currentKey: string }
+  | { status: 'staleRevision';    snapshotRev: number; currentRev: number };
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
-/** One snapshot per room (keyed by roomId). */
-const _snapshots = new Map<string, RoomRenderSnapshot>();
+/** One snapshot per room (keyed by roomId). Owned exclusively by the store until detached. */
+const _snapshots = new Map<string, RoomRenderCacheBundle>();
 
 // ── Key computation ───────────────────────────────────────────────────────────
 
@@ -156,67 +171,84 @@ export function computeRenderStateKey(
 // ── Snapshot lifecycle ────────────────────────────────────────────────────────
 
 /**
- * Returns the existing snapshot for `roomId` if it matches `renderStateKey`,
- * or creates a new empty snapshot (evicting any stale one).
+ * Creates a new empty bundle (evicting any stale one).
+ * Prewarm building functions call this.
  */
-export function getOrCreateSnapshot(roomId: string, renderStateKey: string): RoomRenderSnapshot {
+export function getOrCreateBundle(
+  roomId: string,
+  renderStateKey: string,
+  renderRevision: number,
+  scalePx: number,
+): RoomRenderCacheBundle {
   const existing = _snapshots.get(roomId);
   if (existing !== undefined) {
-    if (existing.renderStateKey === renderStateKey) {
+    if (existing.renderStateKey === renderStateKey && existing.renderRevision === renderRevision && existing.scalePx === scalePx) {
       return existing;
     }
-    // Key changed (e.g. theme/lighting edit) — discard stale snapshot.
+    // Key/revision/scale changed — discard stale bundle.
     _snapshots.delete(roomId);
   }
-  const snap: RoomRenderSnapshot = {
+  const bundle: RoomRenderCacheBundle = {
     roomId,
     renderStateKey,
+    renderRevision,
+    scalePx,
     wallCache:  null,
     wallLayout: null,
     bgCache:    null,
+    dirtyStatus: 'clean',
+    memoryKB: 0,
+    pinned: false,
   };
-  _snapshots.set(roomId, snap);
-  return snap;
+  _snapshots.set(roomId, bundle);
+  return bundle;
 }
 
-/** Returns the snapshot for `roomId`, or `undefined` if not held. */
-export function getSnapshot(roomId: string): RoomRenderSnapshot | undefined {
+/** Returns the bundle for `roomId`, or `undefined` if not held in the store. */
+export function getCacheBundle(roomId: string): RoomRenderCacheBundle | undefined {
   return _snapshots.get(roomId);
 }
 
-export function clearAllRenderSnapshots(): void {
+/**
+ * Detaches the bundle from the store and transfers ownership to the caller.
+ * Use this during room adoption to take exclusive ownership of the cache.
+ */
+export function detachCacheBundle(roomId: string): RoomRenderCacheBundle | undefined {
+  const bundle = _snapshots.get(roomId);
+  if (bundle !== undefined) {
+    _snapshots.delete(roomId);
+  }
+  return bundle;
+}
+
+/**
+ * Attaches an externally-owned bundle back into the store.
+ * The caller yields ownership to the store.
+ */
+export function attachCacheBundle(bundle: RoomRenderCacheBundle): void {
+  // If there's an existing bundle, evict it (the attached one wins, typically the live dynamically updated one)
+  _snapshots.set(bundle.roomId, bundle);
+}
+
+export function clearAllRenderBundles(): void {
   _snapshots.clear();
 }
 
 /**
- * Clears wall cache and layout for `roomId`, leaving the bg cache intact.
- * Called after wall-chunk adoption so the bg can still be found and adopted.
- * Removes the snapshot from the store once all fields are null.
+ * Sets the pinned status of a bundle. Pinned bundles are not subject to standard eviction.
  */
-export function clearSnapshotWallData(roomId: string): void {
-  const snap = _snapshots.get(roomId);
-  if (snap === undefined) return;
-  snap.wallCache  = null;
-  snap.wallLayout = null;
-  _cleanupIfEmpty(snap, roomId);
+export function setBundlePinned(roomId: string, pinned: boolean): void {
+  const bundle = _snapshots.get(roomId);
+  if (bundle) {
+    bundle.pinned = pinned;
+  }
 }
 
 /**
- * Clears the bg cache for `roomId`, leaving wall data intact.
- * Called after bg-chunk adoption (or bg eviction).
- * Removes the snapshot from the store once all fields are null.
+ * Removes the bundle from the store and destroys it.
  */
-export function clearSnapshotBgData(roomId: string): void {
-  const snap = _snapshots.get(roomId);
-  if (snap === undefined) return;
-  snap.bgCache = null;
-  _cleanupIfEmpty(snap, roomId);
-}
-
-function _cleanupIfEmpty(snap: RoomRenderSnapshot, roomId: string): void {
-  if (snap.wallCache === null && snap.wallLayout === null && snap.bgCache === null) {
-    _snapshots.delete(roomId);
-  }
+export function evictCacheBundle(roomId: string): void {
+  _snapshots.delete(roomId);
 }
 
 // ── Predicate helpers ─────────────────────────────────────────────────────────
@@ -243,6 +275,40 @@ export function listBgPrewarmRoomIds(): string[] {
     if (snap.bgCache !== null) ids.push(id);
   }
   return ids;
+}
+
+// ── Coverage Validation ───────────────────────────────────────────────────────
+
+export function isWallPrewarmViewportCovered(entry: DirectedEntry, targetOffsetX: number, targetOffsetY: number): boolean {
+  const bundle = _snapshots.get(entry.targetRoomId);
+  if (!bundle || bundle.wallCache === null) return false;
+  if (bundle.renderStateKey !== entry.targetRenderKey) return false;
+  if (bundle.renderRevision !== entry.targetRenderRevision) return false;
+  if (bundle.scalePx !== entry.scalePx) return false;
+  if (bundle.dirtyStatus === 'fallback_present') return false;
+
+  return bundle.wallCache.isViewportCovered(
+    targetOffsetX, targetOffsetY,
+    entry.vpWPx, entry.vpHPx,
+    entry.scalePx,
+    0, // margin handled by cache logic/builder
+  );
+}
+
+export function isBgPrewarmViewportCovered(entry: DirectedEntry, targetOffsetX: number, targetOffsetY: number): boolean {
+  const bundle = _snapshots.get(entry.targetRoomId);
+  if (!bundle || bundle.bgCache === null) return false;
+  if (bundle.renderStateKey !== entry.targetRenderKey) return false;
+  if (bundle.renderRevision !== entry.targetRenderRevision) return false;
+  if (bundle.scalePx !== entry.scalePx) return false;
+  if (bundle.dirtyStatus === 'fallback_present') return false;
+
+  return bundle.bgCache.isViewportCovered(
+    targetOffsetX, targetOffsetY,
+    entry.vpWPx, entry.vpHPx,
+    entry.scalePx,
+    0,
+  );
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────

@@ -36,7 +36,7 @@ import {
   deletePrewarmEntry,
   getPrewarmDummyCtx,
 } from './wallChunkPrewarmStore';
-import { computeRenderStateKey, type PrewarmAdoptResult } from './roomRenderCacheStore';
+import { computeRenderStateKey, type PrewarmAdoptResult, getCacheBundle } from './roomRenderCacheStore';
 // Re-export prewarm store management API so existing import paths continue to work.
 export {
   evictPrewarmedWallChunks,
@@ -418,6 +418,7 @@ export interface WallPrewarmContext {
   /** Wall geometry adapted from RoomWallTemplate (shared typed-array views — not copied). */
   wallSnapshot: WallSnapshot;
   worldNumber: number;
+  renderRevision: number;
   blockTheme: BlockTheme | null;
   lightingEffect: LightingEffect;
   ambientDirection: AmbientLightDirection;
@@ -638,7 +639,7 @@ export function prewarmWallChunksForRoom(
     //   (a) the snapshot exists when setPrewarmWallLayout writes into it, and
     //   (b) any stale renderStateKey is evicted before we read the old layout
     //       — preventing an outdated layout from being restored.
-    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
+    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey, ctx.renderRevision, scalePx);
     tempCache.activateContentOwnership(
       createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
     );
@@ -830,7 +831,7 @@ export function drawRoomWallChunksAt(
     _vpWPx = vpWPx;
     _vpHPx = vpHPx;
 
-    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey);
+    const tempCache = getOrCreatePrewarmWallCache(roomId, renderStateKey, pctx.renderRevision, scalePx);
     tempCache.activateContentOwnership(
       createChunkCacheOwnershipKey(roomId, renderStateKey, scalePx),
     );
@@ -974,10 +975,10 @@ export function adoptPrewarmedWallChunks(
     );
   }
 
-  // Clean up prewarm store for this room.
+  const bundle = getCacheBundle(roomId);
   deletePrewarmEntry(roomId);
 
-  return chunks.size > 0 ? { status: 'adopted', chunks: chunks.size } : { status: 'empty' };
+  return chunks.size > 0 && bundle ? { status: 'adopted', bundle } : { status: 'empty' };
 }
 
 /**

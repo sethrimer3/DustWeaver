@@ -608,6 +608,7 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
       if (c.r[2] !== 1) entry.wBlock = c.r[2];
       if (c.r[3] !== 1) entry.hBlock = c.r[3];
       if (c.v) entry.variant = c.v;
+      if (c.secret === 1) entry.isSecretFlag = 1;
       if (c.ramp !== undefined) entry.rampOrientation = c.ramp;
       if (c.stairs !== undefined) entry.stairsOrientation = c.stairs;
       if (c.smoothRamp !== undefined) entry.smoothRampOrientation = c.smoothRamp;

@@ -144,6 +144,7 @@ export function resolveRoomWallTemplate(
   if (room.bakedWallTemplate !== undefined) {
     if (cache !== undefined) {
       cache.set(room.id, {
+        renderRevision: -1,
         wallTemplate: room.bakedWallTemplate,
         edgeExtension:   null,
         blockerKeys:     null,
@@ -161,6 +162,7 @@ export function resolveRoomWallTemplate(
   const buildMs = performance.now() - t0;
   if (cache !== undefined) {
     cache.set(room.id, {
+      renderRevision: -1,
       wallTemplate: template,
       edgeExtension:   null,
       blockerKeys:     null,
@@ -234,6 +236,7 @@ export function buildPreparedRoomRuntime(room: RoomDef): PreparedRoomResult {
 
   return {
     runtimeEntry: {
+      renderRevision: -1,
       wallTemplate,
       edgeExtension: null,
       blockerKeys,

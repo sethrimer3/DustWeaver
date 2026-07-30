@@ -286,7 +286,7 @@ export function tickEntryWarm(
   const t0 = performance.now();
 
   const wallSnap = wallTemplateToSnapshot(entry.wallTemplate);
-  const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys);
+  const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys, entry.renderRevision);
 
   const wallResult = prewarmWallChunksForRoom(
     room.id,

@@ -795,6 +795,8 @@ export function createEditorUI(
   const modifierOptions: { id: BlockPlacementModifier; label: string; help: string; isFalling?: boolean }[] = [
     { id: 'cracked', label: 'Cracked',
       help: 'Places a crumble block: cracks on the first hit, then breaks apart on the second.' },
+    { id: 'secret', label: 'Secret Block',
+      help: 'Acts like a Cracked block, but regenerates when the player saves or returns after death.' },
     { id: 'tough', label: 'Falling: Tough',
       help: 'Falling block that only drops when hit by a strong downward force or a downward grapple pull.', isFalling: true },
     { id: 'sensitive', label: 'Falling: Sensitive',
@@ -1439,7 +1441,9 @@ export function createEditorUI(
         for (const input of modifierInputs) {
           input.checked = input.dataset.modifier === state.pendingBlockPlacementModifier;
         }
-        modifierCrumbleSelect.style.display = state.pendingBlockPlacementModifier === 'cracked' ? '' : 'none';
+        modifierCrumbleSelect.style.display =
+          state.pendingBlockPlacementModifier === 'cracked' ||
+          state.pendingBlockPlacementModifier === 'secret' ? '' : 'none';
         if (document.activeElement !== modifierCrumbleSelect) {
           modifierCrumbleSelect.value = state.pendingCrumbleVariant;
         }

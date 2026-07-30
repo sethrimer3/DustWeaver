@@ -443,6 +443,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
       world.crumbleBlockXWorld[ci] = world.spikeXWorld[si];
       world.crumbleBlockYWorld[ci] = world.spikeYWorld[si];
       world.isCrumbleBlockActiveFlag[ci] = 1;
+      world.isCrumbleBlockSecretFlag[ci] = b.isSecretFlag === 1 ? 1 : 0;
       world.crumbleBlockHitsRemaining[ci] = 2;
       world.crumbleBlockHitCooldownTicks[ci] = 0;
       world.crumbleBlockWallIndex[ci] = -1;
@@ -488,6 +489,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.crumbleBlockXWorld[ci] = bx;
     world.crumbleBlockYWorld[ci] = by;
     world.isCrumbleBlockActiveFlag[ci] = 1;
+    world.isCrumbleBlockSecretFlag[ci] = b.isSecretFlag === 1 ? 1 : 0;
     world.crumbleBlockHitsRemaining[ci] = 2;
     world.crumbleBlockHitCooldownTicks[ci] = 0;
     world.crumbleBlockWallIndex[ci] = wallIdx;

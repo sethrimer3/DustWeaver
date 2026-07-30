@@ -40,17 +40,31 @@ class MockImage extends MockElement {
   alt = '';
   decoding = '';
   loading = '';
-  complete = true;
   naturalWidth = 1920;
   naturalHeight = 1080;
-  src = '';
+  private _src = '';
 
   constructor() {
     super();
     createdImages.push(this);
   }
 
-  addEventListener(): void {}
+  get src(): string { return this._src; }
+  set src(val: string) { this._src = val; }
+
+  get complete(): boolean {
+    if (this._src === '') return true;
+    if (this._src.includes('/individualFrames/')) return true;
+    return failureRule(this._src) === undefined;
+  }
+
+  addEventListener(event: string, cb: () => void): void {
+    if (event === 'error' && failureRule(this._src) !== undefined) {
+      setTimeout(cb, 0);
+    } else if (event === 'load' && failureRule(this._src) === undefined) {
+      setTimeout(cb, 0);
+    }
+  }
 
   async decode(): Promise<void> {
     const failure = failureRule(this.src);

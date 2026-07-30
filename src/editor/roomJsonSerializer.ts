@@ -385,6 +385,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.smoothRampOrientation !== undefined) entry.smoothRampOrientation = b.smoothRampOrientation;
       if (b.isPillarHalfWidthFlag === 1) entry.isPillarHalfWidthFlag = 1;
       if (b.variant !== 'normal') entry.variant = b.variant;
+      if (b.isSecretFlag === 1) entry.isSecretFlag = 1;
       if (b.blockTheme !== undefined) {
         entry.blockTheme = b.blockTheme;
         entry.blockThemeId = blockThemeToId(b.blockTheme);

@@ -482,6 +482,7 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       smoothRampOrientation: b.smoothRampOrientation,
       isPillarHalfWidthFlag: b.isPillarHalfWidthFlag,
       variant: b.variant !== 'normal' ? b.variant : undefined,
+      isSecretFlag: b.isSecretFlag,
       blockTheme: b.blockTheme,
       spikeDirection: b.spikeDirection,
       spikeSize: b.spikeDirection !== undefined ? b.spikeSize : undefined,

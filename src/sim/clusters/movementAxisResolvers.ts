@@ -335,7 +335,7 @@ export function resolveWallsX(
       // Cracked block hit at momentum speed: shatter instead of stopping/stepping.
       if (tryShatterOnImpact(cluster, world, wi, -1, 0)) continue;
       // Step-up is disabled for kinetic blocks so the boost always fires rather than silently stepping.
-      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, 1, wasGrounded)) continue;
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, 1, wasGrounded)) return;
       // Was to the left of wall — push out left
       cluster.positionXWorld = wallLeft - hw;
       if (isKinetic) {
@@ -354,7 +354,7 @@ export function resolveWallsX(
       }
     } else if (prevLeft >= wallRight - COLLISION_EPSILON) {
       if (tryShatterOnImpact(cluster, world, wi, 1, 0)) continue;
-      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, -1, wasGrounded)) continue;
+      if (!isBounce && !isKinetic && tryStepUpSingleBlock(cluster, world, wallLeft, wallRight, wallTop, -1, wasGrounded)) return;
       // Was to the right of wall — push out right
       cluster.positionXWorld = wallRight + hw;
       if (isKinetic) {

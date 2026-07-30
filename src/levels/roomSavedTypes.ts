@@ -237,6 +237,8 @@ export interface SavedCrumble {
   r: SavedRect;
   /** Variant string (omit if 'normal'). */
   v?: CrumbleVariant;
+  /** 1 for a Secret Block (omit for an ordinary cracked block). */
+  secret?: 1;
   /** Ramp orientation 0-3 (omit if not a ramp). */
   ramp?: 0 | 1 | 2 | 3;
   /** Stairs orientation 0-3 (omit if not stairs). */

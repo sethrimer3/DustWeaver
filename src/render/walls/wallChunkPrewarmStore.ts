@@ -15,14 +15,11 @@
 import { RoomChunkCache } from './chunkRenderCache';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import {
-  getOrCreateSnapshot,
-  getSnapshot,
-  clearSnapshotWallData,
-  hasWallPrewarmData,
-  listWallPrewarmRoomIds,
-  getSnapshotWallRoomStats,
-  getAggregateWallStats,
+  getOrCreateBundle,
+  getCacheBundle,
   getPrewarmDummyCtx,
+  listWallPrewarmRoomIds,
+  hasWallPrewarmData,
 } from './roomRenderCacheStore';
 
 // Re-export the shared dummy ctx so blockSpriteRenderer.ts keeps its import path.
@@ -31,55 +28,42 @@ export { getPrewarmDummyCtx };
 // ── Internal accessors (used only by blockSpriteRenderer.ts) ──────────────
 
 export function getPrewarmWallLayout(roomId: string): CachedWallLayout | undefined {
-  return getSnapshot(roomId)?.wallLayout ?? undefined;
+  return getCacheBundle(roomId)?.wallLayout ?? undefined;
 }
 
 export function setPrewarmWallLayout(roomId: string, layout: CachedWallLayout): void {
-  const snap = getSnapshot(roomId);
+  const snap = getCacheBundle(roomId);
   if (snap !== undefined) {
     snap.wallLayout = layout;
   }
 }
 
 export function getPrewarmWallCache(roomId: string): RoomChunkCache | undefined {
-  return getSnapshot(roomId)?.wallCache ?? undefined;
+  return getCacheBundle(roomId)?.wallCache ?? undefined;
 }
 
-/**
- * Returns the `renderStateKey` stored in the snapshot for `roomId`, or
- * `undefined` when no snapshot is held.  Used by the adoption path to
- * detect stale snapshots whose key no longer matches the active room state.
- */
 export function getPrewarmSnapshotRenderStateKey(roomId: string): string | undefined {
-  return getSnapshot(roomId)?.renderStateKey;
+  return getCacheBundle(roomId)?.renderStateKey;
 }
 
-/**
- * Returns the existing prewarm wall cache for `roomId`, or creates a new one.
- * `renderStateKey` is forwarded to `getOrCreateSnapshot` so that a stale
- * snapshot (built with a different theme/lighting) is evicted automatically.
- */
-export function getOrCreatePrewarmWallCache(roomId: string, renderStateKey: string): RoomChunkCache {
-  const snap = getOrCreateSnapshot(roomId, renderStateKey);
+export function getOrCreatePrewarmWallCache(roomId: string, renderStateKey: string, renderRevision: number, scalePx: number): RoomChunkCache {
+  const snap = getOrCreateBundle(roomId, renderStateKey, renderRevision, scalePx);
   if (snap.wallCache === null) {
     snap.wallCache = new RoomChunkCache();
   }
   return snap.wallCache;
 }
 
-/**
- * Clears the wall cache and layout for `roomId`, leaving the bg cache intact
- * so bg adoption can proceed independently.
- */
 export function deletePrewarmEntry(roomId: string): void {
-  clearSnapshotWallData(roomId);
+  const snap = getCacheBundle(roomId);
+  if (snap) {
+    snap.wallCache = null;
+    snap.wallLayout = null;
+  }
 }
 
-// ── Public management API (re-exported from blockSpriteRenderer.ts) ────────
-
-/** Discards pre-warmed wall chunks for `roomId` without adopting them. */
 export function evictPrewarmedWallChunks(roomId: string): void {
-  clearSnapshotWallData(roomId);
+  deletePrewarmEntry(roomId);
 }
 
 /** Returns `true` when pre-warmed wall data exists for `roomId`. */
@@ -92,18 +76,23 @@ export function listPrewarmedWallRoomIds(): string[] {
   return listWallPrewarmRoomIds();
 }
 
-/**
- * Returns per-room prewarm wall stats for `roomId`, or `null` when not held.
- * Used by the eviction pass to compute per-room memory.
- */
 export function getPrewarmWallRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
-  return getSnapshotWallRoomStats(roomId);
+  const cache = getCacheBundle(roomId)?.wallCache;
+  if (!cache) return null;
+  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
 }
 
-/**
- * Returns aggregate stats across all currently-held prewarm wall caches.
- * Used by the debug overlay.
- */
 export function getPrewarmWallStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
-  return getAggregateWallStats();
+  let roomCount = 0;
+  let totalChunks = 0;
+  let memoryEstimateKB = 0;
+  for (const id of listWallPrewarmRoomIds()) {
+    const stats = getPrewarmWallRoomStats(id);
+    if (stats) {
+      roomCount++;
+      totalChunks += stats.chunks;
+      memoryEstimateKB += stats.memoryKB;
+    }
+  }
+  return { roomCount, totalChunks, memoryEstimateKB };
 }

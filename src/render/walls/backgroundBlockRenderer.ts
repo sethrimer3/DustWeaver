@@ -59,7 +59,7 @@ let _bgCacheRoomRef: string | null = null;
 if (typeof window !== 'undefined') {
   window.addEventListener('dw:sprite-atlas-mode-changed', () => {
     invalidateBackgroundBlockCache();
-    clearAllRenderSnapshots();
+    clearAllRenderBundles();
   });
 }
 
@@ -155,26 +155,15 @@ export function setBgChunkCacheMemoryKB(kb: number): void {
 
 import { RoomChunkCache as _RCC } from './chunkRenderCache'; // local alias to avoid shadowing
 import {
-  computeRenderStateKey,
-  clearAllRenderSnapshots,
-  getSnapshot,
-  getOrCreateSnapshot,
-  clearSnapshotBgData,
+  clearAllRenderBundles,
+  getCacheBundle,
+  getOrCreateBundle,
   hasBgPrewarmData,
   listBgPrewarmRoomIds,
-  getSnapshotBgRoomStats,
-  getAggregateBgStats,
   getBgPrewarmDummyCtx,
   type PrewarmAdoptResult,
 } from './roomRenderCacheStore';
-import {
-  DEFAULT_DIRECTIONAL_BIAS,
-  DEFAULT_SIDE_EXPOSURE_STRENGTH,
-  DEFAULT_MINIMUM_WALL_LIGHT,
-  DEFAULT_FALLOFF_POWER,
-  DEFAULT_BACKGROUND_LIGHT_SPILL,
-  DEFAULT_SOLID_LIGHT_SOFTNESS,
-} from './ambientLightDepths';
+import { computeRoomRenderStateKey } from './roomRenderState';
 
 /**
  * Builds a chunk-rendering closure for `room`'s background blocks.
@@ -286,25 +275,12 @@ export function prewarmBgChunksForRoom(
   // same room, if one exists.  If not (corner case: bg called without a prior
   // wall prewarm), create a new snapshot with a minimal key derived from the
   // same computeRenderStateKey format so keys are consistent.
-  let snap = getSnapshot(room.id);
+  let snap = getCacheBundle(room.id);
   if (snap === undefined) {
     // No lighting/ambient context available here; use neutral defaults.  In
     // practice this path is not taken since wall prewarm always runs first.
-    const fallbackKey = computeRenderStateKey(
-      room.blockTheme ?? null,
-      room.worldNumber ?? 1,
-      'none', 'default', 'false',
-      new Set<string>(),
-      room.widthBlocks,
-      room.heightBlocks,
-      DEFAULT_DIRECTIONAL_BIAS,
-      DEFAULT_SIDE_EXPOSURE_STRENGTH,
-      DEFAULT_MINIMUM_WALL_LIGHT,
-      DEFAULT_FALLOFF_POWER,
-      DEFAULT_BACKGROUND_LIGHT_SPILL,
-      DEFAULT_SOLID_LIGHT_SOFTNESS,
-    );
-    snap = getOrCreateSnapshot(room.id, fallbackKey);
+    const fallbackKey = computeRoomRenderStateKey(room, new Set<string>());
+    snap = getOrCreateBundle(room.id, fallbackKey, -1, 1);
   }
   if (snap.bgCache === null) {
     snap.bgCache = new _RCC(true);
@@ -363,23 +339,10 @@ export function drawRoomBgChunksAt(
   const blocks = room.backgroundBlocks;
   if (!blocks || blocks.length === 0) return empty;
 
-  let snap = getSnapshot(room.id);
+  let snap = getCacheBundle(room.id);
   if (snap === undefined) {
-    const fallbackKey = computeRenderStateKey(
-      room.blockTheme ?? null,
-      room.worldNumber ?? 1,
-      'none', 'default', 'false',
-      new Set<string>(),
-      room.widthBlocks,
-      room.heightBlocks,
-      DEFAULT_DIRECTIONAL_BIAS,
-      DEFAULT_SIDE_EXPOSURE_STRENGTH,
-      DEFAULT_MINIMUM_WALL_LIGHT,
-      DEFAULT_FALLOFF_POWER,
-      DEFAULT_BACKGROUND_LIGHT_SPILL,
-      DEFAULT_SOLID_LIGHT_SOFTNESS,
-    );
-    snap = getOrCreateSnapshot(room.id, fallbackKey);
+    const fallbackKey = computeRoomRenderStateKey(room, new Set<string>());
+    snap = getOrCreateBundle(room.id, fallbackKey, -1, 1);
   }
   if (snap.bgCache === null) snap.bgCache = new _RCC(true);
   const tempCache = snap.bgCache;
@@ -437,7 +400,7 @@ export function drawRoomBgChunksAt(
  * @returns Structured `PrewarmAdoptResult` describing the outcome.
  */
 export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRenderStateKey: string): PrewarmAdoptResult {
-  const snap = getSnapshot(room.id);
+  const snap = getCacheBundle(room.id);
   if (snap === undefined || snap.bgCache === null) return { status: 'missing' };
 
   // Adoption-time stale-key guard: refuse chunks built for a different render state.
@@ -448,7 +411,7 @@ export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRende
         `\n  snapshot: ${snap.renderStateKey}\n  current:  ${currentRenderStateKey}`,
       );
     }
-    clearSnapshotBgData(room.id);
+    if (snap) snap.bgCache = null;
     return { status: 'staleRenderState', snapshotKey: snap.renderStateKey, currentKey: currentRenderStateKey };
   }
 
@@ -465,13 +428,14 @@ export function adoptPrewarmedBgChunks(room: RoomDef, zoom: number, currentRende
   }
 
   // Clear bg data from the snapshot (removes snapshot if all fields are now null).
-  clearSnapshotBgData(room.id);
-  return chunks.size > 0 ? { status: 'adopted', chunks: chunks.size } : { status: 'empty' };
+  if (snap) snap.bgCache = null;
+  return chunks.size > 0 ? { status: 'adopted', bundle: snap } : { status: 'empty' };
 }
 
 /** Discards pre-warmed background block chunks for `roomId` without adopting them. */
 export function evictPrewarmedBgChunks(roomId: string): void {
-  clearSnapshotBgData(roomId);
+  const snap = getCacheBundle(roomId);
+  if (snap) snap.bgCache = null;
 }
 
 /** Returns `true` when pre-warmed background block data exists for `roomId`. */
@@ -489,7 +453,9 @@ export function listPrewarmedBgRoomIds(): string[] {
  * Used by the eviction pass to compute per-room memory.
  */
 export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryKB: number } | null {
-  return getSnapshotBgRoomStats(roomId);
+  const cache = getCacheBundle(roomId)?.bgCache;
+  if (!cache) return null;
+  return { chunks: cache.stats.totalChunkCount, memoryKB: cache.stats.memoryEstimateKB };
 }
 
 /**
@@ -497,7 +463,18 @@ export function getPrewarmBgRoomStats(roomId: string): { chunks: number; memoryK
  * Used by the debug overlay.
  */
 export function getPrewarmBgStats(): { roomCount: number; totalChunks: number; memoryEstimateKB: number } {
-  return getAggregateBgStats();
+  let roomCount = 0;
+  let totalChunks = 0;
+  let memoryEstimateKB = 0;
+  for (const id of listBgPrewarmRoomIds()) {
+    const stats = getPrewarmBgRoomStats(id);
+    if (stats) {
+      roomCount++;
+      totalChunks += stats.chunks;
+      memoryEstimateKB += stats.memoryKB;
+    }
+  }
+  return { roomCount, totalChunks, memoryEstimateKB };
 }
 
 /**

@@ -388,7 +388,8 @@ export function wouldPlacementSucceedAt(
     // modifier is active creates a crumble spike (EditorCrumbleBlock with
     // spikeDirection/spikeSize — see handleCrumbleModifierToggle's inverse
     // conversion) instead of silently placing an ordinary, unbreakable spike.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 &&
+      (state.pendingBlockPlacementModifier === 'cracked' || state.pendingBlockPlacementModifier === 'secret'))) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
       if (!rectFitsInsideRoom(room, bx, by, crumbleW, crumbleH)) return false;
@@ -835,7 +836,8 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     // spikeSize set, mirroring handleCrumbleModifierToggle's inverse
     // conversion in editorPropertyChange.ts) instead of silently placing an
     // ordinary, unbreakable spike that ignores the active modifier.
-    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 && state.pendingBlockPlacementModifier === 'cracked')) {
+    if (item.isCrumbleBlockItem === 1 || (item.category === 'blocks' && item.isPlatformItem !== 1 && item.isLaserItem !== 1 &&
+      (state.pendingBlockPlacementModifier === 'cracked' || state.pendingBlockPlacementModifier === 'secret'))) {
       const crumbleW = getPlacementWidth(item, state.placementRotationSteps);
       const crumbleH = getPlacementHeight(item, state.placementRotationSteps);
 
@@ -901,6 +903,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         smoothRampOrientation: crumbleSmoothRamp,
         isPillarHalfWidthFlag: crumblePillar,
         variant: state.pendingCrumbleVariant,
+        isSecretFlag: state.pendingBlockPlacementModifier === 'secret' ? 1 : undefined,
         blockTheme: placementBlockTheme,
         spikeDirection: crumbleSpikeDirection,
         spikeSize: crumbleSpikeSize,

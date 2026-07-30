@@ -61,7 +61,7 @@ export enum EditorTool {
   Delete = 'delete',
 }
 
-export type BlockPlacementModifier = 'none' | 'cracked' | FallingBlockVariant | 'background';
+export type BlockPlacementModifier = 'none' | 'cracked' | 'secret' | FallingBlockVariant | 'background';
 
 // ── Editor state ─────────────────────────────────────────────────────────────
 

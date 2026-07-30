@@ -177,8 +177,11 @@ export interface RoomTransitionLoadCoordinatorDeps {
   getRoomPreparedState(roomId: string): 'prepared' | 'partial' | 'cold';
   /** Synchronous full room load (all phases in one call) — prepared instant path. */
   loadRoomSync(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void;
-  /** Incremental load generator (makeLoadRoomPhases) — async cache-miss path. */
-  createLoadGenerator(room: RoomDef, spawnXBlock: number, spawnYBlock: number): Generator<void, void, void>;
+  /**
+   * Replaces createLoadGenerator. Returns a generator that yields phase names and
+   * ultimately returns a fully built, playerless WorldState.
+   */
+  createResidentBuildGenerator(room: RoomDef): Generator<string, WorldState, void>;
   /** playerTransfer.ts capture (BEFORE detach). */
   capturePlayerTransfer(world: WorldState): PlayerTransferSnapshot | null;
   /** playerTransfer.ts detach (kills owned particles, removes cluster). */
@@ -231,15 +234,22 @@ export interface RoomTransitionLoadCoordinatorDeps {
  * The player velocity captured before the transition is stored here and
  * applied once the generator completes and the new player cluster exists.
  */
-interface AsyncRoomLoadState {
+/**
+ * The formal state machine for cold cache misses. Builds the target room
+ * as an isolated resident world in the background, then hot-swaps to it.
+ */
+interface BuildingResidentState {
   isActive: boolean;
-  gen: Generator<void, void, void> | null;
+  gen: Generator<string, WorldState, void> | null;
+  targetRoomId: string;
+  sourceRoomId: string;
+  targetRenderRevision: number;
   preTransVX: number;
   preTransVY: number;
   transitionDir: TransitionDirection | null;
-  /** Spawn block coordinates stored for startEntryWarm() on generator completion. */
   spawnXBlock: number;
   spawnYBlock: number;
+  hotSwapMissReason: string;
 }
 
 /** Coarse transition-execution phase, for diagnostics and tests. */
@@ -249,14 +259,18 @@ export type TransitionExecutionPhase = 'idle' | 'asyncLoading' | 'zoneLoading';
 
 export class RoomTransitionLoadCoordinator {
   private readonly deps: RoomTransitionLoadCoordinatorDeps;
-  private readonly asyncLoad: AsyncRoomLoadState = {
+  private readonly buildingResident: BuildingResidentState = {
     isActive: false,
     gen: null,
+    targetRoomId: '',
+    sourceRoomId: '',
+    targetRenderRevision: -1,
     preTransVX: 0,
     preTransVY: 0,
     transitionDir: null,
     spawnXBlock: 0,
     spawnYBlock: 0,
+    hotSwapMissReason: '',
   };
   /**
    * Cross-zone transition state.  While active, gameplay is paused and
@@ -295,7 +309,7 @@ export class RoomTransitionLoadCoordinator {
 
   /** True while an async cache-miss load is spreading phases across frames. */
   isAsyncLoadActive(): boolean {
-    return this.asyncLoad.isActive;
+    return this.buildingResident.isActive;
   }
 
   /** True while a cross-zone load is preparing the target zone. */
@@ -308,13 +322,20 @@ export class RoomTransitionLoadCoordinator {
    * sim/input and hold the loading overlay while this returns true.
    */
   isBlockingGameplay(): boolean {
-    return this.asyncLoad.isActive || this.zoneTransition.isActive;
+    return this.buildingResident.isActive || this.zoneTransition.isActive;
   }
 
   getPhase(): TransitionExecutionPhase {
-    if (this.asyncLoad.isActive) return 'asyncLoading';
+    if (this.buildingResident.isActive) return 'asyncLoading';
     if (this.zoneTransition.isActive) return 'zoneLoading';
     return 'idle';
+  }
+
+  getActiveTransitionDirection(): TransitionDirection | null {
+    if (this.buildingResident.isActive && this.buildingResident.transitionDir !== null) {
+      return this.buildingResident.transitionDir;
+    }
+    return null;
   }
 
   /**
@@ -425,10 +446,10 @@ export class RoomTransitionLoadCoordinator {
 
     if (residentReady && targetResident !== undefined && targetResident.world !== null) {
       this._runResidentHotSwap(room, spawnXBlock, spawnYBlock, vx, vy, dir, targetResident.world, t0);
-    } else if (isPrepared) {
-      this._runPreparedInstant(room, spawnXBlock, spawnYBlock, vx, vy, dir, hotSwapMissReason, t0);
     } else {
-      this._startAsyncCacheMiss(room, spawnXBlock, spawnYBlock, vx, vy, dir, hotSwapMissReason, preparedState);
+      // Both partial and cold states fallback to building a resident.
+      // _runPreparedInstant is removed to prevent destructive cannibalization.
+      this._startBuildingResident(room, spawnXBlock, spawnYBlock, vx, vy, dir, hotSwapMissReason, preparedState);
     }
   }
 
@@ -443,9 +464,9 @@ export class RoomTransitionLoadCoordinator {
    */
   advanceAsyncLoad(): void {
     const d = this.deps;
-    if (!this.asyncLoad.isActive || this.asyncLoad.gen === null) return;
+    if (!this.buildingResident.isActive || this.buildingResident.gen === null) return;
     const phaseT0 = d.isDevMode ? performance.now() : 0;
-    const result = this.asyncLoad.gen.next();
+    const result = this.buildingResident.gen.next();
     if (d.isDevMode && phaseT0 > 0) {
       const phaseMs = performance.now() - phaseT0;
       if (phaseMs > 16) {
@@ -454,34 +475,39 @@ export class RoomTransitionLoadCoordinator {
     }
     if (!result.done) return;
 
-    this.asyncLoad.isActive = false;
-    this.asyncLoad.gen = null;
-    const world = d.getWorld();
-    const currentRoom = d.getCurrentRoom();
-    // Apply the deferred player velocity now that the new cluster exists.
-    const player = world.clusters[0];
-    if (player !== undefined && player.isPlayerFlag === 1) {
-      this._applyTransitionVelocity(player, this.asyncLoad.preTransVX, this.asyncLoad.preTransVY, this.asyncLoad.transitionDir);
+    this.buildingResident.isActive = false;
+    this.buildingResident.gen = null;
+    
+    // The generator yielded the fully built, playerless resident world.
+    const targetWorld = result.value;
+    const targetRoomId = this.buildingResident.targetRoomId;
+    const targetRoom = d.registry.get(targetRoomId);
+    if (!targetRoom) {
+      console.error(`[resident] fallback build complete but target room "${targetRoomId}" is missing from registry`);
+      return;
     }
-    // Register the newly loaded room as an active resident and store the world.
-    d.manager.ensureResident(currentRoom);
-    d.manager.setActiveResidentId(currentRoom.id);
-    d.manager.setResidentWorld(currentRoom.id, world, true);
-    d.manager.evictDistantZoneAware(d.zoneLoader.buildZoneRoomIdSet(currentRoom.worldNumber ?? 1));
-    // Pre-register adjacent rooms (radius ≤ 2).
-    this._ensureAdjacentResidents(currentRoom.id);
-    // Start the entry warm now that all load phases are complete.
-    // The warm advances in subsequent gameplay frames (before bake is
-    // forbidden) and holds the overlay until coverage is confirmed or
-    // the timeout fires.
-    d.resetEntryWarm();
-    d.startEntryWarm(currentRoom, this.asyncLoad.spawnXBlock, this.asyncLoad.spawnYBlock);
+    
+    // Complete the legacy "async fallback" by treating this as a delayed hot-swap.
+    // Ensure the built world is registered.
+    d.manager.ensureResident(targetRoom);
+    d.manager.setResidentWorld(targetRoomId, targetWorld, false);
+    
+    // Now hot-swap to it. We use performance.now() to measure the swap time.
+    const dir = this.buildingResident.transitionDir ?? 'right';
+    this._runResidentHotSwap(
+      targetRoom, 
+      this.buildingResident.spawnXBlock, 
+      this.buildingResident.spawnYBlock, 
+      this.buildingResident.preTransVX, 
+      this.buildingResident.preTransVY, 
+      dir, 
+      targetWorld, 
+      performance.now()
+    );
+
     if (d.isDevMode) {
       console.log('[transition] async load complete — velocity applied, resuming gameplay');
     }
-    // Refresh build queue so newly adjacent rooms are queued after async transition.
-    d.buildScheduler.refreshFromNeighborhood();
-    d.updateRadiusReadyCounts();
   }
 
   /**
@@ -526,8 +552,6 @@ export class RoomTransitionLoadCoordinator {
         `[zoneTransition] zone ${prevWorldNumber} → ${pending.targetWorldNumber} ready, activated ${pending.targetRoom.id}`,
       );
     }
-    d.buildScheduler.refreshFromNeighborhood();
-    d.updateRadiusReadyCounts();
   }
 
   /**
@@ -536,13 +560,13 @@ export class RoomTransitionLoadCoordinator {
    * Call on game-screen shutdown.
    */
   reset(): void {
-    this.asyncLoad.isActive = false;
-    this.asyncLoad.gen = null;
-    this.asyncLoad.transitionDir = null;
-    this.asyncLoad.preTransVX = 0;
-    this.asyncLoad.preTransVY = 0;
-    this.asyncLoad.spawnXBlock = 0;
-    this.asyncLoad.spawnYBlock = 0;
+    this.buildingResident.isActive = false;
+    this.buildingResident.gen = null;
+    this.buildingResident.transitionDir = null;
+    this.buildingResident.preTransVX = 0;
+    this.buildingResident.preTransVY = 0;
+    this.buildingResident.spawnXBlock = 0;
+    this.buildingResident.spawnYBlock = 0;
     this.zoneTransition.clear();
     this.isReissuingZoneActivation = false;
     this.preTransVX = 0;
@@ -660,153 +684,9 @@ export class RoomTransitionLoadCoordinator {
     d.updateRadiusReadyCounts();
   }
 
-  /** Instant path (fully prepared cache hit + snapshot restore). */
-  private _runPreparedInstant(
-    room: RoomDef,
-    spawnXBlock: number,
-    spawnYBlock: number,
-    vx: number,
-    vy: number,
-    dir: TransitionDirection,
-    hotSwapMissReason: string,
-    t0: number,
-  ): void {
-    const d = this.deps;
-    if (d.isDevMode && d.profiler.isVerbose()) {
-      console.log(`[transition] ${room.id}: prepared cache HIT — instant load (residentRestore/fallback)`);
-    }
-    const outgoingRoom = d.getCurrentRoom();
-    const world = d.getWorld();
-    // Freeze the outgoing room before loadRoom destroys its state.
-    // playerDetached is NOT set (false/omitted) — the player is still present
-    // at this point; this is the legacy snapshot path, not a true hot-swap.
-    d.manager.ensureResident(outgoingRoom);
-    d.manager.freezeRoom(world, outgoingRoom.id, outgoingRoom);
-    d.manager.freezeSimState(world, outgoingRoom.id);
-    // Invalidate outgoing resident world — loadRoom will corrupt it.
-    d.manager.invalidateResidentWorld(outgoingRoom.id);
-    // Capture prewarm-store state BEFORE loadRoom (Phase A adoption clears it).
-    const { wallPresent, bgPresent, bgRequired } = d.getRoomPrewarmReadiness(room.id, room);
-    const frozenEnemies = d.manager.getFrozenEnemies(room.id);
-    const frozenSimState = d.manager.getFrozenSimState(room.id);
-    d.loadRoomSync(room, spawnXBlock, spawnYBlock);
-    // Restore frozen enemy state if this room was previously visited.
-    d.manager.ensureResident(room);
-    let residentMode: 'residentRestore' | 'residentFallback' = 'residentFallback';
-    if (frozenEnemies !== null) {
-      try {
-        const restored = d.manager.restoreFrozenEnemies(world, frozenEnemies, d.levelRng);
-        if (restored > 0) residentMode = 'residentRestore';
-      } catch (err) {
-        if (d.isDevMode) {
-          console.warn('[resident] restoreFrozenEnemies failed — keeping fresh spawn', err);
-        }
-      }
-    }
-    if (frozenSimState !== null) {
-      try {
-        d.manager.restoreSimState(world, frozenSimState);
-      } catch (err) {
-        if (d.isDevMode) {
-          console.warn('[resident] restoreSimState failed — keeping fresh sim state', err);
-        }
-      }
-    }
-    // Store the newly loaded world in the resident for future hot-swap.
-    d.manager.setResidentWorld(room.id, world, true);
-    d.manager.setActiveResidentId(room.id);
-    d.manager.evictDistantZoneAware(d.zoneLoader.buildZoneRoomIdSet(room.worldNumber ?? 1));
-    d.manager.recordTransitionMode(residentMode, hotSwapMissReason, d.isDevMode ? performance.now() - t0 : 0);
-    this._ensureAdjacentResidents(room.id);
-    // Retrieve the structured adoption result set by Phase A (adoptPrewarmedChunksForRoom).
-    const adoptResult = d.getLastAdoptionResult();
-    const wallAdoptStatus = adoptResult?.wall.status ?? 'missing';
-    const bgAdoptStatus   = adoptResult?.bg.status   ?? 'missing';
-    const renderStateKeyMatches: boolean | null =
-      wallAdoptStatus === 'staleRenderState' || bgAdoptStatus === 'staleRenderState' ? false :
-      wallAdoptStatus === 'adopted'          || bgAdoptStatus === 'adopted'          ? true  :
-      null;
-    const spritesDecoded: boolean | null    = d.areRoomSpritesReady(room);
-    const backgroundDecoded: boolean | null = d.isRoomBackgroundDecodeReady(room);
-    const player = world.clusters[0];
-    if (player !== undefined && player.isPlayerFlag === 1) {
-      this._applyTransitionVelocity(player, vx, vy, dir);
-    }
-    // Start the entry warm for the instant path.  Do NOT tick eagerly here:
-    // chunk building inside the transition callback (before the overlay is
-    // visible) can cause a hitch on the room-boundary frame.  Instead, show
-    // a lightweight textless cover and let the normal RAF loop advance the
-    // warm in the dedicated 'entryWarm' early branch.
-    //
-    // Probe the active chunk caches first: if the entry viewport is already
-    // fully covered (e.g. the room was prewarmed before the player arrived),
-    // skip the overlay entirely — no visible flash, no warm work needed.
-    d.resetEntryWarm();
-    const viewportCovered = d.canSkipEntryWarm(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
-    let warmStarted = false;
-    if (!viewportCovered) {
-      d.startEntryWarm(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
-      d.overlay.showEntryWarm();
-      warmStarted = true;
-      const missReason: TransitionReadinessDiagnostic['missReason'] =
-        wallAdoptStatus === 'staleRenderState' || bgAdoptStatus === 'staleRenderState' ? 'staleRenderState' :
-        !wallPresent ? 'wallChunksMissing' :
-        !bgPresent   ? 'bgChunksMissing'   :
-        wallAdoptStatus === 'empty' ? 'wallAdoptEmpty' :
-        (bgRequired && bgAdoptStatus === 'empty') ? 'bgAdoptEmpty' :
-                       'entryViewportNotCovered';
-      if (d.isDevMode && d.profiler.isVerbose()) {
-        console.warn(
-          `[transition] ${room.id}: entryWarm — missReason: ${missReason}` +
-          ` wallPresent:${wallPresent} bgPresent:${bgPresent} bgReq:${bgRequired}` +
-          ` wall:${wallAdoptStatus} bg:${bgAdoptStatus}`,
-        );
-      }
-      const diag: TransitionReadinessDiagnostic = {
-        roomId: room.id,
-        runtimeReady: true,
-        wallPrewarmPresent: wallPresent,
-        bgPrewarmPresent:   bgPresent,
-        bgPrewarmRequired:  bgRequired,
-        renderStateKeyMatches,
-        entryViewportCovered: false,
-        outcome: 'entryWarm',
-        spritesDecoded,
-        backgroundDecoded,
-        missReason,
-      };
-      d.recordTransitionOutcome('entryWarm', diag);
-      d.profiler.end(room, diag);
-    } else {
-      const diag: TransitionReadinessDiagnostic = {
-        roomId: room.id,
-        runtimeReady: true,
-        wallPrewarmPresent: wallPresent,
-        bgPrewarmPresent:   bgPresent,
-        bgPrewarmRequired:  bgRequired,
-        renderStateKeyMatches,
-        entryViewportCovered: true,
-        outcome: residentMode,
-        spritesDecoded,
-        backgroundDecoded,
-        missReason: 'none',
-      };
-      d.recordTransitionOutcome(residentMode, diag);
-      d.profiler.end(room, diag);
-    }
-    if (d.isDevMode && d.profiler.isVerbose()) {
-      const warmStatus = !warmStarted ? ' (entryWarm skipped — viewport covered)' : ' (entryWarm started — overlay shown)';
-      console.log(
-        `[transition] ${room.id}: instant load done in ${(performance.now() - t0).toFixed(1)}ms` + warmStatus,
-      );
-    }
-    // Refresh build queue so newly adjacent rooms are queued after transition.
-    d.buildScheduler.refreshFromNeighborhood();
-    d.updateRadiusReadyCounts();
-  }
 
   /** Async path (cache miss — spread over RAF frames). */
-  private _startAsyncCacheMiss(
+  private _startBuildingResident(
     room: RoomDef,
     spawnXBlock: number,
     spawnYBlock: number,
@@ -821,27 +701,23 @@ export class RoomTransitionLoadCoordinator {
       console.warn(`[transition] ${room.id}: cache MISS (${preparedState}) — async load`);
     }
     const outgoingRoom = d.getCurrentRoom();
-    const world = d.getWorld();
-    // Freeze outgoing room before the async generator destroys world state.
-    // playerDetached is NOT set (false/omitted) — the player is still present
-    // on the legacy async path; no false duplicate-player diagnostic should fire.
-    d.manager.ensureResident(outgoingRoom);
-    d.manager.freezeRoom(world, outgoingRoom.id, outgoingRoom);
-    d.manager.freezeSimState(world, outgoingRoom.id);
-    // Invalidate outgoing resident world — the async generator rebuilds the
-    // shared `world` object in place for the target room, so any resident
-    // entry still referencing it would hold wrong-room geometry.  (Mirrors
-    // the same invalidation on the instant path; without it every return to
-    // this room tripped the hot-swap room-id integrity guard.)
-    d.manager.invalidateResidentWorld(outgoingRoom.id);
+    
+    // We do NOT invalidate the outgoing resident world. The async load builds 
+    // the target room in an isolated world and then hot-swaps to it, preserving
+    // the source room for backtracking.
     d.manager.recordTransitionMode('legacyLoad', hotSwapMissReason);
-    this.asyncLoad.preTransVX    = vx;
-    this.asyncLoad.preTransVY    = vy;
-    this.asyncLoad.transitionDir = dir;
-    this.asyncLoad.spawnXBlock   = spawnXBlock;
-    this.asyncLoad.spawnYBlock   = spawnYBlock;
-    this.asyncLoad.gen           = d.createLoadGenerator(room, spawnXBlock, spawnYBlock);
-    this.asyncLoad.isActive      = true;
+    
+    this.buildingResident.preTransVX    = vx;
+    this.buildingResident.preTransVY    = vy;
+    this.buildingResident.transitionDir = dir;
+    this.buildingResident.spawnXBlock   = spawnXBlock;
+    this.buildingResident.spawnYBlock   = spawnYBlock;
+    this.buildingResident.sourceRoomId  = outgoingRoom.id;
+    this.buildingResident.targetRoomId  = room.id;
+    this.buildingResident.hotSwapMissReason = hotSwapMissReason;
+    this.buildingResident.gen           = d.createResidentBuildGenerator(room);
+    this.buildingResident.isActive      = true;
+    
     const diag: TransitionReadinessDiagnostic = {
       roomId: room.id,
       runtimeReady: false,
@@ -856,19 +732,11 @@ export class RoomTransitionLoadCoordinator {
       missReason: 'runtimeNotReady',
     };
     d.recordTransitionOutcome('loading', diag);
-    // Async transition: finalise the profile now with mode+counts; the
-    // multi-frame Phase A–F timings continue to feed FP.recordLoadPhaseStep
-    // for the freeze profiler, but are not attributed to this single
-    // transition record (they span unrelated frames).  A separate
-    // `[transition async-complete]` line is logged when the generator
-    // finishes (see advanceAsyncLoad).
     d.profiler.end(room, diag);
     d.overlay.showLoadingOverlay();
-    // Advance Phase A immediately (room metadata + world reset, < 1ms).
-    // This sets `currentRoom = room` so `onRoomBecameActive()` — called by
-    // the orchestrator right after this function returns — will trigger sprite
-    // preloads for the NEW room, not the stale one.
-    this.asyncLoad.gen.next();
+    
+    // Advance Phase A immediately.
+    this.buildingResident.gen.next();
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────

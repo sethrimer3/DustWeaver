@@ -145,7 +145,7 @@ export function buildElementTypeName(
       const variantLabel = b.variant && b.variant !== 'normal' ? ` [${b.variant}]` : '';
       const sizeLabel = (b.wBlock ?? 1) > 1 || (b.hBlock ?? 1) > 1
         ? ` ${b.wBlock ?? 1}×${b.hBlock ?? 1}` : '';
-      return `Crumble Block${sizeLabel}${variantLabel}`;
+      return `${b.isSecretFlag === 1 ? 'Secret Block' : 'Crumble Block'}${sizeLabel}${variantLabel}`;
     }
     return 'Crumble Block';
   }

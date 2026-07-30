@@ -301,6 +301,8 @@ export interface EditorCrumbleBlock {
   isPillarHalfWidthFlag?: 0 | 1;
   /** Which elemental type this crumble block is weak to. */
   variant: CrumbleVariant;
+  /** 1 for a Secret Block, whose damage resets on save/death respawn. */
+  isSecretFlag?: 0 | 1;
   /** Per-block theme override. When set, overrides the room-level default. */
   blockTheme?: BlockTheme;
   /**

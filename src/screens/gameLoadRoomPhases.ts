@@ -797,6 +797,7 @@ export function* makeLoadRoomPhases(
       // Baked template present — apply and store so subsequent transitions are fast.
       applyRoomWallTemplate(world, room.bakedWallTemplate);
       roomRuntimeCache.set(room.id, {
+        renderRevision: -1,
         wallTemplate:    room.bakedWallTemplate,
         edgeExtension:   null,
         blockerKeys,
@@ -826,6 +827,7 @@ export function* makeLoadRoomPhases(
       const wallTemplate = mergeStep.value;
       applyRoomWallTemplate(world, wallTemplate);
       roomRuntimeCache.set(room.id, {
+        renderRevision: -1,
         wallTemplate,
         edgeExtension:   null,
         blockerKeys,

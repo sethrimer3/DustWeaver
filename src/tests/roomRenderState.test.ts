@@ -131,7 +131,7 @@ test('computeRoomRenderStateKey matches the legacy inline expansion (fully-speci
 // adoption computes it from the RoomDef.  Both must agree for adoption to work.
 
 function keyFromPrewarmCtx(room: RoomDef, blockers: Set<string> | undefined): string {
-  const ctx = makeWallPrewarmCtx(room, wallTemplateToSnapshot(makeEmptyTemplate()), blockers);
+  const ctx = makeWallPrewarmCtx(room, wallTemplateToSnapshot(makeEmptyTemplate()), blockers, -1);
   // Mirror of the computeRenderStateKey call at the top of prewarmWallChunksForRoom.
   return computeRenderStateKey(
     ctx.blockTheme,

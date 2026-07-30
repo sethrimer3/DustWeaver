@@ -45,6 +45,7 @@ import {
   FB_STATE_IDLE_STABLE,
 } from '../sim/fallingBlocks/fallingBlockTypes';
 import { updateWallSlot } from '../sim/fallingBlocks/fallingBlockSim';
+import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,33 @@ export interface FrozenCrumbleBlockState {
   activeFlags: Uint8Array;
   /** Hits remaining until destruction (2 = intact, 1 = cracked, 0 = gone). */
   hitsRemaining: Uint8Array;
+}
+
+/** Restore every Secret Block in one loaded room to its initial intact state. */
+export function resetSecretCrumbleBlocksInWorld(world: WorldState, room: RoomDef): number {
+  const defs = room.crumbleBlocks ?? [];
+  const count = Math.min(world.crumbleBlockCount, defs.length);
+  let resetCount = 0;
+  for (let i = 0; i < count; i++) {
+    if (defs[i].isSecretFlag !== 1) continue;
+    const wasDamaged = world.isCrumbleBlockActiveFlag[i] === 0 ||
+      world.crumbleBlockHitsRemaining[i] < 2;
+    world.isCrumbleBlockActiveFlag[i] = 1;
+    world.crumbleBlockHitsRemaining[i] = 2;
+    world.crumbleBlockHitCooldownTicks[i] = 0;
+    const wi = world.crumbleBlockWallIndex[i];
+    if (wi >= 0 && wi < world.wallCount) {
+      const def = defs[i];
+      const wBlocks = def.wBlock ?? 1;
+      const hBlocks = def.hBlock ?? 1;
+      world.wallWWorld[wi] = def.isPillarHalfWidthFlag === 1
+        ? Math.max(BLOCK_SIZE_MEDIUM / 2, wBlocks * (BLOCK_SIZE_MEDIUM / 2))
+        : wBlocks * BLOCK_SIZE_MEDIUM;
+      world.wallHWorld[wi] = hBlocks * BLOCK_SIZE_MEDIUM;
+    }
+    if (wasDamaged) resetCount++;
+  }
+  return resetCount;
 }
 
 /** Grasshopper positions and velocities snapshot. */
@@ -772,6 +800,40 @@ export class ResidentRoomManager {
    */
   getFrozenSimState(roomId: string): FrozenSimState | null {
     return this._residents.get(roomId)?.frozenSimState ?? null;
+  }
+
+  /**
+   * Reset run-scoped Secret Block damage across active and frozen rooms.
+   * Called at save/checkpoint boundaries and before death respawn.
+   */
+  resetSecretBlocks(activeWorld?: WorldState, activeRoomId?: string): number {
+    let resetCount = 0;
+    for (const resident of this._residents.values()) {
+      const defs = resident.roomDef.crumbleBlocks ?? [];
+      const frozen = resident.frozenSimState?.crumbleBlocks;
+      if (frozen !== null && frozen !== undefined) {
+        const count = Math.min(frozen.count, defs.length);
+        for (let i = 0; i < count; i++) {
+          if (defs[i].isSecretFlag !== 1) continue;
+          if (frozen.activeFlags[i] === 0 || frozen.hitsRemaining[i] < 2) resetCount++;
+          frozen.activeFlags[i] = 1;
+          frozen.hitsRemaining[i] = 2;
+        }
+      }
+      if (resident.world !== null) {
+        resetCount += resetSecretCrumbleBlocksInWorld(resident.world, resident.roomDef);
+      }
+    }
+    if (activeWorld !== undefined && activeRoomId !== undefined) {
+      const residentWorld = this._residents.get(activeRoomId)?.world;
+      if (residentWorld !== activeWorld) {
+        const activeRoom = this._residents.get(activeRoomId)?.roomDef;
+        if (activeRoom !== undefined) {
+          resetCount += resetSecretCrumbleBlocksInWorld(activeWorld, activeRoom);
+        }
+      }
+    }
+    return resetCount;
   }
 
   /**

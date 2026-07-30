@@ -29,6 +29,8 @@ import type { WallDecoration } from '../render/effects/wallDecorations';
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RoomRuntimeEntry {
+  /** The live render revision for dynamic invalidation tracking. */
+  renderRevision: number;
   /** Merged wall geometry snapshot — apply with `applyRoomWallTemplate`. */
   wallTemplate: RoomWallTemplate;
   /**
@@ -94,9 +96,20 @@ export function isEntryFullyPrepared(entry: RoomRuntimeEntry): boolean {
 export class RoomRuntimeCache {
   private readonly _map = new Map<string, RoomRuntimeEntry>();
   private readonly _capacity: number;
+  private readonly _pinnedRooms = new Set<string>();
 
   constructor(capacity = 16) {
     this._capacity = capacity;
+  }
+
+  /**
+   * Pins rooms that should never be evicted (e.g. all rooms in the active zone).
+   */
+  setPinnedRooms(roomIds: Iterable<string>): void {
+    this._pinnedRooms.clear();
+    for (const id of roomIds) {
+      this._pinnedRooms.add(id);
+    }
   }
 
   /**
@@ -116,17 +129,32 @@ export class RoomRuntimeCache {
   /**
    * Stores `entry` for `roomId`.
    * If an entry already exists it is replaced in-place (no eviction needed).
-   * When size would exceed capacity, the least-recently-used entry is evicted.
+   * When size would exceed capacity, the least-recently-used unpinned entry is evicted.
    */
   set(roomId: string, entry: RoomRuntimeEntry): void {
     if (this._map.has(roomId)) {
       this._map.delete(roomId);
-    } else if (this._map.size >= this._capacity) {
-      // Evict LRU (first key in insertion order).
-      const firstKey = this._map.keys().next().value;
-      if (firstKey !== undefined) this._map.delete(firstKey);
+    } else {
+      this._evictUntilCapacity();
     }
     this._map.set(roomId, entry);
+  }
+  
+  private _evictUntilCapacity(): void {
+    while (this._map.size >= this._capacity) {
+      let evictedAny = false;
+      for (const key of this._map.keys()) {
+        if (!this._pinnedRooms.has(key)) {
+          this._map.delete(key);
+          evictedAny = true;
+          break;
+        }
+      }
+      if (!evictedAny) {
+        // All rooms in cache are pinned. We must exceed capacity.
+        break;
+      }
+    }
   }
 
   /** Returns true when the room already has a cached entry. */

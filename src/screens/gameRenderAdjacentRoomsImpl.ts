@@ -23,7 +23,7 @@ export const productionAdjacentRoomDrawImpl: AdjacentRoomDrawImpl = {
     // blockerKeys omitted for the first implementation — neighbour ambient-light
     // blockers are not reproduced (documented limitation); geometry/theme/light
     // come from the canonical room render-state derivation.
-    const pctx = makeWallPrewarmCtx(room, wallSnapshot, undefined);
+    const pctx = makeWallPrewarmCtx(room, wallSnapshot, undefined, -1);
     drawRoomWallChunksAt(ctx, roomId, pctx, offXPx, offYPx, clipXPx, clipYPx, clipWPx, clipHPx, vpWPx, vpHPx, zoom, blockSizePx, maxChunks);
   },
 };

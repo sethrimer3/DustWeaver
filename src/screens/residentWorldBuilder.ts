@@ -450,6 +450,7 @@ export function* createResidentBuildGenerator(
       // visitors get a cache hit.  Skip phaseD_walls_build entirely.
       applyRoomWallTemplate(rw, room.bakedWallTemplate);
       roomRuntimeCache.set(room.id, {
+        renderRevision: -1,
         wallTemplate:    room.bakedWallTemplate,
         edgeExtension:   null,
         blockerKeys:     null,
@@ -493,7 +494,8 @@ export function* createResidentBuildGenerator(
     applyRoomWallTemplate(rw, wallTemplate);
     // Cache the result so subsequent visitors get a fast hit.
     roomRuntimeCache.set(room.id, {
-      wallTemplate,
+      renderRevision: -1,
+      wallTemplate:    wallTemplate,
       edgeExtension:   null,
       blockerKeys:     null,
       darkBlockerKeys: null,

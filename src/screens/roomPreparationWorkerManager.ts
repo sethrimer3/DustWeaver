@@ -107,6 +107,7 @@ function _reconstructRoomRuntimeEntry(msg: WorkerSuccessMessage): RoomRuntimeEnt
     msg.darkBlockerKeys !== null ? new Set(msg.darkBlockerKeys) : undefined;
 
   return {
+    renderRevision: -1,
     wallTemplate,
     edgeExtension: null,
     blockerKeys,
