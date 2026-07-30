@@ -20,12 +20,16 @@ class MockImage {
 let drawAnimatedDustContainerHud: typeof import('../render/hud/dustContainerAnimation').drawAnimatedDustContainerHud;
 let drawAnimatedDustContainer: typeof import('../render/hud/dustContainerAnimation').drawAnimatedDustContainer;
 let _resetDustContainerAnimationStateForTests: typeof import('../render/hud/dustContainerAnimation')._resetDustContainerAnimationStateForTests;
+let HUD_FILL_CROSSFADE_MS: number;
+let HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER: number;
 
 before(async () => {
   const mod = await import('../render/hud/dustContainerAnimation');
   drawAnimatedDustContainerHud = mod.drawAnimatedDustContainerHud;
   drawAnimatedDustContainer = mod.drawAnimatedDustContainer;
   _resetDustContainerAnimationStateForTests = mod._resetDustContainerAnimationStateForTests;
+  HUD_FILL_CROSSFADE_MS = mod.HUD_FILL_CROSSFADE_MS;
+  HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER = mod.HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER;
 });
 
 interface DrawCall { img: unknown; alpha: number; }
@@ -33,9 +37,10 @@ interface DrawCall { img: unknown; alpha: number; }
 function makeStubCtx(): { ctx: CanvasRenderingContext2D; calls: DrawCall[] } {
   const calls: DrawCall[] = [];
   let currentAlpha = 1;
+  const alphaStack: number[] = [];
   const ctx = {
-    save() {},
-    restore() {},
+    save() { alphaStack.push(currentAlpha); },
+    restore() { currentAlpha = alphaStack.pop() ?? 1; },
     set globalAlpha(v: number) { currentAlpha = v; },
     get globalAlpha() { return currentAlpha; },
     drawImage(img: unknown) { calls.push({ img, alpha: currentAlpha }); },
@@ -89,20 +94,21 @@ test('different slots receive independent phases and targets', () => {
     const { ctx: perSlotCtx, calls } = makeStubCtx();
     void ctx;
     drawAnimatedDustContainerHud(perSlotCtx, 0, 0, 10, 11, true, slot, 0);
-    if (calls.length > 0) seenFirstFrameImgs.add(calls[0].img);
+    if (calls.length > 1) seenFirstFrameImgs.add(calls[1].img);
   }
   assert.ok(seenFirstFrameImgs.size > 1, 'slots should not all start on the same frame image');
 });
 
 test('reveal crossfade always keeps the base frame at 100% opacity while the target fades in on top', () => {
-  // Draw many slots and find one that lands mid-crossfade (two draw calls) at nowMs=0.
+  // The first draw is the opaque empty-container base. Find a slot whose filled
+  // animation adds two frame draws during its ambient crossfade.
   let found = false;
   for (let slot = 0; slot < 40 && !found; slot++) {
     const { ctx, calls } = makeStubCtx();
     drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, slot, 0);
-    if (calls.length === 2) {
+    if (calls.length === 3) {
       found = true;
-      const [base, incoming] = calls;
+      const [, base, incoming] = calls;
       assert.equal(base.alpha, 1, `base (bottom) frame must always draw at full opacity, got ${base.alpha}`);
       assert.ok(incoming.alpha >= 0 && incoming.alpha <= 1, `incoming (top) frame alpha must be in [0,1], got ${incoming.alpha}`);
       assert.notEqual(base.img, incoming.img, 'crossfade must blend two distinct frames');
@@ -142,4 +148,46 @@ test('empty slots render statically regardless of nowMs', () => {
   assert.equal(callsA.length, 1);
   assert.equal(callsB.length, 1);
   assert.equal(callsA[0].img, callsB[0].img, 'empty slot must use the same static sprite regardless of time');
+});
+
+test('HUD ambient container crossfades run exactly five times faster', () => {
+  assert.equal(HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER, 5);
+});
+
+test('damage keeps the empty sprite opaque underneath while the full sprite rapidly fades out', () => {
+  const { ctx, calls } = makeStubCtx();
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, 0, 0);
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, false, 0, 10);
+  assert.equal(calls[0].alpha, 1, 'empty sprite must be the fully opaque base');
+  assert.equal(calls[1].alpha, 1, 'full sprite starts damage transition fully opaque');
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, false, 0, 10 + HUD_FILL_CROSSFADE_MS / 2);
+  assert.equal(calls[0].alpha, 1);
+  assert.ok(calls.slice(1).every(call => Math.abs(call.alpha - 0.5) < 0.0001 || call.alpha < 0.5));
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, false, 0, 10 + HUD_FILL_CROSSFADE_MS);
+  assert.equal(calls.length, 1, 'only the empty sprite remains after damage crossfade');
+});
+
+test('mote regeneration reverses the transition and fades a full sprite over the empty sprite', () => {
+  const { ctx, calls } = makeStubCtx();
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, false, 0, 0);
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, 0, 10);
+  assert.equal(calls.length, 1, 'full sprite begins at zero opacity over the empty base');
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, 0, 10 + HUD_FILL_CROSSFADE_MS / 2);
+  assert.equal(calls[0].alpha, 1);
+  assert.ok(calls.slice(1).some(call => Math.abs(call.alpha - 0.5) < 0.0001));
+
+  calls.length = 0;
+  drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, 0, 10 + HUD_FILL_CROSSFADE_MS);
+  assert.ok(calls.length >= 2, 'full sprite is fully restored after regeneration crossfade');
+  assert.equal(calls[1].alpha, 1);
 });

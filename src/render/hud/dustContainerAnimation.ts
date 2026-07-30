@@ -127,6 +127,15 @@ interface SlotAnimState {
 
 const _slotStates = new Map<number, SlotAnimState>();
 
+interface SlotFillState {
+  isFilled: boolean;
+  transitionStartMs: number;
+}
+
+const _slotFillStates = new Map<number, SlotFillState>();
+export const HUD_FILL_CROSSFADE_MS = 120;
+export const HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER = 5;
+
 function randomFrameExcluding(exclude: number): number {
   let next = Math.floor(Math.random() * ANIM_FRAME_COUNT);
   if (next === exclude) next = (next + 1) % ANIM_FRAME_COUNT;
@@ -134,12 +143,12 @@ function randomFrameExcluding(exclude: number): number {
 }
 
 /** Creates fresh, independently-randomized animation state for a slot. */
-function createSlotState(nowMs: number): SlotAnimState {
+function createSlotState(nowMs: number, speedMultiplier = 1): SlotAnimState {
   // Randomized initial frame and an initial phase offset (a randomized starting point
   // within the first cycle) so freshly-created slots don't all animate in lockstep.
   const initialFrame = Math.floor(Math.random() * ANIM_FRAME_COUNT);
   const targetFrame = randomFrameExcluding(initialFrame);
-  const durationMs = 400 + Math.floor(Math.random() * 400);
+  const durationMs = (400 + Math.floor(Math.random() * 400)) / speedMultiplier;
   const phaseOffsetMs = Math.floor(Math.random() * durationMs);
   return {
     currentFrame: initialFrame,
@@ -153,7 +162,7 @@ function createSlotState(nowMs: number): SlotAnimState {
 }
 
 /** Advances slot state past any elapsed crossfades/holds, looping as many times as needed. */
-function advanceSlotState(state: SlotAnimState, nowMs: number): void {
+function advanceSlotState(state: SlotAnimState, nowMs: number, speedMultiplier = 1): void {
   // Bounded loop: with realistic durations/hold times and frame deltas this resolves in a
   // handful of iterations even after a long tab-backgrounding gap; the cap just prevents any
   // pathological input from hanging the render loop.
@@ -167,7 +176,7 @@ function advanceSlotState(state: SlotAnimState, nowMs: number): void {
       state.holdMs = Math.floor(Math.random() * 600);
       state.crossfading = false;
     } else {
-      state.durationMs = 400 + Math.floor(Math.random() * 400);
+      state.durationMs = (400 + Math.floor(Math.random() * 400)) / speedMultiplier;
       state.crossfading = true;
     }
   }
@@ -208,34 +217,20 @@ const HUD_IMAGE_SET: DustContainerImageSet = {
 function drawAnimatedDustContainerInternal(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, w: number, h: number,
-  isFilled: boolean,
   slotIndex: number,
   nowMs: number,
   images: DustContainerImageSet,
+  alpha = 1,
+  speedMultiplier = 1,
 ): void {
-  if (!isFilled) {
-    const emptyImg = images.getEmpty();
-    if (isSpriteReady(emptyImg)) {
-      ctx.drawImage(emptyImg, x, y, w, h);
-    } else {
-      // Fallback rectangle while loading image
-      ctx.fillStyle = 'rgba(12,10,7,0.88)';
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = 'rgba(105,82,35,0.7)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
-    }
-    return;
-  }
-
   let state = _slotStates.get(slotIndex);
   // Only reset on clock rollback (e.g. slot index reuse across sessions); normal forward
   // progress — including large gaps from a backgrounded tab — is handled by advanceSlotState.
   if (state === undefined || nowMs < state.startMs - 60_000) {
-    state = createSlotState(nowMs);
+    state = createSlotState(nowMs, speedMultiplier);
     _slotStates.set(slotIndex, state);
   } else {
-    advanceSlotState(state, nowMs);
+    advanceSlotState(state, nowMs, speedMultiplier);
   }
 
   const imgA = images.getFrame(state.currentFrame);
@@ -247,7 +242,7 @@ function drawAnimatedDustContainerInternal(
     // Holding on the settled frame, or the next frame isn't ready yet: draw current frame only.
     if (readyA) {
       ctx.save();
-      drawSlotImage(ctx, x, y, w, h, imgA, 1);
+      drawSlotImage(ctx, x, y, w, h, imgA, alpha);
       ctx.restore();
     } else {
       drawMissingFrameFallback(ctx, x, y, w, h, state, images);
@@ -264,12 +259,29 @@ function drawAnimatedDustContainerInternal(
     // on top of it.
     const t = Math.max(0, Math.min(1, (nowMs - state.startMs) / state.durationMs));
     ctx.save();
-    drawSlotImage(ctx, x, y, w, h, imgA, 1);
-    drawSlotImage(ctx, x, y, w, h, imgB, t);
+    drawSlotImage(ctx, x, y, w, h, imgA, alpha);
+    drawSlotImage(ctx, x, y, w, h, imgB, t * alpha);
     ctx.restore();
   } else {
     drawMissingFrameFallback(ctx, x, y, w, h, state, images);
   }
+}
+
+function drawEmptyDustContainer(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+  images: DustContainerImageSet,
+): void {
+  const emptyImg = images.getEmpty();
+  if (isSpriteReady(emptyImg)) {
+    ctx.drawImage(emptyImg, x, y, w, h);
+    return;
+  }
+  ctx.fillStyle = 'rgba(12,10,7,0.88)';
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(105,82,35,0.7)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
 }
 
 function drawMissingFrameFallback(
@@ -312,7 +324,11 @@ export function drawAnimatedDustContainer(
   slotIndex: number,
   nowMs: number,
 ): void {
-  drawAnimatedDustContainerInternal(ctx, x, y, w, h, isFilled, slotIndex, nowMs, NATIVE_IMAGE_SET);
+  if (!isFilled) {
+    drawEmptyDustContainer(ctx, x, y, w, h, NATIVE_IMAGE_SET);
+    return;
+  }
+  drawAnimatedDustContainerInternal(ctx, x, y, w, h, slotIndex, nowMs, NATIVE_IMAGE_SET);
 }
 
 /**
@@ -331,7 +347,31 @@ export function drawAnimatedDustContainerHud(
   slotIndex: number,
   nowMs: number,
 ): void {
-  drawAnimatedDustContainerInternal(ctx, x, y, w, h, isFilled, slotIndex, nowMs, HUD_IMAGE_SET);
+  let fillState = _slotFillStates.get(slotIndex);
+  if (fillState === undefined) {
+    // A newly observed slot is already in its settled state; only subsequent
+    // live mote-count changes should animate.
+    fillState = { isFilled, transitionStartMs: nowMs - HUD_FILL_CROSSFADE_MS };
+    _slotFillStates.set(slotIndex, fillState);
+  } else if (fillState.isFilled !== isFilled) {
+    fillState.isFilled = isFilled;
+    fillState.transitionStartMs = nowMs;
+  }
+
+  const transitionT = Math.max(0, Math.min(1, (nowMs - fillState.transitionStartMs) / HUD_FILL_CROSSFADE_MS));
+  const isTransitioning = transitionT < 1;
+  const fullAlpha = isTransitioning ? (fillState.isFilled ? transitionT : 1 - transitionT) : (isFilled ? 1 : 0);
+
+  // The empty sprite stays fully opaque underneath. Damage rapidly fades the
+  // full sprite away; regeneration performs the exact reverse, one changed
+  // slot at a time as the live mote count increases.
+  drawEmptyDustContainer(ctx, x, y, w, h, HUD_IMAGE_SET);
+  if (fullAlpha > 0) {
+    drawAnimatedDustContainerInternal(
+      ctx, x, y, w, h, slotIndex, nowMs, HUD_IMAGE_SET,
+      fullAlpha, HUD_AMBIENT_CROSSFADE_SPEED_MULTIPLIER,
+    );
+  }
 }
 
 /**
@@ -371,5 +411,6 @@ export function startDustContainerCanvasAnimation(
 /** Test-only: clears all per-slot animation state and preload flags. */
 export function _resetDustContainerAnimationStateForTests(): void {
   _slotStates.clear();
+  _slotFillStates.clear();
   _hudFramesPreloadStarted = false;
 }
