@@ -1174,7 +1174,6 @@ export function startGameScreen(
 
     const elapsedMs = lastTimestampMs === 0 ? FIXED_DT_MS : timestampMs - lastTimestampMs;
     lastTimestampMs = timestampMs;
-    pollGamepadInput(inputState, elapsedMs, canvas.width, canvas.height, timestampMs);
 
     // Reset per-frame freeze-profiler counters (works in both dev and production
     // because it also resets the production-safe sprite-bake budget counter).
@@ -1205,6 +1204,21 @@ export function startGameScreen(
     // ── Compute camera offset for screen → world conversion ──────────────
     const { offsetXPx, offsetYPx } = getCameraOffset(camera, virtualWidthPx, virtualHeightPx);
     const zoom = camera.zoom;
+    const player = world.clusters[0];
+    const playerAimOriginXPx = player === undefined
+      ? canvas.width * 0.5
+      : ((player.positionXWorld * zoom + offsetXPx) / virtualWidthPx) * canvas.width;
+    const playerAimOriginYPx = player === undefined
+      ? canvas.height * 0.5
+      : ((player.positionYWorld * zoom + offsetYPx) / virtualHeightPx) * canvas.height;
+    pollGamepadInput(
+      inputState,
+      canvas.width,
+      canvas.height,
+      timestampMs,
+      playerAimOriginXPx,
+      playerAimOriginYPx,
+    );
 
     // ── Editor mode gate ──────────────────────────────────────────────────
     // When the editor is active, it takes over camera and input; skip gameplay.

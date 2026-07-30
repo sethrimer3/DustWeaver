@@ -12,11 +12,20 @@
 import type { DustSelectionWheelController } from '../../screens/gameDustSelectionState';
 import { ParticleShape, getKindShape } from '../../sim/particles/kinds';
 import { getDustDefinition } from '../../sim/weaves/dustDefinition';
+import { loadImg, isSpriteReady } from '../imageCache';
 
 /** Distance (world units) from the player's visual center to each option icon at full expansion. */
 const DUST_WHEEL_RADIUS_WORLD = 24;
 /** Icon radius (virtual pixels) for each wheel option at full expansion. */
 const DUST_WHEEL_ICON_RADIUS_PX = 3.4;
+/**
+ * Icon sprites (SPRITES/DUST/DustTypes/*.png) are 30×33 native pixel-art —
+ * far smaller than the on-screen size they're drawn at here. Unlike the
+ * rest of the game's nearest-neighbor pixel-art rendering, the wheel draws
+ * these with imageSmoothingEnabled so upscaling reads as a crisp/HD icon
+ * rather than blocky native-resolution pixels.
+ */
+const DUST_WHEEL_SPRITE_SCALE = 2.4;
 /** Extra radius multiplier applied to the highlighted option's icon. */
 const DUST_WHEEL_HIGHLIGHT_SCALE = 1.35;
 /** Ring radius (virtual pixels) drawn around the currently-active option. */
@@ -171,15 +180,23 @@ export function renderDustSelectionWheel(
       ctx.fill();
     }
 
-    // Icon body — canonical color + shape.
+    // Icon body — sprite artwork when available (drawn smoothed/upscaled for
+    // an HD look), falling back to the canonical color + shape otherwise.
     ctx.globalAlpha = alpha;
-    ctx.fillStyle = def.colorHex;
-    drawKindShape(ctx, shape, iconCxPx, iconCyPx, iconRadiusPx);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-    ctx.lineWidth = 0.6;
-    drawKindShape(ctx, shape, iconCxPx, iconCyPx, iconRadiusPx);
-    ctx.stroke();
+    const spriteImg = def.spriteUrl !== undefined && def.spriteUrl.length > 0 ? loadImg(def.spriteUrl) : undefined;
+    if (spriteImg !== undefined && isSpriteReady(spriteImg)) {
+      const drawWidthPx = iconRadiusPx * 2 * DUST_WHEEL_SPRITE_SCALE;
+      const drawHeightPx = drawWidthPx * (spriteImg.naturalHeight / spriteImg.naturalWidth);
+      ctx.drawImage(spriteImg, iconCxPx - drawWidthPx / 2, iconCyPx - drawHeightPx / 2, drawWidthPx, drawHeightPx);
+    } else {
+      ctx.fillStyle = def.colorHex;
+      drawKindShape(ctx, shape, iconCxPx, iconCyPx, iconRadiusPx);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth = 0.6;
+      drawKindShape(ctx, shape, iconCxPx, iconCyPx, iconRadiusPx);
+      ctx.stroke();
+    }
   }
 
   // Label for the highlighted option only — keeps the wheel readable instead

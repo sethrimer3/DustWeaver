@@ -4,7 +4,6 @@ import { getKeyboardBindings, keyMatches } from './keybindings';
 const JOYSTICK_DEAD_ZONE_PX = 12;
 export const JOYSTICK_MAX_RADIUS_PX = 60;
 const GAMEPAD_AXIS_DEAD_ZONE = 0.2;
-const GAMEPAD_AIM_SPEED_PX_PER_SEC = 900;
 
 /** Hold < 200ms = quick attack; hold ≥ 200ms transitions to block mode. */
 const ATTACK_HOLD_THRESHOLD_MS = 200;
@@ -208,10 +207,11 @@ function deadZoneAxis(value: number | undefined): number {
 export function applyGamepadInputSnapshot(
   state: InputState,
   gamepad: GamepadInputSnapshot | null,
-  elapsedMs: number,
   canvasWidthPx: number,
   canvasHeightPx: number,
   nowMs: number,
+  aimOriginXPx = canvasWidthPx * 0.5,
+  aimOriginYPx = canvasHeightPx * 0.5,
 ): void {
   const gamepadPreviousState = getGamepadPreviousState(state);
   if (gamepad === null) {
@@ -231,14 +231,15 @@ export function applyGamepadInputSnapshot(
 
   const aimX = deadZoneAxis(gamepad.axes[2]);
   const aimY = deadZoneAxis(gamepad.axes[3]);
-  if (state.mouseXPx === 0 && state.mouseYPx === 0) {
-    state.mouseXPx = canvasWidthPx * 0.5;
-    state.mouseYPx = canvasHeightPx * 0.5;
-  }
   if (aimX !== 0 || aimY !== 0) {
-    const dtSec = Math.min(Math.max(elapsedMs, 0), 50) / 1000;
-    state.mouseXPx = Math.min(canvasWidthPx, Math.max(0, state.mouseXPx + aimX * GAMEPAD_AIM_SPEED_PX_PER_SEC * dtSec));
-    state.mouseYPx = Math.min(canvasHeightPx, Math.max(0, state.mouseYPx + aimY * GAMEPAD_AIM_SPEED_PX_PER_SEC * dtSec));
+    // Treat the stick as a direction, not as a slowly moving virtual cursor.
+    // The far-away target may intentionally sit outside the canvas: downstream
+    // screen-to-world conversion then preserves the exact stick angle even
+    // when the player is not centered on screen.
+    const magnitude = Math.hypot(aimX, aimY);
+    const aimDistancePx = Math.max(canvasWidthPx, canvasHeightPx);
+    state.mouseXPx = aimOriginXPx + aimX / magnitude * aimDistancePx;
+    state.mouseYPx = aimOriginYPx + aimY / magnitude * aimDistancePx;
   }
 
   const jump = gamepadButtonPressed(gamepad, 0);
@@ -300,10 +301,11 @@ export function applyGamepadInputSnapshot(
 /** Polls the first connected standard gamepad and applies it to gameplay input. */
 export function pollGamepadInput(
   state: InputState,
-  elapsedMs: number,
   canvasWidthPx: number,
   canvasHeightPx: number,
   nowMs: number,
+  aimOriginXPx?: number,
+  aimOriginYPx?: number,
 ): void {
   const pads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
   let active: Gamepad | null = null;
@@ -313,7 +315,15 @@ export function pollGamepadInput(
       break;
     }
   }
-  applyGamepadInputSnapshot(state, active, elapsedMs, canvasWidthPx, canvasHeightPx, nowMs);
+  applyGamepadInputSnapshot(
+    state,
+    active,
+    canvasWidthPx,
+    canvasHeightPx,
+    nowMs,
+    aimOriginXPx,
+    aimOriginYPx,
+  );
 }
 
 function applyJoystickToKeys(state: InputState): void {

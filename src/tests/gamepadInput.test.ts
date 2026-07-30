@@ -23,25 +23,25 @@ function pad(
 
 test('left stick and D-pad drive analog gameplay movement', () => {
   const input = createInputState();
-  applyGamepadInputSnapshot(input, pad([], [-0.6, 0, 0, 0]), 16, 800, 450, 100);
+  applyGamepadInputSnapshot(input, pad([], [-0.6, 0, 0, 0]), 800, 450, 100);
   const move = collectCommands(input).find(command => command.kind === CommandKind.MovePlayer);
   assert.ok(move && move.kind === CommandKind.MovePlayer);
   assert.ok(move.dx < -0.4);
 
-  applyGamepadInputSnapshot(input, pad([15]), 16, 800, 450, 116);
+  applyGamepadInputSnapshot(input, pad([15]), 800, 450, 116);
   const dpadMove = collectCommands(input).find(command => command.kind === CommandKind.MovePlayer);
   assert.deepEqual(dpadMove, { kind: CommandKind.MovePlayer, dx: 1, dy: 0 });
 });
 
 test('jump and pause buttons are edge-triggered', () => {
   const input = createInputState();
-  applyGamepadInputSnapshot(input, pad([0, 9]), 16, 800, 450, 100);
+  applyGamepadInputSnapshot(input, pad([0, 9]), 800, 450, 100);
   const first = collectCommands(input);
   assert.equal(first.filter(command => command.kind === CommandKind.Jump).length, 1);
   assert.equal(first.filter(command => command.kind === CommandKind.ReturnToMap).length, 1);
   assert.equal(input.isGamepadJumpHeldFlag, true);
 
-  applyGamepadInputSnapshot(input, pad([0, 9]), 16, 800, 450, 116);
+  applyGamepadInputSnapshot(input, pad([0, 9]), 800, 450, 116);
   const held = collectCommands(input);
   assert.equal(held.some(command => command.kind === CommandKind.Jump), false);
   assert.equal(held.some(command => command.kind === CommandKind.ReturnToMap), false);
@@ -49,23 +49,32 @@ test('jump and pause buttons are edge-triggered', () => {
 
 test('triggers mirror primary grapple and secondary shield input', () => {
   const input = createInputState();
-  applyGamepadInputSnapshot(input, pad([6, 7], [0, 0, 1, 0]), 16, 800, 450, 100);
+  applyGamepadInputSnapshot(input, pad([6, 7], [0, 0, 1, 0]), 800, 450, 100);
   const pressed = collectCommands(input);
   assert.equal(pressed.some(command => command.kind === CommandKind.GrappleFire), true);
   assert.equal(pressed.some(command => command.kind === CommandKind.ShieldWeaveHold), true);
 
-  applyGamepadInputSnapshot(input, pad(), 16, 800, 450, 400);
+  applyGamepadInputSnapshot(input, pad(), 800, 450, 400);
   const released = collectCommands(input);
   assert.equal(released.some(command => command.kind === CommandKind.GrappleRelease), true);
   assert.equal(released.some(command => command.kind === CommandKind.ShieldWeaveEnd), true);
 });
 
-test('right stick moves and clamps the virtual aim cursor', () => {
+test('right stick changes aim direction instantaneously from the player origin', () => {
   const input = createInputState();
-  applyGamepadInputSnapshot(input, pad([], [0, 0, 1, -1]), 50, 100, 80, 100);
-  assert.equal(input.mouseXPx, 95);
-  assert.equal(input.mouseYPx, 0);
-  applyGamepadInputSnapshot(input, pad([], [0, 0, 1, -1]), 50, 100, 80, 150);
-  assert.equal(input.mouseXPx, 100);
-  assert.equal(input.mouseYPx, 0);
+  applyGamepadInputSnapshot(input, pad([], [0, 0, 1, 0]), 100, 80, 100, 20, 30);
+  assert.deepEqual([input.mouseXPx, input.mouseYPx], [120, 30]);
+
+  // A sudden full reversal snaps to the opposite direction in one sample;
+  // elapsed time and the prior cursor position are not involved.
+  applyGamepadInputSnapshot(input, pad([], [0, 0, -1, 0]), 100, 80, 101, 20, 30);
+  assert.deepEqual([input.mouseXPx, input.mouseYPx], [-80, 30]);
+});
+
+test('diagonal right-stick aim preserves its exact angle outside the canvas', () => {
+  const input = createInputState();
+  applyGamepadInputSnapshot(input, pad([], [0, 0, 1, -1]), 100, 80, 100, 20, 30);
+  const dx = input.mouseXPx - 20;
+  const dy = input.mouseYPx - 30;
+  assert.ok(Math.abs(dx + dy) < 1e-9);
 });
