@@ -6,7 +6,7 @@ import { getMoteTypeConfig, getMoteTypeVisual, hasMoteTypeConfig } from '../sim/
 import { particleKindToString, stringToParticleKind } from '../editor/roomJsonSchema';
 import { DUST_KIND_OPTIONS } from '../editor/editorDropdownData';
 import { DUST_DEFINITIONS } from '../sim/weaves/dustDefinition';
-import { createDefaultProgress, sanitizePlayerDustProgress } from '../progression/playerProgress';
+import { createDefaultProgress, sanitizePlayerDustProgress, migrateStarterFireDustUnlock } from '../progression/playerProgress';
 import { applyCampaignStartingOptions } from '../progression/campaignStartingOptions';
 import { resolveEffectiveSelectedDustKind } from '../sim/weaves/dustWheelOptions';
 import { loadSaveSlot, saveSaveSlot, createNewSaveSlot } from '../progression/saveSlots';
@@ -107,6 +107,27 @@ test('campaign starting options unlock Fire Dust via its canonical id', () => {
     startingDustTypes: ['Golden', 'FireDust'],
   }, 'fresh');
   assert.ok(progress.unlockedDustKinds.includes(ParticleKind.FireDust));
+});
+
+test('existing saves with the full pre-Fire starter kit are backfilled with Fire Dust', () => {
+  const progress = createDefaultProgress();
+  progress.unlockedDustKinds = [ParticleKind.Golden, ParticleKind.Ice, ParticleKind.Nature, ParticleKind.Void, ParticleKind.Light];
+  migrateStarterFireDustUnlock(progress);
+  assert.ok(progress.unlockedDustKinds.includes(ParticleKind.FireDust));
+});
+
+test('saves missing part of the pre-Fire starter kit are not backfilled with Fire Dust', () => {
+  const progress = createDefaultProgress();
+  progress.unlockedDustKinds = [ParticleKind.Golden, ParticleKind.Ice];
+  migrateStarterFireDustUnlock(progress);
+  assert.ok(!progress.unlockedDustKinds.includes(ParticleKind.FireDust));
+});
+
+test('the Fire Dust backfill is idempotent and never duplicates the entry', () => {
+  const progress = createDefaultProgress();
+  progress.unlockedDustKinds = [ParticleKind.Golden, ParticleKind.Ice, ParticleKind.Nature, ParticleKind.Void, ParticleKind.Light, ParticleKind.FireDust];
+  migrateStarterFireDustUnlock(progress);
+  assert.equal(progress.unlockedDustKinds.filter(k => k === ParticleKind.FireDust).length, 1);
 });
 
 // ── 6. Fallback behavior for invalid / unknown mote ids ─────────────────────

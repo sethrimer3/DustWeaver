@@ -99,6 +99,13 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     // independent Sword + Shield unlocks (idempotent; never removes an
     // ability the save already has — see weaveMigration.ts).
     migrateLegacyWeaveUnlocks(parsed.progress);
+    // Backfill Fire Dust for existing saves created before it was added to
+    // the campaign's starting dust kit. `applyCampaignStartingOptions` only
+    // (re-)applies `startingDustTypes` to saves that have never explored a
+    // room, so a save that already has the rest of the pre-Fire starter kit
+    // (Golden/Ice/Nature/Void/Light) would otherwise never receive Fire Dust
+    // even after this campaign update — idempotent, never removes anything.
+    migrateStarterFireDustUnlock(parsed.progress);
     // Migrate timer fields (added for speedrun timer feature).
     if (typeof parsed.runTimerMs !== 'number' || !isFinite(parsed.runTimerMs) || parsed.runTimerMs < 0) {
       parsed.runTimerMs = 0;

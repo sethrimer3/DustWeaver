@@ -750,21 +750,6 @@ export function renderFrame(r: RenderFrameContext): void {
   // ── Void edge overlay (noisy black intrusion along exposed room boundaries) ─
   renderVoidEdge(ctx, currentRoom, ox, oy, zoom);
 
-  // ── Dust selection wheel (screen-space overlay, unclipped by room bounds,
-  //     drawn on top of world content but still in virtual-canvas pixel
-  //     space so it upscales identically to everything else). No-ops
-  //     cheaply when the wheel is fully closed.
-  {
-    const wheelPlayer = world.clusters[0];
-    if (wheelPlayer !== undefined) {
-      renderDustSelectionWheel(
-        ctx, dustWheel,
-        wheelPlayer.positionXWorld, wheelPlayer.positionYWorld,
-        ox, oy, zoom,
-      );
-    }
-  }
-
   // ── HUD layers (debug overlay, health bar, dust display, enemy bars, combat text) ──
   if (renderProfiler !== undefined) renderProfiler.stageBegin(STAGE_HUD);
   renderGameHud(r, nowMs);
@@ -803,6 +788,23 @@ export function renderFrame(r: RenderFrameContext): void {
   deviceCtx.restore();
   if (renderProfiler !== undefined) renderProfiler.stageEnd(STAGE_BLOOM);
   drawOffensiveDustOutlineOverlay(deviceCtx, snapshot, canvas.width, canvas.height, ox, oy, zoom);
+
+  // ── Dust selection wheel (device-canvas overlay, unclipped by room bounds,
+  //     drawn on top of world content directly at full device resolution so
+  //     the icon artwork and labels read as crisp/HD rather than inheriting
+  //     the game's native pixel-art blockiness). No-ops cheaply when the
+  //     wheel is fully closed.
+  {
+    const wheelPlayer = world.clusters[0];
+    if (wheelPlayer !== undefined) {
+      renderDustSelectionWheel(
+        deviceCtx, dustWheel,
+        wheelPlayer.positionXWorld, wheelPlayer.positionYWorld,
+        ox, oy, zoom,
+        canvas.width / virtualWidthPx, canvas.height / virtualHeightPx,
+      );
+    }
+  }
 
   // ── Device-canvas overlays (touch joystick, debug control hints) ─────────
   renderDeviceOverlay(r);
