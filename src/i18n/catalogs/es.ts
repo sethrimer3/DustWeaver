@@ -243,6 +243,8 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   // Editor
   'editor.customCampaignTitle': '🛠 Editor de campañas personalizadas',
   'editor.zoneEditorTitle': '🛠 Editor de zonas',
+  'editor.autosaveWork': 'Guardar trabajo automáticamente',
+  'editor.test': 'Probar',
   'editor.saveAndTest': '▶ Guardar y probar',
   'editor.save': '✔ Guardar',
   'editor.cancel': '✕ Cancelar',
@@ -251,6 +253,9 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
   'editor.brushLabel': 'Pincel:',
   'editor.edgeResizeTitle': 'Añadir / quitar fila o columna',
   'editor.saveChangesQuestion': '¿Guardar los cambios?',
+  'editor.unexportedChanges': '¡CAMBIOS SIN EXPORTAR! ¿Seguro que quieres descartarlos?',
+  'editor.discard': 'Descartar',
+  'editor.export': 'Exportar',
   'editor.yes': 'SÍ',
   'editor.no': 'NO',
 };

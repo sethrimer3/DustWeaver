@@ -1048,6 +1048,14 @@ export function startGameScreen(
     editorDebugControls?.handleEditorClosed();
   }, campaignSession ?? null);
 
+  function requestReturnToMainMenu(): void {
+    editorController.requestExit(() => {
+      isRunning = false;
+      detachInput();
+      callbacks.onReturnToMenu();
+    });
+  }
+
   editorDebugControls = createGameEditorDebugControls({
     uiRoot,
     editorController,
@@ -1101,9 +1109,7 @@ export function startGameScreen(
     onResetTransitionReveal: () => { armEntryFade(entryFadeState); },
     onResetFrameClock: () => { lastTimestampMs = 0; },
     onExitToMainMenu: () => {
-      isRunning = false;
-      detachInput();
-      callbacks.onReturnToMenu();
+      requestReturnToMainMenu();
     },
     onSave: () => {
       callbacks.onSave?.();
@@ -1129,9 +1135,7 @@ export function startGameScreen(
       lastTimestampMs = 0;
     },
     onExitToMainMenu: () => {
-      isRunning = false;
-      detachInput();
-      callbacks.onReturnToMenu();
+      requestReturnToMainMenu();
     },
     onDebugModeChanged: (isDebugMode) => {
       if (isDebugMode) {

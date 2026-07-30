@@ -252,6 +252,8 @@ export const EN_CATALOG = {
   // Leading glyphs are part of the button design and are kept in translations.
   'editor.customCampaignTitle': '🛠 Custom Campaign Editor',
   'editor.zoneEditorTitle': '🛠 Zone Editor',
+  'editor.autosaveWork': 'Autosave Work',
+  'editor.test': 'Test',
   'editor.saveAndTest': '▶ Save & Test',
   'editor.save': '✔ Save',
   'editor.cancel': '✕ Cancel',
@@ -260,6 +262,9 @@ export const EN_CATALOG = {
   'editor.brushLabel': 'Brush:',
   'editor.edgeResizeTitle': 'Add / Remove Row or Column',
   'editor.saveChangesQuestion': 'Save Changes?',
+  'editor.unexportedChanges': 'UNEXPORTED CHANGES! Are you sure you want to discard these?',
+  'editor.discard': 'Discard',
+  'editor.export': 'Export',
   'editor.yes': 'YES',
   'editor.no': 'NO',
 } as const satisfies Record<string, CatalogEntry>;

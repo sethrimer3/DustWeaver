@@ -267,13 +267,17 @@ test('Cancel discards without committing', () => {
   assert.ok(body.includes('closeEditor();'));
 });
 
-test('room switching commits at most once, and only on the explicit "save changes" branch', () => {
+test('room switching uses one shared decision path with autosave, save, and discard branches', () => {
   const source = readControllerSource();
-  const switchCommits = source.match(/commitActiveRoomToCampaign\('change-room'\)/g) ?? [];
-  // Two entry points (world map and visual map), one commit each.
-  assert.equal(switchCommits.length, 2);
-  // Each sits inside a showSaveChangesDialog save-branch whose sibling
-  // discard-branch calls discardCurrentRoomSessionChanges instead.
-  const discardBranches = source.match(/discardCurrentRoomSessionChanges\(state\.roomData\)/g) ?? [];
-  assert.ok(discardBranches.length >= 2, 'each switch offers a non-committing discard branch');
+  const body = source.slice(
+    source.indexOf('function switchRoomWithSaveDecision('),
+    source.indexOf('function collectActiveSavedRoomsForDevChecks('),
+  );
+  assert.ok(body.includes('if (autosaveWork)'));
+  assert.equal((body.match(/commitActiveRoomToCampaign\('change-room'\)/g) ?? []).length, 2,
+    'autosave and the explicit Save Changes branch each commit once');
+  assert.equal((body.match(/discardCurrentRoomSessionChanges\(/g) ?? []).length, 1,
+    'the explicit discard branch remains non-committing');
+  assert.equal((source.match(/switchRoomWithSaveDecision\(doSwitch\)/g) ?? []).length, 2,
+    'both world-map room switch entry points share the same decision path');
 });

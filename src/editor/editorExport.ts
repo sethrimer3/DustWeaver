@@ -277,9 +277,9 @@ async function runElectronProgressExport(
   isOfficialCampaign: boolean,
   progressRoot: HTMLElement,
   removeMissingRooms?: (roomIds: ReadonlySet<string>) => void,
-): Promise<void> {
+): Promise<boolean> {
   const electronApi = window.dustweaverElectron;
-  if (!electronApi) return;
+  if (!electronApi) return false;
 
   // Random per-export ID so the Cancel button can target this specific
   // export via 'dw:cancel-export' without disturbing a concurrent one.
@@ -320,6 +320,7 @@ async function runElectronProgressExport(
     // using the completion metadata the IPC result carries.
     const outcomeEvent = resolveExportOutcomeEvent(settled, result);
     if (outcomeEvent !== null) modal.update(outcomeEvent);
+    return result.ok;
   } catch (err) {
     if (!settled) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -341,6 +342,7 @@ async function runElectronProgressExport(
         });
       }
     }
+    return false;
   } finally {
     unsubscribe();
   }
@@ -362,13 +364,13 @@ async function runElectronProgressExport(
  * @param progressRoot     When provided and running in Electron, the progress
  *                         modal is appended here.
  */
-export function exportCampaignJson(
+export async function exportCampaignJson(
   session: EditableCampaignSession,
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   activeRoomData?: EditorRoomData | null,
   progressRoot?: HTMLElement | null,
   customBlockDefs?: import('../levels/campaignSchema').SavedCampaignV1['customBlockDefs'],
-): void {
+): Promise<boolean> {
   const buildExport = (): ReturnType<typeof assembleExportCampaign> => {
     let exported: ReturnType<typeof assembleExportCampaign>;
     if (session.campaignStore !== undefined) {
@@ -417,7 +419,7 @@ export function exportCampaignJson(
 
   // In Electron, write directly to userData/CUSTOM_CAMPAIGNS/<id>/ with progress.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(
+    return runElectronProgressExport(
       buildExport,
       session.source === 'main',
       progressRoot,
@@ -427,8 +429,8 @@ export function exportCampaignJson(
     ).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron custom campaign export error:', msg);
+      return false;
     });
-    return;
   }
 
   const exported = buildExport();
@@ -455,6 +457,7 @@ export function exportCampaignJson(
   // Also download the derived room-cache ZIP alongside the canonical JSON.
   // The ZIP is a convenience artifact; the .dwcampaign.json remains canonical.
   void downloadRoomCacheZip(exported, `${exported.campaign.id}_ROOMS.zip`);
+  return true;
 }
 
 /**
@@ -475,11 +478,11 @@ export function exportCampaignJson(
  * @param progressRoot      When provided and running in Electron, the progress
  *                          modal is appended to this element.
  */
-export function exportMainCampaignJson(
+export async function exportMainCampaignJson(
   pendingRoomEdits: ReadonlyMap<string, EditorRoomData>,
   progressRoot?: HTMLElement | null,
   campaignSpawn?: CampaignSpawnData | null,
-): void {
+): Promise<boolean> {
   const buildExport = (): SavedCampaignV1 => {
     if (import.meta.env.DEV) {
       for (const [, data] of pendingRoomEdits) {
@@ -541,11 +544,11 @@ export function exportMainCampaignJson(
 
   // In Electron, write directly to the project files with a progress modal.
   if (window.dustweaverElectron !== undefined && progressRoot != null) {
-    runElectronProgressExport(buildExport, true, progressRoot).catch((err: unknown) => {
+    return runElectronProgressExport(buildExport, true, progressRoot).catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[editorExport] Electron main campaign export error:', msg);
+      return false;
     });
-    return;
   }
 
   const exported = buildExport();
@@ -553,21 +556,20 @@ export function exportMainCampaignJson(
   // In Electron without a progressRoot (legacy callers) fall back to the old
   // synchronous IPC call so no regression occurs.
   if (window.dustweaverElectron !== undefined) {
-    window.dustweaverElectron
-      .saveOfficialCampaignToProject(exported)
-      .then((result) => {
-        if (result.ok) {
-          const dir = result.campaignDir ?? 'ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN';
-          window.alert(`Campaign saved to project files:\n${dir}`);
-        } else {
-          window.alert(`Campaign save failed:\n${result.error ?? 'Unknown error'}`);
-        }
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        window.alert(`Campaign save failed:\n${msg}`);
-      });
-    return;
+    try {
+      const result = await window.dustweaverElectron.saveOfficialCampaignToProject(exported);
+      if (result.ok) {
+        const dir = result.campaignDir ?? 'ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN';
+        window.alert(`Campaign saved to project files:\n${dir}`);
+        return true;
+      }
+      window.alert(`Campaign save failed:\n${result.error ?? 'Unknown error'}`);
+      return false;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      window.alert(`Campaign save failed:\n${msg}`);
+      return false;
+    }
   }
 
   // Browser / GitHub Pages fallback — trigger a download.
@@ -591,4 +593,5 @@ export function exportMainCampaignJson(
   // Also download the derived room-cache ZIP alongside the canonical JSON.
   // The ZIP is a convenience artifact; the .dwcampaign.json remains canonical.
   void downloadRoomCacheZip(exported, 'DustweaverCampaign_ROOMS.zip');
+  return true;
 }

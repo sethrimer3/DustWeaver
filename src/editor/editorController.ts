@@ -115,6 +115,7 @@ function arePositionMapsEqual(
   return true;
 }
 import { deepCloneRoomData, showSaveChangesDialog } from './editorSaveChangesDialog';
+import { showUnexportedChangesDialog } from './editorUnexportedChangesDialog';
 import { applyRoomDimensionChange, applyEdgeResize } from './editorRoomResize';
 import { handlePropertyChange, handleCrumbleModifierToggle } from './editorPropertyChange';
 import type { EditableCampaignSession } from './editableCampaignSession';
@@ -218,6 +219,8 @@ export interface EditorController {
   /** Lightweight per-frame backdrop view (Item E). Never triggers a full
    *  RoomDef conversion; rebuilt only when room content revision advances. */
   getBackdropRoom: () => EditorBackdropRoom | null;
+  /** Continue an exit action immediately, or gate it behind the unexported-work decision. */
+  requestExit: (onProceed: () => void) => void;
   /** Cleanup. */
   destroy: () => void;
 }
@@ -277,6 +280,10 @@ export function createEditorController(
   // update(), kept so closeEditor() can reset zoom back to default and
   // avoid leaking editor zoom into gameplay rendering.
   let activeCameraRef: CameraState | null = null;
+  let autosaveWork = false;
+  let hasUnexportedChanges = campaignSession?.source === 'new-draft';
+  let isExitDialogOpen = false;
+  let allowWindowClose = false;
 
   // Drag-paint tracking: last block position where Place/Delete acted during a drag
   // Initialized to out-of-range sentinels so the first drag always triggers.
@@ -419,6 +426,7 @@ export function createEditorController(
    */
   function markWorldMapDirty(): void {
     isWorldMapDirty = true;
+    hasUnexportedChanges = true;
     const store = campaignSession?.campaignStore;
     if (store === undefined) return;
     store.updateWorldMap(mergeWorldMapWithRegistry(campaignSession!, WORLD_NAMES, ROOM_REGISTRY, WORLD_ORDER));
@@ -523,6 +531,7 @@ export function createEditorController(
     persistSavedCampaignRoom(campaignSession, pendingRoomEdits, state.roomData);
     isCurrentRoomDirty = false;
     markHistorySaved(history);
+    hasUnexportedChanges = true;
     // The source-room half of any linked-room-creation link just became
     // persisted/authoritative — it is no longer part of an in-progress edit
     // session that a later Discard could roll back.
@@ -533,22 +542,102 @@ export function createEditorController(
     return true;
   }
 
-  function saveAndExportCampaign(): void {
+  function captureCustomBlockDefs(): NonNullable<EditableCampaignSession['campaign']['customBlockDefs']> {
+    return [...state.customBlockRegistry.values()].map(def =>
+      serializeCustomBlock(
+        def.id,
+        def.name,
+        def.tileWidth,
+        def.tileHeight,
+        def.pixelData,
+        def.properties,
+      ));
+  }
+
+  function noteCustomBlockDefinitionsChanged(): void {
+    hasUnexportedChanges = true;
+    if (campaignSession) campaignSession.campaign.customBlockDefs = captureCustomBlockDefs();
+  }
+
+  async function saveAndExportCampaign(): Promise<boolean> {
     commitActiveRoomToCampaign('export');
+    let succeeded: boolean;
     if (campaignSession) {
-      const customBlockDefs = state.customBlockRegistry.size > 0
-        ? [...state.customBlockRegistry.values()].map(def =>
-            serializeCustomBlock(def.id, def.name, def.tileWidth, def.tileHeight, def.pixelData))
-        : undefined;
-      exportCampaignJson(campaignSession, pendingRoomEdits, state.roomData, uiRoot, customBlockDefs);
+      const customBlockDefs = state.isActive
+        ? captureCustomBlockDefs()
+        : campaignSession.campaign.customBlockDefs;
+      succeeded = await exportCampaignJson(
+        campaignSession,
+        pendingRoomEdits,
+        state.roomData,
+        uiRoot,
+        customBlockDefs,
+      );
+    } else {
+      succeeded = await exportMainCampaignJson(
+        new Map(pendingRoomEdits),
+        uiRoot,
+        activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
+      );
+    }
+    if (succeeded) {
+      hasUnexportedChanges = false;
+      isWorldMapDirty = false;
+    }
+    return succeeded;
+  }
+
+  function requestExit(onProceed: () => void): void {
+    if (!hasUnexportedChanges && !isCurrentRoomDirty && !isWorldMapDirty) {
+      onProceed();
       return;
     }
-
-    exportMainCampaignJson(
-      new Map(pendingRoomEdits),
+    if (isExitDialogOpen) return;
+    isExitDialogOpen = true;
+    showUnexportedChangesDialog(
       uiRoot,
-      activeCampaignSession.campaign.campaign.campaignSpawn ?? null,
+      () => {
+        isExitDialogOpen = false;
+        onProceed();
+      },
+      () => {
+        isExitDialogOpen = false;
+        void saveAndExportCampaign().then((succeeded) => {
+          if (succeeded) onProceed();
+        });
+      },
     );
+  }
+
+  function handleBeforeUnload(event: BeforeUnloadEvent): void {
+    if (allowWindowClose || (!hasUnexportedChanges && !isCurrentRoomDirty && !isWorldMapDirty)) return;
+    event.preventDefault();
+    event.returnValue = '';
+    requestExit(() => {
+      allowWindowClose = true;
+      window.close();
+    });
+  }
+  window.addEventListener('beforeunload', handleBeforeUnload);
+
+  function switchRoomWithSaveDecision(doSwitch: () => void): void {
+    if (!isCurrentRoomDirty || !state.roomData) {
+      doSwitch();
+      return;
+    }
+    if (autosaveWork) {
+      commitActiveRoomToCampaign('change-room');
+      doSwitch();
+      return;
+    }
+    showSaveChangesDialog(uiRoot, () => {
+      commitActiveRoomToCampaign('change-room');
+      doSwitch();
+    }, () => {
+      discardCurrentRoomSessionChanges(state.roomData!);
+      isCurrentRoomDirty = false;
+      doSwitch();
+    });
   }
 
   function collectActiveSavedRoomsForDevChecks(): SavedRoomV2[] {
@@ -886,7 +975,7 @@ export function createEditorController(
       state.brushMode = workspacePrefs.brushMode;
 
       const campaignTitle = activeCampaignSession.campaign.campaign.title;
-      ui = createEditorUI(uiRoot, campaignTitle);
+      ui = createEditorUI(uiRoot, campaignTitle, autosaveWork);
       ui.applyWorkspaceUIPrefs({
         layerPanelCollapsed: workspacePrefs.layerPanelCollapsed,
         leftSidebarScrollTop: workspacePrefs.leftSidebarScrollTop,
@@ -1115,6 +1204,9 @@ export function createEditorController(
         onRoomSongChange: (songId: RoomSongId) => {
           runRoomFieldMutation('songId', room => { room.songId = songId; });
         },
+        onAutosaveWorkChange: (enabled: boolean) => {
+          autosaveWork = enabled;
+        },
         onSave: () => saveEdits(),
         onConfirm: () => confirmEdits(),
         onCancel: () => cancelEdits(),
@@ -1125,7 +1217,7 @@ export function createEditorController(
             window.alert('No changed rooms or world-map edits to export yet.');
           }
         },
-        onExportCampaignJson: () => saveAndExportCampaign(),
+        onExportCampaignJson: () => { void saveAndExportCampaign(); },
         onRunRoomAudit: () => runDevRoomAudit(),
         onRunRoomRoundTripValidation: () => runDevRoomRoundTripValidation(),
         onOpenVisualMap: () => openVisualMap(),
@@ -1179,6 +1271,7 @@ export function createEditorController(
             state.customBlockRegistry.set(parsed.def.id, bumpSpriteRevision(parsed.def));
             registerCustomBlockSprite(parsed.def);
             rebuildCustomBlockUsage();
+            noteCustomBlockDefinitionsChanged();
             ui?.update(state);
           });
         },
@@ -1204,6 +1297,7 @@ export function createEditorController(
               invalidateCustomBlockSprite(parsed.def);
               registerCustomBlockSprite(parsed.def);
             }
+            noteCustomBlockDefinitionsChanged();
             ui?.update(state);
           });
         },
@@ -1220,6 +1314,7 @@ export function createEditorController(
           const parsed = parseCustomBlockSource(sourceDef, { blockId: def.id });
           if (!parsed.ok) return;
           state.customBlockRegistry.set(blockId, { ...parsed.def, spriteRevision: def.spriteRevision });
+          noteCustomBlockDefinitionsChanged();
           // Sprite pixels didn't change — no need to invalidate the cached canvas.
           ui?.update(state);
         },
@@ -1239,6 +1334,7 @@ export function createEditorController(
           state.customBlockRegistry.set(parsed.def.id, bumpSpriteRevision(parsed.def));
           registerCustomBlockSprite(parsed.def);
           rebuildCustomBlockUsage();
+          noteCustomBlockDefinitionsChanged();
           ui?.update(state);
         },
         onDeleteCustomBlock: (blockId: string) => {
@@ -1266,6 +1362,7 @@ export function createEditorController(
           state.customBlockRegistry.delete(blockId);
           state.customBlockUsage.delete(blockId);
           invalidateCustomBlockSprite({ id: blockId } as import('../levels/customBlocks').CustomBlockDef);
+          noteCustomBlockDefinitionsChanged();
           ui?.update(state);
         },
         onSelectCustomBlockForPlacement: (blockId: string) => {
@@ -1698,18 +1795,7 @@ export function createEditorController(
           onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
         };
 
-        if (isCurrentRoomDirty && state.roomData) {
-          showSaveChangesDialog(uiRoot, () => {
-            commitActiveRoomToCampaign('change-room');
-            doSwitch();
-          }, () => {
-            discardCurrentRoomSessionChanges(state.roomData);
-            isCurrentRoomDirty = false;
-            doSwitch();
-          });
-        } else {
-          doSwitch();
-        }
+        switchRoomWithSaveDecision(doSwitch);
       },
       onLinkTransition: (room, transitionIndex) => {
         state.isWorldMapOpen = false;
@@ -1798,24 +1884,13 @@ export function createEditorController(
           onLoadRoom(roomDef, room.playerSpawnBlock[0], room.playerSpawnBlock[1]);
         };
 
-        if (isCurrentRoomDirty && state.roomData) {
-          showSaveChangesDialog(uiRoot, () => {
-            commitActiveRoomToCampaign('change-room');
-            doSwitch();
-          }, () => {
-            discardCurrentRoomSessionChanges(state.roomData);
-            isCurrentRoomDirty = false;
-            doSwitch();
-          });
-        } else {
-          doSwitch();
-        }
+        switchRoomWithSaveDecision(doSwitch);
       },
       onClose: () => {
         state.isVisualMapOpen = false;
         visualMapCleanup = null;
       },
-      onSaveAndExportCampaign: () => saveAndExportCampaign(),
+      onSaveAndExportCampaign: () => { void saveAndExportCampaign(); },
       onWorldMapDataChanged: () => { markWorldMapDirty(); },
       onRoomCreated: handleRoomCreatedFromVisualMap,
       requestCreateLinkedRoom: requestCreateLinkedRoomFromVisualMap,
@@ -2678,6 +2753,7 @@ export function createEditorController(
   }
 
   function destroy(): void {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
     if (inputCleanup) { inputCleanup(); inputCleanup = null; }
     if (ui) { ui.destroy(); ui = null; }
     if (worldMapCleanup) { worldMapCleanup(); worldMapCleanup = null; }
@@ -2694,6 +2770,7 @@ export function createEditorController(
     loadRoomForEditing,
     getRoomDef,
     getBackdropRoom,
+    requestExit,
     destroy,
   };
 }

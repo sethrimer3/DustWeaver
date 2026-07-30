@@ -67,7 +67,7 @@ test('controller snapshots session UI state before ui.destroy() and restores it 
   // Restore must happen after createEditorUI() builds the new instance, and
   // must be conditional (so a null snapshot — first-ever open — leaves the
   // UI's own all-collapsed/both-visible defaults untouched).
-  const createIdx = source.indexOf('ui = createEditorUI(uiRoot, campaignTitle);');
+  const createIdx = source.indexOf('ui = createEditorUI(uiRoot, campaignTitle, autosaveWork);');
   const restoreIdx = source.indexOf('if (sessionUIState) ui.applySessionUIState(sessionUIState);');
   assert.ok(createIdx >= 0 && restoreIdx >= 0);
   assert.ok(restoreIdx > createIdx, 'restore must happen after the new EditorUI is constructed');

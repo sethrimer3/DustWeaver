@@ -121,7 +121,11 @@ export interface EditorUI {
 export type { RoomEdge, EditorUICallbacks } from './editorState';
 import { t } from '../i18n';
 
-export function createEditorUI(root: HTMLElement, campaignTitle?: string | null): EditorUI {
+export function createEditorUI(
+  root: HTMLElement,
+  campaignTitle?: string | null,
+  initialAutosaveWork = false,
+): EditorUI {
   let callbacks: EditorUICallbacks | null = null;
   let animatedBackgroundPreviewCanvases: HTMLCanvasElement[] = [];
   const animatedBackgroundPreviewEffects = new WeakMap<HTMLCanvasElement, TheroBackgroundEffect>();
@@ -278,8 +282,24 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
   } else {
     title.textContent = t('editor.zoneEditorTitle');
   }
-  title.style.cssText = `font-size: 15px; color: ${ACCENT_GOLD}; margin-bottom: 12px; font-weight: bold;`;
+  title.style.cssText = `font-size: 15px; color: ${ACCENT_GOLD}; margin-bottom: 7px; font-weight: bold;`;
   leftContentGroup.appendChild(title);
+
+  // ── Autosave Work ───────────────────────────────────────────────────────
+  // This is working-session persistence only. It commits rooms as the author
+  // leaves them, but deliberately does not export the campaign.
+  const autosaveLabel = document.createElement('label');
+  autosaveLabel.style.cssText = `
+    display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+    color: #f1e7cb; font-size: 11px; cursor: pointer; user-select: none;
+  `;
+  const autosaveCheckbox = document.createElement('input');
+  autosaveCheckbox.type = 'checkbox';
+  autosaveCheckbox.checked = initialAutosaveWork;
+  autosaveCheckbox.style.cssText = `accent-color: ${ACCENT_GOLD}; cursor: pointer;`;
+  autosaveLabel.appendChild(autosaveCheckbox);
+  autosaveLabel.appendChild(document.createTextNode(t('editor.autosaveWork')));
+  leftContentGroup.appendChild(autosaveLabel);
 
   // ── Confirm / Cancel bar ─────────────────────────────────────────────────
   const confirmCancelBar = document.createElement('div');
@@ -303,6 +323,21 @@ export function createEditorUI(root: HTMLElement, campaignTitle?: string | null)
     background: rgba(30,70,120,0.5); border-color: #55aaff; color: #55aaff;
   `;
   confirmCancelBar.appendChild(saveBtn);
+
+  function applyAutosaveWorkVisualState(enabled: boolean): void {
+    confirmBtn.textContent = enabled ? t('editor.test') : t('editor.saveAndTest');
+    saveBtn.disabled = enabled;
+    saveBtn.style.background = enabled ? 'rgba(70,70,70,0.45)' : 'rgba(30,70,120,0.5)';
+    saveBtn.style.borderColor = enabled ? '#777' : '#55aaff';
+    saveBtn.style.color = enabled ? '#888' : '#55aaff';
+    saveBtn.style.cursor = enabled ? 'not-allowed' : 'pointer';
+    saveBtn.setAttribute('aria-disabled', String(enabled));
+  }
+  autosaveCheckbox.addEventListener('change', () => {
+    applyAutosaveWorkVisualState(autosaveCheckbox.checked);
+    callbacks?.onAutosaveWorkChange(autosaveCheckbox.checked);
+  });
+  applyAutosaveWorkVisualState(initialAutosaveWork);
 
   const cancelBtn = makeBtn(t('editor.cancel'), () => {
     if (!isCancelConfirmationPending) {

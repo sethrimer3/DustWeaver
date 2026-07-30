@@ -360,6 +360,7 @@ export interface EditorUICallbacks {
   onBackgroundChange: (backgroundId: BackgroundId) => void;
   onBackgroundBlurChange: (useBlur: boolean) => void;
   onRoomSongChange: (songId: RoomSongId) => void;
+  onAutosaveWorkChange: (enabled: boolean) => void;
   onSave: () => void;
   onConfirm: () => void;
   onCancel: () => void;
