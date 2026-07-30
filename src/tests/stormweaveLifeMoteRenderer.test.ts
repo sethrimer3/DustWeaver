@@ -5,7 +5,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ParticleKind, EQUIPPABLE_KINDS } from '../sim/particles/kinds';
-import { buildStormweaveMotePalette } from '../render/stormweaveLifeMoteRenderer';
+import {
+  blendStormweaveMotePalettes,
+  buildStormweaveMotePalette,
+} from '../render/stormweaveLifeMoteRenderer';
 import { getMoteTypeVisual } from '../sim/motes/moteTypeConfig';
 
 test('buildStormweaveMotePalette produces a distinct palette per equippable mote type', () => {
@@ -16,6 +19,18 @@ test('buildStormweaveMotePalette produces a distinct palette per equippable mote
   assert.equal(bodyHexes.size, EQUIPPABLE_KINDS.length, 'each kind must have a distinct body colour');
   assert.equal(glowHexes.size, EQUIPPABLE_KINDS.length, 'each kind must have a distinct glow colour');
   assert.equal(trailHexes.size, EQUIPPABLE_KINDS.length, 'each kind must have a distinct trail colour');
+});
+
+test('mote palettes blend smoothly between dust types', () => {
+  const golden = buildStormweaveMotePalette(ParticleKind.Golden);
+  const ice = buildStormweaveMotePalette(ParticleKind.Ice);
+  assert.deepEqual(blendStormweaveMotePalettes(golden, ice, 0), golden);
+  assert.deepEqual(blendStormweaveMotePalettes(golden, ice, 1), ice);
+  const middle = blendStormweaveMotePalettes(golden, ice, 0.5);
+  assert.notEqual(middle.bodyHex, golden.bodyHex);
+  assert.notEqual(middle.bodyHex, ice.bodyHex);
+  assert.notEqual(middle.trailMainHex, golden.trailMainHex);
+  assert.notEqual(middle.trailMainHex, ice.trailMainHex);
 });
 
 test('Void Dust palette is dark purple/violet, not gold', () => {

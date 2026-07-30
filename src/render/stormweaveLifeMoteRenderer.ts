@@ -87,6 +87,45 @@ export function buildStormweaveMotePalette(kind: number): StormweaveMotePalette 
   };
 }
 
+function blendHex(from: string, to: string, blend: number): string {
+  const t = Math.max(0, Math.min(1, blend));
+  const channel = (offset: number) => Math.round(
+    Number.parseInt(from.slice(offset, offset + 2), 16) * (1 - t)
+      + Number.parseInt(to.slice(offset, offset + 2), 16) * t,
+  ).toString(16).padStart(2, '0');
+  return `#${channel(1)}${channel(3)}${channel(5)}`;
+}
+
+export function blendStormweaveMotePalettes(
+  from: StormweaveMotePalette,
+  to: StormweaveMotePalette,
+  blend: number,
+): StormweaveMotePalette {
+  return {
+    bodyHex: blendHex(from.bodyHex, to.bodyHex, blend),
+    highlightHex: blendHex(from.highlightHex, to.highlightHex, blend),
+    glowOuterHex: blendHex(from.glowOuterHex, to.glowOuterHex, blend),
+    glowInnerHex: blendHex(from.glowInnerHex, to.glowInnerHex, blend),
+    trailOuterHex: blendHex(from.trailOuterHex, to.trailOuterHex, blend),
+    trailMainHex: blendHex(from.trailMainHex, to.trailMainHex, blend),
+    trailCoreHex: blendHex(from.trailCoreHex, to.trailCoreHex, blend),
+    shieldCrescentHex: blendHex(from.shieldCrescentHex, to.shieldCrescentHex, blend),
+    shieldCrescentCenterHex: blendHex(from.shieldCrescentCenterHex, to.shieldCrescentCenterHex, blend),
+    shieldImpactHex: blendHex(from.shieldImpactHex, to.shieldImpactHex, blend),
+  };
+}
+
+function getMotePalette(motes: StormweaveLifeMotes, index: number, fallbackKind: number): StormweaveMotePalette {
+  const transition = motes.getMoteColorTransition(index, fallbackKind);
+  const from = buildStormweaveMotePalette(transition.fromKind);
+  if (transition.blend >= 1 || transition.fromKind === transition.toKind) return from;
+  return blendStormweaveMotePalettes(
+    from,
+    buildStormweaveMotePalette(transition.toKind),
+    transition.blend,
+  );
+}
+
 function renderRibbonPass(
   ctx: CanvasRenderingContext2D,
   motes: StormweaveLifeMotes,
@@ -246,9 +285,10 @@ export function renderStormweaveLifeMotes(
     const sizing = getStormweaveTrailSizing(motes.trailIntensity);
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 0; i < motes.moteCount; i++) {
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, palette.trailOuterHex, 0.13);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, palette.trailMainHex, 0.37);
-      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, palette.trailCoreHex, 0.74);
+      const motePalette = getMotePalette(motes, i, selectedDustKind);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.glowHeadWidth, motePalette.trailOuterHex, 0.13);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.goldHeadWidth, motePalette.trailMainHex, 0.37);
+      renderRibbonPass(ctx, motes, i, offsetXPx, offsetYPx, scalePx, sizing.coreHeadWidth, motePalette.trailCoreHex, 0.74);
     }
   }
   if (shield.isActive) {
@@ -293,28 +333,29 @@ export function renderStormweaveLifeMotes(
   }
   ctx.globalAlpha = 1;
   const sizing = getStormweaveTrailSizing(motes.trailIntensity);
-  motes.forEachMote((xWorld, yWorld) => {
+  motes.forEachMote((xWorld, yWorld, index) => {
+    const motePalette = getMotePalette(motes, index, selectedDustKind);
     const x = Math.round(xWorld * scalePx + offsetXPx);
     const y = Math.round(yWorld * scalePx + offsetYPx);
     if (graphicsQuality === 'high') {
       const radius = sizing.headGlowRadius * scalePx;
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = 0.07 + motes.trailIntensity * 0.06;
-      ctx.fillStyle = palette.glowOuterHex;
+      ctx.fillStyle = motePalette.glowOuterHex;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha = 0.16 + motes.trailIntensity * 0.09;
-      ctx.fillStyle = palette.glowInnerHex;
+      ctx.fillStyle = motePalette.glowInnerHex;
       ctx.beginPath();
       ctx.arc(x, y, radius * 0.55, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
-    ctx.fillStyle = palette.bodyHex;
+    ctx.fillStyle = motePalette.bodyHex;
     ctx.fillRect(x - 1, y - 1, 2, 2);
-    ctx.fillStyle = palette.highlightHex;
+    ctx.fillStyle = motePalette.highlightHex;
     ctx.fillRect(x, y, 1, 1);
   });
   ctx.restore();

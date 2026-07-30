@@ -10,9 +10,12 @@ import {
   STORMWEAVE_TRAIL_LIFETIME_SEC,
   STORMWEAVE_TRAIL_SAMPLES_PER_MOTE,
   STORMWEAVE_GLOW_ATTACK_SEC,
+  MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD,
+  MOTE_SWITCH_COLOR_BLEND_SEC,
 } from '../sim/stormweave/lifeMotes';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
 import { MOMENTUM_COMBAT_MIN_HORIZONTAL_SPEED } from '../sim/momentumCombatConfig';
+import { ParticleKind } from '../sim/particles/kinds';
 
 const DT_SEC = 1 / 60;
 
@@ -72,6 +75,44 @@ describe('Stormweave current-mote synchronization', () => {
 });
 
 describe('Stormweave life-mote steering', () => {
+  test('a dust switch rushes motes into the centered 10x10 handoff zone before changing colour', () => {
+    const cloud = new StormweaveLifeMotes();
+    cloud.reset(0, 0, 1);
+    cloud.setMoteState(0, 40, 0);
+    cloud.update(DT_SEC, 0, 0, 0, 0, false, undefined, ParticleKind.Golden);
+    cloud.update(DT_SEC, 0, 0, 0, 0, false, undefined, ParticleKind.Ice);
+
+    let transition = cloud.getMoteColorTransition(0, ParticleKind.Ice);
+    assert.equal(transition.fromKind, ParticleKind.Golden);
+    assert.equal(transition.toKind, ParticleKind.Ice);
+    assert.equal(transition.blend, 0, 'colour must remain old while outside the center zone');
+
+    let enteredCenter = false;
+    for (let i = 0; i < 180; i++) {
+      cloud.update(DT_SEC, 0, 0, 0, 0, false, undefined, ParticleKind.Ice);
+      const mote = cloud.getMote(0)!;
+      transition = cloud.getMoteColorTransition(0, ParticleKind.Ice);
+      if (Math.abs(mote.xWorld) <= MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD
+        && Math.abs(mote.yWorld) <= MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD) {
+        enteredCenter = true;
+        break;
+      }
+      assert.equal(transition.blend, 0, 'colour changed before the mote reached the player');
+    }
+    assert.equal(enteredCenter, true, 'mote should rush into the handoff zone');
+
+    const blendTicks = Math.ceil(MOTE_SWITCH_COLOR_BLEND_SEC / DT_SEC);
+    for (let i = 0; i < Math.floor(blendTicks / 2); i++) {
+      cloud.update(DT_SEC, 0, 0, 0, 0, false, undefined, ParticleKind.Ice);
+    }
+    transition = cloud.getMoteColorTransition(0, ParticleKind.Ice);
+    assert.ok(transition.blend > 0 && transition.blend < 1, 'colour should be partway through a smooth blend');
+    for (let i = 0; i < blendTicks; i++) {
+      cloud.update(DT_SEC, 0, 0, 0, 0, false, undefined, ParticleKind.Ice);
+    }
+    assert.equal(cloud.getMoteColorTransition(0, ParticleKind.Ice).blend, 1);
+  });
+
   test('motes follow the recorded player route instead of cutting across a turn', () => {
     const cloud = new StormweaveLifeMotes();
     cloud.reset(0, 0, 1);

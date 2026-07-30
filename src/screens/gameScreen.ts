@@ -1710,6 +1710,7 @@ export function startGameScreen(
           stormweavePlayer.velocityYWorld,
           getGraphicsQuality() === 'high',
           world.shieldWeave,
+          world.selectedDustKind,
         );
       } else {
         deactivateShieldWeave(world.shieldWeave);

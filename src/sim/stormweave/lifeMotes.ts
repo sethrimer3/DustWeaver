@@ -67,6 +67,17 @@ const IDLE_WANDER_PERIOD_VARIATION_SEC = 0.9;
 // every mote, which is what kept causing the stationary trail pop even after
 // the perpendicular-direction fix.
 const FOLLOW_BLEND_RATE_PER_SEC = 3.5;
+export const MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD = 5;
+export const MOTE_SWITCH_COLOR_BLEND_SEC = 0.4;
+const MOTE_SWITCH_ATTRACTION_PER_SEC2 = 34;
+const MOTE_SWITCH_MAX_SPEED_WORLD_PER_SEC = 420;
+
+export interface StormweaveMoteColorTransition {
+  readonly fromKind: number;
+  readonly toKind: number;
+  /** Smoothstep-weighted render blend in the inclusive 0..1 range. */
+  readonly blend: number;
+}
 
 export function getStormweaveMoteCount(currentMoteCount: number): number {
   return Math.min(MAX_LIFE_MOTES, normalizeMoteCount(currentMoteCount));
@@ -137,6 +148,13 @@ export class StormweaveLifeMotes {
   private readonly baseDelaySamples = new Float32Array(MAX_LIFE_MOTES);
   private readonly delayVariationSamples = new Float32Array(MAX_LIFE_MOTES);
   private readonly followResponseScale = new Float32Array(MAX_LIFE_MOTES);
+  // 0 = settled, 1 = rushing into the player-center handoff zone,
+  // 2 = smoothly changing colour after reaching that zone.
+  private readonly switchPhase = new Uint8Array(MAX_LIFE_MOTES);
+  private readonly switchFromKind = new Int16Array(MAX_LIFE_MOTES);
+  private readonly switchToKind = new Int16Array(MAX_LIFE_MOTES);
+  private readonly switchColorBlend = new Float32Array(MAX_LIFE_MOTES);
+  private observedDustKind: number | undefined;
   // Idle-wander noise-walk state (requirement 3): current wander velocity
   // and integrated offset from the path-follow anchor, plus per-mote
   // randomized retarget period/phase so motes decorrelate from each other.
@@ -201,6 +219,19 @@ export class StormweaveLifeMotes {
       yWorld: this.yWorld[index],
       velocityXWorld: this.velocityXWorld[index],
       velocityYWorld: this.velocityYWorld[index],
+    };
+  }
+
+  getMoteColorTransition(index: number, fallbackKind: number): StormweaveMoteColorTransition {
+    if (index < 0 || index >= this.count || this.observedDustKind === undefined) {
+      return { fromKind: fallbackKind, toKind: fallbackKind, blend: 1 };
+    }
+    const rawBlend = this.switchPhase[index] === 1 ? 0 : this.switchColorBlend[index];
+    const blend = rawBlend * rawBlend * (3 - 2 * rawBlend);
+    return {
+      fromKind: this.switchFromKind[index],
+      toKind: this.switchToKind[index],
+      blend,
     };
   }
 
@@ -297,6 +328,11 @@ export class StormweaveLifeMotes {
       this.baseDelaySamples[i] = 4 + ((i * 19 + serial * 23) % 32);
       this.delayVariationSamples[i] = 2 + ((i * 7 + serial * 5) % 8) * 0.6;
       this.followResponseScale[i] = 0.72 + ((i * 13 + serial * 3) % 15) * 0.04;
+      const initialKind = this.observedDustKind ?? 0;
+      this.switchPhase[i] = 0;
+      this.switchFromKind[i] = initialKind;
+      this.switchToKind[i] = initialKind;
+      this.switchColorBlend[i] = 1;
       this.noiseVelX[i] = 0;
       this.noiseVelY[i] = 0;
       this.wanderOffsetX[i] = 0;
@@ -321,6 +357,7 @@ export class StormweaveLifeMotes {
     playerVelocityYWorld: number,
     enableHighQualityTrails: boolean,
     shieldGeometry?: ShieldArcGeometry,
+    selectedDustKind?: number,
   ): void {
     const dt = Math.max(0, Math.min(dtSec, 0.05));
     if (dt <= 0) return;
@@ -351,6 +388,7 @@ export class StormweaveLifeMotes {
       this.visualIntensity += (targetIntensity - this.visualIntensity) * (1 - Math.exp(-7 * dt));
     }
     this.recordPlayerPath(playerXWorld, playerYWorld, playerVelocityXWorld, playerVelocityYWorld);
+    this.updateSelectedDustKind(selectedDustKind);
     this.separationX.fill(0, 0, this.count);
     this.separationY.fill(0, 0, this.count);
 
@@ -395,6 +433,21 @@ export class StormweaveLifeMotes {
     const idleWeight = 1 - followWeight;
     const playerSpeedWorldPerSec = Math.hypot(playerVelocityXWorld, playerVelocityYWorld);
     for (let i = 0; i < this.count; i++) {
+      if (this.switchPhase[i] === 1
+        && Math.abs(this.xWorld[i] - playerXWorld) <= MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD
+        && Math.abs(this.yWorld[i] - playerYWorld) <= MOTE_SWITCH_CENTER_HALF_EXTENT_WORLD) {
+        this.switchPhase[i] = 2;
+        this.switchColorBlend[i] = 0;
+      }
+      if (this.switchPhase[i] === 2) {
+        this.switchColorBlend[i] = Math.min(1,
+          this.switchColorBlend[i] + dt / MOTE_SWITCH_COLOR_BLEND_SEC);
+        if (this.switchColorBlend[i] >= 1) {
+          this.switchPhase[i] = 0;
+          this.switchFromKind[i] = this.switchToKind[i];
+        }
+      }
+      const isRushingForSwitch = this.switchPhase[i] === 1;
       const phase = this.phase[i] + this.elapsedSec * this.waveAngularSpeed[i];
       const shieldAngle = isShieldActive ? getShieldMoteAngleRad(shieldGeometry, i) : 0;
       const livingOffset = isShieldActive ? Math.sin(phase) * 0.22 : 0;
@@ -445,12 +498,16 @@ export class StormweaveLifeMotes {
         this.wanderOffsetY[i] -= this.wanderOffsetY[i] * pullT;
       }
 
-      const targetX = isShieldActive
+      const targetX = isRushingForSwitch
+        ? playerXWorld
+        : isShieldActive
         ? shieldGeometry.centerXWorld + Math.cos(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
         : feedForwardX + this.preferredOffsetX[i] * 0.22
           + perpendicularX * waveOffset * followWeight
           + this.wanderOffsetX[i] * idleWeight;
-      const targetY = isShieldActive
+      const targetY = isRushingForSwitch
+        ? playerYWorld
+        : isShieldActive
         ? shieldGeometry.centerYWorld + Math.sin(shieldAngle) * (shieldGeometry.radiusWorld + livingOffset)
         : feedForwardY + this.preferredOffsetY[i] * 0.22
           + perpendicularY * waveOffset * followWeight
@@ -459,7 +516,7 @@ export class StormweaveLifeMotes {
       const dy = targetY - this.yWorld[i];
       const distance = Math.hypot(dx, dy);
 
-      if (isShieldActive) {
+      if (isShieldActive && !isRushingForSwitch) {
         if (!this.locked[i] && distance <= SHIELD_MOTE_LOCK_DISTANCE_WORLD) {
           this.locked[i] = 1;
         }
@@ -475,7 +532,9 @@ export class StormweaveLifeMotes {
         }
       }
 
-      const attraction = isShieldActive
+      const attraction = isRushingForSwitch
+        ? distance * MOTE_SWITCH_ATTRACTION_PER_SEC2
+        : isShieldActive
         ? distance * 28
         : getStormweaveAttractionAcceleration(distance) * this.followResponseScale[i];
       if (distance > 0.000001) {
@@ -492,8 +551,10 @@ export class StormweaveLifeMotes {
       // the per-mote personality base) so lag converges instead of growing
       // unboundedly when sustained player speed would otherwise exceed a
       // mote's fixed cap (requirement 4).
-      const maxCatchUpSpeed = MAX_CATCH_UP_SPEED_WORLD_PER_SEC * (isShieldActive ? 1 : this.followResponseScale[i])
-        + (isShieldActive ? 0 : playerSpeedWorldPerSec * 1.2);
+      const maxCatchUpSpeed = isRushingForSwitch
+        ? MOTE_SWITCH_MAX_SPEED_WORLD_PER_SEC + playerSpeedWorldPerSec
+        : MAX_CATCH_UP_SPEED_WORLD_PER_SEC * (isShieldActive ? 1 : this.followResponseScale[i])
+          + (isShieldActive ? 0 : playerSpeedWorldPerSec * 1.2);
       if (speed > maxCatchUpSpeed) {
         const scale = maxCatchUpSpeed / speed;
         this.velocityXWorld[i] *= scale;
@@ -511,6 +572,32 @@ export class StormweaveLifeMotes {
     this.trailWriteByMote.fill(0);
     this.lastTrailSampleTimeSec.fill(this.elapsedSec);
     this.trailReadyTimeSec.fill(this.elapsedSec + TRAIL_REBASE_DURATION_SEC);
+  }
+
+  private updateSelectedDustKind(selectedDustKind: number | undefined): void {
+    if (selectedDustKind === undefined) return;
+    if (this.observedDustKind === undefined) {
+      this.observedDustKind = selectedDustKind;
+      for (let i = 0; i < this.count; i++) {
+        this.switchPhase[i] = 0;
+        this.switchFromKind[i] = selectedDustKind;
+        this.switchToKind[i] = selectedDustKind;
+        this.switchColorBlend[i] = 1;
+      }
+      return;
+    }
+    if (selectedDustKind === this.observedDustKind) return;
+    this.observedDustKind = selectedDustKind;
+    for (let i = 0; i < this.count; i++) {
+      // A rapid second switch uses the prior target as its stable starting
+      // colour; the rush phase holds that colour until the mote is hidden
+      // beneath the player again.
+      this.switchFromKind[i] = this.switchToKind[i];
+      this.switchToKind[i] = selectedDustKind;
+      this.switchColorBlend[i] = 0;
+      this.switchPhase[i] = 1;
+      this.locked[i] = 0;
+    }
   }
 
   private sampleMoteTrail(moteIndex: number): void {
