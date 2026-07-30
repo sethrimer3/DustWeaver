@@ -1,5 +1,9 @@
 [CmdletBinding()]
-param([string]$RepositoryRoot, [int]$GitTimeoutSeconds = 60)
+param(
+    [string]$RepositoryRoot,
+    [int]$GitTimeoutSeconds = 60,
+    [switch]$TestForceIndexRestoreFailure
+)
 $ErrorActionPreference = 'Continue'
 . (Join-Path $PSScriptRoot 'autosync-common.ps1')
 
@@ -39,8 +43,41 @@ $lockOwned = $false
 $paths = $null
 $indexBackup = $null
 $indexExistedBeforeStaging = $false
+$stagingOccurred = $false
+$commitSucceeded = $false
+$indexRestored = $false
+$preserveIndexBackup = $false
+
+function Restore-OriginalIndex {
+    if (-not $script:stagingOccurred -or $script:commitSucceeded -or $script:indexRestored) { return }
+    $indexPath = Join-Path $script:paths.GitDirectory 'index'
+    try {
+        if ($TestForceIndexRestoreFailure) {
+            throw 'test-only forced index restoration failure'
+        }
+        if ($script:indexExistedBeforeStaging) {
+            if (-not (Test-Path -LiteralPath $script:indexBackup -PathType Leaf)) {
+                throw "index backup is missing: '$($script:indexBackup)'"
+            }
+            Copy-Item -LiteralPath $script:indexBackup -Destination $indexPath -Force -ErrorAction Stop
+        } elseif (Test-Path -LiteralPath $indexPath) {
+            Remove-Item -LiteralPath $indexPath -Force -ErrorAction Stop
+        }
+        $script:indexRestored = $true
+        Remove-Item -LiteralPath $script:indexBackup -Force -ErrorAction Stop
+        $script:indexBackup = $null
+    } catch {
+        $script:preserveIndexBackup = $true
+        if ($null -ne $script:paths -and -not (Test-Path -LiteralPath $script:paths.PauseMarker)) {
+            New-Item -ItemType File -Path $script:paths.PauseMarker -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        throw "INDEX RESTORATION FAILED. Auto-sync remains paused. Preserve and recover from '$($script:indexBackup)'. $($_.Exception.Message)"
+    }
+}
+
 try {
     $RepositoryRoot = if ($RepositoryRoot) { Get-DustWeaverRepositoryRoot $RepositoryRoot } else { Get-DustWeaverRepositoryRoot }
+    [void](Test-DustWeaverRepositoryIdentity $RepositoryRoot -ThrowOnFailure)
     $paths = Get-AutosyncPaths $RepositoryRoot
 
     # Gate 1: before locking or staging.
@@ -90,21 +127,21 @@ try {
         if ($indexExistedBeforeStaging) {
             Copy-Item -LiteralPath $indexPath -Destination $indexBackup -ErrorAction Stop
         }
+        $stagingOccurred = $true
         Invoke-CheckedGit @('add', '-A') $RepositoryRoot $GitTimeoutSeconds | Out-Null
 
         # Gate 2: immediately before commit. If pause appeared after staging,
         # restore the exact pre-sync index; working-tree content is preserved.
         if (Stop-IfPaused $paths.PauseMarker) {
-            if ($indexExistedBeforeStaging) {
-                Copy-Item -LiteralPath $indexBackup -Destination $indexPath -Force -ErrorAction Stop
-            } elseif (Test-Path -LiteralPath $indexPath) {
-                Remove-Item -LiteralPath $indexPath -Force -ErrorAction Stop
-            }
+            Restore-OriginalIndex
             exit 0
         }
         & git -C $RepositoryRoot diff --cached --quiet
         if ($LASTEXITCODE -eq 1) {
             Invoke-CheckedGit @('commit', '-m', "Auto-sync $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')") $RepositoryRoot $GitTimeoutSeconds | Out-Null
+            $commitSucceeded = $true
+            Remove-Item -LiteralPath $indexBackup -Force -ErrorAction Stop
+            $indexBackup = $null
         } elseif ($LASTEXITCODE -ne 0) { throw 'git diff --cached --quiet failed' }
     }
 
@@ -121,13 +158,20 @@ try {
     Write-Host 'DustWeaver auto-sync completed successfully.'
     exit 0
 } catch {
-    Write-Error "DustWeaver auto-sync stopped safely: $($_.Exception.Message)"
+    $originalError = $_.Exception.Message
+    try {
+        Restore-OriginalIndex
+    } catch {
+        Write-Error "DustWeaver auto-sync stopped unsafely: $($_.Exception.Message)"
+        exit 1
+    }
+    Write-Error "DustWeaver auto-sync stopped safely: $originalError"
     exit 1
 } finally {
     if ($lockOwned -and $null -ne $paths -and (Test-Path -LiteralPath $paths.RunningLock)) {
         Remove-Item -LiteralPath $paths.RunningLock -Force -ErrorAction SilentlyContinue
     }
-    if ($indexBackup -and (Test-Path -LiteralPath $indexBackup)) {
+    if (-not $preserveIndexBackup -and $indexBackup -and (Test-Path -LiteralPath $indexBackup)) {
         Remove-Item -LiteralPath $indexBackup -Force -ErrorAction SilentlyContinue
     }
 }

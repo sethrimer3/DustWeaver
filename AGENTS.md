@@ -62,7 +62,7 @@ See [`docs/AUTOSYNC_WORKFLOW.md`](docs/AUTOSYNC_WORKFLOW.md) for commands and re
 
 - All AI coding work is performed directly on `main`. Do not create, switch to, or push a feature branch, and do not open a pull request, unless the user explicitly requests it.
 - Before editing, confirm `main` is checked out. When the tree is clean, update it with a safe fast-forward-only pull.
-- Before investigation that could lead to edits, run `powershell -NoProfile -File scripts/pause-autosync.ps1`. Keep auto-sync paused through investigation, implementation, focused/full validation, commit, synchronization, and push.
+- Before investigation that could lead to edits, run `powershell -NoProfile -File scripts/pause-autosync.ps1` and require exit code 0. A marker alone is insufficient: do not edit unless the helper confirms auto-sync is quiescent. Keep auto-sync paused through investigation, implementation, focused/full validation, commit, synchronization, and push.
 - Make one coherent commit. Synchronize safely (normally `git pull --rebase origin main`), resolve conflicts manually, and push without force to `origin/main`.
 - Resume auto-sync only after confirming the completed commit exists on `origin/main`.
 - If work is interrupted, validation fails, a conflict occurs, or push/verification fails, leave auto-sync paused and report the exact repository state. Incomplete work must remain uncommitted.

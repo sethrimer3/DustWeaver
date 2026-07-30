@@ -41,6 +41,8 @@ Get-ChildItem -LiteralPath $RepositoriesRoot -Directory | ForEach-Object {
     try {
         $dustWeaverScript = Join-Path $repository 'scripts\autosync.ps1'
         if ($repositoryName -eq 'DustWeaver' -and (Test-Path -LiteralPath $dustWeaverScript)) {
+            . (Join-Path $repository 'scripts\autosync-common.ps1')
+            [void](Test-DustWeaverRepositoryIdentity $repository -ThrowOnFailure)
             Write-SyncLog 'Syncing DustWeaver through repository safety protocol'
             $output = & powershell.exe -NoProfile -NonInteractive -File $dustWeaverScript -RepositoryRoot $repository 2>&1
             Write-SyncLog "  DustWeaver protocol: $($output -join [Environment]::NewLine)"

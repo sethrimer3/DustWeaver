@@ -10,18 +10,24 @@ cannot become automatic commits.
 powershell -NoProfile -File scripts/pause-autosync.ps1
 powershell -NoProfile -File scripts/autosync-status.ps1
 powershell -NoProfile -File scripts/resume-autosync.ps1
+powershell -NoProfile -File scripts/tests/autosync-integration.ps1
 ```
 
 The pause marker is `.git/AUTOSYNC_PAUSED`; it is never tracked. The scheduled
 process checks it before staging, before committing, and before pulling,
 rebasing, or pushing. A paused run exits successfully without changing Git
-state.
+state. Every helper first verifies that the resolved repository is DustWeaver
+using its configured `origin`, expected files, and package metadata.
 
 ## Agent procedure
 
 1. Confirm `main` and inspect the tree. Preserve unrelated changes. If clean,
    update with a fast-forward-only pull.
-2. Pause auto-sync before investigation or editing and confirm status.
+2. Pause auto-sync before investigation or editing and require exit code 0.
+   The helper creates the marker immediately, then waits up to 90 seconds for
+   an active lock owner to finish. A marker without a successful, quiescent
+   result is not permission to edit. Override the bound when needed with
+   `-WaitTimeoutSeconds <seconds>`.
 3. Keep it paused throughout editing, validation, commit, rebase, and push.
 4. Create one coherent commit directly on `main`, synchronize safely, and push
    without force to `origin/main`.
@@ -54,10 +60,29 @@ in-progress operations; resolve them manually. Resume refuses during one.
 Resume warns but does not block on a dirty tree. This permits intentional local
 work while making clear that the next scheduled run may commit it.
 
+Before staging, auto-sync saves the exact Git index. If staging or commit fails,
+times out, or a pause arrives before commit, it restores that index byte-for-byte
+and leaves working-tree content untouched. The backup is deleted only after a
+successful commit or successful restoration. If restoration fails, auto-sync
+creates the pause marker, preserves the reported
+`.git/AUTOSYNC_INDEX_BACKUP_*` file, and exits nonzero for manual recovery.
+
 ## Scheduled task
 
-Task `\SyncGithubRepos` retains its ten-minute schedule and launches
-`wscript.exe "C:\Users\srime\Documents\GitHub\sync-repos-hidden.vbs"`. Its
-PowerShell implementation delegates DustWeaver to `scripts/autosync.ps1`;
-other repositories retain their prior behavior. While paused, DustWeaver exits
+Task `\SyncGithubRepos` retains its ten-minute schedule, user context, hidden
+execution, and `C:\Users\srime\Documents\GitHub` working directory. It launches:
+
+```text
+wscript.exe "C:\Users\srime\Documents\GitHub\DustWeaver\scripts\scheduled-sync-all-repos-hidden.vbs"
+```
+
+That tracked wrapper runs `scripts/scheduled-sync-all-repos.ps1`, which verifies
+DustWeaver's identity and delegates it to `scripts/autosync.ps1`; other
+repositories retain their prior behavior. While paused, DustWeaver exits
 successfully and the scheduler continues servicing other repositories.
+
+Run the disposable Git-repository regression suite with:
+
+```powershell
+powershell -NoProfile -File scripts/tests/autosync-integration.ps1
+```
