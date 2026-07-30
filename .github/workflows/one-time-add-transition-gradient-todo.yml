@@ -1,0 +1,52 @@
+name: One-time transition-gradient Todo update
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-time-add-transition-gradient-todo.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Insert Todo item and remove this workflow
+        shell: python
+        run: |
+          from pathlib import Path
+
+          todo_path = Path("docs/Todo.md")
+          workflow_path = Path(".github/workflows/one-time-add-transition-gradient-todo.yml")
+          text = todo_path.read_text(encoding="utf-8")
+
+          anchor = "- [ ] Continue hardening resident-room / zone-resident loading toward the goal of room-level instant transitions and longer loading only between zones."
+          item = "- [ ] Fix Room Transition Gradient Width edits so they resize only the visual gradient and never move the authored transition. Repro: select a room transition in the editor, note its `xBlock`/`yBlock` and actual crossing/trigger location, then change `gradientWidthBlocks`; a right-facing transition currently moves because `src/editor/editorPropertyChange.ts` adds `oldGw - newGw` to `xBlock`, and the same compensating mutation exists for downward transitions on `yBlock`. Remove position mutation from the width-property path and keep the transition opening, trigger/crossing line, linked-room alignment, target spawn behavior, and map/editor position fixed while only the gradient's inward visual depth changes. Audit all four directions because right is confirmed and down shares the same code pattern; verify left/up as regression cases and ensure editor preview, runtime fade geometry, save/load, undo/redo, copy/paste, multi-selection edits, and room-resize behavior agree on the same coordinate semantics. Likely files: `src/editor/editorPropertyChange.ts`, transition inspector/preview geometry, runtime transition-gradient rendering helpers, and focused editor transition tests. Add deterministic tests asserting `xBlock`, `yBlock`, `positionBlock`, opening geometry, and linked target data remain byte-for-byte unchanged after width edits in every direction while `gradientWidthBlocks` alone changes; manually smoke-test widening and narrowing right/left/up/down transitions, then run targeted transition/editor tests, `npm run build`, `npm run lint`, and `npm test`."
+
+          if item not in text:
+              if anchor not in text:
+                  raise RuntimeError("Todo insertion anchor was not found; refusing to edit")
+              text = text.replace(anchor, anchor + "\n" + item, 1)
+              todo_path.write_text(text, encoding="utf-8")
+
+          workflow_path.unlink(missing_ok=True)
+
+      - name: Commit Todo update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "docs: add transition gradient width position bug"
+          git pull --rebase origin main
+          git push origin HEAD:main
