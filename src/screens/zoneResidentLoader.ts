@@ -49,6 +49,11 @@ import {
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
+import {
+  isZoneEntryReadinessComplete,
+  addZoneEntryViewportTasks,
+  runChunkPrewarmSliceNow,
+} from './roomRenderChunkWarmScheduler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +94,8 @@ interface ZoneLoadState {
   failedCount:  number;
   /** performance.now() when building started (after yield frames). */
   t0:           number;
+  /** True if we have queued the prewarm tasks for this zone yet. */
+  tasksQueued:  boolean;
 }
 
 // ── Module-level constants ────────────────────────────────────────────────────
@@ -184,6 +191,7 @@ export class ZoneResidentLoader {
       builtCount:    0,
       failedCount:   0,
       t0:            0,
+      tasksQueued:   false,
     };
 
     if (import.meta.env.DEV) {
@@ -201,7 +209,13 @@ export class ZoneResidentLoader {
    * @param campaignSeed         Same seed used in startZoneLoad.
    * @returns True when the active zone satisfies all readiness criteria.
    */
-  tickZoneLoad(residentRoomManager: ResidentRoomManager, campaignSeed: number): boolean {
+  tickZoneLoad(
+    residentRoomManager: ResidentRoomManager,
+    campaignSeed: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+  ): boolean {
     const state = this._activeZone;
     if (state === null) return true;
 
@@ -291,7 +305,7 @@ export class ZoneResidentLoader {
     }
 
     // ── Check zone readiness ──────────────────────────────────────────────
-    if (this._isZoneReadyNow(state, residentRoomManager)) {
+    if (this._isZoneReadyNow(state, residentRoomManager, vpWPx, vpHPx, scalePx)) {
       const elapsed = performance.now() - state.t0;
       this._readyZones.add(state.worldNumber);
       if (import.meta.env.DEV) {
@@ -325,6 +339,8 @@ export class ZoneResidentLoader {
           return false;
         }
       }
+      // Note: Full directed-entry readiness is not re-verified here because it requires viewport sizes,
+      // and this cheap check is mainly for quick validations.
       return true;
     }
     return false;
@@ -446,6 +462,9 @@ export class ZoneResidentLoader {
   private _isZoneReadyNow(
     state:               ZoneLoadState,
     residentRoomManager: ResidentRoomManager,
+    vpWPx:               number,
+    vpHPx:               number,
+    scalePx:             number,
   ): boolean {
     // All builds must be done (no active generator, full queue walk complete).
     if (state.activeGen !== null) return false;
@@ -460,6 +479,22 @@ export class ZoneResidentLoader {
       if (!areRoomSpritesReady(room)) return false;
       if (!isRoomBackgroundDecodeReady(room)) return false;
     }
+
+    // Queue directed-entry tasks exactly once after all builds finish.
+    if (!state.tasksQueued) {
+      addZoneEntryViewportTasks(state.roomIds, this._registry, vpWPx, vpHPx, scalePx);
+      state.tasksQueued = true;
+    }
+
+    // Drive prewarm work deterministically while the overlay is visible.
+    // Give it a healthy time budget per frame (e.g. 16ms) to chew through chunks quickly.
+    runChunkPrewarmSliceNow(16);
+
+    // Finally, strictly validate directed-entry foreground/background coverage.
+    if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, vpWPx, vpHPx, scalePx)) {
+      return false;
+    }
+
     return true;
   }
 

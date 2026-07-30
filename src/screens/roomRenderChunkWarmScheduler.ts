@@ -937,8 +937,9 @@ export function addZoneEntryViewportTasks(
 }
 
 function computeRenderStateKeyForEntry(room: RoomDef, runtime: RoomRuntimeEntry): string | null {
-  if (runtime.blockerKeys === null || runtime.blockerKeys === undefined) return null;
-  return computeRoomRenderStateKey(room, runtime.blockerKeys);
+  if (runtime.blockerKeys === null) return null;
+  // undefined means computed successfully with no blockers, pass it through
+  return computeRoomRenderStateKey(room, runtime.blockerKeys as ReadonlySet<string> | undefined);
 }
 
 /**

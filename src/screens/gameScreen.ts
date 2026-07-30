@@ -828,7 +828,7 @@ export function startGameScreen(
     zoneLoader: {
       startZoneLoad: (worldNumber) => { _zoneLoader.startZoneLoad(worldNumber, residentRoomManager); },
       getZoneRoomIds: (worldNumber) => _zoneLoader.getZoneRoomIds(worldNumber),
-      tickZoneLoad: () => _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED),
+      tickZoneLoad: () => _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED, virtualWidthPx, virtualHeightPx, camera.zoom),
       getZoneProgress: () => _zoneLoader.getZoneProgress(residentRoomManager),
       buildZoneRoomIdSet: (worldNumber) => _zoneLoader.buildZoneRoomIdSet(worldNumber),
       evictInactiveZoneResidents: (activeWorldNumber, previousWorldNumber) => {
@@ -1306,7 +1306,7 @@ export function startGameScreen(
     // handles its own yield frames internally.  The loading overlay is updated
     // with progress text each frame.
     if (initialZoneLoad.isActive) {
-      const _zoneDone = _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED);
+      const _zoneDone = _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED, virtualWidthPx, virtualHeightPx, camera.zoom);
 
       // Update overlay progress text.
       const _zoneProgress = _zoneLoader.getZoneProgress(residentRoomManager);
@@ -1337,14 +1337,7 @@ export function startGameScreen(
           );
           logWallTemplateDiagnosticsSummary('startup');
         }
-        // Queue zone entry viewport prewarm tasks for idle-time warming.
-        addZoneEntryViewportTasks(
-          _zoneLoader.getZoneRoomIds(currentRoom.worldNumber ?? 1),
-          ROOM_REGISTRY,
-          virtualWidthPx,
-          virtualHeightPx,
-          camera.zoom,
-        );
+        // Zone entry viewport tasks are now queued exactly once internally by ZoneResidentLoader
         residentBuildScheduler.refreshFromNeighborhood();
         _updateRadiusReadyCounts();
       }

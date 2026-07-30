@@ -26,6 +26,7 @@
 import { RoomChunkCache } from './chunkRenderCache';
 import type { CachedWallLayout } from './blockWallLayoutCache';
 import { isSpriteAtlasEnabled } from '../atlases/spriteAtlasConfig';
+import { BLOCK_SIZE_SMALL } from '../../levels/roomDef';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -291,7 +292,7 @@ export function isWallPrewarmViewportCovered(entry: DirectedEntry, targetOffsetX
     targetOffsetX, targetOffsetY,
     entry.vpWPx, entry.vpHPx,
     entry.scalePx,
-    0, // margin handled by cache logic/builder
+    BLOCK_SIZE_SMALL, // margin handled by cache logic/builder
   );
 }
 
@@ -307,7 +308,7 @@ export function isBgPrewarmViewportCovered(entry: DirectedEntry, targetOffsetX: 
     targetOffsetX, targetOffsetY,
     entry.vpWPx, entry.vpHPx,
     entry.scalePx,
-    0,
+    BLOCK_SIZE_SMALL,
   );
 }
 

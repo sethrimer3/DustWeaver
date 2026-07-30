@@ -537,8 +537,6 @@ export class RoomTransitionLoadCoordinator {
     // Zone ready — activate target room via submitTransition (takes hot-swap).
     const pending = this.zoneTransition.takePendingActivation();
     const prevWorldNumber = d.getCurrentRoom().worldNumber ?? 1;
-    // Queue zone entry viewport prewarm tasks for the new zone.
-    d.queueZoneEntryViewportTasks(d.zoneLoader.getZoneRoomIds(pending.targetWorldNumber));
     this.isReissuingZoneActivation = true;
     try {
       this.submitTransition(pending.targetRoom, pending.spawnXBlock, pending.spawnYBlock, pending.vx, pending.vy, pending.dir);

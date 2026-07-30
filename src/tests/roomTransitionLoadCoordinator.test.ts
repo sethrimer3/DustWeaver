@@ -471,7 +471,6 @@ test('cross-zone completion: pending cleared before re-issue, no recursive defer
   // The re-issued activation went through the hot-swap path, not a second deferral.
   assert.equal(h.events.filter(e => e.startsWith('startZoneLoad')).length, 1, 'zone load started exactly once');
   assert.ok(h.events.includes('setWorld:b'), 're-issued transition hot-swapped the target');
-  assert.ok(h.events.includes('queueZoneEntryViewportTasks:1'));
   assert.ok(h.events.includes('evictInactiveZone:2:1'), 'old-zone residents evicted after activation');
   const idx = (e: string): number => h.events.indexOf(e);
   assert.ok(idx('setWorld:b') < idx('evictInactiveZone:2:1'), 'activation precedes old-zone eviction');
