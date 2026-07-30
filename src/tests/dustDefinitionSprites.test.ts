@@ -22,3 +22,18 @@ test('Fire Dust has a registered sprite asset (no longer falls back to a color s
   const def = getDustDefinition(ParticleKind.FireDust);
   assert.equal(def.spriteUrl, 'SPRITES/DUST/DustTypes/Fire_DustType.png');
 });
+
+test('every equippable mote type has the expected single-word wheel shortName', () => {
+  const expected: Partial<Record<ParticleKind, string>> = {
+    [ParticleKind.Golden]: 'Gold',
+    [ParticleKind.Ice]: 'Frost',
+    [ParticleKind.Nature]: 'Verdant',
+    [ParticleKind.Void]: 'Void',
+    [ParticleKind.Light]: 'Luminant',
+    [ParticleKind.FireDust]: 'Fire',
+  };
+  for (const kind of EQUIPPABLE_KINDS) {
+    const def = getDustDefinition(kind);
+    assert.equal(def.shortName, expected[kind], `unexpected shortName for ${def.displayName}`);
+  }
+});

@@ -546,6 +546,7 @@ export function updateSnapshotInPlace(
   b.newSwordHandAnchorXWorld = world.newSwordHandAnchorXWorld;
   b.newSwordHandAnchorYWorld = world.newSwordHandAnchorYWorld;
   b.newSwordCurrentAngleRad = world.newSwordCurrentAngleRad;
+  b.characterId               = world.characterId;
   b.grasshopperCount          = world.grasshopperCount;
 
   b.playerWeaveAimDirXWorld    = world.playerWeaveAimDirXWorld;
@@ -631,20 +632,6 @@ export function refreshSnapshotWorldArrayRefs(
   w.hWorld                = world.wallHWorld;
   w.isPlatformFlag        = world.wallIsPlatformFlag;
   w.platformEdge          = world.wallPlatformEdge;
-  w.themeIndex            = world.wallThemeIndex;
-  w.isInvisibleFlag       = world.wallIsInvisibleFlag;
-  w.rampOrientationIndex  = world.wallRampOrientationIndex;
-  w.isPillarHalfWidthFlag = world.wallIsPillarHalfWidthFlag;
-  w.surfaceRimStyleIndex  = world.wallSurfaceRimStyleIndex;
-  w.surfaceRimStyleTable  = world.wallSurfaceRimStyleTable;
-
-  // ── Top-level typed-array fields ─────────────────────────────────────────
-  raw.grasshopperXWorld              = world.grasshopperXWorld;
-  raw.grasshopperYWorld              = world.grasshopperYWorld;
-  raw.isGrasshopperAliveFlag         = world.isGrasshopperAliveFlag;
-  raw.squareStampedeTrailXWorld      = world.squareStampedeTrailXWorld;
-  raw.squareStampedeTrailYWorld      = world.squareStampedeTrailYWorld;
-  raw.squareStampedeTrailHead        = world.squareStampedeTrailHead;
   raw.squareStampedeTrailCount       = world.squareStampedeTrailCount;
   raw.slimeSnailTrailCol             = world.slimeSnailTrailCol;
   raw.slimeSnailTrailRow             = world.slimeSnailTrailRow;

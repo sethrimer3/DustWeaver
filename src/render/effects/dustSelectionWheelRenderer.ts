@@ -24,7 +24,7 @@ import { getDustDefinition } from '../../sim/weaves/dustDefinition';
 import { loadImg, isSpriteReady } from '../imageCache';
 
 /** Distance (world units) from the player's visual center to each option icon at full expansion. */
-const DUST_WHEEL_RADIUS_WORLD = 24;
+const DUST_WHEEL_RADIUS_WORLD = 36;
 /** Icon radius (virtual pixels, pre device-scale) for each wheel option at full expansion. */
 const DUST_WHEEL_ICON_RADIUS_PX = 3.4;
 /**
@@ -34,15 +34,29 @@ const DUST_WHEEL_ICON_RADIUS_PX = 3.4;
  * virtual canvas) means the upscale reads as a crisp/HD icon instead of
  * blocky native-resolution pixels.
  */
-const DUST_WHEEL_SPRITE_SCALE = 2.4;
+const DUST_WHEEL_SPRITE_SCALE = 1.8;
 /** Extra radius multiplier applied to the highlighted option's icon. */
 const DUST_WHEEL_HIGHLIGHT_SCALE = 1.35;
 /** Ring radius (virtual pixels, pre device-scale) drawn around the currently-active option. */
 const DUST_WHEEL_ACTIVE_RING_EXTRA_PX = 1.6;
 /** Base label font size in virtual pixels, pre device-scale (scaled up like everything else here). */
-const DUST_WHEEL_LABEL_FONT_PX = 6;
+const DUST_WHEEL_LABEL_FONT_PX = 4.8;
 /** Gap (virtual pixels, pre device-scale) between the bottom of an icon and the top of its label. */
 const DUST_WHEEL_LABEL_GAP_PX = 3;
+/** How strongly each label is tinted toward its dust's canonical color (0 = white, 1 = full color). */
+const DUST_WHEEL_LABEL_TINT_STRENGTH = 0.55;
+
+/** Mixes a #rrggbb color toward white by `strength` (0 = unchanged, 1 = white) — keeps labels readable on a dark backdrop while still reading as "that dust's color". */
+function tintTowardWhite(colorHex: string, strength: number): string {
+  const hex = colorHex.replace('#', '');
+  if (hex.length !== 6) return '#ffffff';
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const mix = (channel: number) => Math.round(channel + (255 - channel) * (1 - strength));
+  const toHex = (channel: number) => channel.toString(16).padStart(2, '0');
+  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+}
 
 function drawKindShape(
   ctx: CanvasRenderingContext2D,
@@ -175,6 +189,16 @@ export function renderDustSelectionWheel(
   const prevSmoothing = deviceCtx.imageSmoothingEnabled;
   deviceCtx.imageSmoothingEnabled = true;
 
+  // Two passes so every label draws on top of every icon (z-order), instead
+  // of a later icon in iteration order painting over an earlier icon's label.
+  interface LabelLayout {
+    readonly def: ReturnType<typeof getDustDefinition>;
+    readonly isHighlighted: boolean;
+    readonly labelXPx: number;
+    readonly labelYPx: number;
+  }
+  const labelLayouts: LabelLayout[] = [];
+
   for (let i = 0; i < options.length; i++) {
     const option = options[i];
     const iconCxPx = playerScreenXPx + Math.cos(option.angleRad) * radiusXPx;
@@ -226,19 +250,26 @@ export function renderDustSelectionWheel(
       deviceCtx.stroke();
     }
 
-    // Name label — short single-word title, centered directly below the icon.
+    labelLayouts.push({
+      def, isHighlighted,
+      labelXPx: iconCxPx,
+      labelYPx: iconBottomPx + DUST_WHEEL_LABEL_GAP_PX * uniformDeviceScale,
+    });
+  }
+
+  // Second pass — name labels drawn after every icon, so they always render
+  // in front of all sprite artwork regardless of wheel position/overlap.
+  for (const { def, isHighlighted, labelXPx, labelYPx } of labelLayouts) {
     deviceCtx.globalAlpha = alpha * (isHighlighted ? 1 : 0.75);
     const fontPx = DUST_WHEEL_LABEL_FONT_PX * uniformDeviceScale * (isHighlighted ? DUST_WHEEL_HIGHLIGHT_SCALE : 1);
-    deviceCtx.font = `${fontPx}px monospace`;
+    deviceCtx.font = `bold ${fontPx}px Cinzel, Georgia, serif`;
     deviceCtx.textAlign = 'center';
     deviceCtx.textBaseline = 'top';
-    const labelXPx = iconCxPx;
-    const labelYPx = iconBottomPx + DUST_WHEEL_LABEL_GAP_PX * uniformDeviceScale;
     const labelWidthPx = deviceCtx.measureText(def.shortName).width;
     const paddingPx = 2 * uniformDeviceScale;
     deviceCtx.fillStyle = 'rgba(0,0,0,0.55)';
     deviceCtx.fillRect(labelXPx - labelWidthPx / 2 - paddingPx, labelYPx - paddingPx, labelWidthPx + paddingPx * 2, fontPx + paddingPx * 2);
-    deviceCtx.fillStyle = '#ffffff';
+    deviceCtx.fillStyle = tintTowardWhite(def.colorHex, DUST_WHEEL_LABEL_TINT_STRENGTH);
     deviceCtx.fillText(def.shortName, labelXPx, labelYPx);
   }
 

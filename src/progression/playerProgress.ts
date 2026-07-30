@@ -228,6 +228,33 @@ export function sanitizePlayerDustProgress(progress: PlayerProgress): void {
   }
 }
 
+/** The dust kit the official campaign granted new players before Fire Dust existed. */
+const PRE_FIRE_STARTER_DUST_KIT: readonly ParticleKind[] = [
+  ParticleKind.Golden,
+  ParticleKind.Ice,
+  ParticleKind.Nature,
+  ParticleKind.Void,
+  ParticleKind.Light,
+];
+
+/**
+ * Backfills Fire Dust for existing saves that already hold the rest of the
+ * pre-Fire starter kit. `applyCampaignStartingOptions` (campaignStartingOptions.ts)
+ * only (re-)applies `startingDustTypes` to saves that have never explored a
+ * room, so a save created before Fire Dust was added to that list would
+ * otherwise never receive it even after the campaign is updated. Idempotent —
+ * no-ops once Fire Dust is unlocked, and never removes anything.
+ */
+export function migrateStarterFireDustUnlock(progress: PlayerProgress): void {
+  if (progress.unlockedDustKinds.includes(ParticleKind.FireDust)) return;
+  const hasFullPreFireStarterKit = PRE_FIRE_STARTER_DUST_KIT.every(
+    kind => progress.unlockedDustKinds.includes(kind),
+  );
+  if (hasFullPreFireStarterKit) {
+    progress.unlockedDustKinds.push(ParticleKind.FireDust);
+  }
+}
+
 /**
  * Returns true if `kinds` fits within the player's current dust slot budget.
  */
