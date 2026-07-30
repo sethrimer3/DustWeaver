@@ -74,7 +74,7 @@ test('zip contact does not recharge grapple before the player touches ground', (
 
 // ── 1. Shift is inert ───────────────────────────────────────────────────────
 
-test('grounded acceleration caps at GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC (120), never a legacy sprint multiplier', () => {
+test('grounded acceleration caps at GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC, never a legacy sprint multiplier', () => {
   const { world, player } = makeWorldAndPlayer();
   player.isGroundedFlag = 1;
   world.playerMoveInputDxWorld = 1;
@@ -85,7 +85,10 @@ test('grounded acceleration caps at GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC (120), 
     Math.abs(player.velocityXWorld - GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC) < 0.01,
     `expected velocity to settle at walking speed ${GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC}, got ${player.velocityXWorld}`,
   );
-  assert.ok(player.velocityXWorld < 150, 'velocity must not reach anything resembling a 1.5x sprint multiplier (157.5)');
+  assert.ok(
+    player.velocityXWorld < GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC * 1.25,
+    'velocity must not reach anything resembling a 1.5x sprint multiplier',
+  );
 });
 
 test('crouch (Down key) blocks horizontal acceleration regardless of any other key held', () => {
@@ -109,14 +112,14 @@ test('WorldState and ClusterState no longer expose any sprint field', () => {
 
 // ── 2/3. Skid entry threshold ────────────────────────────────────────────────
 
-test('grounded reversal at exactly 120 units/s enters a skid without any sprint-like input', () => {
+test('grounded reversal at exactly walking speed enters a skid without any sprint-like input', () => {
   const { world, player } = makeWorldAndPlayer();
   player.isGroundedFlag = 1;
-  player.velocityXWorld = 120;
+  player.velocityXWorld = GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC;
   world.playerMoveInputDxWorld = -1;
   updatePlayerSkidState(player, world);
   assert.equal(player.isSkiddingFlag, 1);
-  assert.equal(player.skidEntryVelocityXWorld, 120);
+  assert.equal(player.skidEntryVelocityXWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
 });
 
 test('reversal below the walking-speed threshold does not enter a skid', () => {
@@ -269,30 +272,32 @@ function measuredBonusBlocks(entrySpeed: number): number {
   return (apex - normalApexHeight) / BLOCK_SIZE_SMALL;
 }
 
-test('a full-held skid jump entered at 120 reaches approximately +1 BLOCK_SIZE_SMALL over a normal full-held jump', () => {
-  const bonus = measuredBonusBlocks(120);
+test('a full-held skid jump entered at walking speed reaches approximately +1 BLOCK_SIZE_SMALL over a normal full-held jump', () => {
+  const bonus = measuredBonusBlocks(GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
   assert.ok(Math.abs(bonus - 1.0) < APEX_TOLERANCE_BLOCKS, `expected ~+1 block, measured +${bonus.toFixed(3)} blocks`);
 });
 
-test('entry speeds 150/180/210 produce approximately +2/+3/+4 blocks (continuous, not stepped)', () => {
-  const b150 = measuredBonusBlocks(150);
-  const b180 = measuredBonusBlocks(180);
-  const b210 = measuredBonusBlocks(210);
-  assert.ok(Math.abs(b150 - 2.0) < APEX_TOLERANCE_BLOCKS, `150 -> expected ~+2, got +${b150.toFixed(3)}`);
-  assert.ok(Math.abs(b180 - 3.0) < APEX_TOLERANCE_BLOCKS, `180 -> expected ~+3, got +${b180.toFixed(3)}`);
-  assert.ok(Math.abs(b210 - 4.0) < APEX_TOLERANCE_BLOCKS, `210 -> expected ~+4, got +${b210.toFixed(3)}`);
+test('entry speeds walk+30/+60/+90 produce approximately +2/+3/+4 blocks (continuous, not stepped)', () => {
+  const walk = GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC;
+  const b150 = measuredBonusBlocks(walk + 30);
+  const b180 = measuredBonusBlocks(walk + 60);
+  const b210 = measuredBonusBlocks(walk + 90);
+  assert.ok(Math.abs(b150 - 2.0) < APEX_TOLERANCE_BLOCKS, `walk+30 -> expected ~+2, got +${b150.toFixed(3)}`);
+  assert.ok(Math.abs(b180 - 3.0) < APEX_TOLERANCE_BLOCKS, `walk+60 -> expected ~+3, got +${b180.toFixed(3)}`);
+  assert.ok(Math.abs(b210 - 4.0) < APEX_TOLERANCE_BLOCKS, `walk+90 -> expected ~+4, got +${b210.toFixed(3)}`);
 });
 
-test('midpoint entry speed 135 produces approximately +1.5 blocks, proving continuous interpolation', () => {
-  const bonus = measuredBonusBlocks(135);
+test('midpoint entry speed walk+15 produces approximately +1.5 blocks, proving continuous interpolation', () => {
+  const midpointSpeed = GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC + 15;
+  const bonus = measuredBonusBlocks(midpointSpeed);
   assert.ok(Math.abs(bonus - 1.5) < APEX_TOLERANCE_BLOCKS, `expected ~+1.5 blocks, measured +${bonus.toFixed(3)}`);
   // Pure-function cross-check (no simulation, exact formula):
-  const pureBonus = computeSkidJumpBonusBlocks(135, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
+  const pureBonus = computeSkidJumpBonusBlocks(midpointSpeed, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
   assert.ok(Math.abs(pureBonus - 1.5) < 1e-9, `formula must give exactly 1.5, got ${pureBonus}`);
 });
 
-test('300 units/s entry produces approximately +7 blocks', () => {
-  const bonus = measuredBonusBlocks(300);
+test('walk+180 units/s entry produces approximately +7 blocks', () => {
+  const bonus = measuredBonusBlocks(GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC + 180);
   assert.ok(Math.abs(bonus - 7.0) < APEX_TOLERANCE_BLOCKS, `expected ~+7 blocks, measured +${bonus.toFixed(3)}`);
 });
 
