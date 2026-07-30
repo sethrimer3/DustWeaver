@@ -18,6 +18,7 @@ import type { ClusterState } from './state';
 import {
   COLLISION_EPSILON,
   BLOCK_POP_MAX_PIXELS,
+  BLOCK_STEP_UP_PER_TICK_WORLD,
   JUMP_CORNER_CORRECTION_PIXELS,
   debugSpeedOverrides,
   ov,
@@ -210,9 +211,8 @@ function tryJumpCornerCorrection(
 
 /**
  * Block step-up: when the player walks into a wall whose top edge is at most
- * BLOCK_POP_MAX_PIXELS below the player's feet, pop the player over the wall
- * instead of stopping them.  Only for grounded or falling players moving in the
- * direction of the wall.  Returns true if the step-up was applied.
+ * BLOCK_POP_MAX_PIXELS above the player's feet, climb toward the top while
+ * input remains pressed into the wall. Clearance is checked before climbing.
  */
 export function tryStepUpSingleBlock(
   cluster: ClusterState,
@@ -246,7 +246,13 @@ export function tryStepUpSingleBlock(
   const targetYWorld = wallTopWorld - cluster.halfHeightWorld;
   if (hasWallOverlapAtPosition(cluster, world, cluster.positionXWorld, targetYWorld)) return false;
 
-  cluster.positionYWorld = targetYWorld;
+  const climbWorld = Math.min(stepUpHeightWorld, BLOCK_STEP_UP_PER_TICK_WORLD);
+  cluster.positionYWorld -= climbWorld;
+  if (climbWorld < stepUpHeightWorld) {
+    cluster.positionXWorld = requiredInputDirX > 0
+      ? wallLeftWorld - cluster.halfWidthWorld
+      : wallRightWorld + cluster.halfWidthWorld;
+  }
   cluster.velocityYWorld = 0;
   cluster.isGroundedFlag = 1;
   return true;
