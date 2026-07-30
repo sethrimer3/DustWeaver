@@ -2,10 +2,13 @@
  * gameDustSelectionState.ts — Dust selection wheel state machine.
  *
  * Owns the wheel's open/closed/animating lifecycle and the currently
- * highlighted option. Deliberately holds no simulation truth: the actual
- * dust-type change is driven through `beginDustTypeSwitch` (sim/weaves/
- * dustTypeSwitch.ts) and persisted onto `PlayerProgress.selectedDustKind`.
- * This module is pure UI/input-timing state — it uses wall-clock timestamps
+ * highlighted option. Deliberately holds no simulation truth: on a committed
+ * selection it calls the authoritative `setSelectedDustKind` (sim/weaves/
+ * selectedDust.ts) to update the live `WorldState.selectedDustKind`
+ * immediately, and mirrors the choice onto `PlayerProgress.selectedDustKind`
+ * for persistence. Both updates happen atomically at the moment the
+ * selection is committed — no queued/per-slot transformation, no per-frame
+ * sync. This module is pure UI/input-timing state — it uses wall-clock timestamps
  * (`nowMs`, threaded from the same frame timestamp gameScreen already uses
  * for other cosmetic timers) and never touches the deterministic sim tick.
  *
@@ -27,6 +30,7 @@ import {
   findNearestDustWheelOption,
 } from '../sim/weaves/dustWheelOptions';
 import { computeDustWheelAim } from '../input/dustWheelInput';
+import { setSelectedDustKind } from '../sim/weaves/selectedDust';
 
 /** Duration (ms) of the outward expansion animation when the wheel opens. */
 export const DUST_WHEEL_OPEN_ANIM_MS = 160;
@@ -165,11 +169,12 @@ export class DustSelectionWheelController {
    *
    *   - 'deadzone'    — aim was inside the center dead zone; consumed, wheel stays open.
    *   - 'same'        — selected the already-active dust kind; wheel closes, no switch.
-   *   - 'switched'    — a new dust kind was selected, persisted, and the mote
-   *                     transformation (if any live motes participate) began.
+   *   - 'switched'    — a new dust kind was selected: the live world state was
+   *                     updated immediately (so the renderer picks it up this
+   *                     frame) and the choice was mirrored onto progress.
    */
   selectAtAim(
-    _world: WorldState,
+    world: WorldState,
     progress: PlayerProgress | undefined,
     aimXWorld: number,
     aimYWorld: number,
@@ -192,6 +197,7 @@ export class DustSelectionWheelController {
       return 'same';
     }
 
+    setSelectedDustKind(world, nearest.kind);
     if (progress !== undefined) {
       progress.selectedDustKind = nearest.kind;
     }

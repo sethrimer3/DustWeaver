@@ -38,10 +38,10 @@ interface CloakFieldDef {
  * constants are module-private and cannot be imported.
  */
 const FIELDS: readonly FieldDef[] = [
-  { key: 'walkSpeedWorld',     label: 'Walk Speed',      defaultValue: 105.0 },
+  { key: 'walkSpeedWorld',     label: 'Walk Speed',      defaultValue: 160.0 },
   { key: 'jumpSpeedWorld',     label: 'Jump Speed',      defaultValue: 300.0 },
   { key: 'gravityWorld',       label: 'Gravity',         defaultValue: 900.0 },
-  { key: 'normalFallCapWorld', label: 'Normal Fall Cap', defaultValue: 160.5 },
+  { key: 'normalFallCapWorld', label: 'Normal Fall Cap', defaultValue: 180.0 },
   { key: 'fastFallCapWorld',   label: 'Fast Fall Cap',   defaultValue: 240.0 },
   { key: 'groundAccelWorld',   label: 'Ground Accel',    defaultValue: 800.0 },
   { key: 'groundDecelWorld',   label: 'Ground Decel',    defaultValue: 1000.0 },

@@ -9,6 +9,7 @@ import { isDustWheelSuppressedCommandKind } from '../screens/gameCommandProcesso
 import { CommandKind } from '../input/commands';
 import { createDefaultProgress, sanitizePlayerDustProgress } from '../progression/playerProgress';
 import { loadSaveSlot, saveSaveSlot, createNewSaveSlot } from '../progression/saveSlots';
+import { buildStormweaveMotePalette } from '../render/stormweaveLifeMoteRenderer';
 
 function makeFixture(moteCount = 4) {
   const world = createWorldState(1000 / 60, 3);
@@ -77,11 +78,13 @@ test('selecting the currently active dust is a safe no-op that closes the wheel'
 
   assert.equal(result, 'same');
   assert.equal(progress.selectedDustKind, ParticleKind.Golden);
+  assert.equal(world.selectedDustKind, ParticleKind.Golden, 'world unchanged');
   assert.equal(wheel.isOpen(), false, 'the wheel closes even though nothing changed');
 });
 
-test('selecting a different dust persists it and closes the wheel', () => {
+test('selecting a different dust updates both the runtime world and persisted progress, and closes the wheel', () => {
   const { world, player, progress } = makeFixture();
+  world.selectedDustKind = ParticleKind.Golden;
   const wheel = new DustSelectionWheelController();
   wheel.open(progress, 0);
   wheel.tick(DUST_WHEEL_OPEN_ANIM_MS);
@@ -95,7 +98,61 @@ test('selecting a different dust persists it and closes the wheel', () => {
 
   assert.equal(result, 'switched');
   assert.equal(progress.selectedDustKind, ParticleKind.Void, 'persisted immediately');
+  assert.equal(world.selectedDustKind, ParticleKind.Void, 'runtime world updated immediately, not just progress');
   assert.equal(wheel.isOpen(), false);
+});
+
+test('selecting a different dust updates the runtime world even when there is no progress object', () => {
+  const { world, player, progress } = makeFixture();
+  world.selectedDustKind = ParticleKind.Golden;
+  const wheel = new DustSelectionWheelController();
+  // Wheel options still need to come from somewhere; open with progress to
+  // populate options/activeKindAtOpen, then commit the selection without progress.
+  wheel.open(progress, 0);
+  wheel.tick(DUST_WHEEL_OPEN_ANIM_MS);
+
+  const angle = -Math.PI / 2 + 2 * (Math.PI * 2 / 3); // Void
+  const aimX = player.positionXWorld + Math.cos(angle) * 50;
+  const aimY = player.positionYWorld + Math.sin(angle) * 50;
+  const result = wheel.selectAtAim(world, undefined, aimX, aimY, player.positionXWorld, player.positionYWorld, 100);
+
+  assert.equal(result, 'switched');
+  assert.equal(world.selectedDustKind, ParticleKind.Void, 'world updates even without a progress object');
+});
+
+test('canceling the wheel changes neither world nor progress', () => {
+  const { world, progress } = makeFixture();
+  world.selectedDustKind = ParticleKind.Golden;
+  const wheel = new DustSelectionWheelController();
+  wheel.open(progress, 0);
+  wheel.tick(DUST_WHEEL_OPEN_ANIM_MS);
+  wheel.cancel(100);
+
+  assert.equal(progress.selectedDustKind, ParticleKind.Golden);
+  assert.equal(world.selectedDustKind, ParticleKind.Golden);
+});
+
+test('regression: an in-game dust-wheel selection updates the value the Stormweave renderer actually reads', () => {
+  const { world, player, progress } = makeFixture();
+  world.selectedDustKind = ParticleKind.Golden;
+  const wheel = new DustSelectionWheelController();
+  wheel.open(progress, 0);
+  wheel.tick(DUST_WHEEL_OPEN_ANIM_MS);
+
+  // Ice is the second canonical option among [Golden, Ice, Void].
+  const angle = -Math.PI / 2 + (2 * Math.PI / 3);
+  const aimX = player.positionXWorld + Math.cos(angle) * 50;
+  const aimY = player.positionYWorld + Math.sin(angle) * 50;
+  const result = wheel.selectAtAim(world, progress, aimX, aimY, player.positionXWorld, player.positionYWorld, 100);
+  assert.equal(result, 'switched');
+  assert.equal(world.selectedDustKind, ParticleKind.Ice);
+
+  // The renderer derives its palette from world.selectedDustKind, exactly as
+  // gameRender.ts does — this is the actual chain that was broken.
+  const golden = buildStormweaveMotePalette(ParticleKind.Golden);
+  const resolved = buildStormweaveMotePalette(world.selectedDustKind);
+  assert.equal(resolved.bodyHex, buildStormweaveMotePalette(ParticleKind.Ice).bodyHex);
+  assert.notEqual(resolved.bodyHex, golden.bodyHex, 'Ice palette must visibly differ from Golden');
 });
 
 test('the wheel animation lifecycle opens, stays open, and fully closes on schedule', () => {

@@ -121,7 +121,7 @@ export const APEX_GRAVITY_MULTIPLIER       = APEX_FLOAT_GRAVITY_MULTIPLIER;
  * for the two-stage curve.
  * Increased by 50% from 107.0.
  */
-export const NORMAL_MAX_FALL_WORLD_PER_SEC = 160.5;
+export const NORMAL_MAX_FALL_WORLD_PER_SEC = 180.0;
 
 /**
  * Stage-2 long-fall acceleration (px/s²) applied while ordinary freefall
@@ -131,7 +131,7 @@ export const NORMAL_MAX_FALL_WORLD_PER_SEC = 160.5;
  * Value: 20 px/s².  Does NOT apply during fast-fall, water, grapple, wall
  * slide, or when another force has already pushed vy above the threshold.
  */
-export const LONG_FALL_ACCEL_WORLD_PER_SEC2 = 20.0;
+export const LONG_FALL_ACCEL_WORLD_PER_SEC2 = 40.0;
 
 /** Maximum downward fall speed when holding down (px/s). Increased by 50% from 160.0. */
 export const FAST_MAX_FALL_WORLD_PER_SEC = 240.0;
@@ -189,7 +189,7 @@ export const MAX_RUN_SPEED_WORLD_PER_SEC = 105.0;
 // ============================================================================
 
 /** Speed target for grounded player-input horizontal acceleration (px/s). */
-export const GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 120.0;
+export const GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC = 160.0;
 
 /** Speed target for airborne player-input horizontal acceleration (px/s). */
 export const AIR_MAX_INPUT_SPEED_WORLD_PER_SEC = 100.0;
