@@ -132,6 +132,7 @@ import { resetPlayerLuminantLight } from './gamePlayerLuminantLight';
 import {
   getCharacterSprites,
   getPlayerSprite,
+  preloadActiveCharacterSprites,
   PLAYER_SPRITE_WIDTH_WORLD,
   PLAYER_SPRITE_HEIGHT_WORLD,
   PLAYER_SPRITE_PIVOT_X_WORLD,

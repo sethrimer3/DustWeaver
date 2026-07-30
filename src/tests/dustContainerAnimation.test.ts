@@ -94,7 +94,7 @@ test('different slots receive independent phases and targets', () => {
   assert.ok(seenFirstFrameImgs.size > 1, 'slots should not all start on the same frame image');
 });
 
-test('true complementary crossfade alpha values sum to 1 while crossfading', () => {
+test('reveal crossfade always keeps the base frame at 100% opacity while the target fades in on top', () => {
   // Draw many slots and find one that lands mid-crossfade (two draw calls) at nowMs=0.
   let found = false;
   for (let slot = 0; slot < 40 && !found; slot++) {
@@ -102,9 +102,10 @@ test('true complementary crossfade alpha values sum to 1 while crossfading', () 
     drawAnimatedDustContainerHud(ctx, 0, 0, 10, 11, true, slot, 0);
     if (calls.length === 2) {
       found = true;
-      const [a, b] = calls;
-      assert.ok(Math.abs(a.alpha + b.alpha - 1) < 1e-9, `expected complementary alphas, got ${a.alpha} + ${b.alpha}`);
-      assert.notEqual(a.img, b.img, 'crossfade must blend two distinct frames');
+      const [base, incoming] = calls;
+      assert.equal(base.alpha, 1, `base (bottom) frame must always draw at full opacity, got ${base.alpha}`);
+      assert.ok(incoming.alpha >= 0 && incoming.alpha <= 1, `incoming (top) frame alpha must be in [0,1], got ${incoming.alpha}`);
+      assert.notEqual(base.img, incoming.img, 'crossfade must blend two distinct frames');
     }
   }
   assert.ok(found, 'expected at least one slot to be mid-crossfade at t=0 across 40 random samples');

@@ -256,10 +256,15 @@ function drawAnimatedDustContainerInternal(
   }
 
   if (readyA) {
-    // True complementary crossfade: current frame fades out as the target frame fades in.
+    // "Reveal" crossfade: the current frame is always drawn fully opaque underneath, and the
+    // target frame fades in on top of it (alpha 0 -> 1). This guarantees some frame is always
+    // at 100% opacity throughout the transition — there's never a moment where both frames are
+    // partially transparent and the container looks faded/washed out. Once the target frame
+    // reaches full opacity, it becomes the new opaque base and a fresh target starts fading in
+    // on top of it.
     const t = Math.max(0, Math.min(1, (nowMs - state.startMs) / state.durationMs));
     ctx.save();
-    drawSlotImage(ctx, x, y, w, h, imgA, 1 - t);
+    drawSlotImage(ctx, x, y, w, h, imgA, 1);
     drawSlotImage(ctx, x, y, w, h, imgB, t);
     ctx.restore();
   } else {

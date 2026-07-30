@@ -5,7 +5,16 @@
  */
 
 import type { ClusterSnapshot } from '../snapshot';
-import { loadImg } from '../imageCache';
+import { loadImg, decodeImg, hasImageFailed } from '../imageCache';
+import {
+  PLAYABLE_CHARACTER_IDS,
+  CHARACTER_AVAILABLE_ANIMATION_FRAMES,
+  CHARACTER_ANIMATION_FILE_SUFFIX,
+  getCharacterSpriteBasePath,
+  getRequiredCharacterSpriteUrls,
+  isPlayableCharacterId,
+  type CharacterAnimationFrame,
+} from './characterSpriteManifest';
 export { isSpriteReady } from '../imageCache';
 
 // ── Character sprite sets ───────────────────────────────────────────────────
@@ -179,29 +188,12 @@ export function getOrCreateGoldOutlineMask(sprite: HTMLImageElement): HTMLCanvas
   return goldCanvas;
 }
 
-/**
- * Per-character animation frames that actually exist on disk beyond the
- * baseline standing/crouching pair. Characters not listed here (or states
- * omitted for a listed character) fall back to the standing sprite directly
- * — no network request is made for artwork that was intentionally removed.
- */
-const _availableAnimationFrames: Record<string, ReadonlyArray<'jumping' | 'falling' | 'fastFalling' | 'swinging'>> = {
-  outcast: ['jumping', 'falling', 'fastFalling', 'swinging'],
-};
-
-const _animationFileSuffix: Record<'jumping' | 'falling' | 'fastFalling' | 'swinging', string> = {
-  jumping: 'jumping',
-  falling: 'falling',
-  fastFalling: 'fastfalling',
-  swinging: 'swinging',
-};
-
 function _loadCharacterSprites(characterId: string): CharacterSprites {
-  const base = `SPRITES/PLAYERS/${characterId}/${characterId}`;
+  const base = getCharacterSpriteBasePath(characterId);
   const standingImg = loadImg(`${base}_standing.png`);
-  const availableFrames = _availableAnimationFrames[characterId] ?? [];
-  const framed = (key: 'jumping' | 'falling' | 'fastFalling' | 'swinging'): HTMLImageElement =>
-    availableFrames.includes(key) ? loadImg(`${base}_${_animationFileSuffix[key]}.png`) : standingImg;
+  const availableFrames = CHARACTER_AVAILABLE_ANIMATION_FRAMES[characterId as keyof typeof CHARACTER_AVAILABLE_ANIMATION_FRAMES] ?? [];
+  const framed = (key: CharacterAnimationFrame): HTMLImageElement =>
+    availableFrames.includes(key) ? loadImg(`${base}_${CHARACTER_ANIMATION_FILE_SUFFIX[key]}.png`) : standingImg;
 
   return {
     standing:   standingImg,
@@ -218,16 +210,41 @@ function _loadCharacterSprites(characterId: string): CharacterSprites {
 }
 
 /** Pre-loaded sprite sets for all playable characters. */
-const _characterSprites: Record<string, CharacterSprites> = {
-  knight:   _loadCharacterSprites('knight'),
-  demonFox: _loadCharacterSprites('demonFox'),
-  princess: _loadCharacterSprites('princess'),
-  outcast:  _loadCharacterSprites('outcast'),
-};
+const _characterSprites: Record<string, CharacterSprites> = Object.fromEntries(
+  PLAYABLE_CHARACTER_IDS.map((id) => [id, _loadCharacterSprites(id)]),
+);
 
 /** Returns the sprite set for the given character, falling back to knight. */
 export function getCharacterSprites(characterId: string): CharacterSprites {
   return _characterSprites[characterId] ?? _characterSprites['knight'];
+}
+
+/** Character IDs that have already logged a preload failure, so the diagnostic fires once per character per session. */
+const _preloadFailureLogged = new Set<string>();
+
+/**
+ * Decodes the active character's required sprite files (per
+ * `getRequiredCharacterSpriteUrls`) before gameplay becomes visible, and logs
+ * an explicit diagnostic — including the character ID and the exact failed
+ * URL — if any of them fail to load. Without this, a missing/broken sprite
+ * silently renders as the green placeholder box forever with no indication
+ * of why (see renderer.ts's `isSpriteReady` fallback).
+ *
+ * Fire-and-forget: never blocks or rejects, matching the existing
+ * decodeRoomThemeSprites()/decodeRoomBackground() preload pattern.
+ */
+export async function preloadActiveCharacterSprites(characterId: string): Promise<void> {
+  const resolvedId = isPlayableCharacterId(characterId) ? characterId : 'knight';
+  const urls = getRequiredCharacterSpriteUrls(resolvedId);
+  await Promise.all(urls.map((url) => decodeImg(url)));
+  const failedUrls = urls.filter((url) => hasImageFailed(url));
+  if (failedUrls.length > 0 && !_preloadFailureLogged.has(resolvedId)) {
+    _preloadFailureLogged.add(resolvedId);
+    console.error(
+      `[characterSprites] Character "${resolvedId}" is missing ${failedUrls.length} sprite file(s); ` +
+      `it will render as a placeholder box until these are fixed: ${failedUrls.join(', ')}`,
+    );
+  }
 }
 
 // ── Player sprite rendering constants ────────────────────────────────────────
