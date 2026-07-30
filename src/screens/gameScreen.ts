@@ -730,7 +730,7 @@ export function startGameScreen(
   }
 
   // ── Post-load entry fade (todo #11) ───────────────────────────────────────
-  // Deterministic 1.5s fade-to-black / 1.0s hold / 1.5s fade-in cover for full
+  // Deterministic 0.75s fade-to-black / 0.5s hold / 0.75s fade-in cover for full
   // campaign entry/re-entry (new game, load save, Return to Last Save,
   // restart). Every startGameScreen() call is itself one such entry (a fresh
   // gameplay session), except an immediate editor-playtest open, which skips

@@ -38,7 +38,7 @@ describe('gameEntryFadeController', () => {
     assert.equal(state.elapsedMs, 0);
   });
 
-  it('reaches full black exactly at 1.5s and blocks gameplay throughout fade-to-black', () => {
+  it('reaches full black exactly at 0.75s and blocks gameplay throughout fade-to-black', () => {
     const state = createEntryFadeState();
     armEntryFade(state);
     tickEntryFade(state, 0); // enter fading-to-black
@@ -53,7 +53,7 @@ describe('gameEntryFadeController', () => {
     assert.equal(atEnd.didJustResumeGameplay, false);
   });
 
-  it('holds fully black for exactly 1.0s then blocks gameplay throughout the hold', () => {
+  it('holds fully black for exactly 0.5s then blocks gameplay throughout the hold', () => {
     const state = createEntryFadeState();
     armEntryFade(state);
     tickEntryFade(state, 0);
@@ -78,7 +78,7 @@ describe('gameEntryFadeController', () => {
     assert.equal(result.overlayAlpha, 1);
   });
 
-  it('fades from black back to clear over exactly 1.5s and then goes idle with alpha 0', () => {
+  it('fades from black back to clear over exactly 0.75s and then goes idle with alpha 0', () => {
     const state = createEntryFadeState();
     armEntryFade(state);
     tickEntryFade(state, 0);
