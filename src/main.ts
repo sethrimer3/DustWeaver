@@ -50,7 +50,7 @@ function createStartupLoadingScreen(): {
   title.style.cssText = 'font-size:clamp(2rem,6vw,4.5rem);text-transform:uppercase;text-shadow:0 0 40px rgba(212,168,75,.35)';
 
   const status = document.createElement('div');
-  status.style.cssText = 'font-size:.9rem;color:rgba(212,168,75,.8);text-transform:uppercase';
+  status.style.cssText = 'display:none;font-size:.9rem;color:rgba(212,168,75,.8);text-transform:uppercase';
 
   const track = document.createElement('div');
   track.style.cssText = 'width:min(560px,75vw);height:4px;background:rgba(212,168,75,.15);overflow:hidden';
@@ -62,13 +62,12 @@ function createStartupLoadingScreen(): {
 
   return {
     update(progress): void {
-      const label = progress.phase === 'loading' ? 'Loading animation frames' : 'Preparing animation frames';
-      status.textContent = `${label} ${progress.completed} / ${progress.total}`;
       fill.style.width = `${progress.total === 0 ? 0 : (progress.completed / progress.total) * 100}%`;
     },
     showError(error): void {
       const message = error instanceof Error ? error.message : String(error);
       status.textContent = `Startup failed: ${message}`;
+      status.style.display = '';
       status.style.color = '#ff8a73';
       track.style.display = 'none';
     },
