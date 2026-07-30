@@ -5,7 +5,7 @@
  * Three save slots are available (indices 0–2).
  */
 
-import { PlayerProgress, createDefaultProgress, createOfficialNewProfileProgress, sanitizePlayerDustProgress } from './playerProgress';
+import { PlayerProgress, createDefaultProgress, createOfficialNewProfileProgress, sanitizePlayerDustProgress, migrateStarterFireDustUnlock } from './playerProgress';
 import { migrateLegacyWeaveUnlocks } from './weaveMigration';
 // Presentation-only: used by the two display formatters at the bottom of this
 // file. Save serialisation and the slot schema stay locale-independent.

@@ -24,6 +24,8 @@ export interface DustDefinition {
   displayName: string;
   /** Optional informal/lore name, kept separate from the formal display name. */
   nickname?: string;
+  /** Single-word label used where space is tight (e.g. the dust selection wheel). */
+  shortName: string;
   /** Cost in dust slots when bound to a Weave. */
   slotCost: number;
   /** Primary color hex for UI and render hints. */
@@ -41,12 +43,12 @@ export interface DustDefinition {
  * Internal particle kinds intentionally have no entry here.
  */
 export const DUST_DEFINITIONS: ReadonlyMap<ParticleKind, DustDefinition> = new Map([
-  [ParticleKind.Golden, { id: ParticleKind.Golden, displayName: 'Golden Dust', slotCost: 1, colorHex: '#ffd700', description: 'Versatile, foundational golden motes used for weaving.', spriteUrl: 'SPRITES/DUST/DustTypes/Golden_DustType.png' }],
-  [ParticleKind.Ice, { id: ParticleKind.Ice, displayName: 'Ice Dust', nickname: 'Frost Dust', slotCost: 1, colorHex: '#88ccff', description: 'Cold crystalline motes associated with freezing.', spriteUrl: 'SPRITES/DUST/DustTypes/Ice_DustType.png' }],
-  [ParticleKind.Nature, { id: ParticleKind.Nature, displayName: 'Nature Dust', nickname: 'Verdant Dust', slotCost: 1, colorHex: '#44cc44', description: 'Living green motes associated with growth and organic energy.', spriteUrl: 'SPRITES/DUST/DustTypes/Verdant_DustType.png' }],
-  [ParticleKind.Void, { id: ParticleKind.Void, displayName: 'Void Dust', slotCost: 1, colorHex: '#220044', description: 'Unstable dark motes associated with absence, distortion, and the beyond.', spriteUrl: 'SPRITES/DUST/DustTypes/Void_DustType.png' }],
-  [ParticleKind.Light, { id: ParticleKind.Light, displayName: 'Light Dust', nickname: 'Luminant Dust', slotCost: 1, colorHex: '#fff4b0', description: 'Radiant motes that emit illumination and push back darkness.', spriteUrl: 'SPRITES/DUST/DustTypes/Luminant_DustType.png' }],
-  [ParticleKind.FireDust, { id: ParticleKind.FireDust, displayName: 'Fire Dust', nickname: 'Ember Dust', slotCost: 1, colorHex: '#e65515', description: 'Hot ember motes associated with heat and burning light.', spriteUrl: 'SPRITES/DUST/DustTypes/Fire_DustType.png' }],
+  [ParticleKind.Golden, { id: ParticleKind.Golden, displayName: 'Golden Dust', shortName: 'Gold', slotCost: 1, colorHex: '#ffd700', description: 'Versatile, foundational golden motes used for weaving.', spriteUrl: 'SPRITES/DUST/DustTypes/Golden_DustType.png' }],
+  [ParticleKind.Ice, { id: ParticleKind.Ice, displayName: 'Ice Dust', nickname: 'Frost Dust', shortName: 'Frost', slotCost: 1, colorHex: '#88ccff', description: 'Cold crystalline motes associated with freezing.', spriteUrl: 'SPRITES/DUST/DustTypes/Ice_DustType.png' }],
+  [ParticleKind.Nature, { id: ParticleKind.Nature, displayName: 'Nature Dust', nickname: 'Verdant Dust', shortName: 'Verdant', slotCost: 1, colorHex: '#44cc44', description: 'Living green motes associated with growth and organic energy.', spriteUrl: 'SPRITES/DUST/DustTypes/Verdant_DustType.png' }],
+  [ParticleKind.Void, { id: ParticleKind.Void, displayName: 'Void Dust', shortName: 'Void', slotCost: 1, colorHex: '#220044', description: 'Unstable dark motes associated with absence, distortion, and the beyond.', spriteUrl: 'SPRITES/DUST/DustTypes/Void_DustType.png' }],
+  [ParticleKind.Light, { id: ParticleKind.Light, displayName: 'Light Dust', nickname: 'Luminant Dust', shortName: 'Luminant', slotCost: 1, colorHex: '#fff4b0', description: 'Radiant motes that emit illumination and push back darkness.', spriteUrl: 'SPRITES/DUST/DustTypes/Luminant_DustType.png' }],
+  [ParticleKind.FireDust, { id: ParticleKind.FireDust, displayName: 'Fire Dust', nickname: 'Ember Dust', shortName: 'Fire', slotCost: 1, colorHex: '#e65515', description: 'Hot ember motes associated with heat and burning light.', spriteUrl: 'SPRITES/DUST/DustTypes/Fire_DustType.png' }],
 ]);
 
 /**
@@ -57,6 +59,7 @@ export function getDustDefinition(kind: ParticleKind): DustDefinition {
   return DUST_DEFINITIONS.get(kind) ?? {
     id: kind,
     displayName: 'Unknown Dust',
+    shortName: 'Unknown',
     slotCost: 1,
     colorHex: '#888888',
     description: 'Unknown dust type.',

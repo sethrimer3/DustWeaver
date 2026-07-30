@@ -22,7 +22,8 @@
         "Light",
         "Ice",
         "Nature",
-        "Void"
+        "Void",
+        "FireDust"
       ],
       "startingWeaves": [
         "storm",
