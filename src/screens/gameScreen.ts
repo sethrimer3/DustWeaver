@@ -1652,6 +1652,7 @@ export function startGameScreen(
 
     // During active dialogue, freeze player movement (suppress moveDx/jump inputs).
     const isDialogueBlockingInput = dialogueState.isDialogueActiveFlag;
+    const isDownHeld = inputState.isKeyS || inputState.isGamepadDownHeldFlag;
 
     // Latch one-shot jump and down inputs into world state before ticking.
     // This preserves edge-triggered inputs on high-refresh frames where no
@@ -1698,10 +1699,10 @@ export function startGameScreen(
       if (player !== undefined) {
         // Suppress horizontal movement during active dialogue.
         world.playerMoveInputDxWorld = (!isDialogueBlockingInput && moveDx !== 0) ? (moveDx > 0 ? 1.0 : -1.0) : 0.0;
-        world.playerMoveInputDyWorld = (!isDialogueBlockingInput && inputState.isKeyS) ? 1.0 : 0.0;
+        world.playerMoveInputDyWorld = (!isDialogueBlockingInput && isDownHeld) ? 1.0 : 0.0;
       }
       // Pass crouch input to the sim
-      world.playerCrouchHeldFlag = (!isDialogueBlockingInput && inputState.isKeyS) ? 1 : 0;
+      world.playerCrouchHeldFlag = (!isDialogueBlockingInput && isDownHeld) ? 1 : 0;
       updateRoomChallengeElements(world, progress);
       tick(world);
       const stormweavePlayer = world.clusters[0];

@@ -33,6 +33,24 @@ test('left stick and D-pad drive analog gameplay movement', () => {
   assert.deepEqual(dpadMove, { kind: CommandKind.MovePlayer, dx: 1, dy: 0 });
 });
 
+test('left-stick down and D-pad down mirror held and triggered keyboard-down input', () => {
+  const input = createInputState();
+  applyGamepadInputSnapshot(input, pad([], [0, 0.8, 0, 0]), 800, 450, 100);
+  assert.equal(input.isGamepadDownHeldFlag, true);
+  assert.equal(input.isDownTriggeredFlag, true);
+
+  input.isDownTriggeredFlag = false;
+  applyGamepadInputSnapshot(input, pad([], [0, 0.8, 0, 0]), 800, 450, 116);
+  assert.equal(input.isGamepadDownHeldFlag, true);
+  assert.equal(input.isDownTriggeredFlag, false, 'holding down must not repeat the edge trigger');
+
+  applyGamepadInputSnapshot(input, pad(), 800, 450, 132);
+  assert.equal(input.isGamepadDownHeldFlag, false);
+  applyGamepadInputSnapshot(input, pad([13]), 800, 450, 148);
+  assert.equal(input.isGamepadDownHeldFlag, true);
+  assert.equal(input.isDownTriggeredFlag, true);
+});
+
 test('jump and pause buttons are edge-triggered', () => {
   const input = createInputState();
   applyGamepadInputSnapshot(input, pad([0, 9]), 800, 450, 100);

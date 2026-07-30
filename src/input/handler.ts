@@ -24,6 +24,8 @@ export interface InputState {
   isGamepadJumpHeldFlag: boolean;
   /** Analog horizontal movement supplied by the active gamepad. */
   gamepadMoveX: number;
+  /** True while the gamepad movement stick or D-pad is held downward. */
+  isGamepadDownHeldFlag: boolean;
   /** Tracks whether the joystick is already past the up-flick threshold (edge-detect). */
   isJoystickUpActiveFlag: boolean;
   mouseXPx: number;
@@ -125,6 +127,7 @@ export function createInputState(): InputState {
     isJumpHeldFlag: false,
     isGamepadJumpHeldFlag: false,
     gamepadMoveX: 0,
+    isGamepadDownHeldFlag: false,
     isJoystickUpActiveFlag: false,
     mouseXPx: 0,
     mouseYPx: 0,
@@ -171,6 +174,7 @@ export interface GamepadInputSnapshot {
 }
 
 interface GamepadPreviousState {
+  down: boolean;
   jump: boolean;
   interact: boolean;
   primary: boolean;
@@ -183,7 +187,14 @@ const gamepadPreviousStates = new WeakMap<InputState, GamepadPreviousState>();
 function getGamepadPreviousState(state: InputState): GamepadPreviousState {
   let previous = gamepadPreviousStates.get(state);
   if (previous === undefined) {
-    previous = { jump: false, interact: false, primary: false, secondary: false, pause: false };
+    previous = {
+      down: false,
+      jump: false,
+      interact: false,
+      primary: false,
+      secondary: false,
+      pause: false,
+    };
     gamepadPreviousStates.set(state, previous);
   }
   return previous;
@@ -216,6 +227,7 @@ export function applyGamepadInputSnapshot(
   const gamepadPreviousState = getGamepadPreviousState(state);
   if (gamepad === null) {
     state.gamepadMoveX = 0;
+    state.isGamepadDownHeldFlag = false;
     state.isGamepadJumpHeldFlag = false;
     if (gamepadPreviousState.primary) state.isGrappleReleaseTriggeredFlag = 1;
     state.isMouseDownFlag = 0;
@@ -227,7 +239,11 @@ export function applyGamepadInputSnapshot(
 
   const dpadLeft = gamepadButtonPressed(gamepad, 14);
   const dpadRight = gamepadButtonPressed(gamepad, 15);
+  const dpadDown = gamepadButtonPressed(gamepad, 13);
   state.gamepadMoveX = dpadLeft ? -1 : dpadRight ? 1 : deadZoneAxis(gamepad.axes[0]);
+  const down = dpadDown || (gamepad.axes[1] ?? 0) > GAMEPAD_AXIS_DEAD_ZONE;
+  if (down && !gamepadPreviousState.down) state.isDownTriggeredFlag = true;
+  state.isGamepadDownHeldFlag = down;
 
   const aimX = deadZoneAxis(gamepad.axes[2]);
   const aimY = deadZoneAxis(gamepad.axes[3]);
@@ -291,6 +307,7 @@ export function applyGamepadInputSnapshot(
     if (!handledByOpenMenu) state.isEscapePressed = true;
   }
 
+  gamepadPreviousState.down = down;
   gamepadPreviousState.jump = jump;
   gamepadPreviousState.interact = interact;
   gamepadPreviousState.primary = primary;
@@ -555,6 +572,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     state.isKeyD = false;
     state.isKeyS = false;
     state.isJumpHeldFlag = false;
+    state.isGamepadDownHeldFlag = false;
     // Fire a grapple release so the rope is cancelled when the window loses
     // focus (alt-tab, task switch, etc.).  Without this the grapple stays
     // active in the sim and the player is frozen mid-swing on return.
