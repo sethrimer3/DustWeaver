@@ -5,7 +5,7 @@
  * Three save slots are available (indices 0–2).
  */
 
-import { PlayerProgress, createDefaultProgress, sanitizePlayerDustProgress } from './playerProgress';
+import { PlayerProgress, createDefaultProgress, createOfficialNewProfileProgress, sanitizePlayerDustProgress } from './playerProgress';
 import { migrateLegacyWeaveUnlocks } from './weaveMigration';
 // Presentation-only: used by the two display formatters at the bottom of this
 // file. Save serialisation and the slot schema stay locale-independent.
@@ -83,6 +83,17 @@ export function loadSaveSlot(slotIndex: number): SaveSlotData | null {
     if (!Array.isArray(parsed.progress.collectedDustContainerKeys)) parsed.progress.collectedDustContainerKeys = [];
     if (!Array.isArray(parsed.progress.collectedSkillTombKeys)) parsed.progress.collectedSkillTombKeys = [];
     if (!Array.isArray(parsed.progress.permanentlyOpenGateKeys)) parsed.progress.permanentlyOpenGateKeys = [];
+    // Repair saves stuck with the stale pre-Outcast Knight default: the official
+    // campaign always auto-selects Outcast for brand-new profiles (see game.ts),
+    // but a save could be created and persisted with 'knight' before that
+    // in-session correction had a chance to be flushed (e.g. the app closed
+    // before the first checkpoint — see createOfficialNewProfileProgress()).
+    // Restrict this to saves that have never explored a room: any save with
+    // exploredRoomIds is either a legitimate pre-Outcast playthrough or used
+    // deliberate character selection, and must not be silently overwritten.
+    if (parsed.progress.characterId === 'knight' && parsed.progress.exploredRoomIds.length === 0) {
+      parsed.progress.characterId = 'outcast';
+    }
     sanitizePlayerDustProgress(parsed.progress);
     // Migrate legacy shield_sword secondary-weave saves to grant the new
     // independent Sword + Shield unlocks (idempotent; never removes an
@@ -127,10 +138,16 @@ export function deleteSaveSlot(slotIndex: number): void {
   }
 }
 
-/** Creates a brand-new save slot with default progress and zero play time. */
+/**
+ * Creates a brand-new official-campaign save slot with zero play time.
+ * Progress starts with Outcast already selected — the official campaign
+ * auto-skips character select for new profiles (see game.ts), so the
+ * persisted record must be correct by construction rather than relying on
+ * a later checkpoint write to fix it up.
+ */
 export function createNewSaveSlot(assistMode = false): SaveSlotData {
   return {
-    progress: createDefaultProgress(),
+    progress: createOfficialNewProfileProgress(),
     playTimeMs: 0,
     lastPlayedIso: new Date().toISOString(),
     runTimerMs: 0,

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:atlases": "node scripts/build-sprite-atlases.mjs",
+    "generate:dustContainerHudFrames": "node scripts/generate-dust-container-hud-frames.mjs",
     "validate:atlases": "node scripts/validate-sprite-atlases.mjs",
     "compare:atlases": "node scripts/compare-sprite-atlases.mjs",
     "preview:atlases": "node scripts/preview-sprite-atlases.mjs",

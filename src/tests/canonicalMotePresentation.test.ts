@@ -5,10 +5,13 @@ import { createClusterState } from '../sim/clusters/state';
 import { MOTE_LIFE_SLOT_WIDTH_PX, MOTE_LIFE_SLOT_HEIGHT_PX } from '../render/hud/moteLifeSlots';
 import { capturePlayerTransferState, restoreTransferredPlayerParticles } from '../screens/playerTransfer';
 
-test('canonical mote presentation: square drawImage destination dimensions in HUD', () => {
+test('canonical mote presentation: HUD drawImage destination preserves source sprite aspect ratio', () => {
+  // Source dust container art is ~30x33px (not square) — the HUD slot must preserve that
+  // aspect ratio rather than squashing it into a 1:1 box.
   assert.equal(MOTE_LIFE_SLOT_WIDTH_PX, 10, 'mote slot sprite width must be 10px');
-  assert.equal(MOTE_LIFE_SLOT_HEIGHT_PX, 10, 'mote slot sprite height must be 10px for square aspect ratio');
-  assert.equal(MOTE_LIFE_SLOT_WIDTH_PX, MOTE_LIFE_SLOT_HEIGHT_PX, 'aspect ratio must be exactly square (1:1)');
+  assert.equal(MOTE_LIFE_SLOT_HEIGHT_PX, 11, 'mote slot sprite height must be 11px to match the ~30x33 source aspect ratio');
+  const aspect = MOTE_LIFE_SLOT_HEIGHT_PX / MOTE_LIFE_SLOT_WIDTH_PX;
+  assert.ok(Math.abs(aspect - 33 / 30) < 0.05, 'aspect ratio must approximate the source sprite (33/30)');
 });
 
 test('canonical mote presentation: resident transfer filters out ordinary mode-0 orbiters while preserving special particles', () => {

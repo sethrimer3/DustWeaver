@@ -1,6 +1,8 @@
+// Dust container source art is 30x33px. The HUD slot preserves that aspect
+// ratio (rather than squashing into a square) so the sprite isn't stretched.
 export const MOTE_LIFE_SLOT_SIZE_PX = 10;
 export const MOTE_LIFE_SLOT_WIDTH_PX = 10;
-export const MOTE_LIFE_SLOT_HEIGHT_PX = 10;
+export const MOTE_LIFE_SLOT_HEIGHT_PX = 11;
 export const MOTE_LIFE_SLOT_GAP_PX = 2;
 export const MOTE_LIFE_SLOT_ROWS = 2;
 export const MOTE_LIFE_ORIGIN_X_PX = 8;

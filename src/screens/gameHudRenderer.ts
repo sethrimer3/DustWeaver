@@ -22,10 +22,12 @@ import {
   MOTE_LIFE_SLOT_WIDTH_PX,
   MOTE_LIFE_SLOT_HEIGHT_PX,
 } from '../render/hud/moteLifeSlots';
-import { drawAnimatedDustContainer } from '../render/hud/dustContainerAnimation';
+import { drawAnimatedDustContainerHud, preloadDustContainerHudFrames } from '../render/hud/dustContainerAnimation';
 import { formatRunTimer } from '../progression/saveSlots';
 import { drawChallengeHudShield } from '../render/challengeElementRenderer';
 import { getSpeedrunTimerEnabled } from '../ui/renderSettings';
+
+preloadDustContainerHudFrames();
 
 // ── HUD layout constants ────────────────────────────────────────────────────
 
@@ -242,7 +244,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
   for (let moteIndex = 0; moteIndex < maxMoteCapacity; moteIndex++) {
     const slot = getMoteLifeSlotPosition(moteIndex);
     const isFilled = moteIndex < currentMoteCount;
-    drawAnimatedDustContainer(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, isFilled, moteIndex, nowMs);
+    drawAnimatedDustContainerHud(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, isFilled, moteIndex, nowMs);
   }
   // ── Overhealth slots (temporary current health above max capacity) ─────
   // Rendered after the permanent slots in the same column-major layout, so
@@ -254,7 +256,7 @@ export function renderGameHud(r: HudRenderContext, nowMs: number): void {
     for (let i = 0; i < overhealthMoteCount; i++) {
       const moteIndex = maxMoteCapacity + i;
       const slot = getMoteLifeSlotPosition(moteIndex);
-      drawAnimatedDustContainer(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, true, moteIndex, nowMs);
+      drawAnimatedDustContainerHud(ctx, slot.xPx, slot.yPx, dustSquareWidth, dustSquareHeight, true, moteIndex, nowMs);
       ctx.save();
       ctx.strokeStyle = 'rgba(255,215,90,0.9)';
       ctx.lineWidth = 1;
