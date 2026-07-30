@@ -6,7 +6,7 @@ import {
 import { getEffectiveShieldArcLengthWorld, type ShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import type { GraphicsQuality } from '../ui/renderSettings';
 import { getMoteTypeVisual, shadeRgb, rgbToHex, type MoteRgb } from '../sim/motes/moteTypeConfig';
-import { CONSTELLATION_LINK_QUALITY, ConstellationLinkTracker } from './stormweaveConstellationLinks';
+import { getConstellationLinkQualityConfig, ConstellationLinkTracker } from './stormweaveConstellationLinks';
 import { ParticleKind } from '../sim/particles/kinds';
 
 const FULL_CIRCLE_EPSILON = 1e-6;
@@ -253,7 +253,7 @@ export function renderStormweaveLifeMotes(
 ): void {
   ctx.save();
   const palette = buildStormweaveMotePalette(selectedDustKind);
-  const linkConfig = CONSTELLATION_LINK_QUALITY[graphicsQuality];
+  const linkConfig = getConstellationLinkQualityConfig(graphicsQuality, selectedDustKind);
   if (linkConfig && motes.moteCount >= 2) {
     const tracker = getConstellationTracker(motes);
     const links = tracker.computeLinks(

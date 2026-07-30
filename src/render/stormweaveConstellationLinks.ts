@@ -13,6 +13,8 @@
  * persisted to save data or treated as authoritative simulation state.
  */
 
+import { ParticleKind } from '../sim/particles/kinds';
+
 export interface ConstellationLink {
   /** Lower mote index of the pair. */
   readonly a: number;
@@ -172,3 +174,31 @@ export const CONSTELLATION_LINK_QUALITY: Readonly<Record<'low' | 'med' | 'high',
   med: { maxNeighborsPerMote: 2, innerDistanceWorld: 3, outerDistanceWorld: 7, maxOpacity: 0.12 },
   low: null,
 };
+
+/**
+ * Luminant (Light) Dust motes are the "constellation" type in spirit, so
+ * their links reach twice as far — both thresholds doubled, preserving the
+ * same inner/outer falloff shape — and render at twice the opacity of every
+ * other mote type.
+ */
+const LUMINANT_LINK_DISTANCE_MULTIPLIER = 2;
+const LUMINANT_LINK_OPACITY_MULTIPLIER = 2;
+
+/**
+ * Resolves the quality-tier link config for `moteKind`, applying the
+ * Luminant-specific distance/opacity boost when applicable. `null` disables
+ * the effect entirely (quality gating), matching `CONSTELLATION_LINK_QUALITY`.
+ */
+export function getConstellationLinkQualityConfig(
+  quality: 'low' | 'med' | 'high',
+  moteKind: number,
+): ConstellationLinkQualityConfig | null {
+  const base = CONSTELLATION_LINK_QUALITY[quality];
+  if (!base || moteKind !== ParticleKind.Light) return base;
+  return {
+    ...base,
+    innerDistanceWorld: base.innerDistanceWorld * LUMINANT_LINK_DISTANCE_MULTIPLIER,
+    outerDistanceWorld: base.outerDistanceWorld * LUMINANT_LINK_DISTANCE_MULTIPLIER,
+    maxOpacity: base.maxOpacity * LUMINANT_LINK_OPACITY_MULTIPLIER,
+  };
+}

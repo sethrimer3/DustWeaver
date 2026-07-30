@@ -6,8 +6,10 @@ import {
   selectConstellationLinkPairs,
   ConstellationLinkTracker,
   CONSTELLATION_LINK_QUALITY,
+  getConstellationLinkQualityConfig,
   type ConstellationLinkQualityConfig,
 } from '../render/stormweaveConstellationLinks';
+import { ParticleKind } from '../sim/particles/kinds';
 
 const CONFIG: ConstellationLinkQualityConfig = {
   maxNeighborsPerMote: 2,
@@ -194,6 +196,25 @@ test('a large mote count keeps the rendered link count bounded, not O(n^2)', () 
   const allToAllCount = (count * (count - 1)) / 2;
   assert.ok(links.length < allToAllCount, 'must not degrade into an all-to-all web');
   assert.ok(links.length <= count * config.maxNeighborsPerMote, 'link count must stay bounded by n * cap');
+});
+
+test('Luminant (Light) motes get double the link distance and double the opacity of other types', () => {
+  for (const quality of ['high', 'med'] as const) {
+    const base = CONSTELLATION_LINK_QUALITY[quality]!;
+    const other = getConstellationLinkQualityConfig(quality, ParticleKind.Golden);
+    const luminant = getConstellationLinkQualityConfig(quality, ParticleKind.Light);
+    assert.deepEqual(other, base, `non-Luminant kinds must use the unmodified ${quality} config`);
+    assert.ok(luminant);
+    assert.equal(luminant!.innerDistanceWorld, base.innerDistanceWorld * 2);
+    assert.equal(luminant!.outerDistanceWorld, base.outerDistanceWorld * 2);
+    assert.equal(luminant!.maxOpacity, base.maxOpacity * 2);
+    assert.equal(luminant!.maxNeighborsPerMote, base.maxNeighborsPerMote, 'neighbor cap should be unaffected');
+  }
+});
+
+test('getConstellationLinkQualityConfig stays disabled on low quality regardless of mote kind', () => {
+  assert.equal(getConstellationLinkQualityConfig('low', ParticleKind.Light), null);
+  assert.equal(getConstellationLinkQualityConfig('low', ParticleKind.Golden), null);
 });
 
 test('helpers never mutate the positions supplied to them', () => {
