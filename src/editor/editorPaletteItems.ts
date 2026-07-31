@@ -269,6 +269,10 @@ export const PALETTE_ITEMS: readonly PaletteItem[] = [
   // Non-solid, dynamic, translucent field. Adjacent tiles merge into one
   // connected gameplay region — see sim/timeStopField/.
   { id: 'timestop_field', label: 'TimeStop Field', category: 'fields', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isTimeStopFieldItem: 1 },
+  // ── Poison Field ─────────────────────────────────────────────────────────────
+  // Non-solid, editor-authored rectangle (drag to size, like Challenge Field) —
+  // see sim/poisonField/ for the deterministic exposure/damage contract.
+  { id: 'poison_field', label: 'Poison Field', category: 'fields', defaultWidthBlocks: 4, defaultHeightBlocks: 4 },
   // ── Bounce pads ─────────────────────────────────────────────────────────────
   // Dim = 50 % restitution (small 2×2-pixel core)
   { id: 'bounce_pad_1x1_dim',       label: 'Bounce 1×1 (50%)',      category: 'specialBlocks', defaultWidthBlocks: 1, defaultHeightBlocks: 1, isBouncePadItem: 1, bouncePadSpeedFactorIndex: 0 },

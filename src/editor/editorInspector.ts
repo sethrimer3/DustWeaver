@@ -892,6 +892,18 @@ export function updateInspector(
       addField(div, 'hBlock', String(zone.hBlock),
         v => callbacks?.onPropertyChange('timeStopField.hBlock', parseInt(v)));
     }
+  } else if (el.type === 'poisonField') {
+    const zone = (room.poisonFields ?? []).find(z => z.uid === el.uid);
+    if (zone) {
+      addField(div, 'xBlock', String(zone.xBlock),
+        v => callbacks?.onPropertyChange('poisonField.xBlock', parseInt(v)));
+      addField(div, 'yBlock', String(zone.yBlock),
+        v => callbacks?.onPropertyChange('poisonField.yBlock', parseInt(v)));
+      addField(div, 'wBlock', String(zone.wBlock),
+        v => callbacks?.onPropertyChange('poisonField.wBlock', parseInt(v)));
+      addField(div, 'hBlock', String(zone.hBlock),
+        v => callbacks?.onPropertyChange('poisonField.hBlock', parseInt(v)));
+    }
   } else if (el.type === 'crumbleBlock') {
     const block = (room.crumbleBlocks ?? []).find(b => b.uid === el.uid);
     if (block) {

@@ -134,6 +134,7 @@ import { getPlayerMoteCapacityFromProgress } from '../sim/playerMoteLife';
 import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { resetShieldLiquidContactLatch } from '../sim/hazards';
 import { resetTimeStopFieldPlayerState } from '../sim/timeStopField/timeStopFieldPlayerState';
+import { resetPoisonExposureState } from '../sim/poisonField/poisonExposureState';
 import type { CombatMode } from '../sim/combatMode';
 
 /**
@@ -377,6 +378,12 @@ function resetRoomScopedSimState(world: WorldState): void {
   // to zero by the fresh spawn on every room activation, so any stale
   // suspended momentum from the previous room must never be re-applied here.
   resetTimeStopFieldPlayerState(world.timeStopField);
+
+  // Poison exposure is temporary, room/session-local state — never banked or
+  // serialized. Every room activation path (fresh load, resident hot-swap,
+  // respawn) must clear it so a stale exposure timer never survives into a
+  // new room or a fresh spawn.
+  resetPoisonExposureState(world.poisonExposure);
 
   world.isGrappleActiveFlag       = 0;
   world.isGrappleMissActiveFlag   = 0;

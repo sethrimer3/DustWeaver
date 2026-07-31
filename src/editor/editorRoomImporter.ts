@@ -34,6 +34,7 @@ import type {
   EditorWaterZone,
   EditorLavaZone,
   EditorTimeStopField,
+  EditorPoisonField,
   EditorCrumbleBlock,
   EditorSpike,
   EditorLaser,
@@ -399,6 +400,14 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
     hBlock: z.hBlock,
   }));
 
+  const poisonFields: EditorPoisonField[] = (room.poisonFields ?? []).map(z => ({
+    uid: uid++,
+    xBlock: z.xBlock,
+    yBlock: z.yBlock,
+    wBlock: z.wBlock,
+    hBlock: z.hBlock,
+  }));
+
   const timeStopFields: EditorTimeStopField[] = (room.timeStopFields ?? []).map(z => ({
     uid: uid++,
     xBlock: z.xBlock,
@@ -614,6 +623,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       lightSources,
       waterZones,
       lavaZones,
+      poisonFields,
       timeStopFields,
       crumbleBlocks,
       spikes,

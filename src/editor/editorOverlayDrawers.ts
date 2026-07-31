@@ -53,6 +53,7 @@ export type { IsElementSelected } from './editorZoneDrawers';
 export {
   drawEditorLiquidZones,
   drawEditorTimeStopFields,
+  drawEditorPoisonFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
   drawEditorLasers,

@@ -424,6 +424,13 @@ export function isCellCoveredByLavaZone(room: EditorRoomData, xBlock: number, yB
 }
 
 /**
+ * Same as `isCellCoveredByLavaZone` but for Poison Field rectangles.
+ */
+export function isCellCoveredByPoisonField(room: EditorRoomData, xBlock: number, yBlock: number): boolean {
+  return (room.poisonFields ?? []).some(z => hitTestZone(z, xBlock, yBlock));
+}
+
+/**
  * Same as `isCellCoveredByWaterZone` but for TimeStop Field tiles.
  */
 export function isCellCoveredByTimeStopField(room: EditorRoomData, xBlock: number, yBlock: number): boolean {

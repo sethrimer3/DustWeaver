@@ -18,7 +18,7 @@ export const EDITOR_ROOM_ELEMENT_COLLECTION_KEYS = [
   'lambdaAnchors', 'fireflyJars', 'springboards', 'breakableBlocks',
   'dustPiles', 'grasshopperAreas', 'fireflyAreas', 'decorations',
   'ambientLightBlockers', 'lightSources', 'waterZones', 'lavaZones',
-  'timeStopFields', 'crumbleBlocks', 'spikes', 'lasers', 'bouncePads', 'kineticBlocks',
+  'timeStopFields', 'poisonFields', 'crumbleBlocks', 'spikes', 'lasers', 'bouncePads', 'kineticBlocks',
   'grappleCarryBlocks', 'zipMoveBlocks', 'phantasmalTiles', 'pixelMaterials',
   'ropes', 'sunbeams', 'sceneLights', 'fallingBlocks', 'dialogueTriggers',
   'backgroundBlocks', 'guideDustPaths', 'customBlockPlacements',

@@ -49,6 +49,19 @@ export interface PlayerDamageOptions {
   challengeState?: ChallengeModeState;
   clearTransientMovement?: () => void;
   bypassMomentumInvulnerability?: boolean;
+  /**
+   * When true, skip the generic post-hit `invulnerabilityTicks > 0` gate.
+   * Used exclusively by the Poison Field exposure controller (see
+   * sim/poisonField/poisonExposureState.ts): poison damage is scheduled on
+   * its own independent 3.0s cadence (or fires exactly once on a
+   * Verdant-switch-away transition) and must not be silently swallowed just
+   * because an unrelated contact hazard (spike/lava/enemy) granted the
+   * player a brief 1.5s invulnerability window moments earlier. The hit
+   * still SETS invulnerabilityTicks afterward as normal, so it continues to
+   * protect the player from an immediate unrelated follow-up hit — this only
+   * bypasses the check on the way IN for poison's own scheduled ticks.
+   */
+  bypassContactInvulnerability?: boolean;
 }
 
 export function applyPlayerDamageWithKnockback(
@@ -59,7 +72,7 @@ export function applyPlayerDamageWithKnockback(
   options?: PlayerDamageOptions,
 ): boolean {
   if (player.isAliveFlag === 0) return false;
-  if (player.invulnerabilityTicks > 0) return false;
+  if (player.invulnerabilityTicks > 0 && options?.bypassContactInvulnerability !== true) return false;
   if (player.isHighVelocityAttacking === 1 && options?.bypassMomentumInvulnerability !== true) return false; // momentum combat invulnerability
   if (player.challengeReturnGuard === 1) return false;
 

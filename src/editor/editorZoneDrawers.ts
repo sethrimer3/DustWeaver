@@ -117,6 +117,48 @@ export function drawEditorLiquidZones(
 }
 
 // ============================================================================
+// Poison Field
+// ============================================================================
+
+/**
+ * Draws each Poison Field rectangle with a clearly-identifiable-while-editing
+ * purple tint. Deliberately more visible than the ~10%-peak-opacity runtime
+ * cloud rendering (see render/poisonFieldRenderer.ts) — the editor preview
+ * needs to be legible, while the runtime visual needs to conceal the exact
+ * authored geometry.
+ */
+export function drawEditorPoisonFields(
+  ctx: CanvasRenderingContext2D,
+  room: EditorRoomData,
+  isSelected: IsElementSelected,
+  offsetXPx: number,
+  offsetYPx: number,
+  zoom: number,
+  viewport?: EditorViewport,
+): void {
+  for (const z of (room.poisonFields ?? [])) {
+    editorPerfCounters.overlayElementsVisited++;
+    if (!isElementInViewport(viewport, z.xBlock, z.yBlock, z.wBlock, z.hBlock)) continue;
+    editorPerfCounters.overlayElementsDrawn++;
+    const sel = isSelected('poisonField', z.uid);
+    const xPx = z.xBlock * BLOCK_SIZE_SMALL * zoom + offsetXPx;
+    const yPx = z.yBlock * BLOCK_SIZE_SMALL * zoom + offsetYPx;
+    const wPx = z.wBlock * BLOCK_SIZE_SMALL * zoom;
+    const hPx = z.hBlock * BLOCK_SIZE_SMALL * zoom;
+    ctx.fillStyle = sel ? 'rgba(160,60,220,0.28)' : 'rgba(140,50,190,0.16)';
+    ctx.fillRect(xPx, yPx, wPx, hPx);
+    ctx.strokeStyle = sel ? 'rgba(200,110,255,0.85)' : 'rgba(160,80,220,0.50)';
+    ctx.lineWidth = sel ? 2 : 1;
+    ctx.strokeRect(xPx, yPx, wPx, hPx);
+    ctx.fillStyle = 'rgba(220,170,255,0.75)';
+    ctx.font = `${Math.max(8, BLOCK_SIZE_SMALL * zoom * 0.7)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('☠', xPx + wPx * 0.5, yPx + hPx * 0.5);
+  }
+}
+
+// ============================================================================
 // TimeStop Field (experimental)
 // ============================================================================
 

@@ -386,6 +386,13 @@ export interface SavedRoomV2 {
    * to an empty list on hydrate, so old rooms keep loading unaffected.
    */
   timeStopFieldLayer?: SavedSolidLayer;
+  /**
+   * Poison Field rectangles, compact-compressed the same way as
+   * timeStopFieldLayer. Absent (undefined) on rooms with no Poison Field
+   * placements or saved before this field existed — always defaults safely
+   * to an empty list on hydrate, so old rooms keep loading unaffected.
+   */
+  poisonFieldLayer?: SavedSolidLayer;
   /** [x, y, groupId?] */
   breakableBlocks?: ([number, number] | [number, number, number])[];
   dustBoostJars?: [number, number, string, number][];

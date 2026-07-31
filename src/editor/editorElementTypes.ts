@@ -250,6 +250,20 @@ export interface EditorTimeStopField {
   hBlock: number;
 }
 
+/**
+ * A Poison Field rectangle placed in the room. Non-solid, editor-authored,
+ * drag-resizable like EditorLavaZone/EditorChallengeRect (NOT a per-cell
+ * merged zone like EditorTimeStopField). See sim/poisonField/ for the
+ * deterministic exposure/timing contract this authoring rectangle drives.
+ */
+export interface EditorPoisonField {
+  uid: number;
+  xBlock: number;
+  yBlock: number;
+  wBlock: number;
+  hBlock: number;
+}
+
 export interface EditorChallengeRect {
   uid: number;
   xBlock: number;
@@ -739,6 +753,8 @@ export interface EditorRoomData {
   lavaZones?: EditorLavaZone[];
   /** TimeStop Field tiles placed in this room. */
   timeStopFields?: EditorTimeStopField[];
+  /** Poison Field rectangles placed in this room. */
+  poisonFields?: EditorPoisonField[];
   /** Crumble blocks placed in this room (collapse on first player contact). */
   crumbleBlocks?: EditorCrumbleBlock[];
   /** Spikes placed in this room (damage the player on contact with the base half). */
@@ -775,7 +791,7 @@ export interface EditorRoomData {
 
 // ── Selected element reference ────────────────────────────────────────────────
 
-export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'timeStopField' | 'crumbleBlock' | 'spike' | 'laser' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock' | 'fireflyJar' | 'springboard' | 'breakableBlock';
+export type SelectedElementType = 'wall' | 'enemy' | 'transition' | 'saveTomb' | 'skillTomb' | 'challengeField' | 'challengeGate' | 'gate' | 'challengeTotem' | 'dustContainer' | 'dustContainerPiece' | 'dustBoostJar' | 'dustSwarm' | 'lambdaAnchor' | 'dustPile' | 'grasshopperArea' | 'fireflyArea' | 'decoration' | 'playerSpawn' | 'campaignSpawn' | 'ambientLightBlocker' | 'lightSource' | 'waterZone' | 'lavaZone' | 'timeStopField' | 'poisonField' | 'crumbleBlock' | 'spike' | 'laser' | 'bouncePad' | 'kineticBlock' | 'grappleCarryBlock' | 'zipMoveBlock' | 'phantasmalTile' | 'pixelMaterial' | 'rope' | 'sunbeam' | 'sceneLight' | 'fallingBlock' | 'dialogueTrigger' | 'backgroundBlock' | 'guideDustPath' | 'customBlock' | 'fireflyJar' | 'springboard' | 'breakableBlock';
 
 export interface SelectedElement {
   type: SelectedElementType;

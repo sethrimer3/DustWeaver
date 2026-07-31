@@ -68,7 +68,7 @@ export const CLICK_PRIORITY_ORDER: readonly SelectedElementType[] = [
   'challengeGate', 'gate', 'challengeTotem', 'dustContainer', 'dustContainerPiece',
   'dustBoostJar', 'dustSwarm', 'lambdaAnchor', 'fireflyJar', 'springboard', 'breakableBlock',
   'dustPile', 'grasshopperArea', 'fireflyArea', 'lightSource', 'sunbeam', 'sceneLight',
-  'waterZone', 'lavaZone', 'timeStopField', 'crumbleBlock', 'fallingBlock', 'backgroundBlock',
+  'waterZone', 'lavaZone', 'timeStopField', 'poisonField', 'crumbleBlock', 'fallingBlock', 'backgroundBlock',
   'grappleCarryBlock', 'phantasmalTile', 'dialogueTrigger', 'guideDustPath', 'bouncePad',
   'spike', 'laser', 'decoration', 'campaignSpawn', 'playerSpawn', 'customBlock', 'wall', 'ambientLightBlocker',
 ];

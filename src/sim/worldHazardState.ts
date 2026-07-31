@@ -22,6 +22,8 @@ export const MAX_WATER_ZONES = 6000;
 export const MAX_LAVA_ZONES = 6000;
 /** Maximum number of TimeStop Field tiles per room (matches the liquid-zone scale). */
 export const MAX_TIME_STOP_FIELDS = 6000;
+/** Maximum number of Poison Field rectangles per room (editor-authored rectangle fields, not per-cell). */
+export const MAX_POISON_FIELDS = 256;
 /** Maximum number of breakable blocks per room. */
 export const MAX_BREAKABLE_BLOCKS = 32;
 /**
@@ -312,6 +314,19 @@ export interface HazardWorldState {
   timeStopFieldWWorld: Float32Array;
   /** Height of each TimeStop Field placement (world units). */
   timeStopFieldHWorld: Float32Array;
+
+  // ── Poison Field rectangles (authoring data only — deterministic exposure
+  //    state lives in world.poisonExposure / sim/poisonField/) ────────────────
+  /** Number of active Poison Field rectangle placements. */
+  poisonFieldCount: number;
+  /** Left edge X of each Poison Field placement (world units). */
+  poisonFieldXWorld: Float32Array;
+  /** Top edge Y of each Poison Field placement (world units). */
+  poisonFieldYWorld: Float32Array;
+  /** Width of each Poison Field placement (world units). */
+  poisonFieldWWorld: Float32Array;
+  /** Height of each Poison Field placement (world units). */
+  poisonFieldHWorld: Float32Array;
 
   // ── Breakable blocks ───────────────────────────────────────────────────────
   /** Number of breakable blocks (active + broken). */
@@ -1036,6 +1051,11 @@ export function createHazardWorldState(): HazardWorldState {
     timeStopFieldYWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
     timeStopFieldWWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
     timeStopFieldHWorld:           new Float32Array(MAX_TIME_STOP_FIELDS),
+    poisonFieldCount:              0,
+    poisonFieldXWorld:             new Float32Array(MAX_POISON_FIELDS),
+    poisonFieldYWorld:             new Float32Array(MAX_POISON_FIELDS),
+    poisonFieldWWorld:             new Float32Array(MAX_POISON_FIELDS),
+    poisonFieldHWorld:             new Float32Array(MAX_POISON_FIELDS),
     breakableBlockCount:           0,
     breakableBlockXWorld:          new Float32Array(MAX_BREAKABLE_BLOCKS),
     breakableBlockYWorld:          new Float32Array(MAX_BREAKABLE_BLOCKS),

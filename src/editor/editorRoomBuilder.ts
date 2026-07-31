@@ -466,6 +466,12 @@ export function editorRoomDataToRoomDef(data: EditorRoomData): RoomDef {
       wBlock: z.wBlock,
       hBlock: z.hBlock,
     })),
+    poisonFields: (data.poisonFields ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    })),
     timeStopFields: (data.timeStopFields ?? []).map(z => ({
       xBlock: z.xBlock,
       yBlock: z.yBlock,

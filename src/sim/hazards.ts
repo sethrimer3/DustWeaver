@@ -22,6 +22,7 @@ import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { nextFloat, nextFloatRange } from './rng';
 import { applyPlayerDamageWithKnockback } from './playerDamage';
 import { overlapAABB } from './physics/collision';
+import { updatePoisonExposure } from './poisonField/poisonExposureState';
 import { aabbOverlapsWallSolid } from './stairsWorldGeometry';
 import {
   PLAYER_WATER_STATE_OUTSIDE,
@@ -920,6 +921,13 @@ export function applyHazards(world: WorldState): void {
       }
     }
   }
+
+  // ── Poison Field exposure ──────────────────────────────────────────────────
+  // Deterministic, instance-local exposure/cadence controller — see
+  // sim/poisonField/poisonExposureState.ts for the full entry/Verdant-immunity/
+  // switch-away/recurring-tick contract. Runs once per tick using this tick's
+  // dtSec so timestep subdivision and large ticks both resolve correctly.
+  updatePoisonExposure(world, dtSec);
 
   // Captured BEFORE the contact-damage section below so the breakable-block
   // momentum-threshold check (further down) reflects the player's actual

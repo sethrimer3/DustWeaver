@@ -280,7 +280,7 @@ export function countRoomDefCategories(room: RoomDef): RoomComplexityCategoryCou
       (room.dustSwarms ?? []).reduce((sum, s) => sum + s.dustCount, 0) +
       (room.dustPiles ?? []).reduce((sum, p) => sum + p.dustCount, 0) +
       (room.guideDustPaths ?? []).reduce((sum, p) => sum + p.moteCount, 0),
-    hazards: (room.spikes?.length ?? 0) + (room.lasers?.length ?? 0) + (room.waterZones?.length ?? 0) + (room.lavaZones?.length ?? 0),
+    hazards: (room.spikes?.length ?? 0) + (room.lasers?.length ?? 0) + (room.waterZones?.length ?? 0) + (room.lavaZones?.length ?? 0) + (room.poisonFields?.length ?? 0),
     triggers: (room.dialogueTriggers?.length ?? 0) + room.transitions.length,
     lights:
       (room.ambientLightBlockers?.length ?? 0) +

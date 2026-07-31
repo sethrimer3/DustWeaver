@@ -804,6 +804,13 @@ export interface RoomDef {
    * no runtime state (momentum, overlap, contours) is stored here.
    */
   timeStopFields?: readonly RoomZoneDef[];
+  /**
+   * Poison Field zones — non-solid, editor-authored rectangles. Overlapping
+   * a Poison Field while Verdant Dust is NOT the equipped dust type begins a
+   * continuous vulnerable-exposure timer (see sim/poisonField/). Purely
+   * authoring data — no runtime exposure/timing state is stored here.
+   */
+  poisonFields?: readonly RoomZoneDef[];
   /** Breakable blocks that shatter from high-momentum player impact. */
   breakableBlocks?: readonly RoomBreakableBlockDef[];
   /** Solid custom-block cells that damage the player on contact (Phase 2D). */

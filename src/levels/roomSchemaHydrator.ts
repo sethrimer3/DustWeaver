@@ -506,6 +506,13 @@ export function hydrateV2Room(saved: SavedRoomV2, opts?: { forEditor?: boolean }
     const rects = expandLayerToRects(saved.timeStopFieldLayer);
     if (rects.length > 0) json.timeStopFields = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
   }
+
+  // Poison Field rectangles: compact `poisonFieldLayer` only (no legacy
+  // fallback needed — this field never existed before the compact format).
+  if (saved.poisonFieldLayer) {
+    const rects = expandLayerToRects(saved.poisonFieldLayer);
+    if (rects.length > 0) json.poisonFields = rects.map(([x, y, w, h]) => ({ xBlock: x, yBlock: y, wBlock: w, hBlock: h }));
+  }
   if (saved.breakableBlocks) json.breakableBlocks = saved.breakableBlocks.map(([x, y, groupId]) => ({
     xBlock: x,
     yBlock: y,

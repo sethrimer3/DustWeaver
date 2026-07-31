@@ -81,6 +81,7 @@ export const DRAG_MOVE_KINDS: Partial<Record<SelectedElementType, DragMoveKind>>
   waterZone: 'plain',
   lavaZone: 'plain',
   timeStopField: 'plain',
+  poisonField: 'plain',
   crumbleBlock: 'plain',
   bouncePad: 'plain',
   spike: 'plain',

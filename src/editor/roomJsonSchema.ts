@@ -553,6 +553,7 @@ export interface RoomJsonDef {
   waterZones?: RoomJsonZone[];
   lavaZones?: RoomJsonZone[];
   timeStopFields?: RoomJsonZone[];
+  poisonFields?: RoomJsonZone[];
   breakableBlocks?: RoomJsonBreakableBlock[];
   crumbleBlocks?: RoomJsonCrumbleBlock[];
   bouncePads?: RoomJsonBouncePad[];

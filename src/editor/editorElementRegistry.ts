@@ -171,7 +171,7 @@ import type {
   EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   EditorDustPile, EditorGrasshopperArea, EditorFireflyArea, EditorDecoration,
   EditorAmbientLightBlocker, EditorLightSource, EditorWaterZone, EditorLavaZone,
-  EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad,
+  EditorTimeStopField, EditorPoisonField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad,
   EditorKineticBlock, EditorGrappleCarryBlock, EditorZipMoveBlock, EditorPhantasmalTile,
   EditorPixelMaterial, EditorRope, EditorSunbeam, EditorSceneLight, EditorFallingBlock,
   EditorDialogueTrigger, EditorBackgroundBlock, EditorGuideDustPath, EditorCustomBlockPlacement,
@@ -227,6 +227,7 @@ const lightSourceAdapter = pointAdapter<EditorLightSource>('lightSource', getLay
 const waterZoneAdapter = zoneAdapter<EditorWaterZone>('waterZone', getLayerForElementType('waterZone'), (_s, room) => room.waterZones ?? []);
 const lavaZoneAdapter = zoneAdapter<EditorLavaZone>('lavaZone', getLayerForElementType('lavaZone'), (_s, room) => room.lavaZones ?? []);
 const timeStopFieldAdapter = zoneAdapter<EditorTimeStopField>('timeStopField', getLayerForElementType('timeStopField'), (_s, room) => room.timeStopFields ?? []);
+const poisonFieldAdapter = zoneAdapter<EditorPoisonField>('poisonField', getLayerForElementType('poisonField'), (_s, room) => room.poisonFields ?? []);
 
 const crumbleBlockAdapter: EditorElementAdapter<EditorCrumbleBlock> = {
   elementType: 'crumbleBlock',
@@ -435,6 +436,7 @@ export const ELEMENT_ADAPTERS: { readonly [K in SelectedElementType]: EditorElem
   waterZone: waterZoneAdapter,
   lavaZone: lavaZoneAdapter,
   timeStopField: timeStopFieldAdapter,
+  poisonField: poisonFieldAdapter,
   crumbleBlock: crumbleBlockAdapter,
   spike: spikeAdapter,
   laser: laserAdapter,

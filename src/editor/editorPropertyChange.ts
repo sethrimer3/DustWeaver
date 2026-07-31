@@ -26,6 +26,7 @@ import type {
   EditorSunbeam,
   EditorWaterZone,
   EditorLavaZone,
+  EditorPoisonField,
   EditorCrumbleBlock,
   EditorBouncePad,
   EditorSpike,
@@ -242,6 +243,14 @@ export function applyPropertyToElement(
       if (prop === 'lavaZone.yBlock' && !isNaN(numVal)) zone.yBlock = numVal;
       if (prop === 'lavaZone.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
       if (prop === 'lavaZone.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
+    }
+  } else if (el.type === 'poisonField') {
+    const zone = (room.poisonFields ?? []).find((z: EditorPoisonField) => z.uid === el.uid);
+    if (zone) {
+      if (prop === 'poisonField.xBlock' && !isNaN(numVal)) zone.xBlock = numVal;
+      if (prop === 'poisonField.yBlock' && !isNaN(numVal)) zone.yBlock = numVal;
+      if (prop === 'poisonField.wBlock' && !isNaN(numVal)) zone.wBlock = Math.max(1, numVal);
+      if (prop === 'poisonField.hBlock' && !isNaN(numVal)) zone.hBlock = Math.max(1, numVal);
     }
   } else if (el.type === 'crumbleBlock') {
     const block = (room.crumbleBlocks ?? []).find((b: EditorCrumbleBlock) => b.uid === el.uid);
@@ -485,6 +494,7 @@ function findElementRef(room: EditorRoomData, el: SelectedElement): unknown {
     case 'waterZone': return (room.waterZones ?? []).find(z => z.uid === el.uid);
     case 'lavaZone': return (room.lavaZones ?? []).find(z => z.uid === el.uid);
     case 'timeStopField': return (room.timeStopFields ?? []).find(z => z.uid === el.uid);
+    case 'poisonField': return (room.poisonFields ?? []).find(z => z.uid === el.uid);
     case 'zipMoveBlock': return (room.zipMoveBlocks ?? []).find(z => z.uid === el.uid);
     case 'challengeField': return (room.challengeFields ?? []).find(z => z.uid === el.uid);
     case 'challengeGate': return (room.challengeGates ?? []).find(z => z.uid === el.uid);

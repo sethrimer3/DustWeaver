@@ -286,6 +286,13 @@ function deleteResolvedCandidate(
       markLiquidBodiesDirty();
       break;
     }
+    case 'poisonField': {
+      const zones = room.poisonFields ?? [];
+      const zone = zones.find(z => z.uid === uid);
+      if (!zone) return false;
+      removeByUid(zones, uid);
+      break;
+    }
     case 'lavaZone': {
       const zones = room.lavaZones ?? [];
       const zone = zones.find(z => z.uid === uid);

@@ -87,6 +87,7 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
   world.lavaZoneCount = 0;
   world.lavaInvulnTicks = 0;
   world.timeStopFieldCount = 0;
+  world.poisonFieldCount = 0;
   world.breakableBlockCount = 0;
   world.breakEventCount = 0;
   world.contactDamageBlockCount = 0;
@@ -301,6 +302,25 @@ export function loadRoomHazards(world: WorldState, room: RoomDef): void {
     world.timeStopFieldHWorld[ti] = t.hBlock * BLOCK_SIZE_MEDIUM;
   }
   markTimeStopFieldsDirty();
+
+  // ── Poison Field rectangles ────────────────────────────────────────────────
+  // Editor-authored rectangles only — no per-tile merging/connectivity (unlike
+  // TimeStop Field). Runtime overlap/exposure state lives in
+  // world.poisonExposure (see sim/poisonField/poisonExposureState.ts), never
+  // recomputed here.
+  const poisonFieldDefs = room.poisonFields ?? [];
+  for (
+    let i = 0;
+    i < poisonFieldDefs.length && world.poisonFieldCount < world.poisonFieldXWorld.length;
+    i++
+  ) {
+    const p = poisonFieldDefs[i];
+    const pi = world.poisonFieldCount++;
+    world.poisonFieldXWorld[pi] = p.xBlock * BLOCK_SIZE_MEDIUM;
+    world.poisonFieldYWorld[pi] = p.yBlock * BLOCK_SIZE_MEDIUM;
+    world.poisonFieldWWorld[pi] = p.wBlock * BLOCK_SIZE_MEDIUM;
+    world.poisonFieldHWorld[pi] = p.hBlock * BLOCK_SIZE_MEDIUM;
+  }
 
   // Invalidate the liquid body render cache whenever zones are (re)loaded.
   markLiquidBodiesDirty();

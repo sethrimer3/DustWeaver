@@ -23,6 +23,7 @@ import {
   drawEditorLightingOverlays,
   drawEditorLiquidZones,
   drawEditorTimeStopFields,
+  drawEditorPoisonFields,
   drawEditorCrumbleBlocks,
   drawEditorSpikes,
   drawEditorLasers,
@@ -131,6 +132,7 @@ export function renderEditorOverlays(
   if (layerOn('lightSource')) drawEditorLightingOverlays(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('waterZone')) drawEditorLiquidZones(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('timeStopField')) drawEditorTimeStopFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
+  if (layerOn('poisonField')) drawEditorPoisonFields(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('crumbleBlock')) drawEditorCrumbleBlocks(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('spike')) drawEditorSpikes(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);
   if (layerOn('laser')) drawEditorLasers(ctx, room, isElementSelected, offsetXPx, offsetYPx, zoom, viewport);

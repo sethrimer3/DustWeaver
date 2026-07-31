@@ -577,7 +577,7 @@ export function wouldPlacementSucceedAt(
     return wBlock >= 3 && hBlock >= 3;
   }
 
-  if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
+  if (item.id === 'challenge_field' || item.id === 'poison_field' || item.id.endsWith('_gate')) {
     const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
     const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
     const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
@@ -1128,7 +1128,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     (room.zipMoveBlocks ??= []).push({
       uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock, variant: item.zipMoveBlockVariant,
     });
-  } else if (item.id === 'challenge_field' || item.id.endsWith('_gate')) {
+  } else if (item.id === 'challenge_field' || item.id === 'poison_field' || item.id.endsWith('_gate')) {
     const rectStartX = state.brushMode === 'rect' ? state.brushRectStartBlockX : null;
     const rectStartY = state.brushMode === 'rect' ? state.brushRectStartBlockY : null;
     const xBlock = rectStartX === null ? bx : Math.min(rectStartX, bx);
@@ -1140,6 +1140,8 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     if (wBlock < 1 || hBlock < 1) return;
     if (item.id === 'challenge_field') {
       (room.challengeFields ??= []).push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
+    } else if (item.id === 'poison_field') {
+      (room.poisonFields ??= []).push({ uid: allocateUid(state), xBlock, yBlock, wBlock, hBlock });
     } else {
       const kind = item.id.slice(0, -5) as import('../levels/gateDefs').GateKind;
       (room.gates ??= []).push({

@@ -122,6 +122,10 @@ export function applyRoomDimensionChange(
     clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
   }
 
+  for (const z of (room.poisonFields ?? [])) {
+    clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
+  }
+
   for (const z of (room.timeStopFields ?? [])) {
     clampZoneToDimensions(z, room.widthBlocks, room.heightBlocks);
   }
@@ -336,7 +340,7 @@ export function applyEdgeResize(
   // ── Rect collections (clipped; removed if fully outside new bounds) ───────
   for (const key of [
     'interiorWalls', 'challengeFields', 'challengeGates', 'gates', 'waterZones',
-    'lavaZones', 'timeStopFields', 'crumbleBlocks', 'bouncePads', 'kineticBlocks',
+    'lavaZones', 'timeStopFields', 'poisonFields', 'crumbleBlocks', 'bouncePads', 'kineticBlocks',
     'zipMoveBlocks', 'grasshopperAreas', 'fireflyAreas', 'backgroundBlocks',
     'dialogueTriggers',
   ] as const) {

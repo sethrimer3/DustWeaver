@@ -128,6 +128,7 @@ const ELEMENT_TYPE_LAYER: Readonly<Record<SelectedElementType, LayerId>> = {
   waterZone: 'liquids',
   lavaZone: 'liquids',
   timeStopField: 'fields',
+  poisonField: 'fields',
   crumbleBlock: 'dynamicGeometry',
   spike: 'hazards',
   laser: 'hazards',

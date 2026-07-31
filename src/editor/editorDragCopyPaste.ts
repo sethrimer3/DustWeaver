@@ -9,7 +9,7 @@
 import {
   EditorState,
   EditorWall, EditorEnemy, EditorSaveTomb, EditorSkillTomb, EditorDustPile, EditorDecoration,
-  EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad,
+  EditorLightSource, EditorSunbeam, EditorWaterZone, EditorLavaZone, EditorTimeStopField, EditorPoisonField, EditorCrumbleBlock, EditorSpike, EditorLaser, EditorBouncePad,
   EditorGrasshopperArea, EditorFireflyArea, EditorFallingBlock,
   EditorDustContainer, EditorDustContainerPiece, EditorDustBoostJar, EditorDustSwarm, EditorLambdaAnchor,
   EditorFireflyJar, EditorSpringboard, EditorBreakableBlock,
@@ -101,6 +101,9 @@ export function storeDragStartPositions(
       if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
     } else if (el.type === 'timeStopField') {
       const z = (s.roomData.timeStopFields ?? []).find(z2 => z2.uid === el.uid);
+      if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
+    } else if (el.type === 'poisonField') {
+      const z = (s.roomData.poisonFields ?? []).find(z2 => z2.uid === el.uid);
       if (z) positions.set(key, { xBlock: z.xBlock, yBlock: z.yBlock });
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
@@ -239,6 +242,9 @@ export function moveSelectedElements(
     } else if (el.type === 'timeStopField') {
       const z = (s.roomData.timeStopFields ?? []).find(z2 => z2.uid === el.uid);
       if (z) { z.xBlock = orig.xBlock + deltaX; z.yBlock = orig.yBlock + deltaY; }
+    } else if (el.type === 'poisonField') {
+      const z = (s.roomData.poisonFields ?? []).find(z2 => z2.uid === el.uid);
+      if (z) { z.xBlock = orig.xBlock + deltaX; z.yBlock = orig.yBlock + deltaY; }
     } else if (el.type === 'crumbleBlock') {
       const b = (s.roomData.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) { b.xBlock = orig.xBlock + deltaX; b.yBlock = orig.yBlock + deltaY; }
@@ -328,6 +334,7 @@ export function serializeSelectedElements(
     waterZones: EditorWaterZone[];
     lavaZones: EditorLavaZone[];
     timeStopFields: EditorTimeStopField[];
+    poisonFields: EditorPoisonField[];
     crumbleBlocks: EditorCrumbleBlock[];
     spikes: EditorSpike[];
     lasers: EditorLaser[];
@@ -343,7 +350,7 @@ export function serializeSelectedElements(
     lambdaAnchors: [],
     fireflyJars: [], springboards: [], breakableBlocks: [],
     dustPiles: [],
-    decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], timeStopFields: [], crumbleBlocks: [],
+    decorations: [], lightSources: [], sunbeams: [], waterZones: [], lavaZones: [], timeStopFields: [], poisonFields: [], crumbleBlocks: [],
     spikes: [],
     lasers: [],
     bouncePads: [], grasshopperAreas: [], fireflyAreas: [], fallingBlocks: [], guideDustPaths: [],
@@ -421,6 +428,9 @@ export function serializeSelectedElements(
     } else if (el.type === 'timeStopField') {
       const z = (room.timeStopFields ?? []).find(z2 => z2.uid === el.uid);
       if (z) data.timeStopFields.push({ ...z });
+    } else if (el.type === 'poisonField') {
+      const z = (room.poisonFields ?? []).find(z2 => z2.uid === el.uid);
+      if (z) data.poisonFields.push({ ...z });
     } else if (el.type === 'crumbleBlock') {
       const b = (room.crumbleBlocks ?? []).find(b2 => b2.uid === el.uid);
       if (b) data.crumbleBlocks.push({ ...b });
@@ -479,6 +489,7 @@ const CLIPBOARD_KEY_TYPE: Readonly<Record<string, SelectedElementType>> = {
   waterZones: 'waterZone',
   lavaZones: 'lavaZone',
   timeStopFields: 'timeStopField',
+  poisonFields: 'poisonField',
   crumbleBlocks: 'crumbleBlock',
   spikes: 'spike',
   lasers: 'laser',
@@ -548,6 +559,7 @@ export function pasteFromClipboard(s: EditorState): boolean {
     waterZones?: EditorWaterZone[];
     lavaZones?: EditorLavaZone[];
     timeStopFields?: EditorTimeStopField[];
+    poisonFields?: EditorPoisonField[];
     crumbleBlocks?: EditorCrumbleBlock[];
     spikes?: EditorSpike[];
     lasers?: EditorLaser[];
@@ -581,7 +593,7 @@ export function pasteFromClipboard(s: EditorState): boolean {
     ...(data.fireflyJars ?? []), ...(data.springboards ?? []), ...(data.breakableBlocks ?? []),
     ...(data.dustPiles ?? []),
     ...(data.decorations ?? []), ...(data.lightSources ?? []), ...(data.sunbeams ?? []),
-    ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.timeStopFields ?? []), ...(data.crumbleBlocks ?? []),
+    ...(data.waterZones ?? []), ...(data.lavaZones ?? []), ...(data.timeStopFields ?? []), ...(data.poisonFields ?? []), ...(data.crumbleBlocks ?? []),
     ...(data.spikes ?? []),
     ...(data.lasers ?? []),
     ...(data.bouncePads ?? []), ...(data.grasshopperAreas ?? []), ...(data.fireflyAreas ?? []),
@@ -838,6 +850,17 @@ export function pasteFromClipboard(s: EditorState): boolean {
       yBlock: z.yBlock - minY + offsetY,
     });
     newElements.push({ type: 'timeStopField', uid: newUid });
+  }
+  for (const z of (data.poisonFields ?? [])) {
+    const newUid = allocateUid(s);
+    if (!s.roomData.poisonFields) s.roomData.poisonFields = [];
+    s.roomData.poisonFields.push({
+      ...z,
+      uid: newUid,
+      xBlock: z.xBlock - minX + offsetX,
+      yBlock: z.yBlock - minY + offsetY,
+    });
+    newElements.push({ type: 'poisonField', uid: newUid });
   }
   for (const b of (data.crumbleBlocks ?? [])) {
     const newUid = allocateUid(s);

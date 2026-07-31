@@ -15,6 +15,10 @@ import {
   createTimeStopFieldPlayerState,
   type TimeStopFieldPlayerState,
 } from './timeStopField/timeStopFieldPlayerState';
+import {
+  createPoisonExposureState,
+  type PoisonExposureState,
+} from './poisonField/poisonExposureState';
 import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
 
 /** Fixed capacity for this tick's Verdant flower-bloom spawn events (see verdantFlowerEventCount). */
@@ -82,6 +86,11 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    * TimeStop Field mechanic. See sim/timeStopField/timeStopFieldPlayerState.ts.
    */
   timeStopField: TimeStopFieldPlayerState;
+  /**
+   * Deterministic Poison Field exposure/timing state. See
+   * sim/poisonField/poisonExposureState.ts. Never serialized to saves.
+   */
+  poisonExposure: PoisonExposureState;
   /** Temporary, instance-local state for the currently loaded room's challenge elements. */
   challengeMode: ChallengeModeState;
   gates: RuntimeGate[];
@@ -575,6 +584,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
     shieldWeave: createShieldWeaveState(),
     timeStopField: createTimeStopFieldPlayerState(),
+    poisonExposure: createPoisonExposureState(),
     combatMode: DEFAULT_COMBAT_MODE,
     challengeMode: createChallengeModeState(),
     gates: [],

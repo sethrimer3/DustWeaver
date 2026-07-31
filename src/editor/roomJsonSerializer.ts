@@ -372,6 +372,14 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       hBlock: z.hBlock,
     }));
   }
+  if ((data.poisonFields ?? []).length > 0) {
+    json.poisonFields = (data.poisonFields ?? []).map(z => ({
+      xBlock: z.xBlock,
+      yBlock: z.yBlock,
+      wBlock: z.wBlock,
+      hBlock: z.hBlock,
+    }));
+  }
   if ((data.crumbleBlocks ?? []).length > 0) {
     json.crumbleBlocks = (data.crumbleBlocks ?? []).map(b => {
       const entry: RoomJsonCrumbleBlock = {
