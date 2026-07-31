@@ -43,6 +43,10 @@ import { clearPlayerSkidState } from './playerSkid';
 import { computeSkidJumpSpeedWorld } from './skidJumpHeight';
 import { rechargeGrappleCharge } from './grappleShared';
 import { isVerdantDustEquipped, VERDANT_JUMP_LAUNCH_MULTIPLIER } from './verdantMobility';
+import { updateVerdantFlowerSpawn, type VerdantFlowerSpawnEvent } from './verdantFlowerSpawn';
+
+/** Reused (never reallocated) scratch buffer for this tick's flower-bloom events. */
+const _verdantFlowerEventsScratch: VerdantFlowerSpawnEvent[] = [];
 
 // ============================================================================
 // Movement constants — imported from dedicated module for maintainability.
@@ -430,6 +434,24 @@ export function applyClusterMovement(world: WorldState): void {
         }
         if (cluster.isTouchingWallRightFlag === 1) {
           cluster.wallJumpGraceRightTicks = graceTicks;
+        }
+
+        // ── Verdant Dust temporary-flower bloom (render trigger only) ────────
+        // Evaluated here, after collision resolution finalizes this tick's
+        // grounded state and position, so the crossed-pixel scan uses the
+        // authoritative post-collision position rather than a mid-tick value.
+        // Cosmetic-only: writes bounded transient world-state events the
+        // renderer consumes and clears each frame; never affects collision,
+        // health, or save data.
+        {
+          _verdantFlowerEventsScratch.length = 0;
+          updateVerdantFlowerSpawn(cluster, world, cluster.isGroundedFlag === 1, _verdantFlowerEventsScratch);
+          const n = Math.min(_verdantFlowerEventsScratch.length, world.verdantFlowerEventXWorld.length);
+          for (let ei = 0; ei < n; ei++) {
+            world.verdantFlowerEventXWorld[ei] = _verdantFlowerEventsScratch[ei].xWorld;
+            world.verdantFlowerEventYWorld[ei] = _verdantFlowerEventsScratch[ei].yWorld;
+          }
+          world.verdantFlowerEventCount = n;
         }
       }
 

@@ -29,15 +29,15 @@
       "size": 6,
       "spawn": [
         3,
-        10
+        25
       ],
-      "depth": 59,
-      "gw": 0
+      "depth": 57,
+      "gw": 2
     }
   ],
   "bakedWallTemplate": {
     "schemaVersion": 2,
-    "sourceHash": "1c33ca85",
+    "sourceHash": "75c77eec",
     "wallCount": 4,
     "xWorld": [
       0,

@@ -35,14 +35,20 @@ let _activeIsOfficialCampaign = false;
 let _activeWorldMap: WorldMapJsonDef | null = null;
 
 /**
- * Room IDs whose lazy load is currently in-flight.  Used to avoid firing
- * duplicate IPC calls when the player stands in a transition zone for more
- * than one frame before the room data arrives.
+ * Room IDs whose lazy load is currently in-flight, mapped to their shared load promise.
+ * Used to avoid firing duplicate IPC calls when the player stands in a transition zone
+ * or multiple callers request the same room concurrently.
  *
  * Stored here alongside the other cache-lifecycle state so that
  * `deactivateCampaignRoomCache` can clear it atomically.
  */
-export const roomFilePendingLoadIds = new Set<string>();
+export const roomFilePendingLoadPromises = new Map<string, Promise<import('./roomDef').RoomDef | undefined>>();
+
+/**
+ * Incremented every time a room cache is activated. Used by downstream consumers
+ * (like transition logic) to clear stale failure state when the cache changes.
+ */
+export let cacheGenerationId = 0;
 
 // ── Cache lifecycle ───────────────────────────────────────────────────────────
 
@@ -70,6 +76,7 @@ export function activateCampaignRoomCache(
   _activeCampaignId = campaignId;
   _activeIsOfficialCampaign = isOfficialCampaign;
   _activeWorldMap = worldMap ?? null;
+  cacheGenerationId++;
 }
 
 /**
@@ -81,7 +88,7 @@ export function deactivateCampaignRoomCache(): void {
   _activeCampaignId = null;
   _activeIsOfficialCampaign = false;
   _activeWorldMap = null;
-  roomFilePendingLoadIds.clear();
+  roomFilePendingLoadPromises.clear();
 }
 
 // ── Cache query helpers ───────────────────────────────────────────────────────

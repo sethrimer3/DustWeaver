@@ -167,7 +167,7 @@ import {
   captureCampaignSpawnSnapshot,
   commitCampaignSpawnSnapshot,
 } from './editorCampaignSpawn';
-import type { PendingSnapshot } from './editorHistory';
+import type { PendingSnapshot, HistoryCommitResult } from './editorHistory';
 
 import { handleEditorKeyboardShortcuts } from './editorKeyboardShortcuts';
 import { analyzeEditorRoomComplexity } from './editorRoomComplexity';
@@ -397,6 +397,8 @@ export function createEditorController(
       state.isDragging = false;
       dragOriginalPositions.clear();
     }
+    campaignSpawnDragOrig = null;
+    campaignSpawnDragPending = null;
     // Always reset: covers rollback, layer-permission cancellation, tool/room
     // switch, editor close, and Escape.
     resetDragTargetCache(dragTargets);
@@ -2421,7 +2423,7 @@ export function createEditorController(
           const rightEdge = orig.xBlock + (isHoriz ? orig.gradientWidthBlocks : orig.openingSizeBlocks);
           const newXBlock = Math.min(cx, rightEdge - (isHoriz ? 0 : 1));
           if (isHoriz) {
-            trans.gradientWidthBlocks = Math.max(0, rightEdge - newXBlock);
+            trans.gradientWidthBlocks = Math.max(1, rightEdge - newXBlock);
             trans.xBlock = rightEdge - trans.gradientWidthBlocks;
           } else {
             trans.openingSizeBlocks = Math.max(1, rightEdge - newXBlock);
@@ -2430,7 +2432,7 @@ export function createEditorController(
           }
         } else if (state.resizeEdge === 'right') {
           if (isHoriz) {
-            trans.gradientWidthBlocks = Math.max(0, cx - orig.xBlock);
+            trans.gradientWidthBlocks = Math.max(1, cx - orig.xBlock);
           } else {
             trans.openingSizeBlocks = Math.max(1, cx - orig.xBlock);
           }
@@ -2442,14 +2444,14 @@ export function createEditorController(
             trans.yBlock = bottomEdge - trans.openingSizeBlocks;
             trans.positionBlock = trans.yBlock;
           } else {
-            trans.gradientWidthBlocks = Math.max(0, bottomEdge - newYBlock);
+            trans.gradientWidthBlocks = Math.max(1, bottomEdge - newYBlock);
             trans.yBlock = bottomEdge - trans.gradientWidthBlocks;
           }
         } else if (state.resizeEdge === 'bottom') {
           if (isHoriz) {
             trans.openingSizeBlocks = Math.max(1, cy - orig.yBlock);
           } else {
-            trans.gradientWidthBlocks = Math.max(0, cy - orig.yBlock);
+            trans.gradientWidthBlocks = Math.max(1, cy - orig.yBlock);
           }
         }
       }

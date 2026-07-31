@@ -11,18 +11,20 @@ export type { TransitionDirection };
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { ROOM_REGISTRY } from '../levels/rooms';
 import { isRoomFileCacheActive, loadRoomForGameplayAsync, getActiveRoomAdjacency } from '../levels/roomFileLoader';
+import { cacheGenerationId } from '../levels/roomFileCacheState';
 import { getTransitionXYBlock, normalizedGradientWidthBlocks } from '../levels/transitionGeometry';
 import type { WorldState } from '../sim/world';
 
 export const TRANSITION_SPAWN_INSET_BLOCKS = 3;
 
 /**
- * Rooms with an urgent async load currently in-flight due to a missing-room
- * transition.  Prevents the per-frame console.warn from firing on every tick
- * while the load is pending.  The entry is cleared when the load resolves
- * (success or failure).
+ * Rooms with an urgent async load currently in-flight or permanently failed due to
+ * a missing-room transition. Prevents the per-frame console.warn from firing on
+ * every tick while the load is pending, and prevents infinite retry storms on failure.
+ * The entry is cleared when the load resolves successfully, or when the session is reset.
  */
 const _urgentLoadPending = new Set<string>();
+let _urgentLoadGeneration = -1;
 
 export function getOppositeTransitionDirection(direction: TransitionDirection): TransitionDirection {
   if (direction === 'left') return 'right';
@@ -97,6 +99,11 @@ export function checkRoomTransitions(
 ): boolean {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return false;
+
+  if (_urgentLoadGeneration !== cacheGenerationId) {
+    _urgentLoadPending.clear();
+    _urgentLoadGeneration = cacheGenerationId;
+  }
 
   // Adjust to room-local coordinates when the active room is offset in world space.
   const px = player.positionXWorld - playerOffsetXWorld;
@@ -217,7 +224,6 @@ export function checkRoomTransitions(
               `\n  inManifestAdjacency=${isInManifest === null ? 'unknown (no adjacency data)' : isInManifest}`,
             );
             void loadRoomForGameplayAsync(t.targetRoomId).then(loaded => {
-              _urgentLoadPending.delete(t.targetRoomId);
               if (loaded === undefined) {
                 console.error(
                   `[Transition] Urgent load of "${t.targetRoomId}" FAILED.`,
@@ -226,7 +232,10 @@ export function checkRoomTransitions(
                   `\n  inManifestAdjacency=${isInManifest === null ? 'unknown' : isInManifest}`,
                   '\n  Possible causes: room not in manifest, IPC read error, hash mismatch, or hydration failure.',
                 );
+                // Note: We deliberately DO NOT delete from _urgentLoadPending on failure.
+                // This latches the failure and prevents a per-frame retry storm.
               } else {
+                _urgentLoadPending.delete(t.targetRoomId);
                 console.log(`[Transition] Urgent load of "${t.targetRoomId}" succeeded — transition will fire on next tick.`);
               }
             });

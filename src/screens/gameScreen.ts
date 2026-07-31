@@ -60,12 +60,14 @@ import { processPlayerCommands } from './gameCommandProcessor';
 import { createPlayerSfxState, updatePlayerSfx } from './gamePlayerSfx';
 import { processRoomPickups } from './gamePickups';
 import { DustContainerPickupEffect } from '../render/dustContainerPickupEffect';
+import { VerdantAfterimageTrail } from '../render/clusters/verdantAfterimageTrail';
+import { VerdantFlowerTrail } from '../render/verdantFlowerTrail';
 import { createDialogueState } from '../dialogue/dialogueState';
 import { DialogueOverlayRenderer } from '../render/ui/dialogueOverlayRenderer';
 import { PlayerSpeedometerOverlayRenderer } from '../render/ui/playerSpeedometerOverlayRenderer';
 import { PlayerSpeedGraphOverlayRenderer } from '../render/ui/playerSpeedGraphOverlayRenderer';
 import { handleDialogueAdvance, checkDialogueTriggers } from './gameDialogueHandler';
-import { updatePlayerCloaks } from './gamePlayerCloakUpdate';
+import { updatePlayerCloaks, updateVerdantAfterimageTrailFrame } from './gamePlayerCloakUpdate';
 import { tickCrumbleDebrisEvents } from './gameCrumbleDebrisEvents';
 import { tickCrackedBlockShatterEvents } from './gameCrackedBlockShatterEvents';
 import { tickBreakEvents } from './gameBreakEvents';
@@ -374,6 +376,8 @@ export function startGameScreen(
     while (!result.done) result = gen.next();
     dustContainerPickupEffect.reset();
     playerDeathDust.reset();
+    verdantAfterimageTrail.reset();
+    verdantFlowerTrail.reset();
     resetPlayerLuminantLight();
   }
 
@@ -471,6 +475,8 @@ export function startGameScreen(
   const fallingBlockDust = new FallingBlockDustRenderer();
   const dustContainerPickupEffect = new DustContainerPickupEffect();
   const playerDeathDust = new PlayerDeathDustEffect();
+  const verdantAfterimageTrail = new VerdantAfterimageTrail();
+  const verdantFlowerTrail = new VerdantFlowerTrail();
   let deathDustTriggerSeed = 1;
 
   // ── Dialogue system ──────────────────────────────────────────────────────
@@ -654,6 +660,8 @@ export function startGameScreen(
     playerCloak,
     phantomCloak,
     momentumTrail,
+    verdantAfterimageTrail,
+    verdantFlowerTrail,
     stormweaveLifeMotes,
     decorationWaveState,
     environmentalDust,
@@ -1704,6 +1712,10 @@ export function startGameScreen(
       world.playerCrouchHeldFlag = (!isDialogueBlockingInput && isDownHeld) ? 1 : 0;
       updateRoomChallengeElements(world, progress);
       tick(world);
+      // Consume this tick's deterministic Verdant flower-bloom events right
+      // away so multiple sim ticks per rendered frame never overwrite each
+      // other's events before the render-only pool sees them.
+      verdantFlowerTrail.consumeSpawnEvents(world);
       const stormweavePlayer = world.clusters[0];
       if (stormweavePlayer !== undefined && stormweavePlayer.isAliveFlag === 1) {
         const currentMoteCount = getStormweaveMoteCount(stormweavePlayer.healthPoints);
@@ -1902,6 +1914,15 @@ export function startGameScreen(
       elapsedMs,
       momentumTrail,
     );
+    updateVerdantAfterimageTrailFrame(
+      verdantAfterimageTrail,
+      world,
+      interpolationBuffers.prevClusterPosX,
+      interpolationBuffers.prevClusterPosY,
+      renderAlpha,
+      elapsedMs,
+    );
+    verdantFlowerTrail.update(elapsedMs / 1000);
 
     // ── Render frame (all canvas draw calls delegated to gameRender.ts) ───
     updateSnapshotInPlace(
@@ -1940,7 +1961,7 @@ export function startGameScreen(
     const renderFrameArgs = {
       ctx, deviceCtx, virtualCanvas, canvas,
       webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
-      playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState,
+      playerCloak, phantomCloak, momentumTrail, verdantAfterimageTrail, verdantFlowerTrail, stormweaveLifeMotes, darkRoomOverlay, decorationWaveState,
       sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
       world, currentRoom, isChallengeModeActive: world.challengeMode.isActive,
       snapshot: reusableSnapshot,

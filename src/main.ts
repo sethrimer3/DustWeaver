@@ -2,16 +2,15 @@ import { startGame } from './game';
 import {
   initRoomRegistry,
   captureMainCampaignSnapshot,
-  clearRegistryAndApplyCampaignMetadata,
   applyOfficialCampaignMetadata,
+  ROOM_REGISTRY,
 } from './levels/rooms';
 import {
   ensureCampaignRoomCache,
-  loadRoomForGameplayAsync,
   deactivateCampaignRoomCache,
+  populateRegistryFromRoomFiles,
 } from './levels/roomFileLoader';
 import { fetchOfficialPackedCampaign } from './levels/packedCampaignLoader';
-import { getCampaignStartRoomId } from './levels/campaignSchema';
 import { createExportProgressModal } from './editor/editorExportProgressModal';
 import { installSpriteAtlasDiagnostics } from './render/atlases/spriteAtlasLoader';
 import type { ExportProgressModal } from './editor/editorExportProgressModal';
@@ -146,34 +145,30 @@ async function initAndStart(): Promise<void> {
           // though initRoomRegistry() was not called.
           applyOfficialCampaignMetadata(packedCampaign);
 
-          // Prepare the registry with world-map metadata (world names + map
-          // positions for ALL rooms) WITHOUT hydrating any room data yet.
-          // This keeps the minimap and world-map overlay functional while the
-          // registry is only partially populated.
-          clearRegistryAndApplyCampaignMetadata(packedCampaign);
-
-          // Load only the start room.  Adjacent rooms will be preloaded lazily
-          // during gameplay by the room preload scheduler.
-          const startRoomId = getCampaignStartRoomId(packedCampaign);
-          const startRoom = await loadRoomForGameplayAsync(
-            startRoomId,
-            packedCampaign.worldMap,
+          // Populate the registry with all room definitions from the file cache.
+          // This batch IPC call also verifies content hashes.
+          const success = await populateRegistryFromRoomFiles(
+            packedCampaign,
+            manifest,
+            packedCampaign.campaign.id,
+            true, // isOfficialCampaign
           );
 
-          if (startRoom !== undefined) {
+          if (success) {
             console.log(
-              `[main] Official campaign: start room "${startRoomId}" loaded from file cache. ` +
-              'Remaining rooms will be lazy-loaded during gameplay.',
+              `[main] Official campaign registry ready:\n` +
+              `${ROOM_REGISTRY.size}/${Object.keys(manifest.rooms).length} rooms hydrated and hash-verified from derived cache.\n` +
+              `Starting zone preparation will complete before gameplay begins.`,
             );
             captureMainCampaignSnapshot();
             startGame(canvas, uiRoot);
             return;
           }
 
-          // Start room load failed — deactivate cache and fall through to
-          // full eager load via initRoomRegistry().
+          // Full eager load failed (e.g. hash mismatch or file read error) —
+          // deactivate cache and fall through to full eager load via initRoomRegistry().
           console.warn(
-            `[main] Official campaign: file-cache load of start room "${startRoomId}" failed. ` +
+            `[main] Official campaign: file-cache batch load failed. ` +
             'Falling back to full eager load via initRoomRegistry().',
           );
           deactivateCampaignRoomCache();

@@ -49,6 +49,7 @@ import {
   decodeRoomThemeSprites,
   decodeRoomBackground,
 } from '../render/roomAssetPreloader';
+import { getActiveManifest } from '../levels/roomFileCacheState';
 import {
   isZoneEntryReadinessComplete,
   addZoneEntryViewportTasks,
@@ -195,6 +196,20 @@ export class ZoneResidentLoader {
     };
 
     if (import.meta.env.DEV) {
+      const manifest = getActiveManifest();
+      const manifestRooms = manifest ? Object.keys(manifest.rooms).length : 'N/A';
+      console.log(
+        '[startup:rooms]',
+        `\n  manifestRooms=${manifestRooms}`,
+        `\n  registryRooms=${this._registry.size}`,
+        `\n  startingZoneRooms=${roomIds.length}`,
+      );
+      if (manifest && this._registry.size < Object.keys(manifest.rooms).length) {
+        console.warn(
+          `[zoneLoader] WARNING: Registry size (${this._registry.size}) is smaller than ` +
+          `manifest size (${manifestRooms}). Zone readiness may be inaccurate.`
+        );
+      }
       console.log(`[zoneLoader] startZoneLoad world=${worldNumber}, ${roomIds.length} rooms`);
     }
   }

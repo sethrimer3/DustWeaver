@@ -45,7 +45,7 @@ import {
   getActiveWorldMap,
   getActiveManifest,
   getActiveIsOfficialCampaign,
-  roomFilePendingLoadIds,
+  roomFilePendingLoadPromises,
 } from './roomFileCacheState';
 
 // Re-export the public cache-state API so callers continue to import from
@@ -563,8 +563,9 @@ export async function loadRoomForGameplayAsync(
   if (existing !== undefined) return existing;
 
   // Deduplicate concurrent in-flight loads for the same room.
-  if (roomFilePendingLoadIds.has(roomId)) {
-    return undefined;
+  const pending = roomFilePendingLoadPromises.get(roomId);
+  if (pending !== undefined) {
+    return pending;
   }
 
   // Resolve worldMap: use the stored active worldMap if not explicitly provided.
@@ -581,27 +582,30 @@ export async function loadRoomForGameplayAsync(
     return undefined;
   }
 
-  roomFilePendingLoadIds.add(roomId);
-  try {
-    // Room is not in registry — try the file cache.
-    const roomDef = await loadRoomFromFileCache(roomId, map);
-    if (roomDef !== null) {
-      registerRoom(roomDef);
-      if (import.meta.env.DEV) {
-        // ROOM_REGISTRY grows lazily; each entry here was loaded on demand
-        // rather than at startup.  The registry is never actively evicted —
-        // rooms accumulate as the player explores.  For typical campaign sizes
-        // (~80 rooms) this is not a memory concern.
-        console.debug(
-          `[roomFileLoader] Lazy-loaded "${roomId}". ` +
-          `ROOM_REGISTRY now has ${ROOM_REGISTRY.size} room(s) (no eviction).`,
-        );
+  const loadPromise = (async () => {
+    try {
+      // Room is not in registry — try the file cache.
+      const roomDef = await loadRoomFromFileCache(roomId, map);
+      if (roomDef !== null) {
+        registerRoom(roomDef);
+        if (import.meta.env.DEV) {
+          // ROOM_REGISTRY grows lazily; each entry here was loaded on demand
+          // rather than at startup.  The registry is never actively evicted —
+          // rooms accumulate as the player explores.  For typical campaign sizes
+          // (~80 rooms) this is not a memory concern.
+          console.debug(
+            `[roomFileLoader] Lazy-loaded "${roomId}". ` +
+            `ROOM_REGISTRY now has ${ROOM_REGISTRY.size} room(s) (no eviction).`,
+          );
+        }
+        return roomDef;
       }
-      return roomDef;
+    } finally {
+      roomFilePendingLoadPromises.delete(roomId);
     }
-  } finally {
-    roomFilePendingLoadIds.delete(roomId);
-  }
+    return undefined;
+  })();
 
-  return undefined;
+  roomFilePendingLoadPromises.set(roomId, loadPromise);
+  return loadPromise;
 }

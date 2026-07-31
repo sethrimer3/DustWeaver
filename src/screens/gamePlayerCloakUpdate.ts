@@ -22,6 +22,9 @@ import type { WorldState } from '../sim/world';
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { MomentumTrail } from '../render/clusters/momentumTrail';
+import type { VerdantAfterimageTrail } from '../render/clusters/verdantAfterimageTrail';
+import { isVerdantDustEquipped } from '../sim/clusters/verdantMobility';
+import { getCharacterSprites, getPlayerSprite } from '../render/clusters/characterSprites';
 
 /** Matches PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD used by renderer.ts / playerCloak.ts. */
 const PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD = -1;
@@ -97,4 +100,53 @@ export function updatePlayerCloaks(
       isHighVelocityAttacking: cloakPlayer.isHighVelocityAttacking,
     });
   }
+}
+
+/**
+ * Updates the Verdant Dust afterimage trail for the current render frame.
+ * Captures the player's exact resolved displayed sprite (pose/animation
+ * frame/facing already baked into the resolved `HTMLImageElement`, matching
+ * `renderer.ts`'s own sprite resolution) at the render-interpolated position
+ * so the trail's positions match where the sprite is actually drawn.
+ *
+ * No-op (and stops producing new entries — existing ones still fade) once
+ * Verdant is unequipped or the player is stationary/dead.
+ */
+export function updateVerdantAfterimageTrailFrame(
+  trail: VerdantAfterimageTrail,
+  world: WorldState,
+  prevClusterPosX: Float32Array,
+  prevClusterPosY: Float32Array,
+  renderAlpha: number,
+  elapsedMs: number,
+): void {
+  const player = world.clusters[0];
+  const dtSec = elapsedMs / 1000;
+  if (player === undefined || player.isAliveFlag === 0 || player.isPlayerFlag === 0) {
+    trail.update(dtSec, false, { sprite: null as unknown as HTMLImageElement, xWorld: 0, yWorld: 0, isFacingLeft: false });
+    return;
+  }
+
+  const interpXWorld = prevClusterPosX[0] + (player.positionXWorld - prevClusterPosX[0]) * renderAlpha;
+  const interpYWorld = prevClusterPosY[0] + (player.positionYWorld - prevClusterPosY[0]) * renderAlpha;
+
+  const speed = Math.hypot(player.velocityXWorld, player.velocityYWorld);
+  const isMoving = speed > 4.0;
+  const active = isVerdantDustEquipped(world) && isMoving;
+
+  if (!active) {
+    trail.update(dtSec, false, { sprite: null as unknown as HTMLImageElement, xWorld: interpXWorld, yWorld: interpYWorld, isFacingLeft: player.isFacingLeftFlag === 1 });
+    return;
+  }
+
+  const charSprites = getCharacterSprites(world.characterId);
+  const isGrappling = world.isGrappleActiveFlag === 1;
+  const sprite = getPlayerSprite(charSprites, player as unknown as import('../render/clusterSnapshotTypes').ClusterSnapshot, isGrappling);
+
+  trail.update(dtSec, true, {
+    sprite,
+    xWorld: interpXWorld,
+    yWorld: interpYWorld + PLAYER_SPRITE_CENTER_OFFSET_Y_WORLD,
+    isFacingLeft: player.isFacingLeftFlag === 1,
+  });
 }

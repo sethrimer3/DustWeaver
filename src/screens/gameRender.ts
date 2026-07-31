@@ -54,6 +54,13 @@ import type { SkillTombEffectRenderer } from '../render/skillTombEffectRenderer'
 import type { PlayerCloak } from '../render/clusters/playerCloak';
 import type { PhantomCloakExtension } from '../render/clusters/phantomCloak';
 import type { MomentumTrail } from '../render/clusters/momentumTrail';
+import type { VerdantAfterimageTrail } from '../render/clusters/verdantAfterimageTrail';
+import type { VerdantFlowerTrail } from '../render/verdantFlowerTrail';
+import {
+  PLAYER_SPRITE_PIVOT_X_WORLD,
+  PLAYER_SPRITE_WIDTH_WORLD,
+  PLAYER_SPRITE_HEIGHT_WORLD,
+} from '../render/clusters/characterSprites';
 import type { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
 import { renderStormweaveLifeMotes } from '../render/stormweaveLifeMoteRenderer';
 import { renderIceFrostDecals } from '../render/effects/iceFrostRenderer';
@@ -167,6 +174,10 @@ export interface RenderFrameContext {
   phantomCloak: PhantomCloakExtension;
   /** Golden high-speed trail — visible while momentum-combat invulnerability is active. */
   momentumTrail: MomentumTrail;
+  /** Verdant Dust green afterimage trail — visible while moving with Verdant equipped. */
+  verdantAfterimageTrail: VerdantAfterimageTrail;
+  /** Verdant Dust temporary flower blooms along the ground path walked. */
+  verdantFlowerTrail: VerdantFlowerTrail;
   /** Runtime visual cloud derived from canonical player health. */
   stormweaveLifeMotes: StormweaveLifeMotes;
   darkRoomOverlay: DarkRoomOverlay;
@@ -336,7 +347,7 @@ export function renderFrame(r: RenderFrameContext): void {
   const {
     ctx, deviceCtx, virtualCanvas, canvas,
     webglRenderer, environmentalDust, skidDebris, crumbleDebris, crackedBlockShatter, breakEffects, weakWallJumpDebris, skillTombRenderer, skillTombEffectRenderer, bloomSystem, dustContainerPickupEffect, playerDeathDust,
-    playerCloak, phantomCloak, momentumTrail, stormweaveLifeMotes, decorationWaveState,
+    playerCloak, phantomCloak, momentumTrail, verdantAfterimageTrail, verdantFlowerTrail, stormweaveLifeMotes, decorationWaveState,
     sunbeamRenderer, sunraysRenderer, atmosphericLightDust, guideDustPathRenderer, fallingBlockDust,
     world, currentRoom, snapshot,
     cachedDecorations, cachedDecorationCenterX, cachedDecorationCenterY,
@@ -609,6 +620,14 @@ export function renderFrame(r: RenderFrameContext): void {
   // One-shot golden-mote pickup burst — drawn behind the player sprite so
   // absorbed motes visibly disappear behind it rather than popping in front.
   dustContainerPickupEffect.render(ctx, ox, oy, zoom);
+
+  // Verdant Dust cosmetics — flowers along the walked path, then the green
+  // afterimage trail, both drawn behind the real player sprite.
+  verdantFlowerTrail.render(ctx, ox, oy, zoom);
+  verdantAfterimageTrail.render(
+    ctx, ox, oy, zoom,
+    PLAYER_SPRITE_PIVOT_X_WORLD, PLAYER_SPRITE_WIDTH_WORLD, PLAYER_SPRITE_HEIGHT_WORLD,
+  );
 
   // TimeStop Field stored-momentum arrow — behind the player sprite, kept
   // independent from the active-velocity speedometer/debug overlays.

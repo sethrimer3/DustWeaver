@@ -174,6 +174,8 @@ export interface LoadRoomCtx {
   playerCloak: PlayerCloak;
   phantomCloak: PhantomCloakExtension;
   momentumTrail?: import('../render/clusters/momentumTrail').MomentumTrail;
+  verdantAfterimageTrail?: import('../render/clusters/verdantAfterimageTrail').VerdantAfterimageTrail;
+  verdantFlowerTrail?: import('../render/verdantFlowerTrail').VerdantFlowerTrail;
   stormweaveLifeMotes?: import('../sim/stormweave/lifeMotes').StormweaveLifeMotes;
   decorationWaveState: import('../render/effects/wallDecorations').DecorationWaveState;
   environmentalDust: EnvironmentalDustLayer;
@@ -445,6 +447,8 @@ function applyRoomEnvironmentAndScheduling(
     playerCloak,
     phantomCloak,
     momentumTrail,
+    verdantAfterimageTrail,
+    verdantFlowerTrail,
     decorationWaveState,
     environmentalDust,
     sunbeamRenderer,
@@ -483,6 +487,8 @@ function applyRoomEnvironmentAndScheduling(
   playerCloak.reset();
   phantomCloak.reset();
   momentumTrail?.reset();
+  verdantAfterimageTrail?.reset();
+  verdantFlowerTrail?.reset();
   const stormweavePlayer = world.clusters[0];
   ctx.stormweaveLifeMotes?.reset(
     stormweavePlayer?.positionXWorld ?? 0,

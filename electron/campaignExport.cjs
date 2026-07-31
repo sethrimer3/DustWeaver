@@ -400,7 +400,11 @@ function validateRoomCacheOnDisk(roomsDir, manifest, expectedRoomIds) {
   }
 
   const normalizedRoomsDir = path.normalize(roomsDir);
+  const seenRooms = new Set();
+  let manifestRoomCount = 0;
+
   for (const [roomId, entry] of Object.entries(manifest.rooms)) {
+    manifestRoomCount++;
     if (typeof roomId !== "string" || !SAFE_ROOM_ID_RE.test(roomId)) {
       // Skip unsafe room IDs — they would also be rejected at load time.
       continue;
@@ -408,14 +412,50 @@ function validateRoomCacheOnDisk(roomsDir, manifest, expectedRoomIds) {
     if (!entry || typeof entry.file !== "string") {
       return { ok: false, error: `Room cache is incomplete: manifest entry for "${roomId}" has no file path` };
     }
+    if (seenRooms.has(roomId)) {
+      return { ok: false, error: `Duplicate room entry for "${roomId}"` };
+    }
+    seenRooms.add(roomId);
+
     // Path traversal protection: reject any file path that escapes the ROOMS dir.
     const roomFilePath = path.normalize(path.join(roomsDir, entry.file));
     if (roomFilePath !== normalizedRoomsDir && !roomFilePath.startsWith(normalizedRoomsDir + path.sep)) {
       return { ok: false, error: `Room cache is incomplete: file path escapes ROOMS directory for "${roomId}"` };
     }
     if (!fs.existsSync(roomFilePath)) {
-      return { ok: false, error: `Room cache is incomplete: missing file ROOMS/${entry.file}` };
+      return { ok: false, error: `Room cache is incomplete: missing file ROOMS/${entry.file}`, failure: { kind: 'missing-file', roomId, file: entry.file } };
     }
+
+    let raw;
+    try {
+      raw = fs.readFileSync(roomFilePath, "utf8");
+    } catch (e) {
+      return { ok: false, error: `Failed to read file ROOMS/${entry.file}`, failure: { kind: 'missing-file', roomId, file: entry.file } };
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      return { ok: false, error: `Invalid JSON in ROOMS/${entry.file}: ${e.message}`, failure: { kind: 'invalid-json', roomId, file: entry.file, message: e.message } };
+    }
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return { ok: false, error: `Invalid saved-room shape in ROOMS/${entry.file}`, failure: { kind: 'invalid-shape', roomId, file: entry.file } };
+    }
+
+    if (parsed.id !== roomId) {
+      return { ok: false, error: `Room ID mismatch in ROOMS/${entry.file}: expected "${roomId}", got "${parsed.id}"`, failure: { kind: 'id-mismatch', roomId, actualId: parsed.id } };
+    }
+
+    const actualHash = computeContentHash(parsed);
+    if (actualHash !== entry.hash) {
+      return { ok: false, error: `Hash mismatch for room "${roomId}": expected ${entry.hash}, got ${actualHash}`, failure: { kind: 'hash-mismatch', roomId, expectedHash: entry.hash, actualHash } };
+    }
+  }
+
+  if (expectedRoomIds && manifestRoomCount !== expectedRoomIds.length) {
+    return { ok: false, error: `Manifest/campaign room-set mismatch: manifest has ${manifestRoomCount} rooms, campaign has ${expectedRoomIds.length}`, failure: { kind: 'manifest-mismatch', message: `Count mismatch` } };
   }
 
   return { ok: true };
@@ -550,10 +590,26 @@ async function exportCampaignToDisk({ campaign, campaignMeta, campaignId, rooms,
 
     const prev = existingRooms[roomId];
     const hashMatches = !!(prev && typeof prev.hash === "string" && prev.hash === roomHash);
-    // Only skip the write if the hash matches AND the file actually exists on
-    // disk — otherwise a hash match with a missing file would silently leave
-    // the room cache incomplete.
-    const isUnchanged = hashMatches && fs.existsSync(roomPath);
+    
+    // An "unchanged" room may be skipped only when all are true:
+    // - Existing manifest entry is valid (checked by hashMatches)
+    // - Existing room file exists
+    // - Existing room file parses
+    // - Its actual deterministic content hash equals the manifest hash
+    // - That hash equals the newly computed canonical room hash
+    let isUnchanged = false;
+    if (hashMatches && fs.existsSync(roomPath)) {
+      try {
+        const raw = fs.readFileSync(roomPath, "utf8");
+        const parsed = JSON.parse(raw);
+        const actualHash = computeContentHash(parsed);
+        if (actualHash === roomHash) {
+          isUnchanged = true;
+        }
+      } catch (e) {
+        isUnchanged = false;
+      }
+    }
 
     const roomName = (typeof room.name === "string" && room.name.length > 0) ? room.name : roomId;
     notify({
