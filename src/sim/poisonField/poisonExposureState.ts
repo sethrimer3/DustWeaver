@@ -37,7 +37,11 @@ import type { WorldState } from '../world';
 import { isVerdantDustEquipped } from '../clusters/verdantMobility';
 import { overlapAABB } from '../physics/collision';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../playerDamage';
-import { POISON_TICK_INTERVAL_SECONDS, POISON_DAMAGE_PER_TICK } from './poisonFieldConfig';
+import {
+  POISON_TICK_INTERVAL_SECONDS,
+  POISON_DAMAGE_PER_TICK,
+  POISON_THRESHOLD_EPSILON_SECONDS,
+} from './poisonFieldConfig';
 
 export interface PoisonExposureState {
   /** 1 while the player was overlapping at least one Poison Field on the previous processed tick. */
@@ -90,7 +94,7 @@ export function isPlayerInsidePoisonField(
   return false;
 }
 
-function dealPoisonHit(world: WorldState, player: PlayerDamageTarget): void {
+function dealPoisonHit(player: PlayerDamageTarget): void {
   applyPlayerDamageWithKnockback(
     player,
     POISON_DAMAGE_PER_TICK,
@@ -143,10 +147,10 @@ export function updatePoisonExposure(world: WorldState, dtSeconds: number): void
     // immediate hit, then a fresh 3.0s cadence starting NOW (no dt applied
     // this tick, so the next scheduled hit lands 3.0s from this moment).
     state.wasVerdantLastTick = 0;
-    dealPoisonHit(world, player);
+    dealPoisonHit(player);
     state.elapsedSeconds = 0;
     state.hitsFired = 0;
-    if (player.isAliveFlag === 0) resetPoisonExposureState(state);
+    if (!player.isAliveFlag) resetPoisonExposureState(state);
     return;
   } else {
     state.wasVerdantLastTick = 0;
@@ -156,10 +160,13 @@ export function updatePoisonExposure(world: WorldState, dtSeconds: number): void
   // ticks uniformly: elapsed time is additive regardless of dt slicing, and
   // the while loop below fires every threshold crossed in one call.
   state.elapsedSeconds += dtSeconds;
-  while (state.elapsedSeconds >= (state.hitsFired + 1) * POISON_TICK_INTERVAL_SECONDS) {
-    dealPoisonHit(world, player);
+  while (
+    state.elapsedSeconds >=
+    (state.hitsFired + 1) * POISON_TICK_INTERVAL_SECONDS - POISON_THRESHOLD_EPSILON_SECONDS
+  ) {
+    dealPoisonHit(player);
     state.hitsFired++;
-    if (player.isAliveFlag === 0) {
+    if (!player.isAliveFlag) {
       resetPoisonExposureState(state);
       return;
     }

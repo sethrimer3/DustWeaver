@@ -40,6 +40,7 @@ const EXPECTED_TYPES: readonly SelectedElementType[] = [
   'gate', 'challengeTotem', 'dustContainer', 'dustContainerPiece', 'dustBoostJar', 'dustSwarm',
   'lambdaAnchor', 'dustPile', 'grasshopperArea', 'fireflyArea', 'decoration', 'playerSpawn',
   'campaignSpawn', 'ambientLightBlocker', 'lightSource', 'waterZone', 'lavaZone', 'timeStopField',
+  'poisonField',
   'crumbleBlock', 'spike', 'laser', 'bouncePad', 'kineticBlock', 'grappleCarryBlock', 'zipMoveBlock',
   'phantasmalTile', 'pixelMaterial', 'rope', 'sunbeam', 'sceneLight', 'fallingBlock',
   'dialogueTrigger', 'backgroundBlock', 'guideDustPath', 'customBlock', 'fireflyJar',

@@ -1848,3 +1848,121 @@ labels do not clip the fixed-width main-menu buttons or the pause-menu panel;
 accented glyphs render (not tofu) in both DOM and the canvas control hint;
 switching language from the settings Language tab visibly updates the menu
 behind it without a restart; and the choice survives an app restart.
+
+## Poison Field hazard (BUILD 598)
+
+Implemented the editor-authored Poison Field hazard from docs/Todo.md.
+
+Architecture: modeled the sim/gameplay side after TimeStop Field's
+"authoring-data-only arrays + separate deterministic controller" split, and
+modeled the editor authoring UX after the existing drag-resizable rectangle
+fields (Lava Zone geometry shape, Challenge Field drag-to-size placement) —
+Poison Field rectangles are NOT tile-merged/BFS-connected like TimeStop Field;
+each authored rectangle is an independent AABB and overlap is resolved purely
+by OR-ing hit tests in `isPlayerInsidePoisonField`.
+
+Key new files:
+- `src/sim/poisonField/poisonFieldConfig.ts` — tuning constants (3.0s cadence,
+  1 damage/tick, tiny epsilon for float-accumulation-safe threshold checks).
+- `src/sim/poisonField/poisonExposureState.ts` — the exposure controller
+  (`PoisonExposureState`, `updatePoisonExposure`, `resetPoisonExposureState`,
+  `isPlayerInsidePoisonField`). Narrow state only: `isInsideFieldFlag`,
+  `elapsedSeconds`, `hitsFired`, `wasVerdantLastTick` — no per-field timers.
+- `src/render/poisonFieldRenderer.ts` — render-only cloud visual (4 seeded
+  radial-gradient blobs per field, clipped to the field rect, ~9% peak alpha,
+  independent breathing/drift phases per blob, no Math.random).
+
+Wiring:
+- `world.poisonFieldCount/X/Y/W/H World` (worldHazardState.ts, MAX_POISON_FIELDS=256)
+  hold authoring geometry; `world.poisonExposure` (world.ts) holds the
+  deterministic controller state, reset in `gameLoadRoomPhases.ts`'s
+  `resetRoomScopedSimState` (covers fresh load, resident hot-swap, and
+  respawn — the same single call site TimeStop Field's reset uses).
+- `updatePoisonExposure(world, dtSec)` runs once per tick from inside
+  `applyHazards` (sim/hazards.ts), right after the lava-zone block, reusing
+  that function's `dtSec`. Because `applyHazards` only runs while the fixed
+  tick pipeline is advancing, pause/frozen frames automatically do not
+  advance poison exposure — no extra pause guard was needed.
+- `loadRoomHazards` (screens/gameRoomHazards.ts) populates the world arrays
+  from `RoomDef.poisonFields` and resets `poisonFieldCount` on every room load.
+- Editor: full palette/placement/selection/move/resize/copy-paste/undo-redo/
+  room-resize-clip/delete/inspector wiring added across ~20 editor files by
+  mirroring every `lavaZone`/`timeStopField` call site (editorElementTypes,
+  editorElementRegistry [uses the existing `zoneAdapter` generic — the
+  `Record<SelectedElementType,...>` exhaustiveness check in
+  editorElementRegistry.ts is what caught a couple of missed spots during
+  implementation], editorElementLabels, editorLayers, editorPaletteItems
+  ['poison_field', category 'fields', drag-to-size like 'challenge_field'],
+  editorPlaceTool, editorRoomBuilder, editorZoneDrawers/editorOverlayDrawers/
+  editorRenderer [purple preview fill, more visible than the runtime cloud —
+  intentional per the "clearly identifiable while editing" requirement],
+  editorRoomResize, editorPropertyChange, editorPersistenceManifest,
+  editorTools, editorRoomImporter, editorDragTargetCache, editorDragCopyPaste,
+  editorHistory, editorState, editorInspector, editorDeleteTool,
+  editorHitTest, campaignStore).
+- Schema: `RoomDef.poisonFields?: RoomZoneDef[]` (roomDef.ts), compact
+  `poisonFieldLayer` (roomSavedTypes.ts/roomSchemaV2.ts/roomSchemaHydrator.ts,
+  same `dehydrateZoneLayer`/`expandLayerToRects` helpers TimeStop Field uses,
+  no legacy fallback needed since it's a new field), `RoomJsonZone[]`
+  (roomJsonSchema.ts/roomJson.ts/roomJsonSerializer.ts/roomJsonToRoomDef.ts).
+  Counted in room-complexity hazard totals (roomComplexity.ts,
+  editorRoomComplexity.ts) and in the dev round-trip validator
+  (roomRoundTripValidator.ts). NOT added to roomFileAudit.ts's v2/v3 legacy
+  stats table — that table is diagnostic tooling for the *legacy* migration
+  path specifically, and Poison Field never had a legacy format, so there is
+  nothing to audit there; documenting instead of expanding scope.
+
+Verdant immunity / switch-away hit / invulnerability integration:
+- `isVerdantDustEquipped(world)` (sim/clusters/verdantMobility.ts) is reused
+  directly, per the task's suggested-architecture note.
+- Damage goes through the canonical `applyPlayerDamageWithKnockback`
+  (sim/playerDamage.ts), which now accepts an explicit
+  `bypassContactInvulnerability` option. Poison ticks pass this so a stray
+  earlier hit from an unrelated hazard's ~1.5s (90-tick) invulnerability
+  window can never silently swallow a scheduled poison tick — the option
+  only affects poison's own calls; it does not touch the generic
+  `invulnerabilityTicks` gate for any other hazard, and poison hits still SET
+  `invulnerabilityTicks` afterward as normal (so poison itself still briefly
+  protects against an immediate unrelated follow-up hit).
+- The Verdant-switch-away transition is detected via `wasVerdantLastTick`
+  (set only while immune-and-inside) and fires exactly one immediate hit,
+  then resets `elapsedSeconds`/`hitsFired` to start a fresh cadence with no
+  dt applied that same tick.
+
+Tests added: `src/tests/poisonField.test.ts` (20 tests) — entry/recurring/
+leave/re-entry timing, timestep-subdivision equivalence, large-tick
+multi-boundary correctness, stop-on-death, Verdant immunity (entry, mid-
+exposure cancel, switch-back single hit + fresh cadence, non-Verdant-to-
+non-Verdant no-op, repeated transitions), multi-field overlap (no double
+damage, moving between overlapping fields without reset, leaving the last
+field resets), and lifecycle reset. Also fixed a pre-existing
+`editorElementRegistry.test.ts` element-count assertion (44→46 types) since
+`poisonField` is now a real `SelectedElementType`.
+
+Validation: `npm run build` clean; `npm run lint` clean (one pre-existing
+unrelated `no-explicit-any` error in `roomLoadingIntegration.test.ts`, not
+touched by this change); `npm test` — 3064/3064 passing (3044 pre-existing +
+20 new). BUILD_NUMBER bumped 597 → 598 (src/build-info.ts).
+
+Not done / follow-ups for a future pass:
+- The cloud renderer's blob count is currently a fixed constant (4 per
+  field), not wired to `RenderQualityConfig`'s low/med/high tiers the way
+  bloom/sunrays/TimeStop shimmer are. It IS viewport-culled per field
+  (`isScreenRectVisible`), so cost is still bounded, but a true quality-tier
+  blob-count/detail gate (per the Todo's "quality-gate cloud count/detail"
+  wording) was not added — this is the most likely place to revisit if
+  profiling shows cost in rooms with many large Poison Fields.
+- `roomFileAudit.ts`'s v2/v3 stats table was intentionally left untouched
+  (see above) — flag if a future pass wants Poison Field surfaced there too.
+- Manual in-browser verification of the actual cloud look-and-feel (opacity,
+  drift, edge softness at each quality tier) was NOT performed — this
+  environment's Browser pane reports `document.hidden === true`, so
+  requestAnimationFrame never advances and gameplay frames never render (see
+  the i18n entry above for the same limitation). All correctness here was
+  verified via the deterministic Node test suite and manual code reading of
+  the render math, not a live screenshot. A follow-up agent with a real
+  browser/desktop build should confirm: peak opacity reads as genuinely
+  faint during normal play; no field ever reads as a visible rectangle;
+  adjacent/overlapping fields don't create a visibly doubled-opacity seam;
+  and the editor preview (purple tint + skull glyph) is comfortably more
+  visible than the runtime clouds.

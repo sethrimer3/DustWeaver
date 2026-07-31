@@ -18,6 +18,7 @@ import {
   SPIKE_DIR_RIGHT,
 } from '../sim/hazards';
 import { renderWaterZones, renderLavaZones } from './liquidRenderer';
+import { renderPoisonFields } from './poisonFieldRenderer';
 import { renderIceMoteAuraOverlay } from './iceMoteAuraRenderer';
 import { isScreenRectVisible } from './viewportCull';
 import { SPIKE_TEMPLATE_VARIATIONS } from './walls/blockSpriteCatalog';
@@ -261,6 +262,12 @@ export function renderHazards(
 
   // ── Lava zones (neighbor-aware rounded corners + wave + spark particles) ─
   renderLavaZones(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
+
+  // ── Poison Field clouds (extremely faint, amorphous, render-only) ────────
+  // Drawn here (with the other hazard visuals, behind the player sprite,
+  // which is drawn later in gameRender.ts's draw order) so the cloud never
+  // occludes the player.
+  renderPoisonFields(ctx, world, offsetXPx, offsetYPx, zoom, tick, vpW, vpH);
 
   // ── Breakable blocks (cracked appearance) ──────────────────────────────
   for (let i = 0; i < world.breakableBlockCount; i++) {

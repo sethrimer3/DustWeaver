@@ -219,6 +219,12 @@ export function validateRoundTrip(json: RoomJsonDef): RoundTripValidationResult 
   for (const k of timeStopBefore) if (!timeStopAfter.has(k))  errors.push(`TimeStop Field cell ${k} DROPPED`);
   for (const k of timeStopAfter)  if (!timeStopBefore.has(k)) errors.push(`TimeStop Field cell ${k} ADDED`);
 
+  // ── 6c. Poison Field coverage ──────────────────────────────────────────────
+  const poisonBefore = buildZoneCoverage(json.poisonFields);
+  const poisonAfter  = buildZoneCoverage(roundTripped.poisonFields);
+  for (const k of poisonBefore) if (!poisonAfter.has(k))  errors.push(`Poison Field cell ${k} DROPPED`);
+  for (const k of poisonAfter)  if (!poisonBefore.has(k)) errors.push(`Poison Field cell ${k} ADDED`);
+
   // ── 7. Ambient blockers (clear and dark identity) ─────────────────────────
   const blkBefore = buildBlockerMap(json.ambientLightBlockers);
   const blkAfter  = buildBlockerMap(roundTripped.ambientLightBlockers);
