@@ -1,0 +1,50 @@
+name: Add Verdant mobility Todo item once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-verdant-mobility-todo-once-20260730.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Insert Verdant mobility Todo item
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/Todo.md')
+          text = path.read_text(encoding='utf-8')
+          marker = '## Completed / superseded references'
+          signature = 'Give equipped **Verdant Dust** a high-speed grounded mobility identity'
+          item = """- [ ] Give equipped **Verdant Dust** a high-speed grounded mobility identity with a deliberate grapple tradeoff and strong plant-themed feedback. While Verdant is the authoritative equipped dust type, prevent starting or maintaining a grapple: equipping Verdant during an active grapple must release it safely and immediately without consuming or corrupting grapple-charge state, and grapple input must remain inert until another dust type is equipped. Double the player's ordinary grounded walking maximum speed and grounded horizontal acceleration relative to the current tuned values, without silently doubling unrelated air control, knockback, zip, water, scripted movement, or other external forces. Increase both the horizontal and vertical launch components of skid jumps and wall jumps to 150% of their normal non-Verdant values, while preserving current direction, input buffering, collision correction, wall-side rules, and movement-state transitions. Add a render-only Verdant speed trail of approximately 15 player-shaped afterimages sampled from the player's actual displayed sprite/pose/facing and recent rendered transforms; the newest image should be bright green and relatively visible, with progressively older images becoming darker and more transparent until they disappear. Keep the trail bounded, allocation-conscious, frame-rate-independent, reset it on dust changes/room loads/respawns/screen teardown, and suppress or naturally collapse it while stationary so it does not become a stack of identical silhouettes. As the grounded player's feet traverse new horizontal world pixels while walking with Verdant equipped, evaluate each newly crossed pixel exactly once with a deterministic 1% bloom chance; a successful roll creates a small, temporary, render-only flower rooted to the valid walkable surface at that pixel. Make the probability distance-based rather than frame-based so flower density is stable across frame rates and doubled movement speed; do not spawn flowers while airborne, wall-sliding, swimming, standing still, retracing the same pixel without first leaving it, over empty space, or inside solid geometry. Flowers should use several small randomized shapes/colors, quickly bloom, remain briefly, then fade/wilt without affecting collision or saves; cap and quality-gate the cosmetic pool and clear it across room/session lifecycle boundaries. Likely files/subsystems: equipped-dust change handling, grapple initiation/release and charge state, grounded movement constants/integration, skid-jump and wall-jump launch helpers, player sprite selection/render transforms, a new Verdant afterimage/flower renderer, game render/update lifecycle, and focused tests. Add deterministic tests for grapple suppression and mid-grapple switching, restoration after leaving Verdant, exact 2x ground cap/acceleration without unrelated movement changes, exact 1.5x skid/wall launch components, timestep subdivision, afterimage ordering/fade/cap/reset, per-crossed-pixel bloom sampling at 1% without frame-rate bias or duplicate stationary rolls, valid-surface placement, pool/lifecycle cleanup, and simulation/save isolation; manually tune and verify the speed feel, 15-image green gradient, and flower density at several graphics qualities, then run targeted movement/grapple/render tests, `npm run build`, `npm run lint`, and `npm test`; increment `BUILD_NUMBER` exactly once for code changes."""
+
+          if signature not in text:
+              if marker not in text:
+                  raise SystemExit(f'Marker not found: {marker}')
+              text = text.replace(f'\n{marker}', f'\n{item}\n\n{marker}', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit Todo update and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-verdant-mobility-todo-once-20260730.yml
+          git add docs/Todo.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Add Verdant mobility Todo item [skip ci]"
+          git push origin HEAD:main
