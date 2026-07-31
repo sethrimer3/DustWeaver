@@ -491,6 +491,14 @@ export interface ClusterState {
    */
   skidEntryVelocityXWorld: number;
 
+  // ---- Verdant Dust flower-bloom pixel-crossing tracking (cosmetic only) ----
+  /** 1 once a "last evaluated pixel" baseline has been established while eligible. */
+  verdantFlowerHasLastPixelFlag: number;
+  /** Last evaluated floor(positionXWorld) integer world pixel while eligible. */
+  verdantFlowerLastPixelX: number;
+  /** Monotonic per-crossing counter feeding the deterministic bloom-chance hash. */
+  verdantFlowerCrossingSeq: number;
+
   // ---- Momentum combat -------------------------------------------------------
   /**
    * 1 while the player is moving above MOMENTUM_COMBAT_MIN_SPEED in momentum
@@ -1216,6 +1224,9 @@ export function createClusterState(
     playerIdleNextSwitchTicks: 0,
     isSkiddingFlag: 0,
     skidEntryVelocityXWorld: 0,
+    verdantFlowerHasLastPixelFlag: 0,
+    verdantFlowerLastPixelX: 0,
+    verdantFlowerCrossingSeq: 0,
     isHighVelocityAttacking: 0,
     momentumHitCooldownTicks: 0,
     invulnerabilityTicks: 0,

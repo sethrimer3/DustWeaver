@@ -85,6 +85,7 @@ import {
 import { raycastRopeSegments } from './grappleRopeSupport';
 import { isGrappleWallHitSlimed } from './slimeSnailAi';
 import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
+import { isVerdantDustEquipped } from './verdantMobility';
 
 export { updateGrappleRopeAnchor } from './grappleRopeSupport';
 export { raycastRopeSegments } from './grappleRopeSupport';
@@ -239,6 +240,12 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
   const playerEntityId = player.entityId;
+
+  // Verdant Dust mobility tradeoff: grapple input does nothing while Verdant
+  // is equipped (traded for doubled ground speed/accel and boosted jump
+  // launches). Intentionally silent — no empty-charge FX — since this isn't
+  // an "out of charge" case, it's simply unavailable for this dust type.
+  if (isVerdantDustEquipped(world)) return;
 
   // Grapple charge: cannot fire when spent.  The refire-during-retract
   // shortcut is intentionally removed — the charge system already refreshes

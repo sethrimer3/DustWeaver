@@ -47,6 +47,7 @@ import {
   AIR_FRICTION_PER_SEC2,
   ROCKET_BOOST_AIR_ACCEL_MULTIPLIER,
 } from './movementConstants';
+import { isVerdantDustEquipped, VERDANT_GROUND_SPEED_MULTIPLIER } from './verdantMobility';
 
 /**
  * Clamps velocity down to `cap` only in the pressed direction — i.e. only
@@ -110,8 +111,14 @@ export function applyPlayerHorizontalMovement(
   }
 
   if (world.isGrappleActiveFlag === 0) {
-    const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
-    const baseGroundAccel = ov(debugSpeedOverrides.groundAccelWorld, GROUND_ACCELERATION_PER_SEC2);
+    // Verdant Dust grounded mobility: grounded max walk speed and grounded
+    // horizontal acceleration are doubled while Verdant is equipped. Applied
+    // as a multiplier on top of the (possibly debug-overridden) authoritative
+    // normal-tuned constants, never as a copied magic number, and never on
+    // deceleration, air acceleration, or any other movement system.
+    const verdantGroundMult = isVerdantDustEquipped(world) ? VERDANT_GROUND_SPEED_MULTIPLIER : 1.0;
+    const baseRunSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC) * verdantGroundMult;
+    const baseGroundAccel = ov(debugSpeedOverrides.groundAccelWorld, GROUND_ACCELERATION_PER_SEC2) * verdantGroundMult;
     const baseGroundDecel = ov(debugSpeedOverrides.groundDecelWorld, GROUND_DECELERATION_PER_SEC2);
     const baseAirAccel = ov(debugSpeedOverrides.airAccelWorld, AIR_ACCELERATION_PER_SEC2);
 

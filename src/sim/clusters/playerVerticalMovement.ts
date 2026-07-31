@@ -32,6 +32,7 @@ import {
   UPWARD_BRAKE_STRENGTH_PER_SEC2,
   GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC,
 } from './movementConstants';
+import { isVerdantDustEquipped, VERDANT_JUMP_LAUNCH_MULTIPLIER } from './verdantMobility';
 
 /**
  * Apply gravity, variable-jump sustain, fall-speed cap, and the jump trigger
@@ -211,8 +212,14 @@ export function applyPlayerGravityAndJump(
     // jump path in movement.ts uses the same helper.
     const isSkidJump = cluster.isSkiddingFlag === 1;
     const walkingSpeed = ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC);
+    // Verdant Dust mobility: skid-jump launch strength is boosted 1.5x while
+    // Verdant is equipped (vertical component here; skid jumps do not set a
+    // horizontal launch velocity of their own — horizontal speed carries
+    // over from existing grounded movement, which is separately doubled).
+    // Ordinary (non-skid) jumps are never multiplied.
     const jumpSpeed = isSkidJump
       ? computeSkidJumpSpeedWorld(cluster.skidEntryVelocityXWorld, walkingSpeed, baseJumpSpeed, gravityWorld)
+        * (isVerdantDustEquipped(world) ? VERDANT_JUMP_LAUNCH_MULTIPLIER : 1.0)
       : baseJumpSpeed;
     if (cluster.isGroundedFlag === 1 || cluster.coyoteTimeTicks > 0) {
       // ── Normal ground jump ─────────────────────────────────────────

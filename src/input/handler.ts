@@ -613,7 +613,11 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
   window.addEventListener('blur', onWindowBlur);
   canvas.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('mousedown', onMouseDown);
-  canvas.addEventListener('mouseup', onMouseUp);
+  // Attached to window (not canvas) so the button-up is still caught when the
+  // cursor has left the canvas before releasing — otherwise the grapple (and
+  // block/attack) input state gets stuck "held" forever (mouseup never fires
+  // on an element the cursor isn't over).
+  window.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('mouseleave', onMouseLeave);
   canvas.addEventListener('touchstart', onTouchStart, { passive: false });
   canvas.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -629,7 +633,7 @@ export function attachInputListeners(canvas: HTMLCanvasElement, state: InputStat
     window.removeEventListener('blur', onWindowBlur);
     canvas.removeEventListener('mousemove', onMouseMove);
     canvas.removeEventListener('mousedown', onMouseDown);
-    canvas.removeEventListener('mouseup', onMouseUp);
+    window.removeEventListener('mouseup', onMouseUp);
     canvas.removeEventListener('mouseleave', onMouseLeave);
     canvas.removeEventListener('touchstart', onTouchStart);
     canvas.removeEventListener('touchmove', onTouchMove);

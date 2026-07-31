@@ -17,6 +17,9 @@ import {
 } from './timeStopField/timeStopFieldPlayerState';
 import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
 
+/** Fixed capacity for this tick's Verdant flower-bloom spawn events (see verdantFlowerEventCount). */
+export const VERDANT_FLOWER_EVENTS_CAPACITY = 16;
+
 // Re-export constants from sub-state files so existing imports from world.ts still work.
 export { MAX_GRAPPLE_WRAP_POINTS } from './worldGrappleState';
 export {
@@ -382,6 +385,19 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
    */
   playerSkidEntryVelocityXWorld: number;
 
+  // ---- Verdant Dust flower-bloom spawn events (cosmetic, read by renderer) --
+  /**
+   * Count of deterministic flower-bloom events fired this tick (0..
+   * VERDANT_FLOWER_EVENTS_CAPACITY). Set by `updateVerdantFlowerSpawn`
+   * (src/sim/clusters/verdantFlowerSpawn.ts) once per tick and reset to 0 at
+   * the start of every tick; the renderer reads and clears it each frame.
+   * Render-only trigger — never affects collision/health/save data.
+   */
+  verdantFlowerEventCount: number;
+  /** Parallel fixed-capacity arrays of this tick's flower-bloom world positions. */
+  verdantFlowerEventXWorld: Float32Array;
+  verdantFlowerEventYWorld: Float32Array;
+
   // ---- Weak wall jump cascade visual flags (read by renderer) ---------------
   /**
    * 1 for a single tick when a cascade of heavy debris particles should be spawned
@@ -652,6 +668,9 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     wallJumpSkidDebrisBurstFlag: 0,
     playerLandingSkidSpeedFactor: 0.0,
     playerSkidEntryVelocityXWorld: 0.0,
+    verdantFlowerEventCount: 0,
+    verdantFlowerEventXWorld: new Float32Array(VERDANT_FLOWER_EVENTS_CAPACITY),
+    verdantFlowerEventYWorld: new Float32Array(VERDANT_FLOWER_EVENTS_CAPACITY),
     weakWallJumpCascadeFlag: 0,
     weakWallJumpCascadeXWorld: 0.0,
     weakWallJumpCascadeYWorld: 0.0,

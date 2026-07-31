@@ -323,6 +323,12 @@ export function createEditorController(
   // Drag-to-move: original positions of selected elements at drag start
   const dragOriginalPositions: Map<number | string, { xBlock: number; yBlock: number }> = new Map();
 
+  // Drag-to-move: campaign spawn is not part of room data (it lives on the
+  // campaign session), so it isn't covered by dragOriginalPositions/
+  // dragTargets — tracked separately with its own pending snapshot.
+  let campaignSpawnDragOrig: { xBlock: number; yBlock: number } | null = null;
+  let campaignSpawnDragPending: PendingSnapshot | null = null;
+
   // Edge-resize: original zone geometry of the transition being resized, captured at drag start.
   let resizeOriginalGeometry: { xBlock: number; yBlock: number; gradientWidthBlocks: number; openingSizeBlocks: number; positionBlock: number } | null = null;
   let challengeResize: { type: 'challengeField' | 'challengeGate' | 'gate' | 'zipMoveBlock'; uid: number; edge: RectResizeEdge; original: { xBlock: number; yBlock: number; wBlock: number; hBlock: number } } | null = null;
@@ -2460,6 +2466,12 @@ export function createEditorController(
           state.dragStartBlockY = state.cursorBlockY;
           storeDragStartPositions(state, dragOriginalPositions);
           buildDragTargetCache(state, dragTargets);
+          // Campaign spawn lives on the campaign session, not room data, so
+          // it's tracked outside dragOriginalPositions/dragTargets.
+          if (state.campaignSpawnBlock !== null && state.selectedElements.some(el => el.type === 'campaignSpawn')) {
+            campaignSpawnDragOrig = { xBlock: state.campaignSpawnBlock[0], yBlock: state.campaignSpawnBlock[1] };
+            campaignSpawnDragPending = captureCampaignSpawnSnapshot(campaignSpawnCtx, 'Move campaign spawn');
+          }
           activeGesture = beginGesture(
             state.roomData!,
             () => !arePositionMapsEqual(currentSelectedElementPositions(state), dragOriginalPositions),
@@ -2472,6 +2484,9 @@ export function createEditorController(
                 applyDragDelta(state, dragTargets, 0, 0);
               } else {
                 moveSelectedElements(state, dragOriginalPositions, 0, 0);
+              }
+              if (campaignSpawnDragOrig !== null) {
+                state.campaignSpawnBlock = [campaignSpawnDragOrig.xBlock, campaignSpawnDragOrig.yBlock];
               }
             },
           );
@@ -2486,6 +2501,9 @@ export function createEditorController(
           applyDragDelta(state, dragTargets, deltaX, deltaY);
         } else {
           moveSelectedElements(state, dragOriginalPositions, deltaX, deltaY);
+        }
+        if (campaignSpawnDragOrig !== null) {
+          state.campaignSpawnBlock = [campaignSpawnDragOrig.xBlock + deltaX, campaignSpawnDragOrig.yBlock + deltaY];
         }
       }
     }
@@ -2515,10 +2533,22 @@ export function createEditorController(
         resetDragTargetCache(dragTargets);
         const committed = activeGesture ? finishGesture(history, activeGesture) : 'noop';
         activeGesture = null;
+        let campaignSpawnCommitted: HistoryCommitResult = 'noop';
+        if (campaignSpawnDragOrig !== null) {
+          const spawn = activeCampaignSession?.campaign.campaign.campaignSpawn;
+          if (spawn && state.campaignSpawnBlock !== null &&
+            (spawn.xBlock !== state.campaignSpawnBlock[0] || spawn.yBlock !== state.campaignSpawnBlock[1])) {
+            spawn.xBlock = state.campaignSpawnBlock[0];
+            spawn.yBlock = state.campaignSpawnBlock[1];
+            campaignSpawnCommitted = commitCampaignSpawnSnapshot(campaignSpawnCtx, history, campaignSpawnDragPending);
+          }
+          campaignSpawnDragOrig = null;
+          campaignSpawnDragPending = null;
+        }
         // Only rebuild/dirty the room when the drag actually moved something —
         // a click-release with no movement (or a drag that returned to its
         // origin) leaves undo/redo and dirty state completely untouched.
-        if (committed !== 'noop') applyEdits('metadata');
+        if (committed !== 'noop' || campaignSpawnCommitted !== 'noop') applyEdits('metadata');
       }
       if (state.isResizingTransition) {
         state.isResizingTransition = false;

@@ -42,6 +42,7 @@ import { tickEnemyMovement } from './enemyMovement';
 import { clearPlayerSkidState } from './playerSkid';
 import { computeSkidJumpSpeedWorld } from './skidJumpHeight';
 import { rechargeGrappleCharge } from './grappleShared';
+import { isVerdantDustEquipped, VERDANT_JUMP_LAUNCH_MULTIPLIER } from './verdantMobility';
 
 // ============================================================================
 // Movement constants — imported from dedicated module for maintainability.
@@ -342,7 +343,7 @@ export function applyClusterMovement(world: WorldState): void {
                   ov(debugSpeedOverrides.walkSpeedWorld, GROUND_MAX_INPUT_SPEED_WORLD_PER_SEC),
                   baseJumpSpeedLand,
                   ov(debugSpeedOverrides.gravityWorld, NORMAL_GRAVITY_WORLD_PER_SEC2),
-                )
+                ) * (isVerdantDustEquipped(world) ? VERDANT_JUMP_LAUNCH_MULTIPLIER : 1.0)
               : baseJumpSpeedLand;
             cluster.velocityYWorld      = -landJumpSpeed;
             cluster.isGroundedFlag      = 0;

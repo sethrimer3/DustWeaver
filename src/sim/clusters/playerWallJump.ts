@@ -49,6 +49,7 @@ import {
   canWallSlideOnSurface,
 } from './playerWallSurface';
 import { getAdvancedWallJumpsEnabled } from '../../ui/renderSettings';
+import { isVerdantDustEquipped, VERDANT_JUMP_LAUNCH_MULTIPLIER } from './verdantMobility';
 
 /**
  * Tolerance (world units) used to treat a near-zero gap as "actually touching"
@@ -552,10 +553,19 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
   // wallDir = +1 if wall is to the right, -1 if wall is to the left
   const wallDir = canJumpFromRight ? 1 : -1;
   const tieredWallJumpX = computeWallJumpXSpeedWorld(cluster.wallJumpCountSinceReset, wallDir, world.playerMoveInputDxWorld);
-  const wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, tieredWallJumpX);
+  let wallJumpX = ov(debugSpeedOverrides.wallJumpXWorld, tieredWallJumpX);
+  let wallJumpYFinal = wallJumpY;
+  // Verdant Dust mobility: wall-jump launch strength (both horizontal and
+  // vertical components) is boosted 1.5x while Verdant is equipped. Applied
+  // as a multiplier on the resolved tiered/debug-overridden launch values so
+  // wall-jump tiers/progression are preserved, just scaled up.
+  if (isVerdantDustEquipped(world)) {
+    wallJumpX *= VERDANT_JUMP_LAUNCH_MULTIPLIER;
+    wallJumpYFinal *= VERDANT_JUMP_LAUNCH_MULTIPLIER;
+  }
   // Launch away: strong diagonal push prevents same-wall climbing.
   cluster.velocityXWorld          = -wallDir * wallJumpX;
-  cluster.velocityYWorld          = -wallJumpY;
+  cluster.velocityYWorld          = -wallJumpYFinal;
   cluster.isFastFallModeFlag      = 0;
   cluster.wallJumpLockoutTicks    = WALL_JUMP_LOCKOUT_TICKS;
   cluster.wallJumpForceTimeTicks  = WALL_JUMP_FORCE_TIME_TICKS;
@@ -582,7 +592,7 @@ export function attemptWallJump(cluster: ClusterState, world: WorldState): boole
   }
   // Start variable jump sustain for wall jumps too.
   cluster.varJumpTimerTicks       = VAR_JUMP_TIME_TICKS;
-  cluster.varJumpSpeedWorld       = -wallJumpY;
+  cluster.varJumpSpeedWorld       = -wallJumpYFinal;
 
   return true;
 }
