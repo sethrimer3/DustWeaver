@@ -8,6 +8,7 @@
 import type { DialogueEntry } from '../../dialogue/dialogueTypes';
 import { DIALOGUE_PORTRAIT_OPTIONS, getDialoguePortraitOption } from '../../dialogue/dialoguePortraits';
 import { isSpriteReady, loadImg } from '../imageCache';
+import { isAnimatedSpritePortrait, SpritePortraitAnimation } from './spritePortraitAnimation';
 
 /** Rendered size of the portrait canvas in CSS pixels. */
 const PORTRAIT_SIZE_CSS_PX = 80;
@@ -92,6 +93,7 @@ export class DialogueOverlayRenderer {
   private readonly _textWrapper: HTMLDivElement;
   private _isVisible: boolean = false;
   private _currentPortraitId: string = 'none';
+  private readonly _spritePortraitAnimation: SpritePortraitAnimation;
 
   constructor(uiRoot: HTMLElement) {
     if (!document.getElementById('dialogue-blink-style')) {
@@ -117,6 +119,9 @@ export class DialogueOverlayRenderer {
     const dpr = window.devicePixelRatio || 1;
     this._portraitCanvas.width = Math.round(PORTRAIT_SIZE_CSS_PX * dpr);
     this._portraitCanvas.height = Math.round(PORTRAIT_SIZE_CSS_PX * dpr);
+    const portraitCtx = this._portraitCanvas.getContext('2d');
+    if (portraitCtx === null) throw new Error('Unable to create dialogue portrait canvas');
+    this._spritePortraitAnimation = new SpritePortraitAnimation(this._portraitCanvas, portraitCtx);
 
     this._textWrapper = document.createElement('div');
     this._textWrapper.style.cssText = TEXT_AREA_CSS;
@@ -172,17 +177,20 @@ export class DialogueOverlayRenderer {
   }
 
   hide(): void {
+    this._spritePortraitAnimation.stop();
     this._panel.style.display = 'none';
     this._isVisible = false;
   }
 
   destroy(): void {
+    this._spritePortraitAnimation.stop();
     if (this._panel.parentElement) {
       this._panel.parentElement.removeChild(this._panel);
     }
   }
 
   private _drawPortrait(portraitId: string): void {
+    this._spritePortraitAnimation.stop();
     this._currentPortraitId = portraitId;
     const canvas = this._portraitCanvas;
     const ctx = canvas.getContext('2d');
@@ -201,6 +209,15 @@ export class DialogueOverlayRenderer {
     const option = getDialoguePortraitOption(portraitId);
     if (option !== undefined && option.url.length > 0) {
       const img = loadImg(option.url);
+      if (isAnimatedSpritePortrait(portraitId)) {
+        this._spritePortraitAnimation.start(isSpriteReady(img) ? img : null);
+        if (!isSpriteReady(img)) {
+          img.addEventListener('load', () => {
+            if (this._currentPortraitId === portraitId) this._spritePortraitAnimation.setImage(img);
+          }, { once: true });
+        }
+        return;
+      }
       if (isSpriteReady(img)) {
         this._drawPortraitImage(ctx, img, w, h);
       } else {
