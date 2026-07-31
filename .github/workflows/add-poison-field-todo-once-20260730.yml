@@ -1,0 +1,50 @@
+name: Add poison field Todo item once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/add-poison-field-todo-once-20260730.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-todo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Insert poison field Todo item
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('docs/Todo.md')
+          text = path.read_text(encoding='utf-8')
+          marker = '## Completed / superseded references'
+          signature = 'Add an editor-authored **Poison Field** hazard'
+          item = """- [ ] Add an editor-authored **Poison Field** hazard with amorphous, faint purple-cloud visuals. Gameplay: a poison-vulnerable player takes exactly 1 damage after 3.0 continuous seconds inside any Poison Field, then 1 damage every 3.0 seconds while remaining exposed; entering while Verdant dust is equipped causes no damage and does not advance the vulnerable exposure timer. Switching from Verdant to any non-Verdant dust while still inside deals 1 damage immediately and starts a fresh 3.0-second cadence; equipping Verdant or leaving all Poison Fields cancels/resets the cadence, and overlapping Poison Fields must not stack or multiply damage. Use the authoritative equipped dust type and existing player-damage transaction, respecting death, pause, room-load, respawn, and transition lifecycle without ordinary contact invulnerability accidentally suppressing scheduled ticks. Visuals must be render-only purple-tinted cloud wisps at roughly 10% peak opacity, with soft/noisy boundaries, no strong rectangular silhouette, slow amorphous drift, and independently fading/pulsing patches; constrain coverage to the authored field while feathering its edges, keep simulation deterministic, and quality-gate/cap particle or noise work. Add complete editor palette/placement/selection/resize/undo/redo/copy-paste/save-load/compact-schema support and a readable but subtle editor preview. Likely files/subsystems: field/editor element types and palette/overlay drawers, room JSON/schema serializer/hydrator, runtime hazard loading/tick/damage state, selected-dust helpers, hazard rendering, and focused tests. Add deterministic tests for the initial 3-second grace, recurring ticks, timestep subdivision, Verdant immunity, instant damage when switching inside the field and the subsequent cadence, switching back to Verdant, re-entry reset, overlap non-stacking, lifecycle cleanup, save round trips, and renderer opacity/bounds; manually verify the clouds remain barely visible and shape-soft at every quality level, then run targeted tests, `npm run build`, `npm run lint`, and `npm test`; increment `BUILD_NUMBER` exactly once for code changes."""
+
+          if signature not in text:
+              if marker not in text:
+                  raise SystemExit(f'Marker not found: {marker}')
+              text = text.replace(f'\n{marker}', f'\n{item}\n\n{marker}', 1)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Commit Todo update and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/add-poison-field-todo-once-20260730.yml
+          git add docs/Todo.md
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Add poison field Todo item [skip ci]"
+          git push origin HEAD:main
