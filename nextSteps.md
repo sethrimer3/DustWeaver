@@ -8,6 +8,33 @@ Current focus: large-room loading and rendering performance, especially room-tra
 
 ---
 
+## BUILD 596 — Verdant Dust High-Speed Grounded Mobility Identity
+
+**What was done:** see the completed Todo.md entry for the full architecture summary (grapple suppression/safe-release, 2x grounded speed/accel, 1.5x skid/wall-jump launch, render-only green afterimage trail, deterministic per-pixel flower bloom). New files: `src/sim/clusters/verdantMobility.ts`, `src/sim/clusters/verdantFlowerSpawn.ts`, `src/render/clusters/verdantAfterimageTrail.ts`, `src/render/verdantFlowerTrail.ts`, `src/tests/verdantMobility.test.ts`. Modified: `playerHorizontalMovement.ts`, `playerVerticalMovement.ts`, `playerWallJump.ts`, `movement.ts`, `grapple.ts`, `selectedDust.ts`, `state.ts` (ClusterState), `world.ts` (WorldState), `gameScreen.ts`, `gameRender.ts`, `gameLoadRoomPhases.ts`, `gamePlayerCloakUpdate.ts`.
+
+**Build status:** `npm run build` initially failed mid-session due to unrelated concurrent WIP in the working tree (see below) — this resolved itself once that concurrent session's work landed (commit `48c1591a "Fix room loading for instantaneous transitions"`), and a subsequent `npm run build` after that commit succeeded cleanly. Leaving the original blocker note below for context in case it recurs.
+
+**Original blocker (resolved):** The working tree contained uncommitted, unrelated, apparently mid-refactor changes (not made by this task, from a concurrent session sharing this workspace) to:
+- `src/main.ts` — unused imports (`clearRegistryAndApplyCampaignMetadata`, `loadRoomForGameplayAsync`, `getCampaignStartRoomId`) and a reference to an undefined `ROOM_REGISTRY`.
+- `src/levels/roomFileLoader.ts` — no longer exports `getActiveManifest`, which `src/screens/zoneResidentLoader.ts` still imports.
+- `src/editor/editorController.ts`, `src/levels/roomFileCacheState.ts`, `src/screens/gameTransitions.ts`, `electron/campaignExport.cjs` — also modified, unexamined (out of this task's scope).
+
+These look like an in-progress campaign-export/room-registry refactor that was left uncommitted (possibly by a concurrent session — the repo's autosync job committed twice during this session, `32aa8eb1` and `c26b6197`, but these files remained dirty afterward, i.e. still uncommitted at both commits). `npm run build` (`tsc && vite build`) fails on these files' errors, none of which touch anything this task changed. Verification instead relied on:
+- `npx tsc --noEmit -p .` — passed cleanly (this was run in an early state of the session; note strict `tsc` via `npm run build` later reported the errors above once the unrelated files had drifted further — re-run `tsc --noEmit` once the unrelated WIP is resolved/reverted/committed to get a clean full-project signal again).
+- `npm run lint` — clean except one pre-existing, unrelated `@typescript-eslint/no-explicit-any` in `src/tests/roomLoadingIntegration.test.ts`.
+- `npm test` (full suite) — 3040/3040 passing, including all 33 new `verdantMobility.test.ts` tests.
+
+**Recommended follow-up:** before or alongside the next task, someone should look at `src/main.ts` / `src/levels/roomFileLoader.ts` / `src/screens/zoneResidentLoader.ts` to either finish or revert whatever refactor left `getActiveManifest` removed but still imported, and clean up the unused imports in `main.ts` — none of that is Verdant-mobility-related, but it currently blocks `npm run build` for anyone working on this branch.
+
+**Not manually verified (no DOM/canvas harness in this environment):** the actual visual feel of the green afterimage trail (sprite tinting via `ctx.filter = 'sepia(1) saturate(600%) hue-rotate(72deg) brightness(...)'`), the flower bloom visual density/placement in a real room, and the doubled-speed/1.5x-jump "feel". The deterministic logic underlying all of these is unit-tested; only the pixel-level visual result is unconfirmed. A manual smoke test (equip Verdant, walk/skid-jump/wall-jump around a room with ground pixels, watch the trail and flowers, then switch dust types and confirm grapple/speed instantly return to normal) is recommended.
+
+**Design notes / things a future agent should know:**
+- The flower-bloom trigger deliberately lives in `sim/` (writes bounded transient `WorldState.verdantFlowerEventCount/XWorld/YWorld` fields, capacity 16, reset every tick) rather than purely in render code, because the "exactly one deterministic 1% roll per newly crossed grounded pixel, evaluated once per tick regardless of how many pixels were crossed" requirement needs the authoritative post-collision `positionXWorld`/`isGroundedFlag`, which only exist in the sim tick pipeline. The render-side `VerdantFlowerTrail` pool only *consumes* those events (via `consumeSpawnEvents(world)`, called once right after `tick(world)` in `gameScreen.ts` — deliberately not deferred to the render/draw pass, so multiple sim ticks per rendered frame can't overwrite each other's events).
+- The afterimage trail's green tint uses a canvas `filter` (sepia+saturate+hue-rotate+brightness) rather than a manual pixel-buffer recolor, for simplicity; if this reads visually wrong in-browser, consider swapping to an explicit tinted-mask approach like `renderer.ts`'s `getOrCreateGoldOutlineMask` pattern.
+- `isVerdantDustEquipped(world)` in `src/sim/clusters/verdantMobility.ts` is the one predicate every Verdant system should keep deriving from — do not reintroduce inline `selectedDustKind === ParticleKind.Nature` checks elsewhere.
+
+---
+
 ## BUILD 563 — Render Chunk Prewarm Scheduler: Authoritative Priority + Quality-Tier Suspension
 
 **Why:** Follow-up hardening of `roomRenderChunkWarmScheduler.ts` after BUILD 560/561 identified two remaining architectural weaknesses: (1) `evictStalePrewarmedChunks` derived a candidate room's eviction radius from `_queue` membership (`radiusMap.get(roomId) ?? 3`), so a room whose task had already **completed and left the queue** silently fell back to the default speculative radius-3 bucket during memory-budget eviction — a completed radius-1/2 room could be misclassified as low-value and evicted ahead of genuinely speculative radius-3 work; (2) radius-3 tasks stayed in the active `_queue` when quality was permanently 'low'/'med', so every scheduler slice repeatedly rotated them to the back (`_queue.push(_queue.shift()!)`) — churn indistinguishable from the legitimate temporary poor-frame-time deferral BUILD 561 introduced, and the `deferredRadius3` stat conflated both cases as one incrementing event counter.
