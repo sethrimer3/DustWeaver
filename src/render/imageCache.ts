@@ -38,11 +38,28 @@ export function hasImageFailed(src: string): boolean {
   return _failedUrls.has(src);
 }
 
+/**
+ * Node-safe stand-in for an image that will never finish loading (no network
+ * stack). `addEventListener`/`removeEventListener` are no-ops so `decodeImg()`
+ * can safely register its load/error listeners in a Node test environment
+ * without throwing — the returned promise then simply never settles, which is
+ * harmless for fire-and-forget decode calls exercised by loading-path tests.
+ */
+function _createNodeImageStub(): HTMLImageElement {
+  return {
+    src: '',
+    complete: false,
+    naturalWidth: 0,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  } as unknown as HTMLImageElement;
+}
+
 /** Returns (or creates) a loaded HTMLImageElement for the given URL. */
 export function loadImg(src: string): HTMLImageElement {
   const cached = _imgCache.get(src);
   if (cached !== undefined) return cached;
-  const img = typeof Image !== 'undefined' ? new Image() : ({ src: '', complete: false, naturalWidth: 0 } as unknown as HTMLImageElement);
+  const img = typeof Image !== 'undefined' ? new Image() : _createNodeImageStub();
   img.src = src;
   _imgCache.set(src, img);
   return img;

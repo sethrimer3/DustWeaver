@@ -867,6 +867,22 @@ export function addZoneEntryViewportTasks(
   if (_cancelled) return;
   if (!runtimeCache) return;
 
+  // On a cold app launch this runs before any room transition has ever called
+  // `scheduleChunkPrewarms()` — the only other place that sets the module-level
+  // `_roomRegistry`/`_runtimeCache`/`_getQuality`/`_getLastFrameMs` singletons.
+  // Without this, `_runSlice` reads `_roomRegistry === null`, treats every
+  // queued task's room as "not in registry", and silently drops it — so the
+  // corresponding `isWallPrewarmViewportCovered`/`isBgPrewarmViewportCovered`
+  // checks in `isZoneEntryReadinessComplete()` can never pass, and the initial
+  // zone-load readiness barrier hangs forever (observed as the loading overlay
+  // stuck at "N/N" after all resident builds finish). Only fill in state that
+  // is still unset — an active `scheduleChunkPrewarms()` schedule (real room
+  // transition) must not be clobbered by a later zone-load call.
+  if (_roomRegistry === null) _roomRegistry = registry;
+  if (_runtimeCache === null) _runtimeCache = runtimeCache;
+  if (_getQuality === null) _getQuality = () => 'med';
+  if (_getLastFrameMs === null) _getLastFrameMs = () => 0;
+
   let added = 0;
 
   for (const sourceId of zoneRoomIds) {
