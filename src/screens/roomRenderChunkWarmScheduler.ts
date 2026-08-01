@@ -859,19 +859,20 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
 export function addZoneEntryViewportTasks(
   zoneRoomIds: readonly string[],
   registry:    ReadonlyMap<string, RoomDef>,
+  runtimeCache: RoomRuntimeCache,
   vpWPx:       number,
   vpHPx:       number,
   scalePx:     number,
 ): void {
   if (_cancelled) return;
-  if (!_runtimeCache) return;
+  if (!runtimeCache) return;
 
   let added = 0;
 
   for (const sourceId of zoneRoomIds) {
     const sourceRoom = registry.get(sourceId);
     if (!sourceRoom) continue;
-    const sourceRuntime = _runtimeCache.get(sourceId);
+    const sourceRuntime = runtimeCache.get(sourceId);
     if (!sourceRuntime) continue; // should be ready
 
     for (let i = 0; i < sourceRoom.transitions.length; i++) {
@@ -881,7 +882,7 @@ export function addZoneEntryViewportTasks(
       const targetRoom = registry.get(trans.targetRoomId);
       if (!targetRoom) continue;
       
-      const targetRuntime = _runtimeCache.get(trans.targetRoomId);
+      const targetRuntime = runtimeCache.get(trans.targetRoomId);
       if (!targetRuntime) continue;
       
       const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
@@ -948,37 +949,53 @@ function computeRenderStateKeyForEntry(room: RoomDef, runtime: RoomRuntimeEntry)
 export function isZoneEntryReadinessComplete(
   zoneRoomIds: readonly string[],
   registry:    ReadonlyMap<string, RoomDef>,
+  runtimeCache: RoomRuntimeCache,
   vpWPx:       number,
   vpHPx:       number,
   scalePx:     number,
 ): boolean {
-  if (!_runtimeCache) return false;
+  if (!runtimeCache) return false;
 
   for (const sourceId of zoneRoomIds) {
     const sourceRoom = registry.get(sourceId);
-    if (!sourceRoom) return false;
+    if (!sourceRoom) {
+      console.log(`[isZoneEntryReadinessComplete diag] sourceRoom ${sourceId} not in registry`);
+      return false;
+    }
     
     // Check resident world / static readiness
-    const sourceRuntime = _runtimeCache.get(sourceId);
-    if (!sourceRuntime || !isEntryFullyPrepared(sourceRuntime)) return false;
-
-    // We do not check ResidentRoomManager here directly because it is checked at transition time,
-    // but the runtime logic is ready.
+    const sourceRuntime = runtimeCache.get(sourceId);
+    if (!sourceRuntime || !isEntryFullyPrepared(sourceRuntime)) {
+      console.log(`[isZoneEntryReadinessComplete diag] sourceRoom ${sourceId} not fully prepared`);
+      return false;
+    }
 
     for (let i = 0; i < sourceRoom.transitions.length; i++) {
       const trans = sourceRoom.transitions[i];
       if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
       
       const targetRoom = registry.get(trans.targetRoomId);
-      if (!targetRoom) return false;
+      if (!targetRoom) {
+        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} not in registry`);
+        return false;
+      }
 
-      const targetRuntime = _runtimeCache.get(trans.targetRoomId);
-      if (!targetRuntime || !isEntryFullyPrepared(targetRuntime)) return false;
+      const targetRuntime = runtimeCache.get(trans.targetRoomId);
+      if (!targetRuntime || !isEntryFullyPrepared(targetRuntime)) {
+        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} not fully prepared`);
+        return false;
+      }
 
-      if (!areRoomSpritesReady(targetRoom)) return false;
+      if (!areRoomSpritesReady(targetRoom)) {
+        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} sprites not ready`);
+        return false;
+      }
 
       const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
-      if (!targetRenderKey) return false;
+      if (!targetRenderKey) {
+        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} render state key not ready`);
+        return false;
+      }
 
       const entry: DirectedEntry = {
         sourceRoomId: sourceId,
@@ -995,10 +1012,12 @@ export function isZoneEntryReadinessComplete(
       const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
 
       if (!isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        console.log(`[isZoneEntryReadinessComplete diag] transition ${sourceId}->${trans.targetRoomId} wall prewarm missing`);
         return false;
       }
       const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
       if (hasBg && !isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        console.log(`[isZoneEntryReadinessComplete diag] transition ${sourceId}->${trans.targetRoomId} bg prewarm missing`);
         return false;
       }
     }

@@ -756,7 +756,7 @@ test('addZoneEntryViewportTasks assigns a lower priority than radius-1 work', ()
   const runtimeCache = new RoomRuntimeCache();
   const handle = scheduleChunkPrewarms(room0, registry, runtimeCache, () => 'high', () => 10, 800, 600, 1);
   try {
-    addZoneEntryViewportTasks(['roomZ'], registry, 800, 600, 1);
+    addZoneEntryViewportTasks(['roomZ'], registry, runtimeCache, 800, 600, 1);
 
     getOrCreatePrewarmWallCache('room3', 'k3').stats.memoryEstimateKB = 4000;
     getOrCreatePrewarmWallCache('roomZ', 'kz').stats.memoryEstimateKB = 4000;

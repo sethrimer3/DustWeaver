@@ -482,22 +482,37 @@ export class ZoneResidentLoader {
     scalePx:             number,
   ): boolean {
     // All builds must be done (no active generator, full queue walk complete).
-    if (state.activeGen !== null) return false;
-    if (state.buildIdx < state.roomIds.length) return false;
+    if (state.activeGen !== null) {
+      console.log(`[zoneLoader diag] activeGen is not null`);
+      return false;
+    }
+    if (state.buildIdx < state.roomIds.length) {
+      console.log(`[zoneLoader diag] buildIdx ${state.buildIdx} < ${state.roomIds.length}`);
+      return false;
+    }
 
     // Every room must be runtimeReady, sprites decoded, background decoded.
     for (const roomId of state.roomIds) {
       const resident = residentRoomManager.getResident(roomId);
-      if (resident === undefined || !resident.runtimeReady) return false;
+      if (resident === undefined || !resident.runtimeReady) {
+        console.log(`[zoneLoader diag] room ${roomId} not runtimeReady`);
+        return false;
+      }
       const room = this._registry.get(roomId);
       if (room === undefined) continue;
-      if (!areRoomSpritesReady(room)) return false;
-      if (!isRoomBackgroundDecodeReady(room)) return false;
+      if (!areRoomSpritesReady(room)) {
+        console.log(`[zoneLoader diag] room ${roomId} sprites not ready`);
+        return false;
+      }
+      if (!isRoomBackgroundDecodeReady(room)) {
+        console.log(`[zoneLoader diag] room ${roomId} bg not ready`);
+        return false;
+      }
     }
 
     // Queue directed-entry tasks exactly once after all builds finish.
     if (!state.tasksQueued) {
-      addZoneEntryViewportTasks(state.roomIds, this._registry, vpWPx, vpHPx, scalePx);
+      addZoneEntryViewportTasks(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx);
       state.tasksQueued = true;
     }
 
@@ -506,7 +521,8 @@ export class ZoneResidentLoader {
     runChunkPrewarmSliceNow(16);
 
     // Finally, strictly validate directed-entry foreground/background coverage.
-    if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, vpWPx, vpHPx, scalePx)) {
+    if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx)) {
+      console.log(`[zoneLoader diag] isZoneEntryReadinessComplete returned false`);
       return false;
     }
 
