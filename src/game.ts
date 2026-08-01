@@ -441,5 +441,10 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
     }
   }
 
-  navigate('mainMenu');
+  // HACK: Auto-start campaign for debugging
+  activeSlotIndex = 0;
+  activeSaveData = { progress: createDefaultProgress(), playTimeMs: 0, lastPlayedIso: '' };
+  progress = activeSaveData.progress;
+  sessionStartMs = performance.now();
+  navigate('gameplay', [ParticleKind.SWORD, ParticleKind.SHIELD, ParticleKind.BOW]);
 }

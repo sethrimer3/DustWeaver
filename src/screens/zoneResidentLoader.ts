@@ -477,6 +477,62 @@ export class ZoneResidentLoader {
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
+  private _dumpDiagnosticSnapshot(
+    state: ZoneLoadState,
+    residentRoomManager: ResidentRoomManager,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+  ): void {
+    const report: any = {
+      worldNumber: state.worldNumber,
+      expectedRoomCount: state.roomIds.length,
+      builtCount: state.builtCount,
+      failedCount: state.failedCount,
+      rooms: {}
+    };
+
+    let allRuntimeReady = true;
+    let allSpritesReady = true;
+    let allBgReady = true;
+
+    for (const roomId of state.roomIds) {
+      const room = this._registry.get(roomId);
+      const resident = residentRoomManager.getResident(roomId);
+      const runtimeEntry = this._runtimeCache.get(roomId);
+      
+      const r = {
+        inRegistry: room !== undefined,
+        residentExists: resident !== undefined,
+        runtimeReady: resident?.runtimeReady ?? false,
+        inCache: runtimeEntry !== undefined,
+        spritesReady: room ? areRoomSpritesReady(room) : false,
+        bgReady: room ? isRoomBackgroundDecodeReady(room) : false,
+      };
+      
+      if (!r.runtimeReady) allRuntimeReady = false;
+      if (!r.spritesReady) allSpritesReady = false;
+      if (!r.bgReady) allBgReady = false;
+      
+      report.rooms[roomId] = r;
+    }
+
+    report.allRuntimeReady = allRuntimeReady;
+    report.allSpritesReady = allSpritesReady;
+    report.allBgReady = allBgReady;
+    report.tasksQueued = state.tasksQueued;
+    
+    // Check entry readiness
+    const entryReadiness = isZoneEntryReadinessComplete(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx);
+    report.entryReadiness = entryReadiness;
+
+    const now = performance.now();
+    if (!state.lastDiagTime || now - state.lastDiagTime > 1000) {
+      state.lastDiagTime = now;
+      console.warn(`[zoneLoader diag snapshot]\n` + JSON.stringify(report, null, 2));
+    }
+  }
+
   private _isZoneReadyNow(
     state:               ZoneLoadState,
     residentRoomManager: ResidentRoomManager,
@@ -486,31 +542,32 @@ export class ZoneResidentLoader {
   ): boolean {
     // All builds must be done (no active generator, full queue walk complete).
     if (state.activeGen !== null) {
-      console.log(`[zoneLoader diag] activeGen is not null`);
       return false;
     }
     if (state.buildIdx < state.roomIds.length) {
-      console.log(`[zoneLoader diag] buildIdx ${state.buildIdx} < ${state.roomIds.length}`);
       return false;
     }
 
     // Every room must be runtimeReady, sprites decoded, background decoded.
+    let allBaseReady = true;
     for (const roomId of state.roomIds) {
       const resident = residentRoomManager.getResident(roomId);
       if (resident === undefined || !resident.runtimeReady) {
-        console.log(`[zoneLoader diag] room ${roomId} not runtimeReady`);
-        return false;
+        allBaseReady = false; break;
       }
       const room = this._registry.get(roomId);
       if (room === undefined) continue;
       if (!areRoomSpritesReady(room)) {
-        console.log(`[zoneLoader diag] room ${roomId} sprites not ready`);
-        return false;
+        allBaseReady = false; break;
       }
       if (!isRoomBackgroundDecodeReady(room)) {
-        console.log(`[zoneLoader diag] room ${roomId} bg not ready`);
-        return false;
+        allBaseReady = false; break;
       }
+    }
+
+    if (!allBaseReady) {
+      this._dumpDiagnosticSnapshot(state, residentRoomManager, vpWPx, vpHPx, scalePx);
+      return false;
     }
 
     // Queue directed-entry tasks exactly once after all builds finish.
@@ -525,7 +582,7 @@ export class ZoneResidentLoader {
 
     // Finally, strictly validate directed-entry foreground/background coverage.
     if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx)) {
-      console.log(`[zoneLoader diag] isZoneEntryReadinessComplete returned false`);
+      this._dumpDiagnosticSnapshot(state, residentRoomManager, vpWPx, vpHPx, scalePx);
       return false;
     }
 
