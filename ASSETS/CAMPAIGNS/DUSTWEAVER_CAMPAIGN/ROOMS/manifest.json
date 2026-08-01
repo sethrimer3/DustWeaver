@@ -5,7 +5,7 @@
   "campaignVersion": 15,
   "campaignSchemaVersion": 1,
   "roomCacheVersion": 1,
-  "exportedAt": "2026-07-31T03:50:29.083Z",
+  "exportedAt": "2026-08-01T02:43:05.221Z",
   "rooms": {
     "lobby": {
       "roomId": "lobby",
@@ -41,19 +41,19 @@
       "roomId": "seal_chamber",
       "file": "seal_chamber_room.json",
       "hash": "2ac820feeb66afe2",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "long_hall": {
       "roomId": "long_hall",
       "file": "long_hall_room.json",
       "hash": "946f4909eb732f09",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "tall_shaft": {
       "roomId": "tall_shaft",
       "file": "tall_shaft_room.json",
       "hash": "bf4be0817d1d8b29",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "Cozy_Chamber": {
       "roomId": "Cozy_Chamber",
@@ -65,13 +65,13 @@
       "roomId": "the_fall",
       "file": "the_fall_room.json",
       "hash": "8db07d798ae095bf",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "overgrown_chasm": {
       "roomId": "overgrown_chasm",
       "file": "overgrown_chasm_room.json",
       "hash": "14ee02d55474431b",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "magma_corridor": {
       "roomId": "magma_corridor",
@@ -83,13 +83,13 @@
       "roomId": "interesting_room",
       "file": "interesting_room_room.json",
       "hash": "9e4d3ff239a0029e",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "dark_tunnel": {
       "roomId": "dark_tunnel",
       "file": "dark_tunnel_room.json",
       "hash": "30e8ff17488352b1",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "bend": {
       "roomId": "bend",
@@ -101,13 +101,13 @@
       "roomId": "chasm",
       "file": "chasm_room.json",
       "hash": "31e75eec1c094526",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "a_big_ask": {
       "roomId": "a_big_ask",
       "file": "a_big_ask_room.json",
       "hash": "ba5987059a8bd68a",
-      "updatedAt": "2026-07-25T05:03:20.978Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "lava_tube": {
       "roomId": "lava_tube",
@@ -131,7 +131,7 @@
       "roomId": "ice_hall",
       "file": "ice_hall_room.json",
       "hash": "68b7887109642a87",
-      "updatedAt": "2026-07-25T16:41:54.286Z"
+      "updatedAt": "2026-08-01T02:43:05.221Z"
     },
     "the_icicle": {
       "roomId": "the_icicle",
