@@ -1,5 +1,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import { ZoneResidentLoader } from '../screens/zoneResidentLoader';
 import { ResidentRoomManager } from '../screens/residentRoomManager';
 import { RoomRuntimeCache } from '../screens/roomRuntimeCache';
@@ -53,6 +56,37 @@ describe('ZoneResidentLoader', () => {
     // The loader should pin both rooms so they survive the capacity limit
     assert.strictEqual(runtimeCache.has('room1'), true, 'Room 1 should be pinned and survive eviction');
     assert.strictEqual(runtimeCache.has('room2'), true, 'Room 2 should be pinned and survive eviction');
+  });
+
+  test('gameScreen.ts queueZoneEntryViewportTasks passes the same roomRuntimeCache instance used elsewhere', () => {
+    // Regression guard for a build break where addZoneEntryViewportTasks was
+    // called with a stale/undefined `runtimeCache` identifier instead of the
+    // single authoritative `roomRuntimeCache` instance shared by resident
+    // loading, room preparation, and zone-entry viewport warming. TypeScript
+    // catches an undefined identifier, but a duplicate cache instance created
+    // just to "fix" the type error would compile fine while breaking cache
+    // coherence, so this test pins the exact call-site wiring in source.
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const gameScreenPath = path.join(here, '..', 'screens', 'gameScreen.ts');
+    const src = readFileSync(gameScreenPath, 'utf8');
+
+    // The single RoomRuntimeCache instance must be constructed exactly once.
+    const instanceMatches = src.match(/new RoomRuntimeCache\(/g) ?? [];
+    assert.strictEqual(
+      instanceMatches.length,
+      1,
+      'gameScreen.ts must construct exactly one RoomRuntimeCache instance (no second/alias cache).',
+    );
+
+    // addZoneEntryViewportTasks must be wired to that same instance's variable name.
+    const callMatch = src.match(/addZoneEntryViewportTasks\(\s*zoneRoomIds,\s*ROOM_REGISTRY,\s*(\w+),/);
+    assert.ok(callMatch, 'Expected to find the addZoneEntryViewportTasks call site in gameScreen.ts');
+    assert.strictEqual(
+      callMatch![1],
+      'roomRuntimeCache',
+      'addZoneEntryViewportTasks must be passed the authoritative `roomRuntimeCache` variable, ' +
+        'the same instance used by resident loading, room preparation, and entry-viewport warming.',
+    );
   });
 });
 
