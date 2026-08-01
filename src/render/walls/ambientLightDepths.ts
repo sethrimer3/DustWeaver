@@ -112,7 +112,7 @@ export function buildAmbientDepths(
   const depths = new Map<string, number>();
   if (roomWidthBlocks <= 0 || roomHeightBlocks <= 0) return depths;
 
-  const _devT0 = import.meta.env.DEV ? performance.now() : 0;
+  const _devT0 = import.meta.env?.DEV ? performance.now() : 0;
   const { dx: directionVectorX, dy: directionVectorY } = ambientDirectionVector(direction);
   const isOmni = directionVectorX === 0 && directionVectorY === 0;
 
@@ -255,7 +255,7 @@ export function buildAmbientDepths(
     if (!depths.has(key)) depths.set(key, maxFallbackDepth);
   }
 
-  if (import.meta.env.DEV && _devT0 > 0) {
+  if (import.meta.env?.DEV && _devT0 > 0) {
     const ms = performance.now() - _devT0;
     const area = roomWidthBlocks * roomHeightBlocks;
     if (ms > 5 || area > 65536) {
@@ -354,7 +354,7 @@ export function buildAmbientDarknessAlphas(
   const alphas = new Map<string, number>();
   if (roomWidthBlocks <= 0 || roomHeightBlocks <= 0) return alphas;
 
-  const _devT0 = import.meta.env.DEV ? performance.now() : 0;
+  const _devT0 = import.meta.env?.DEV ? performance.now() : 0;
   const { dx: dirVecX, dy: dirVecY } = ambientDirectionVector(direction);
   const isOmni = dirVecX === 0 && dirVecY === 0;
 
@@ -376,7 +376,7 @@ export function buildAmbientDarknessAlphas(
   // O(W×H) loop over all cells created millions of strings and caused 10–20 s
   // main-thread freezes.  Removing it has no effect on output correctness.
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     const _area = roomWidthBlocks * roomHeightBlocks;
     if (_area > 65536) {
       console.log(
@@ -521,7 +521,7 @@ export function buildAmbientDarknessAlphas(
     if (!alphas.has(key)) alphas.set(key, 1.0);
   }
 
-  if (import.meta.env.DEV && _devT0 > 0) {
+  if (import.meta.env?.DEV && _devT0 > 0) {
     const ms = performance.now() - _devT0;
     const area = roomWidthBlocks * roomHeightBlocks;
     if (ms > 5 || area > 65536) {

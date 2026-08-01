@@ -153,6 +153,30 @@ describe('ZoneResidentLoader', () => {
     const loader = new ZoneResidentLoader(registry, runtimeCache);
     const residentRoomManager = new ResidentRoomManager();
 
+    // Minimal canvas stand-in: chunk warming draws into a real
+    // CanvasRenderingContext2D in the browser (getPrewarmDummyCtx() in
+    // roomRenderCacheStore.ts). Node has no `document`/canvas, so this stubs
+    // just that leaf drawing surface with permissive no-ops — it does not
+    // touch any scheduler/readiness decision logic, only lets the same real
+    // build path referenced by the bug run to completion in a Node test.
+    if (typeof (globalThis as { document?: unknown }).document === 'undefined') {
+      const fakeCtx = new Proxy({}, {
+        get: (_t, prop) => {
+          if (prop === 'canvas') return { width: 1, height: 1 };
+          return () => {};
+        },
+        set: () => true,
+      });
+      const fakeCanvas = {
+        width: 1,
+        height: 1,
+        getContext: () => fakeCtx,
+      };
+      (globalThis as { document?: unknown }).document = {
+        createElement: (tag: string) => (tag === 'canvas' ? fakeCanvas : {}),
+      };
+    }
+
     loader.startZoneLoad(99, residentRoomManager);
 
     // Fast-forward both rooms to fully-built/fully-prepared, exactly as the
