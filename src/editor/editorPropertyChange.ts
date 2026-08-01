@@ -174,14 +174,12 @@ export function applyPropertyToElement(
         // Depth (gradient width) must be at least 2 — this is an explicit
         // inspector edit, never the legacy-omitted fallback case, so clamp
         // unconditionally (see editorBrush.ts DEFAULT_TRANSITION_GRADIENT_BLOCKS).
-        const newGw = Math.max(2, numVal);
-        const oldGw = trans.gradientWidthBlocks ?? 0;
-        // Keep the trigger edge (the transition's actual crossing line) fixed
-        // in place; grow the zone into the room from the far side instead of
-        // pushing the trigger edge further out.
-        if (trans.direction === 'right') trans.xBlock += oldGw - newGw;
-        if (trans.direction === 'down') trans.yBlock += oldGw - newGw;
-        trans.gradientWidthBlocks = newGw;
+        // The trigger/crossing line sits at the transition's near edge
+        // (xBlock/yBlock — see gameTransitions.ts checkRoomTransitions), so
+        // width changes must only grow/shrink the zone into the room from
+        // the far side; xBlock/yBlock (and thus the authored position) must
+        // never be mutated here.
+        trans.gradientWidthBlocks = Math.max(2, numVal);
       }
     }
   } else if (el.type === 'waterZone') {
