@@ -179,6 +179,9 @@ export class ZoneResidentLoader {
       const room = this._registry.get(roomId);
       if (room !== undefined) residentRoomManager.ensureResident(room);
     }
+    
+    // Pin all zone rooms in the runtime cache so they aren't evicted during loading.
+    this._runtimeCache.setPinnedRooms(roomIds);
 
     this._activeZone = {
       worldNumber,
@@ -195,7 +198,7 @@ export class ZoneResidentLoader {
       tasksQueued:   false,
     };
 
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const manifest = getActiveManifest();
       const manifestRooms = manifest ? Object.keys(manifest.rooms).length : 'N/A';
       console.log(
@@ -271,7 +274,7 @@ export class ZoneResidentLoader {
           state.builtCount++;
           state.activeGen     = null;
           state.activeRoomId  = null;
-          if (import.meta.env.DEV) {
+          if (import.meta.env?.DEV) {
             console.log(
               `[zoneLoader] built ${state.builtCount}/${state.roomIds.length} — ${roomId}` +
               ` (${(performance.now() - state.activeGenT0).toFixed(0)}ms)`,
@@ -282,7 +285,7 @@ export class ZoneResidentLoader {
         state.failedCount++;
         state.activeGen    = null;
         state.activeRoomId = null;
-        if (import.meta.env.DEV) {
+        if (import.meta.env?.DEV) {
           console.warn(`[zoneLoader] build failed: ${roomId}`, err);
         }
       }
@@ -323,7 +326,7 @@ export class ZoneResidentLoader {
     if (this._isZoneReadyNow(state, residentRoomManager, vpWPx, vpHPx, scalePx)) {
       const elapsed = performance.now() - state.t0;
       this._readyZones.add(state.worldNumber);
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         this._logZoneReadySummary(state, elapsed);
       }
       this._activeZone = null;
@@ -416,7 +419,7 @@ export class ZoneResidentLoader {
       // Cancel active session — let the caller restart it if desired.
       this._activeZone = null;
     }
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(`[zoneLoader] invalidateZone world=${worldNumber}`);
     }
   }
@@ -464,7 +467,7 @@ export class ZoneResidentLoader {
   ): void {
     const activeRoomIds = this.buildZoneRoomIdSet(activeWorldNumber);
     residentRoomManager.evictDistantZoneAware(activeRoomIds);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       console.log(
         `[zoneLoader] evictInactiveZoneResidents: kept world=${activeWorldNumber} (${activeRoomIds.size} rooms)` +
         (prevWorldNumber !== null ? `, prev world=${prevWorldNumber}` : ''),

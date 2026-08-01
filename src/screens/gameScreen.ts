@@ -897,7 +897,7 @@ export function startGameScreen(
     getLastAdoptionResult,
     recordTransitionOutcome,
     queueZoneEntryViewportTasks: (zoneRoomIds) => {
-      addZoneEntryViewportTasks(zoneRoomIds, ROOM_REGISTRY, virtualWidthPx, virtualHeightPx, camera.zoom);
+      addZoneEntryViewportTasks(zoneRoomIds, ROOM_REGISTRY, runtimeCache, virtualWidthPx, virtualHeightPx, camera.zoom);
     },
     areRoomSpritesReady,
     isRoomBackgroundDecodeReady,
