@@ -126,6 +126,32 @@ try {
         Assert-True (-not (Test-Path (Join-Path $leases 'agent-two.json'))) 'second lease remained'
         Assert-True ($releaseSecond.Output.Contains('is active')) 'final release did not activate auto-sync'
     }
+    Invoke-Test 'path casing does not bypass an active lease' {
+        $pauseResult = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', 'case-lease', '-Owner', 'Codex', '-Purpose', 'casing test')
+        Assert-True ($pauseResult.ExitCode -eq 0) $pauseResult.Output
+        Set-Content (Join-Path $repo.Path 'casing-change.txt') 'change'
+        $head = & git -C $repo.Path rev-parse HEAD
+        $upperPath = $repo.Path.ToUpperInvariant()
+        $result = Invoke-WorkflowScript 'autosync.ps1' $upperPath
+        Assert-True ($result.ExitCode -eq 0) $result.Output
+        Assert-True ((& git -C $repo.Path rev-parse HEAD) -eq $head) 'casing bypassed lease and committed'
+        Remove-Item (Join-Path $repo.Path 'casing-change.txt')
+        $release = Invoke-WorkflowScript 'resume-autosync.ps1' $repo.Path @('-LeaseId', 'case-lease')
+        Assert-True ($release.ExitCode -eq 0) $release.Output
+    }
+    Invoke-Test 'forward-slash path does not bypass an active lease' {
+        $pauseResult = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', 'slash-lease', '-Owner', 'Codex', '-Purpose', 'slash test')
+        Assert-True ($pauseResult.ExitCode -eq 0) $pauseResult.Output
+        Set-Content (Join-Path $repo.Path 'slash-change.txt') 'change'
+        $head = & git -C $repo.Path rev-parse HEAD
+        $slashPath = $repo.Path -replace '\\', '/'
+        $result = Invoke-WorkflowScript 'autosync.ps1' $slashPath
+        Assert-True ($result.ExitCode -eq 0) $result.Output
+        Assert-True ((& git -C $repo.Path rev-parse HEAD) -eq $head) 'forward-slash path bypassed lease and committed'
+        Remove-Item (Join-Path $repo.Path 'slash-change.txt')
+        $release = Invoke-WorkflowScript 'resume-autosync.ps1' $repo.Path @('-LeaseId', 'slash-lease')
+        Assert-True ($release.ExitCode -eq 0) $release.Output
+    }
     Invoke-Test 'invalid lease ID is rejected without escaping lease directory' {
         $result = Invoke-WorkflowScript 'pause-autosync.ps1' $repo.Path @('-LeaseId', '..\escape')
         Assert-True ($result.ExitCode -ne 0) 'invalid lease ID succeeded'

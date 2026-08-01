@@ -197,3 +197,34 @@ test('meshCellsToRectangles: handles a single-cell edge shape explicitly', () =>
   const row: MeshCell[] = [{ x: 0, y: 0, key: 'k' }];
   assert.deepEqual(meshCellsToRectangles(row), [{ x: 0, y: 0, w: 1, h: 1, key: 'k' }]);
 });
+
+test('meshCellsToRectangles: rejects a conflicting duplicate coordinate with two different keys', () => {
+  const input: MeshCell[] = [
+    { x: 0, y: 0, key: 'dark' },
+    { x: 0, y: 0, key: 'clear' }, // same coordinate, different key -> conflict
+  ];
+  assert.throws(() => meshCellsToRectangles(input), /conflicting duplicate coordinate/);
+});
+
+test('meshCellsToRectangles: conflicting-key rejection is deterministic regardless of which entry appears first', () => {
+  const forward: MeshCell[] = [
+    { x: 3, y: 3, key: 'dark' },
+    { x: 3, y: 3, key: 'clear' },
+  ];
+  const reversed: MeshCell[] = [
+    { x: 3, y: 3, key: 'clear' },
+    { x: 3, y: 3, key: 'dark' },
+  ];
+  assert.throws(() => meshCellsToRectangles(forward), /conflicting duplicate coordinate \(3, 3\)/);
+  assert.throws(() => meshCellsToRectangles(reversed), /conflicting duplicate coordinate \(3, 3\)/);
+});
+
+test('meshCellsToRectangles: a conflicting coordinate elsewhere in a larger input still throws and produces no output', () => {
+  const input: MeshCell[] = [
+    { x: 0, y: 0, key: 'dark' },
+    { x: 1, y: 0, key: 'dark' },
+    { x: 5, y: 5, key: 'dark' },
+    { x: 5, y: 5, key: 'clear' }, // conflict buried among otherwise-valid cells
+  ];
+  assert.throws(() => meshCellsToRectangles(input), /conflicting duplicate coordinate \(5, 5\)/);
+});

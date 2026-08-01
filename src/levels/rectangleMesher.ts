@@ -2,9 +2,26 @@
  * rectangleMesher.ts — Shared deterministic occupancy-to-rectangle meshing utility.
  *
  * Pure, Node-safe helper that turns a sparse set of occupied grid cells (each
- * tagged with a "behavior key") into a minimal, deterministic, non-overlapping
+ * tagged with a "behavior key") into a deterministic, compact, non-overlapping
  * set of axis-aligned rectangles — one rectangle set per behavior key. Cells
  * with different behavior keys are never merged into the same rectangle.
+ *
+ * ── Contract ─────────────────────────────────────────────────────────────
+ *  - A coordinate may have only one behavior key within a single call.
+ *  - Duplicate input entries with the same (x, y) AND the same key are
+ *    deduplicated (treated as one occupied cell).
+ *  - Conflicting duplicates — the same (x, y) with two *different* keys — are
+ *    REJECTED: the function throws a descriptive error rather than silently
+ *    keeping one, keeping both (which would force overlapping rectangles), or
+ *    picking a winner. Callers with a legitimate reason for the same
+ *    coordinate to carry different keys must resolve that upstream (e.g. by
+ *    picking one key per coordinate) before calling this module.
+ *  - Output rectangles never overlap, including across different keys.
+ *  - Output is deterministic and compact, but it is NOT guaranteed to be the
+ *    theoretical minimum rectangle count (that is NP-hard in general).
+ *  - Every accepted input cell is covered by exactly one output rectangle.
+ *  - No output rectangle contains a cell absent from the accepted input for
+ *    that key.
  *
  * This module has NO editor/runtime/schema coupling. Phase 1 wires it into
  * the dark ambient-light blocker overlay renderer only (see
@@ -60,31 +77,47 @@ export interface MeshRect {
  * non-overlapping set of rectangles per behavior key.
  *
  * Guarantees:
- *  - Every input cell is covered by exactly one output rectangle.
- *  - No output rectangle contains a cell not present in the input with the
- *    same key.
+ *  - Every accepted input cell is covered by exactly one output rectangle.
+ *  - No output rectangle contains a cell not present in the accepted input
+ *    with the same key.
  *  - No two output rectangles (regardless of key) overlap.
  *  - Output rectangle order is stable and independent of input order.
  *  - Duplicate input cells (same x, y, key) are treated as one occupied cell.
  *
- * If the same (x, y) coordinate appears with two different keys, both are
- * kept — a coordinate can be validly reused with different keys by the
- * caller's data model (though callers of this module for ambient blockers
- * are expected to have already deduped keys per coordinate upstream).
+ * If the same (x, y) coordinate appears with two *different* keys, this is a
+ * conflicting duplicate and is rejected with a thrown error — see the module
+ * doc comment's Contract section. It is never silently resolved, because
+ * keeping both would force two rectangles (one per key) to overlap at that
+ * coordinate, violating the no-overlap guarantee.
  *
  * @param cells Sparse occupied cells; any iteration order.
  * @returns Deterministic rectangle list, sorted by (key, y, x).
+ * @throws {Error} If the same (x, y) coordinate appears with two different keys.
  */
 export function meshCellsToRectangles(cells: readonly MeshCell[]): MeshRect[] {
-  // Group by key, deduping (x,y) within each key.
+  // Group by key, deduping (x,y) within each key. Track which key first
+  // claimed each coordinate so conflicting duplicates can be detected and
+  // rejected deterministically (in input order).
   const byKey = new Map<string, Set<string>>();
+  const coordOwner = new Map<string, string>();
   for (const cell of cells) {
+    const coord = `${cell.x},${cell.y}`;
+    const owner = coordOwner.get(coord);
+    if (owner === undefined) {
+      coordOwner.set(coord, cell.key);
+    } else if (owner !== cell.key) {
+      throw new Error(
+        `meshCellsToRectangles: conflicting duplicate coordinate (${cell.x}, ${cell.y}) ` +
+          `has both key "${owner}" and key "${cell.key}". A coordinate may have only one ` +
+          `behavior key per call — resolve the conflict upstream before calling this module.`,
+      );
+    }
     let set = byKey.get(cell.key);
     if (set === undefined) {
       set = new Set<string>();
       byKey.set(cell.key, set);
     }
-    set.add(`${cell.x},${cell.y}`);
+    set.add(coord);
   }
 
   const result: MeshRect[] = [];

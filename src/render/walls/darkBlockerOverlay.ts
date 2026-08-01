@@ -94,8 +94,9 @@ export function setActiveDarkAmbientBlockers(darkBlockerKeys?: ReadonlySet<strin
 
 /**
  * Draws a solid black rectangle over every dark ambient-light blocker cell.
- * Uses pre-merged horizontal spans for efficiency and viewport-culls spans
- * that are fully outside the current camera view.
+ * Uses pre-merged 2D rectangles (via the shared `meshCellsToRectangles`
+ * mesher) for efficiency and viewport-culls rectangles that are fully
+ * outside the current camera view.
  *
  * @param ctx          Canvas 2D rendering context (virtual canvas).
  * @param offsetXPx    Camera X offset (world-to-screen translation, virtual px).

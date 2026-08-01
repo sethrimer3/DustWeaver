@@ -125,6 +125,12 @@ try {
     $status = & git -C $RepositoryRoot status --porcelain 2>$null
     if ($LASTEXITCODE -ne 0) { throw "git status failed: $($status -join [Environment]::NewLine)" }
     if ($status) {
+        # Gate 1b: immediately before staging. A lease can appear during the
+        # branch/operation/status checks above (small but non-zero window);
+        # re-check right at the point of first index mutation so a pause
+        # created in that window still prevents `git add` from running at all,
+        # rather than relying solely on the pre-commit gate to roll it back.
+        if (Stop-IfPaused $paths) { exit 0 }
         $indexPath = Join-Path $paths.GitDirectory 'index'
         $indexBackup = Join-Path $paths.GitDirectory "AUTOSYNC_INDEX_BACKUP_$PID"
         $indexExistedBeforeStaging = Test-Path -LiteralPath $indexPath
