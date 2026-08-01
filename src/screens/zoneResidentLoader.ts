@@ -97,6 +97,8 @@ interface ZoneLoadState {
   t0:           number;
   /** True if we have queued the prewarm tasks for this zone yet. */
   tasksQueued:  boolean;
+  /** Timestamp of the last diagnostic snapshot. */
+  lastDiagTime?: number;
 }
 
 // ── Module-level constants ────────────────────────────────────────────────────

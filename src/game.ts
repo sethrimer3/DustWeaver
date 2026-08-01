@@ -443,8 +443,8 @@ export function startGame(canvas: HTMLCanvasElement, uiRoot: HTMLElement): void 
 
   // HACK: Auto-start campaign for debugging
   activeSlotIndex = 0;
-  activeSaveData = { progress: createDefaultProgress(), playTimeMs: 0, lastPlayedIso: '' };
-  progress = activeSaveData.progress;
+  activeSaveData = { progress: createDefaultProgress(), playTimeMs: 0, lastPlayedIso: '' } as any;
+  progress = activeSaveData!.progress;
   sessionStartMs = performance.now();
-  navigate('gameplay', [ParticleKind.SWORD, ParticleKind.SHIELD, ParticleKind.BOW]);
+  navigate('gameplay', [] as any);
 }

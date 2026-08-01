@@ -26,7 +26,7 @@
  */
 
 import { WorldState, createWorldState } from '../sim/world';
-import { RoomDef, BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
+import { RoomDef, BLOCK_SIZE_MEDIUM, BLOCK_SIZE_SMALL } from '../levels/roomDef';
 import { createRng, type RngState } from '../sim/rng';
 import { spawnBackgroundFluidParticles, spawnAllDustPiles, BACKGROUND_FLUID_COUNT } from './gameSpawn';
 import { spawnEnemyClusters } from './gameEnemySpawn';
@@ -36,6 +36,8 @@ import { loadRoomChallengeElements } from './gameRoomChallenge';
 import { applyRoomWallTemplate, buildRoomWallTemplateIncremental } from './gameRoomWalls';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import { resolveRoomWallTemplate } from './preparedRoomRuntime';
+import { buildRoomAmbientBlockerKeys } from '../levels/roomAmbientBlockers';
+import { buildRoomDecorations } from '../render/effects/wallDecorations';
 import * as FP from '../debug/perfFreezeProfiler';
 
 const FIXED_DT_MS = 16.666;
@@ -509,6 +511,28 @@ export function* createResidentBuildGenerator(
     } else { FP.recordLoadPhaseStep('Resident:walls_build', 0); }
     yield 'phaseD_walls_build';
   }
+
+  // ── Phase D step 5: static render data ──────────────────────────────────
+  {
+    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const cacheEntry = roomRuntimeCache.get(room.id);
+    if (cacheEntry) {
+      if (cacheEntry.blockerKeys === null || cacheEntry.darkBlockerKeys === null) {
+        const { blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room);
+        cacheEntry.blockerKeys = blockerKeys;
+        cacheEntry.darkBlockerKeys = darkBlockerKeys;
+      }
+      if (cacheEntry.wallDecorations === null) {
+        cacheEntry.wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+      }
+    }
+    if (import.meta.env.DEV) {
+      const _ms = performance.now() - _t;
+      FP.recordLoadPhaseStep('Resident:static_render', _ms);
+      _warnLongPhase('phaseD_static_render', _ms, room.id, diagContext);
+    } else { FP.recordLoadPhaseStep('Resident:static_render', 0); }
+  }
+  yield 'phaseD_static_render';
 
   // ── Phase E step 1: hazards + ropes + falling blocks + grasshoppers ───────
   {
