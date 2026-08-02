@@ -13,7 +13,7 @@
     "preview:atlases": "node scripts/preview-sprite-atlases.mjs",
     "lint": "eslint src/",
     "preview": "vite preview",
-    "electron": "npm exec -- electron --no-sandbox .",
+    "electron": "npm exec -- electron --no-sandbox --disable-renderer-backgrounding --disable-background-timer-throttling .",
     "electron:dev": "set DUSTWEAVER_DEVTOOLS=1&& npm exec -- electron --no-sandbox .",
     "desktop": "npm run build && npm exec -- electron --no-sandbox .",
     "test": "node --import tsx --test src/tests/**/*.test.ts"

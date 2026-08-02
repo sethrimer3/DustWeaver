@@ -480,6 +480,7 @@ export class ZoneResidentLoader {
 
   private _diagSnapshotTaken = false;
   private _diagLastUnresolvedStr = '';
+  private _diagHeartbeat = 0;
 
   private _isZoneReadyNow(
     state:               ZoneLoadState,
@@ -488,6 +489,10 @@ export class ZoneResidentLoader {
     vpHPx:               number,
     scalePx:             number,
   ): boolean {
+    if (performance.now() - this._diagHeartbeat > 2000) {
+      console.log(`[zoneLoader diag] heartbeat. buildIdx=${state.buildIdx}/${state.roomIds.length}, activeGen=${state.activeGen !== null}`);
+      this._diagHeartbeat = performance.now();
+    }
     const diag: any = {
       isZoneReadyNow: false,
       operands: {
@@ -560,18 +565,20 @@ export class ZoneResidentLoader {
 
     diag.isZoneReadyNow = allReady;
 
-    if (state.buildIdx === state.roomIds.length && diag.incompleteRooms.length === 0) {
-      // "UI first reaches 24/24" effectively
+    const timeLoading = performance.now() - state.t0;
+    if (timeLoading > 3000) {
       const diagStr = JSON.stringify(diag);
       if (!this._diagSnapshotTaken) {
         this._diagSnapshotTaken = true;
         this._diagLastUnresolvedStr = diagStr;
-        console.log("=== DIAGNOSTIC SNAPSHOT (FIRST 24/24) ===");
+        console.log("=== DIAGNOSTIC SNAPSHOT (>3s) ===");
         console.log(JSON.stringify(diag, null, 2));
+        fetch('http://localhost:9999', { method: 'POST', body: diagStr }).catch(() => {});
       } else if (!allReady && diagStr !== this._diagLastUnresolvedStr) {
         this._diagLastUnresolvedStr = diagStr;
         console.log("=== DIAGNOSTIC SNAPSHOT (STATE CHANGED) ===");
         console.log(JSON.stringify(diag, null, 2));
+        fetch('http://localhost:9999', { method: 'POST', body: diagStr }).catch(() => {});
       }
     }
 
