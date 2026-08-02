@@ -54,6 +54,7 @@ import {
   isZoneEntryReadinessComplete,
   addZoneEntryViewportTasks,
   runChunkPrewarmSliceNow,
+  getPrewarmStats
 } from './roomRenderChunkWarmScheduler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -477,6 +478,9 @@ export class ZoneResidentLoader {
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
+  private _diagSnapshotTaken = false;
+  private _diagLastUnresolvedStr = '';
+
   private _isZoneReadyNow(
     state:               ZoneLoadState,
     residentRoomManager: ResidentRoomManager,
@@ -484,32 +488,57 @@ export class ZoneResidentLoader {
     vpHPx:               number,
     scalePx:             number,
   ): boolean {
+    const diag: any = {
+      isZoneReadyNow: false,
+      operands: {
+        activeGenNull: state.activeGen === null,
+        buildIdx: state.buildIdx,
+        roomIdsLength: state.roomIds.length,
+        tasksQueued: state.tasksQueued
+      },
+      incompleteRooms: [],
+      failedPredicates: {},
+      pendingResidentBuildTasks: state.roomIds.length - state.buildIdx + (state.activeGen ? 1 : 0),
+      pendingRenderChunkWarmTasks: getPrewarmStats().queueLength,
+      pendingViewportWarmTasks: getPrewarmStats().deferredRadius3Events ?? 0,
+      schedulersTicking: {
+        renderChunkWarmActive: getPrewarmStats().queueLength > 0 ? (getPrewarmStats().chunksLastSlice > 0 || getPrewarmStats().chunksSkippedLastSlice > 0) : false
+      },
+      zoneReadyCompletionFires: false,
+      startingRoomActivationBegins: false,
+      startingRoomActivationCompletes: false,
+      loadingScreenDismissalRequested: false
+    };
+
+    let allReady = true;
+
     // All builds must be done (no active generator, full queue walk complete).
     if (state.activeGen !== null) {
-      console.log(`[zoneLoader diag] activeGen is not null`);
-      return false;
+      allReady = false;
+      diag.failedPredicates["activeGen"] = ["activeGen is not null"];
     }
     if (state.buildIdx < state.roomIds.length) {
-      console.log(`[zoneLoader diag] buildIdx ${state.buildIdx} < ${state.roomIds.length}`);
-      return false;
+      allReady = false;
+      diag.failedPredicates["buildIdx"] = [`buildIdx ${state.buildIdx} < ${state.roomIds.length}`];
     }
 
     // Every room must be runtimeReady, sprites decoded, background decoded.
     for (const roomId of state.roomIds) {
       const resident = residentRoomManager.getResident(roomId);
-      if (resident === undefined || !resident.runtimeReady) {
-        console.log(`[zoneLoader diag] room ${roomId} not runtimeReady`);
-        return false;
-      }
       const room = this._registry.get(roomId);
-      if (room === undefined) continue;
-      if (!areRoomSpritesReady(room)) {
-        console.log(`[zoneLoader diag] room ${roomId} sprites not ready`);
-        return false;
+      
+      const fails = [];
+      if (resident === undefined || !resident.runtimeReady) fails.push("not runtimeReady");
+      if (room === undefined) fails.push("room not in registry");
+      else {
+        if (!areRoomSpritesReady(room)) fails.push("sprites not ready");
+        if (!isRoomBackgroundDecodeReady(room)) fails.push("bg not ready");
       }
-      if (!isRoomBackgroundDecodeReady(room)) {
-        console.log(`[zoneLoader diag] room ${roomId} bg not ready`);
-        return false;
+      
+      if (fails.length > 0) {
+        diag.incompleteRooms.push(roomId);
+        diag.failedPredicates[roomId] = fails;
+        allReady = false;
       }
     }
 
@@ -525,10 +554,29 @@ export class ZoneResidentLoader {
 
     // Finally, strictly validate directed-entry foreground/background coverage.
     if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx)) {
-      console.log(`[zoneLoader diag] isZoneEntryReadinessComplete returned false`);
-      return false;
+      diag.failedPredicates["isZoneEntryReadinessComplete"] = ["returned false"];
+      allReady = false;
     }
 
+    diag.isZoneReadyNow = allReady;
+
+    if (state.buildIdx === state.roomIds.length && diag.incompleteRooms.length === 0) {
+      // "UI first reaches 24/24" effectively
+      const diagStr = JSON.stringify(diag);
+      if (!this._diagSnapshotTaken) {
+        this._diagSnapshotTaken = true;
+        this._diagLastUnresolvedStr = diagStr;
+        console.log("=== DIAGNOSTIC SNAPSHOT (FIRST 24/24) ===");
+        console.log(JSON.stringify(diag, null, 2));
+      } else if (!allReady && diagStr !== this._diagLastUnresolvedStr) {
+        this._diagLastUnresolvedStr = diagStr;
+        console.log("=== DIAGNOSTIC SNAPSHOT (STATE CHANGED) ===");
+        console.log(JSON.stringify(diag, null, 2));
+      }
+    }
+
+    if (!allReady) return false;
+    diag.zoneReadyCompletionFires = true;
     return true;
   }
 
