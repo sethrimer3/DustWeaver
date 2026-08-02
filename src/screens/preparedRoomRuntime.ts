@@ -294,6 +294,47 @@ function _estimateRoomBuildCostMs(room: RoomDef): number {
 export const SAFE_SYNC_BUILD_COST_MS = 8;
 
 /**
+ * Fills in any not-yet-computed static fields of an existing `RoomRuntimeEntry`
+ * **in place**, leaving the already-built `wallTemplate` untouched.
+ *
+ * The resident-world build path (`residentWorldBuilder.ts`) populates the
+ * runtime cache with a wall template only — `blockerKeys`, `darkBlockerKeys`
+ * and `wallDecorations` are left at the `null` "not yet computed" sentinel.
+ * Historically those were filled in later by `roomPreloadScheduler` or by the
+ * room-entry path in `gameLoadRoomPhases`.  Neither of those runs during an
+ * initial zone load (the RAF frame returns early while the zone overlay is up),
+ * so a zone-load readiness barrier that requires `isEntryFullyPrepared` would
+ * wait forever on work nothing was scheduled to do.  This lets the zone loader
+ * complete that preparation itself.
+ *
+ * Uses the same shared builders as every other population path so the derived
+ * ambient-blocker sets — and therefore the render-state key — are identical to
+ * what the room-entry path will compute; prewarmed chunks stay adoptable.
+ *
+ * Idempotent: returns `false` without doing work when nothing was missing.
+ *
+ * @returns `true` when at least one field was computed by this call.
+ */
+export function completeRuntimeEntryPreparation(room: RoomDef, entry: RoomRuntimeEntry): boolean {
+  let didWork = false;
+
+  // `null` = not yet computed.  `undefined` = computed, no blockers — leave it.
+  if (entry.blockerKeys === null || entry.darkBlockerKeys === null) {
+    const { blockerKeys, darkBlockerKeys } = buildRoomAmbientBlockerKeys(room);
+    if (entry.blockerKeys === null)     entry.blockerKeys     = blockerKeys;
+    if (entry.darkBlockerKeys === null) entry.darkBlockerKeys = darkBlockerKeys;
+    didWork = true;
+  }
+
+  if (entry.wallDecorations === null) {
+    entry.wallDecorations = buildRoomDecorations(room.decorations ?? [], BLOCK_SIZE_SMALL);
+    didWork = true;
+  }
+
+  return didWork;
+}
+
+/**
  * Immediately builds and caches a `PreparedRoomRuntime` for `roomId` if it is
  * not already in the cache.  Called as an urgent fallback when the player is
  * close to a transition and the preload scheduler has not yet processed that

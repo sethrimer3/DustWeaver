@@ -41,6 +41,7 @@
 import type { RoomDef } from '../levels/roomDef';
 import type { WorldState } from '../sim/world';
 import { createResidentBuildGenerator } from './residentWorldBuilder';
+import { completeRuntimeEntryPreparation } from './preparedRoomRuntime';
 import type { RoomRuntimeCache } from './roomRuntimeCache';
 import type { ResidentRoomManager } from './residentRoomManager';
 import {
@@ -51,10 +52,10 @@ import {
 } from '../render/roomAssetPreloader';
 import { getActiveManifest } from '../levels/roomFileCacheState';
 import {
-  isZoneEntryReadinessComplete,
+  collectZoneEntryReadinessReport,
   addZoneEntryViewportTasks,
   runChunkPrewarmSliceNow,
-  getPrewarmStats
+  getPrewarmStats,
 } from './roomRenderChunkWarmScheduler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -98,6 +99,14 @@ interface ZoneLoadState {
   t0:           number;
   /** True if we have queued the prewarm tasks for this zone yet. */
   tasksQueued:  boolean;
+  /**
+   * Index into roomIds for the next room whose `RoomRuntimeCache` entry should
+   * be completed (blocker sets + wall decorations).  Advanced one room per
+   * frame so the O(room-area) blocker pass never lands entirely in one frame.
+   */
+  prepIdx:      number;
+  /** Rooms whose runtime entry preparation has been completed by this session. */
+  prepDone:     Set<string>;
 }
 
 // ── Module-level constants ────────────────────────────────────────────────────
@@ -197,7 +206,13 @@ export class ZoneResidentLoader {
       failedCount:   0,
       t0:            0,
       tasksQueued:   false,
+      prepIdx:       0,
+      prepDone:      new Set(),
     };
+
+    // Fresh session → fresh diagnostic snapshot.
+    this._diagSnapshotTaken     = false;
+    this._diagLastUnresolvedStr = '';
 
     if (import.meta.env?.DEV) {
       const manifest = getActiveManifest();
@@ -322,6 +337,14 @@ export class ZoneResidentLoader {
         break;
       }
     }
+
+    // ── Complete static runtime preparation for one room per frame ────────
+    // The resident build above caches only a wall template; the zone-entry
+    // readiness barrier additionally requires blocker sets and decorations
+    // (isEntryFullyPrepared).  No other scheduler runs while the zone overlay
+    // is up, so this loop must produce that data itself or the barrier can
+    // never be satisfied.  One room per frame keeps the cost bounded.
+    this._advanceRuntimePreparation(state);
 
     // ── Check zone readiness ──────────────────────────────────────────────
     if (this._isZoneReadyNow(state, residentRoomManager, vpWPx, vpHPx, scalePx)) {
@@ -478,10 +501,63 @@ export class ZoneResidentLoader {
 
   // ── Internal helpers ────────────────────────────────────────────────────────
 
-  private _diagSnapshotTaken = false;
-  private _diagLastUnresolvedStr = '';
-  private _diagHeartbeat = 0;
+  /**
+   * Completes the static runtime-cache preparation for at most one zone room
+   * per call, cycling until every room in the zone is fully prepared.
+   *
+   * A room is only considered once its resident build has cached a runtime
+   * entry; rooms not yet in the cache are retried on a later pass (the index
+   * wraps), so ordering between builds and preparation does not matter.
+   */
+  private _advanceRuntimePreparation(state: ZoneLoadState): void {
+    const total = state.roomIds.length;
+    if (state.prepDone.size >= total) return;
 
+    // Scan forward from prepIdx for the next room that still needs work,
+    // wrapping at most once so this is O(total) worst case and O(1) typical.
+    for (let scanned = 0; scanned < total; scanned++) {
+      const idx    = (state.prepIdx + scanned) % total;
+      const roomId = state.roomIds[idx];
+      if (state.prepDone.has(roomId)) continue;
+
+      const entry = this._runtimeCache.get(roomId);
+      if (entry === undefined) continue; // Not built yet — retry on a later tick.
+
+      const room = this._registry.get(roomId);
+      if (room === undefined) {
+        // Not buildable; mark done so the sweep can terminate. The readiness
+        // check reports it separately as a registry failure.
+        state.prepDone.add(roomId);
+        continue;
+      }
+
+      completeRuntimeEntryPreparation(room, entry);
+      state.prepDone.add(roomId);
+      state.prepIdx = (idx + 1) % total;
+      return; // One room per frame.
+    }
+  }
+
+  /** True once the base-readiness snapshot has been emitted for this session. */
+  private _diagSnapshotTaken = false;
+  /** Serialised last-emitted unresolved snapshot, for change detection. */
+  private _diagLastUnresolvedStr = '';
+
+  /**
+   * Authoritative zone-readiness predicate.
+   *
+   * Evaluated in two stages, and the ordering is load-bearing:
+   *
+   *  1. **Base readiness** — all resident builds complete, and every zone room
+   *     has a resident world, decoded sprites, and a decoded background.
+   *  2. **Directed-entry readiness** — every same-zone transition's entry
+   *     viewport is covered by pre-warmed render chunks.
+   *
+   * Stage 2's task producer (`addZoneEntryViewportTasks`) reads each room's
+   * `RoomRuntimeCache` entry, which only exists once that room has been built.
+   * Running it before stage 1 holds therefore queues nothing.  Stage 1 must
+   * short-circuit, not merely record a failure and fall through.
+   */
   private _isZoneReadyNow(
     state:               ZoneLoadState,
     residentRoomManager: ResidentRoomManager,
@@ -489,102 +565,136 @@ export class ZoneResidentLoader {
     vpHPx:               number,
     scalePx:             number,
   ): boolean {
-    if (performance.now() - this._diagHeartbeat > 2000) {
-      console.log(`[zoneLoader diag] heartbeat. buildIdx=${state.buildIdx}/${state.roomIds.length}, activeGen=${state.activeGen !== null}`);
-      this._diagHeartbeat = performance.now();
-    }
-    const diag: any = {
-      isZoneReadyNow: false,
-      operands: {
-        activeGenNull: state.activeGen === null,
-        buildIdx: state.buildIdx,
-        roomIdsLength: state.roomIds.length,
-        tasksQueued: state.tasksQueued
-      },
-      incompleteRooms: [],
-      failedPredicates: {},
-      pendingResidentBuildTasks: state.roomIds.length - state.buildIdx + (state.activeGen ? 1 : 0),
-      pendingRenderChunkWarmTasks: getPrewarmStats().queueLength,
-      pendingViewportWarmTasks: getPrewarmStats().deferredRadius3Events ?? 0,
-      schedulersTicking: {
-        renderChunkWarmActive: getPrewarmStats().queueLength > 0 ? (getPrewarmStats().chunksLastSlice > 0 || getPrewarmStats().chunksSkippedLastSlice > 0) : false
-      },
-      zoneReadyCompletionFires: false,
-      startingRoomActivationBegins: false,
-      startingRoomActivationCompletes: false,
-      loadingScreenDismissalRequested: false
-    };
+    // ── Stage 1: base readiness ───────────────────────────────────────────
+    let baseReady = true;
+    const incompleteRooms: Record<string, string[]> = {};
 
-    let allReady = true;
+    if (state.activeGen !== null)                  baseReady = false;
+    if (state.buildIdx < state.roomIds.length)     baseReady = false;
 
-    // All builds must be done (no active generator, full queue walk complete).
-    if (state.activeGen !== null) {
-      allReady = false;
-      diag.failedPredicates["activeGen"] = ["activeGen is not null"];
-    }
-    if (state.buildIdx < state.roomIds.length) {
-      allReady = false;
-      diag.failedPredicates["buildIdx"] = [`buildIdx ${state.buildIdx} < ${state.roomIds.length}`];
-    }
-
-    // Every room must be runtimeReady, sprites decoded, background decoded.
     for (const roomId of state.roomIds) {
       const resident = residentRoomManager.getResident(roomId);
-      const room = this._registry.get(roomId);
-      
-      const fails = [];
-      if (resident === undefined || !resident.runtimeReady) fails.push("not runtimeReady");
-      if (room === undefined) fails.push("room not in registry");
+      const room     = this._registry.get(roomId);
+
+      const fails: string[] = [];
+      if (resident === undefined || !resident.runtimeReady) fails.push('residentBuildIncomplete');
+      if (room === undefined) fails.push('roomNotInRegistry');
       else {
-        if (!areRoomSpritesReady(room)) fails.push("sprites not ready");
-        if (!isRoomBackgroundDecodeReady(room)) fails.push("bg not ready");
+        if (!areRoomSpritesReady(room))          fails.push('spritesNotDecoded');
+        if (!isRoomBackgroundDecodeReady(room))  fails.push('backgroundNotDecoded');
       }
-      
       if (fails.length > 0) {
-        diag.incompleteRooms.push(roomId);
-        diag.failedPredicates[roomId] = fails;
-        allReady = false;
+        incompleteRooms[roomId] = fails;
+        baseReady = false;
       }
     }
 
-    // Queue directed-entry tasks exactly once after all builds finish.
-    if (!state.tasksQueued) {
-      addZoneEntryViewportTasks(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx);
-      state.tasksQueued = true;
-    }
+    if (!baseReady) return false;
 
-    // Drive prewarm work deterministically while the overlay is visible.
-    // Give it a healthy time budget per frame (e.g. 16ms) to chew through chunks quickly.
+    // ── Stage 2: directed-entry readiness ─────────────────────────────────
+    // Idempotent: re-ensures a task exists for every uncovered requirement on
+    // every frame, so a requirement can never be left waiting on a task that
+    // was never created, was dropped, or terminated without achieving
+    // coverage.  (The previous one-shot `tasksQueued` latch is what allowed a
+    // permanent stall — see addZoneEntryViewportTasks' doc comment.)
+    const queueResult = addZoneEntryViewportTasks(
+      state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
+    );
+    state.tasksQueued = true;
+
+    // Drive prewarm work deterministically while the overlay is visible; the
+    // idle scheduler alone makes no reliable progress on a continuously
+    // rendering canvas.
     runChunkPrewarmSliceNow(16);
 
-    // Finally, strictly validate directed-entry foreground/background coverage.
-    if (!isZoneEntryReadinessComplete(state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx)) {
-      diag.failedPredicates["isZoneEntryReadinessComplete"] = ["returned false"];
-      allReady = false;
+    const entryReport = collectZoneEntryReadinessReport(
+      state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
+    );
+    const allReady = entryReport.failures.length === 0;
+
+    this._emitZoneLoadDiagnostic(state, incompleteRooms, queueResult, entryReport, allReady);
+
+    return allReady;
+  }
+
+  /**
+   * Emits one structured snapshot when base readiness is first satisfied (the
+   * moment the overlay reads "N/N"), then only when the unresolved state
+   * changes.  Never per-frame.
+   */
+  private _emitZoneLoadDiagnostic(
+    state:            ZoneLoadState,
+    incompleteRooms:  Record<string, string[]>,
+    queueResult:      ReturnType<typeof addZoneEntryViewportTasks>,
+    entryReport:      ReturnType<typeof collectZoneEntryReadinessReport>,
+    allReady:         boolean,
+  ): void {
+    const prewarm = getPrewarmStats();
+    // Group failures by reason so a 24-room zone yields a readable summary.
+    const failuresByReason: Record<string, string[]> = {};
+    for (const f of entryReport.failures) {
+      (failuresByReason[f.reason] ??= []).push(
+        f.targetRoomId !== null ? `${f.sourceRoomId}->${f.targetRoomId}` : f.sourceRoomId,
+      );
     }
 
-    diag.isZoneReadyNow = allReady;
+    const diag = {
+      worldNumber:   state.worldNumber,
+      phase:         allReady ? 'zoneReady' : 'awaitingDirectedEntryCoverage',
+      isZoneReadyNow: allReady,
+      progress: {
+        totalRooms:            state.roomIds.length,
+        residentBuildsDone:    state.buildIdx,
+        residentBuildsBuilt:   state.builtCount,
+        residentBuildsFailed:  state.failedCount,
+        activeGeneratorRoomId: state.activeRoomId,
+        incompleteRooms,
+      },
+      runtimeCache: {
+        size:                 this._runtimeCache.size,
+        expectedKeys:         state.roomIds.length,
+        missingExpectedKeys:  state.roomIds.filter(id => !this._runtimeCache.has(id)),
+        fullyPreparedCount:   state.prepDone.size,
+        notYetPreparedKeys:   state.roomIds.filter(id => !state.prepDone.has(id)),
+      },
+      directedEntryRequirements: {
+        required:       entryReport.required,
+        satisfied:      entryReport.satisfied,
+        unsatisfied:    entryReport.failures.length,
+        failuresByReason,
+      },
+      taskProduction: queueResult,
+      chunkWarmScheduler: {
+        queueLength:            prewarm.queueLength,
+        suspendedRadius3Count:  prewarm.suspendedRadius3Count,
+        activeRadius3Count:     prewarm.activeRadius3Count,
+        chunksLastSlice:        prewarm.chunksLastSlice,
+        chunksSkippedLastSlice: prewarm.chunksSkippedLastSlice,
+        msLastSlice:            prewarm.msLastSlice,
+        deferredNotReady:       prewarm.deferredNotReady,
+        deferredSpritesNotReady: prewarm.deferredSpritesNotReady,
+        pausedForFrameTime:     prewarm.pausedForFrameTime,
+        totalWallChunks:        prewarm.totalWallChunks,
+        totalBgChunks:          prewarm.totalBgChunks,
+      },
+      // Invariant: no unsatisfied requirement may lack an executable task.
+      // A non-empty list here is the signature of a load that cannot progress.
+      requirementsWithoutExecutableTask:
+        prewarm.queueLength === 0 && !allReady ? entryReport.failures.map(f => f.entryKey) : [],
+      elapsedMs: Math.round(performance.now() - state.t0),
+    };
 
-    const timeLoading = performance.now() - state.t0;
-    if (timeLoading > 3000) {
-      const diagStr = JSON.stringify(diag);
-      if (!this._diagSnapshotTaken) {
-        this._diagSnapshotTaken = true;
-        this._diagLastUnresolvedStr = diagStr;
-        console.log("=== DIAGNOSTIC SNAPSHOT (>3s) ===");
-        console.log(JSON.stringify(diag, null, 2));
-        fetch('http://localhost:9999', { method: 'POST', body: diagStr }).catch(() => {});
-      } else if (!allReady && diagStr !== this._diagLastUnresolvedStr) {
-        this._diagLastUnresolvedStr = diagStr;
-        console.log("=== DIAGNOSTIC SNAPSHOT (STATE CHANGED) ===");
-        console.log(JSON.stringify(diag, null, 2));
-        fetch('http://localhost:9999', { method: 'POST', body: diagStr }).catch(() => {});
-      }
+    const diagStr = JSON.stringify(diag);
+    if (!this._diagSnapshotTaken) {
+      this._diagSnapshotTaken     = true;
+      this._diagLastUnresolvedStr = diagStr;
+      console.log('[zoneLoader] === ZONE LOAD SNAPSHOT (base readiness reached) ===');
+      console.log(JSON.stringify(diag, null, 2));
+    } else if (!allReady && diagStr !== this._diagLastUnresolvedStr) {
+      this._diagLastUnresolvedStr = diagStr;
+      console.log('[zoneLoader] === ZONE LOAD SNAPSHOT (state changed) ===');
+      console.log(JSON.stringify(diag, null, 2));
     }
-
-    if (!allReady) return false;
-    diag.zoneReadyCompletionFires = true;
-    return true;
   }
 
   private _logZoneReadySummary(

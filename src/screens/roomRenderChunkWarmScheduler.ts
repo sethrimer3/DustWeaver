@@ -388,6 +388,14 @@ interface WarmTask {
   radius: number;
   /** Explicit directed entry identity if this task is warming for a specific transition. */
   directedEntry?: DirectedEntry;
+  /**
+   * Stable identity of the directed transition this task satisfies
+   * (`${sourceRoomId}:${transitionIndex}`), or `undefined` for generic
+   * room-level warm tasks.  Used by `addZoneEntryViewportTasks` to recognise
+   * a requirement that already has an in-flight task, so the producer can be
+   * called every frame without growing the queue.
+   */
+  entryKey?: string;
   /** Entrance camera offset to prioritise the first-visible chunk region. */
   offsetXPx: number;
   offsetYPx: number;
@@ -841,17 +849,58 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
 // ── Zone entry-viewport warm ─────────────────────────────────────────────────
 
 /**
- * Appends low-priority prewarm tasks for every transition entry-viewport in a
- * set of zone rooms.  Tasks are added to the END of the idle queue so they do
- * not displace proximity or velocity-direction tasks for the current room.
+ * Outcome of one `addZoneEntryViewportTasks` pass, so the caller can assert the
+ * invariant that every unsatisfied zone-entry readiness requirement has an
+ * executable or active task behind it.
  *
- * Rooms that are already fully warmed (wall + bg prewarm data present) are
- * skipped to avoid redundant work.  Call this once per zone-load session
- * after `scheduleChunkPrewarms` has been called so the scheduler state is
- * initialised.
+ * `isZoneEntryReadinessComplete` requires wall (and, where applicable, bg)
+ * viewport coverage for *every* same-zone directed transition.  This producer
+ * is the only thing that creates the tasks which generate that coverage, so
+ * the two must enumerate the same requirement set.  Returning the counts makes
+ * a mismatch observable instead of silently deadlocking the load.
+ */
+export interface ZoneEntryQueueResult {
+  /** Same-zone directed transitions that require coverage. */
+  required: number;
+  /** Requirements already satisfied by existing prewarm data. */
+  covered: number;
+  /** Requirements that already had an in-flight task (no duplicate created). */
+  alreadyQueued: number;
+  /** Tasks newly appended to the queue by this pass. */
+  added: number;
+  /**
+   * Requirements that could NOT be queued because their source or target
+   * runtime-cache entry was absent / not fully prepared, or the target's
+   * render-state key was not yet computable.  These are the requirements with
+   * no executable task — a non-empty list means readiness cannot progress
+   * until the underlying room data is prepared.
+   */
+  blocked: string[];
+}
+
+/**
+ * Ensures a prewarm task exists for every same-zone directed transition whose
+ * entry viewport is not yet covered.  Tasks are added to the END of the idle
+ * queue so they do not displace proximity or velocity-direction tasks for the
+ * current room.
+ *
+ * **Idempotent — safe (and intended) to call every frame while a zone load is
+ * active.**  Requirements that are already covered, or that already have an
+ * in-flight task with the same directed-entry identity, are skipped rather
+ * than re-queued.  This is what guarantees the readiness barrier can never
+ * wait on a requirement that has no task: if a task is dropped, completes
+ * without achieving coverage, or was never creatable because room data was not
+ * ready at the time, the next call re-creates it.
+ *
+ * (Previously this was a one-shot call latched by the caller.  On a cold zone
+ * load it ran before any resident build had populated `RoomRuntimeCache`, so
+ * every transition hit the `continue` paths below, zero tasks were queued, and
+ * the latch prevented any retry — leaving `isZoneEntryReadinessComplete()`
+ * permanently false with an empty queue and the loading overlay stuck at N/N.)
  *
  * @param zoneRoomIds   Room IDs belonging to the zone.
  * @param registry      Full room registry.
+ * @param runtimeCache  The shared `RoomRuntimeCache` instance.
  * @param vpWPx         Viewport width  (virtual pixels).
  * @param vpHPx         Viewport height (virtual pixels).
  * @param scalePx       Camera scale factor (usually 1.0).
@@ -863,9 +912,12 @@ export function addZoneEntryViewportTasks(
   vpWPx:       number,
   vpHPx:       number,
   scalePx:     number,
-): void {
-  if (_cancelled) return;
-  if (!runtimeCache) return;
+): ZoneEntryQueueResult {
+  const result: ZoneEntryQueueResult = {
+    required: 0, covered: 0, alreadyQueued: 0, added: 0, blocked: [],
+  };
+  if (_cancelled) return result;
+  if (!runtimeCache) return result;
 
   // On a cold app launch this runs before any room transition has ever called
   // `scheduleChunkPrewarms()` — the only other place that sets the module-level
@@ -883,27 +935,35 @@ export function addZoneEntryViewportTasks(
   if (_getQuality === null) _getQuality = () => 'med';
   if (_getLastFrameMs === null) _getLastFrameMs = () => 0;
 
-  let added = 0;
-
   for (const sourceId of zoneRoomIds) {
     const sourceRoom = registry.get(sourceId);
     if (!sourceRoom) continue;
-    const sourceRuntime = runtimeCache.get(sourceId);
-    if (!sourceRuntime) continue; // should be ready
 
     for (let i = 0; i < sourceRoom.transitions.length; i++) {
       const trans = sourceRoom.transitions[i];
       if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
-      
+
       const targetRoom = registry.get(trans.targetRoomId);
       if (!targetRoom) continue;
-      
+
+      // This directed transition is a readiness requirement from here on —
+      // count it before any early-out so `required` matches exactly what
+      // `isZoneEntryReadinessComplete` will demand.
+      result.required++;
+      const entryKey = `${sourceId}:${i}`;
+
+      const sourceRuntime = runtimeCache.get(sourceId);
       const targetRuntime = runtimeCache.get(trans.targetRoomId);
-      if (!targetRuntime) continue;
-      
-      const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
-      if (!targetRenderKey) continue;
-      
+      const targetRenderKey =
+        targetRuntime !== undefined ? computeRenderStateKeyForEntry(targetRoom, targetRuntime) : null;
+      if (sourceRuntime === undefined || targetRuntime === undefined || !targetRenderKey) {
+        // Room data not prepared yet — this requirement has no executable task
+        // this frame.  Reported, not swallowed; a later call will queue it once
+        // the runtime entry exists.
+        result.blocked.push(entryKey);
+        continue;
+      }
+
       const entry: DirectedEntry = {
         sourceRoomId: sourceId,
         sourceTransitionKey: `${sourceId}:${i}`,
@@ -922,13 +982,22 @@ export function addZoneEntryViewportTasks(
       const wallReady = isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx);
       const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
       const bgReady = !hasBg || isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx);
-      
-      if (wallReady && bgReady) continue;
-      
+
+      if (wallReady && bgReady) { result.covered++; continue; }
+
+      // Idempotency: never create a second task for a requirement that already
+      // has one in flight (active queue or quality-tier suspension).
+      if (_queue.some(t => t.entryKey === entryKey) ||
+          _suspendedRadius3.some(t => t.entryKey === entryKey)) {
+        result.alreadyQueued++;
+        continue;
+      }
+
       _queue.push({
         roomId: entry.targetRoomId,
         radius: 2,
         directedEntry: entry,
+        entryKey,
         offsetXPx: off.offsetXPx,
         offsetYPx: off.offsetYPx,
         vpWPx,
@@ -939,18 +1008,24 @@ export function addZoneEntryViewportTasks(
         bgDone: false,
       });
       _roomPriority.set(entry.targetRoomId, Math.min(_roomPriority.get(entry.targetRoomId) ?? Infinity, 2));
-      added++;
+      // Zone-entry tasks are readiness-critical: protect their output from the
+      // post-slice memory-budget eviction pass that would otherwise be free to
+      // drop a just-built bundle and re-open the requirement.
+      _keepIds.add(entry.targetRoomId);
+      result.added++;
     }
   }
 
-  if (added > 0) {
+  if (result.added > 0) {
     if (import.meta.env?.DEV) {
-      console.log(`[chunkPrewarm:zone] addZoneEntryViewportTasks: added ${added} tasks`);
+      console.log(`[chunkPrewarm:zone] addZoneEntryViewportTasks: added ${result.added} tasks`);
     }
     if (_idleHandle === 0 && !_cancelled) {
       _idleHandle = _scheduleIdle(_onIdle);
     }
   }
+
+  return result;
 }
 
 function computeRenderStateKeyForEntry(room: RoomDef, runtime: RoomRuntimeEntry): string | null {
@@ -960,7 +1035,125 @@ function computeRenderStateKeyForEntry(room: RoomDef, runtime: RoomRuntimeEntry)
 }
 
 /**
+ * One unsatisfied zone-entry readiness requirement, with the exact
+ * subcondition that failed rather than a bare `false`.
+ */
+export interface ZoneEntryReadinessFailure {
+  /** `${sourceRoomId}:${transitionIndex}`, or the room id for room-level failures. */
+  entryKey: string;
+  sourceRoomId: string;
+  /** `null` for room-level failures that occur before a transition is examined. */
+  targetRoomId: string | null;
+  reason:
+    | 'sourceRoomNotInRegistry'
+    | 'sourceRuntimeEntryAbsent'
+    | 'sourceRuntimeNotFullyPrepared'
+    | 'targetRoomNotInRegistry'
+    | 'targetRuntimeEntryAbsent'
+    | 'targetRuntimeNotFullyPrepared'
+    | 'targetSpritesNotDecoded'
+    | 'targetRenderStateKeyNotComputable'
+    | 'wallViewportNotCovered'
+    | 'bgViewportNotCovered';
+}
+
+/**
+ * Aggregate report of every unsatisfied same-zone directed-entry requirement.
+ *
+ * Unlike `isZoneEntryReadinessComplete` (which short-circuits), this evaluates
+ * **all** requirements so the zone-load diagnostic snapshot can name every
+ * blocking subcondition at once instead of revealing them one reload at a time.
+ * Pure — no console output, safe to call from a diagnostic path.
+ */
+export function collectZoneEntryReadinessReport(
+  zoneRoomIds: readonly string[],
+  registry:    ReadonlyMap<string, RoomDef>,
+  runtimeCache: RoomRuntimeCache,
+  vpWPx:       number,
+  vpHPx:       number,
+  scalePx:     number,
+): { required: number; satisfied: number; failures: ZoneEntryReadinessFailure[] } {
+  const failures: ZoneEntryReadinessFailure[] = [];
+  let required  = 0;
+  let satisfied = 0;
+  if (!runtimeCache) {
+    return { required: 0, satisfied: 0, failures: [] };
+  }
+
+  for (const sourceId of zoneRoomIds) {
+    const sourceRoom = registry.get(sourceId);
+    if (!sourceRoom) {
+      failures.push({ entryKey: sourceId, sourceRoomId: sourceId, targetRoomId: null, reason: 'sourceRoomNotInRegistry' });
+      continue;
+    }
+
+    // Source room's own static runtime data must be prepared before any of its
+    // outgoing transitions can be considered ready.
+    const sourceRuntime = runtimeCache.get(sourceId);
+    if (sourceRuntime === undefined) {
+      failures.push({ entryKey: sourceId, sourceRoomId: sourceId, targetRoomId: null, reason: 'sourceRuntimeEntryAbsent' });
+      continue;
+    }
+    if (!isEntryFullyPrepared(sourceRuntime)) {
+      failures.push({ entryKey: sourceId, sourceRoomId: sourceId, targetRoomId: null, reason: 'sourceRuntimeNotFullyPrepared' });
+      continue;
+    }
+
+    for (let i = 0; i < sourceRoom.transitions.length; i++) {
+      const trans = sourceRoom.transitions[i];
+      if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
+
+      required++;
+      const entryKey = `${sourceId}:${i}`;
+      const push = (reason: ZoneEntryReadinessFailure['reason']): void => {
+        failures.push({ entryKey, sourceRoomId: sourceId, targetRoomId: trans.targetRoomId, reason });
+      };
+
+      const targetRoom = registry.get(trans.targetRoomId);
+      if (!targetRoom)                      { push('targetRoomNotInRegistry'); continue; }
+
+      const targetRuntime = runtimeCache.get(trans.targetRoomId);
+      if (targetRuntime === undefined)      { push('targetRuntimeEntryAbsent'); continue; }
+      if (!isEntryFullyPrepared(targetRuntime)) { push('targetRuntimeNotFullyPrepared'); continue; }
+      if (!areRoomSpritesReady(targetRoom)) { push('targetSpritesNotDecoded'); continue; }
+
+      const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
+      if (!targetRenderKey)                 { push('targetRenderStateKeyNotComputable'); continue; }
+
+      const entry: DirectedEntry = {
+        sourceRoomId: sourceId,
+        sourceTransitionKey: entryKey,
+        targetRoomId: trans.targetRoomId,
+        targetSpawnBlock: trans.targetSpawnBlock,
+        targetRenderKey,
+        targetRenderRevision: targetRuntime.renderRevision,
+        vpWPx,
+        vpHPx,
+        scalePx,
+      };
+      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
+
+      if (!isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        push('wallViewportNotCovered');
+        continue;
+      }
+      const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
+      if (hasBg && !isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
+        push('bgViewportNotCovered');
+        continue;
+      }
+      satisfied++;
+    }
+  }
+
+  return { required, satisfied, failures };
+}
+
+/**
  * Validates that every same-zone directed transition is fully covered and ready.
+ *
+ * Strictness is unchanged: this is true only when `collectZoneEntryReadinessReport`
+ * finds zero unsatisfied requirements.
  */
 export function isZoneEntryReadinessComplete(
   zoneRoomIds: readonly string[],
@@ -971,74 +1164,9 @@ export function isZoneEntryReadinessComplete(
   scalePx:     number,
 ): boolean {
   if (!runtimeCache) return false;
-
-  for (const sourceId of zoneRoomIds) {
-    const sourceRoom = registry.get(sourceId);
-    if (!sourceRoom) {
-      console.log(`[isZoneEntryReadinessComplete diag] sourceRoom ${sourceId} not in registry`);
-      return false;
-    }
-    
-    // Check resident world / static readiness
-    const sourceRuntime = runtimeCache.get(sourceId);
-    if (!sourceRuntime || !isEntryFullyPrepared(sourceRuntime)) {
-      console.log(`[isZoneEntryReadinessComplete diag] sourceRoom ${sourceId} not fully prepared`);
-      return false;
-    }
-
-    for (let i = 0; i < sourceRoom.transitions.length; i++) {
-      const trans = sourceRoom.transitions[i];
-      if (!zoneRoomIds.includes(trans.targetRoomId)) continue;
-      
-      const targetRoom = registry.get(trans.targetRoomId);
-      if (!targetRoom) {
-        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} not in registry`);
-        return false;
-      }
-
-      const targetRuntime = runtimeCache.get(trans.targetRoomId);
-      if (!targetRuntime || !isEntryFullyPrepared(targetRuntime)) {
-        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} not fully prepared`);
-        return false;
-      }
-
-      if (!areRoomSpritesReady(targetRoom)) {
-        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} sprites not ready`);
-        return false;
-      }
-
-      const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
-      if (!targetRenderKey) {
-        console.log(`[isZoneEntryReadinessComplete diag] targetRoom ${trans.targetRoomId} render state key not ready`);
-        return false;
-      }
-
-      const entry: DirectedEntry = {
-        sourceRoomId: sourceId,
-        sourceTransitionKey: `${sourceId}:${i}`,
-        targetRoomId: trans.targetRoomId,
-        targetSpawnBlock: trans.targetSpawnBlock,
-        targetRenderKey,
-        targetRenderRevision: targetRuntime.renderRevision,
-        vpWPx,
-        vpHPx,
-        scalePx
-      };
-
-      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
-
-      if (!isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
-        console.log(`[isZoneEntryReadinessComplete diag] transition ${sourceId}->${trans.targetRoomId} wall prewarm missing`);
-        return false;
-      }
-      const hasBg = (targetRoom.backgroundBlocks?.length ?? 0) > 0;
-      if (hasBg && !isBgPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
-        console.log(`[isZoneEntryReadinessComplete diag] transition ${sourceId}->${trans.targetRoomId} bg prewarm missing`);
-        return false;
-      }
-    }
-  }
-  return true;
+  return collectZoneEntryReadinessReport(
+    zoneRoomIds, registry, runtimeCache, vpWPx, vpHPx, scalePx,
+  ).failures.length === 0;
 }
 
 // ── Adoption on room entry ────────────────────────────────────────────────────
