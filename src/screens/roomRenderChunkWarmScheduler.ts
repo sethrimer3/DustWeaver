@@ -474,6 +474,17 @@ let _lastScalePx: number = 1;
  * completed.
  */
 let _keepIds: Set<string> = new Set<string>();
+/**
+ * Rooms belonging to the active zone, whose pre-warmed chunks back a zone-load
+ * readiness requirement and therefore must not be evicted.
+ *
+ * Mirrors `RoomRuntimeCache.setPinnedRooms` for the render-chunk store.  The
+ * quality-tier memory budget is a *soft* limit against these: a zone whose
+ * entry viewports do not fit in the budget must exceed it rather than evict
+ * coverage the readiness barrier is waiting on — otherwise warming and
+ * eviction thrash against each other and the load never completes.
+ */
+let _zonePinnedRoomIds: ReadonlySet<string> = new Set<string>();
 
 // ── Handle ────────────────────────────────────────────────────────────────────
 
@@ -847,6 +858,27 @@ export function invalidateRoomChunkPrewarm(roomId: string): void {
 }
 
 // ── Zone entry-viewport warm ─────────────────────────────────────────────────
+
+/**
+ * Marks `roomIds` as belonging to the active zone, protecting their pre-warmed
+ * render chunks from both stale-set and memory-budget eviction.
+ *
+ * The render-chunk counterpart of `RoomRuntimeCache.setPinnedRooms`, and it
+ * must be kept in step with it: zone-load readiness requires entry-viewport
+ * coverage for every same-zone transition, so any room whose chunks can be
+ * evicted mid-load is a requirement that can be un-satisfied after being
+ * satisfied — warming and eviction then thrash and the barrier never closes.
+ *
+ * Replaces the previous set entirely; pass an empty iterable to unpin.
+ */
+export function setPinnedPrewarmRooms(roomIds: Iterable<string>): void {
+  _zonePinnedRoomIds = new Set<string>(roomIds);
+}
+
+/** Room IDs currently protected by `setPinnedPrewarmRooms` (diagnostics). */
+export function getPinnedPrewarmRoomIds(): ReadonlySet<string> {
+  return _zonePinnedRoomIds;
+}
 
 /**
  * Outcome of one `addZoneEntryViewportTasks` pass, so the caller can assert the
@@ -1240,50 +1272,57 @@ export function evictStalePrewarmedChunks(
 ): void {
   const currentRoom = _currentRoomId;
   const evictedRoomIds = new Set<string>();
+  const isProtected = (roomId: string): boolean =>
+    roomId === currentRoom || _zonePinnedRoomIds.has(roomId) || (getCacheBundle(roomId)?.pinned ?? false);
+
   // ── Step 1: drop rooms outside the keep set ───────────────────────────────
   for (const roomId of listPrewarmedWallRoomIds()) {
-    const bundle = getCacheBundle(roomId);
-    if (bundle?.pinned) continue;
-    if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
+    if (isProtected(roomId)) continue;
+    if (!keepRoomIds.has(roomId)) {
       evictPrewarmedWallChunks(roomId);
       evictedRoomIds.add(roomId);
     }
   }
   for (const roomId of listPrewarmedBgRoomIds()) {
-    const bundle = getCacheBundle(roomId);
-    if (bundle?.pinned) continue;
-    if (!keepRoomIds.has(roomId) && roomId !== currentRoom) {
+    if (isProtected(roomId)) continue;
+    if (!keepRoomIds.has(roomId)) {
       evictPrewarmedBgChunks(roomId);
       evictedRoomIds.add(roomId);
     }
   }
 
   // ── Step 2: enforce the memory budget ─────────────────────────────────────
+  // The budget governs *discretionary* prewarm memory only.  Chunks belonging
+  // to the active zone are pinned because zone readiness requires them, so
+  // counting them toward the budget would just make every pass scan a
+  // candidate list it cannot act on — and, before pinning existed, made the
+  // scheduler evict readiness-critical coverage as fast as it was rebuilt.
   const budget = PREWARM_MEMORY_BUDGET_KB[quality];
-  const ws = getPrewarmWallStats();
-  const bs = getPrewarmBgStats();
-  let totalMemKB = ws.memoryEstimateKB + bs.memoryEstimateKB;
+  const UNKNOWN_ROOM_RADIUS = MAX_PREWARM_RADIUS + 1;
+
+  // Single scan: every evictable room is both a budget contributor and an
+  // eviction candidate, so collecting them together keeps the two consistent.
+  interface EvictCandidate { roomId: string; radius: number; memKB: number }
+  const candidates: EvictCandidate[] = [];
+  const seen = new Set<string>();
+  let totalMemKB = 0;
+
+  for (const roomId of listPrewarmedWallRoomIds()) {
+    if (isProtected(roomId)) continue;
+    seen.add(roomId);
+    const memKB = (getPrewarmWallRoomStats(roomId)?.memoryKB ?? 0)
+                + (getPrewarmBgRoomStats(roomId)?.memoryKB   ?? 0);
+    totalMemKB += memKB;
+    candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB });
+  }
+  for (const roomId of listPrewarmedBgRoomIds()) {
+    if (seen.has(roomId) || isProtected(roomId)) continue;
+    const memKB = getPrewarmBgRoomStats(roomId)?.memoryKB ?? 0;
+    totalMemKB += memKB;
+    candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB });
+  }
 
   if (totalMemKB > budget) {
-    const UNKNOWN_ROOM_RADIUS = MAX_PREWARM_RADIUS + 1;
-
-    interface EvictCandidate { roomId: string; radius: number; memKB: number }
-    const candidates: EvictCandidate[] = [];
-    const seen = new Set<string>();
-
-    for (const roomId of listPrewarmedWallRoomIds()) {
-      if (roomId === currentRoom || getCacheBundle(roomId)?.pinned) continue;
-      seen.add(roomId);
-      const wallMem = getPrewarmWallRoomStats(roomId)?.memoryKB ?? 0;
-      const bgMem   = getPrewarmBgRoomStats(roomId)?.memoryKB   ?? 0;
-      candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: wallMem + bgMem });
-    }
-    for (const roomId of listPrewarmedBgRoomIds()) {
-      if (roomId === currentRoom || seen.has(roomId) || getCacheBundle(roomId)?.pinned) continue;
-      const bgMem = getPrewarmBgRoomStats(roomId)?.memoryKB ?? 0;
-      candidates.push({ roomId, radius: _roomPriority.get(roomId) ?? UNKNOWN_ROOM_RADIUS, memKB: bgMem });
-    }
-
     // Sort: highest radius first; within same radius, largest memory first.
     candidates.sort((a, b) =>
       b.radius !== a.radius ? b.radius - a.radius : b.memKB - a.memKB,

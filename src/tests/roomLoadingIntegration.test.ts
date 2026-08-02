@@ -2,15 +2,16 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { roomFilePendingLoadPromises } from '../levels/roomFileCacheState';
 import { cacheGenerationId } from '../levels/roomFileCacheState';
+import type { RoomDef } from '../levels/roomDef';
 
 describe('Room Loading Integration', () => {
   test('single-flight concurrent loads', async () => {
     roomFilePendingLoadPromises.clear();
-    const fakePromise = new Promise<unknown>((resolve) => {
+    const fakePromise = new Promise<RoomDef | undefined>((resolve) => {
       setTimeout(() => {
-        resolve({ id: 'fake_room' });
+        resolve({ id: 'fake_room' } as RoomDef);
       }, 10);
-    }) as Promise<any>;
+    });
 
     roomFilePendingLoadPromises.set('fake_room', fakePromise);
     const p1 = roomFilePendingLoadPromises.get('fake_room');

@@ -5,7 +5,16 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { ZoneResidentLoader } from '../screens/zoneResidentLoader';
 import { ResidentRoomManager } from '../screens/residentRoomManager';
-import { RoomRuntimeCache } from '../screens/roomRuntimeCache';
+import { RoomRuntimeCache, isEntryFullyPrepared } from '../screens/roomRuntimeCache';
+import {
+  addZoneEntryViewportTasks,
+  collectZoneEntryReadinessReport,
+  isZoneEntryReadinessComplete,
+  evictStalePrewarmedChunks,
+  setPinnedPrewarmRooms,
+  getPinnedPrewarmRoomIds,
+  getPrewarmStats,
+} from '../screens/roomRenderChunkWarmScheduler';
 import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { buildRoomWallTemplate, type RoomWallTemplate } from '../screens/gameRoomWalls';
 
@@ -212,6 +221,328 @@ describe('ZoneResidentLoader', () => {
         'addZoneEntryViewportTasks() must still be processed by runChunkPrewarmSliceNow() ' +
         'instead of being silently dropped because the chunk-warm scheduler\'s module-level ' +
         'registry/runtime-cache/quality singletons were never initialized.',
+    );
+  });
+
+  // ── Regression coverage for the 24/24 zone-load hang ───────────────────────
+  //
+  // Reproduced failure: with a 24-room zone, the loading overlay reached
+  // "24/24" (all resident builds done) and never dismissed.  Three independent
+  // defects had to line up, and each gets its own test below:
+  //
+  //   1. `_isZoneReadyNow` queued entry-viewport tasks BEFORE base readiness,
+  //      i.e. before any resident build had populated RoomRuntimeCache, so the
+  //      producer skipped every transition and the one-shot `tasksQueued` latch
+  //      prevented any retry — zero tasks for 48 requirements.
+  //   2. Runtime-cache entries written by the resident builder leave
+  //      blockerKeys/darkBlockerKeys/wallDecorations null, and nothing computes
+  //      them while the zone overlay holds the frame — so `isEntryFullyPrepared`
+  //      (required by the readiness barrier) could never become true.
+  //   3. Pre-warmed chunks for zone rooms were not protected from the
+  //      memory-budget eviction pass, so coverage was destroyed as fast as it
+  //      was built and the barrier oscillated forever.
+  //
+  // These use the real ZoneResidentLoader / RoomRuntimeCache / chunk-warm
+  // scheduler; nothing on the failing path is mocked.
+
+  /**
+   * Builds an N-room ring zone where every room links to its two neighbours.
+   *
+   * Room IDs are namespaced by `worldNumber` because the chunk-warm scheduler
+   * and render-chunk store are module-level singletons shared by every test in
+   * this file — reusing IDs across tests would let one test's queued tasks and
+   * prewarm bundles satisfy (or block) another's.
+   */
+  function ringZone(n: number, worldNumber: number): Map<string, RoomDef> {
+    const ids = Array.from({ length: n }, (_, i) => `w${worldNumber}_ring${i}`);
+    const registry = new Map<string, RoomDef>();
+    for (let i = 0; i < n; i++) {
+      const next = ids[(i + 1) % n];
+      const prev = ids[(i - 1 + n) % n];
+      const mk = (targetRoomId: string, direction: 'left' | 'right'): RoomTransitionDef => ({
+        direction, targetRoomId, xBlock: 0, yBlock: 0,
+        positionBlock: 0, openingSizeBlocks: 4, targetSpawnBlock: [0, 0],
+      });
+      registry.set(ids[i], fullRoom(ids[i], worldNumber, [mk(next, 'right'), mk(prev, 'left')]));
+    }
+    return registry;
+  }
+
+  /** Minimal canvas stand-in so real chunk building can run under node:test. */
+  function installCanvasStub(): void {
+    if (typeof (globalThis as { document?: unknown }).document !== 'undefined') return;
+    const fakeCtx = new Proxy({}, {
+      get: (_t, prop) => (prop === 'canvas' ? { width: 1, height: 1 } : () => {}),
+      set: () => true,
+    });
+    (globalThis as { document?: unknown }).document = {
+      createElement: (tag: string) => (tag === 'canvas'
+        ? { width: 1, height: 1, getContext: () => fakeCtx }
+        : {}),
+    };
+  }
+
+  /**
+   * Drives the loader exactly as gameScreen.ts does, but populates the runtime
+   * cache only as each resident build completes — the real ordering, and the
+   * one the earlier fast-forward test skipped past.
+   *
+   * Scope note: the final wall/bg *chunk rasterization* step needs a real
+   * CanvasRenderingContext2D, so under node:test no chunks are produced and
+   * viewport coverage cannot become true.  These tests therefore assert the
+   * conditions that actually deadlocked — runtime preparation, task production,
+   * and pin protection — rather than end-to-end coverage.  Nothing on that path
+   * is stubbed or bypassed; end-to-end dismissal is validated in the renderer.
+   */
+  function runZoneLoad(
+    registry: Map<string, RoomDef>,
+    worldNumber: number,
+    maxFrames = 400,
+  ): { ready: boolean; frames: number; loader: ZoneResidentLoader; cache: RoomRuntimeCache } {
+    installCanvasStub();
+    const cache   = new RoomRuntimeCache();
+    const loader  = new ZoneResidentLoader(registry, cache);
+    const manager = new ResidentRoomManager();
+    const ids     = loader.getZoneRoomIds(worldNumber);
+
+    loader.startZoneLoad(worldNumber, manager);
+
+    let ready = false;
+    let frames = 0;
+    let built = 0;
+    for (; frames < maxFrames; frames++) {
+      // Simulate one resident build completing per frame, in order — the
+      // resident builder caches a wall template only, leaving the remaining
+      // static fields at the `null` "not yet computed" sentinel.
+      if (built < ids.length) {
+        const id = ids[built++];
+        const r  = registry.get(id)!;
+        manager.ensureResident(r);
+        manager.getResident(id)!.runtimeReady = true;
+        cache.set(id, {
+          renderRevision: -1,
+          wallTemplate: buildRoomWallTemplate(r),
+          edgeExtension: null,
+          blockerKeys: null,
+          darkBlockerKeys: null,
+          wallDecorations: null,
+        });
+      }
+      ready = loader.tickZoneLoad(manager, 1, 480, 270, 1);
+      if (ready) break;
+    }
+    return { ready, frames, loader, cache };
+  }
+
+  test('a 24-room zone leaves no readiness requirement without an executable task', () => {
+    // The reproduced hang: the overlay reached 24/24 (all resident builds done)
+    // and the queue was EMPTY while 43 of 48 directed-entry requirements were
+    // still unsatisfied — requirements with no task behind them, so no amount
+    // of further ticking could ever satisfy them.
+    const registry = ringZone(24, 91);
+    const { cache } = runZoneLoad(registry, 91);
+    const ids = [...registry.keys()];
+
+    const produced = addZoneEntryViewportTasks(ids, registry, cache, 480, 270, 1);
+    assert.deepStrictEqual(
+      produced.blocked, [],
+      'After the zone load has run, every directed-entry requirement must be queueable. ' +
+        'A non-empty `blocked` list means those requirements have no executable task and ' +
+        'the readiness barrier can never close — the exact 24/24 hang.',
+    );
+    assert.strictEqual(
+      produced.covered + produced.added + produced.alreadyQueued, produced.required,
+      'Every requirement must be accounted for as covered, newly queued, or already queued.',
+    );
+  });
+
+  test('every zone room ends fully prepared in the runtime cache', () => {
+    // Defect 2 (the scheduler deadlock): the readiness barrier requires
+    // isEntryFullyPrepared for every zone room, but the resident builder only
+    // caches a wall template — blockerKeys/darkBlockerKeys/wallDecorations stay
+    // null — and neither roomPreloadScheduler nor gameLoadRoomPhases runs while
+    // the zone overlay holds the frame. Before the fix this was permanently
+    // false for every room the player had not already entered.
+    const registry = ringZone(8, 92);
+    const { cache } = runZoneLoad(registry, 92);
+    for (const id of registry.keys()) {
+      const entry = cache.get(id);
+      assert.ok(entry !== undefined, `${id} must be present in the runtime cache`);
+      assert.ok(
+        isEntryFullyPrepared(entry!),
+        `${id} must be fully prepared (blockerKeys, darkBlockerKeys and wallDecorations ` +
+          'all computed) — zone readiness requires it and nothing else computes it during loading.',
+      );
+    }
+  });
+
+  test('entry-viewport task production covers every readiness requirement', () => {
+    // Defect 1: the producer and the readiness checker must enumerate the same
+    // requirement set. Any requirement the producer neither queues nor reports
+    // as covered is a requirement with no task behind it — a permanent stall.
+    installCanvasStub();
+    const registry = ringZone(6, 93);
+    const cache    = new RoomRuntimeCache();
+    const loader   = new ZoneResidentLoader(registry, cache);
+    const manager  = new ResidentRoomManager();
+
+    loader.startZoneLoad(93, manager);
+    for (const [id, r] of registry) {
+      manager.ensureResident(r);
+      manager.getResident(id)!.runtimeReady = true;
+      cache.set(id, {
+        renderRevision: -1,
+        wallTemplate: buildRoomWallTemplate(r),
+        edgeExtension: null,
+        blockerKeys: new Set(),
+        darkBlockerKeys: new Set(),
+        wallDecorations: [],
+      });
+    }
+
+    const ids = loader.getZoneRoomIds(93);
+    const produced = addZoneEntryViewportTasks(ids, registry, cache, 480, 270, 1);
+    const report   = collectZoneEntryReadinessReport(ids, registry, cache, 480, 270, 1);
+
+    assert.strictEqual(
+      produced.required, report.required,
+      'The task producer and the readiness checker must enumerate the same directed-entry set.',
+    );
+    assert.deepStrictEqual(
+      produced.blocked, [],
+      'With every room fully prepared, no requirement may be left without a task.',
+    );
+    assert.strictEqual(
+      produced.covered + produced.added + produced.alreadyQueued, produced.required,
+      'Every requirement must be accounted for as covered, newly queued, or already queued.',
+    );
+  });
+
+  test('repeated task production is idempotent (no duplicate tasks)', () => {
+    // The producer is called every frame now; it must not grow the queue.
+    installCanvasStub();
+    const registry = ringZone(6, 94);
+    const cache    = new RoomRuntimeCache();
+    const loader   = new ZoneResidentLoader(registry, cache);
+    const manager  = new ResidentRoomManager();
+    loader.startZoneLoad(94, manager);
+    for (const [id, r] of registry) {
+      manager.ensureResident(r);
+      manager.getResident(id)!.runtimeReady = true;
+      cache.set(id, {
+        renderRevision: -1, wallTemplate: buildRoomWallTemplate(r), edgeExtension: null,
+        blockerKeys: new Set(), darkBlockerKeys: new Set(), wallDecorations: [],
+      });
+    }
+    const ids = loader.getZoneRoomIds(94);
+
+    const first  = addZoneEntryViewportTasks(ids, registry, cache, 480, 270, 1);
+    const qAfter1 = getPrewarmStats().queueLength;
+    const second = addZoneEntryViewportTasks(ids, registry, cache, 480, 270, 1);
+    const qAfter2 = getPrewarmStats().queueLength;
+
+    assert.ok(first.added > 0, 'first pass should queue work');
+    assert.strictEqual(second.added, 0, 'second pass must not create duplicate tasks');
+    assert.strictEqual(
+      qAfter2, qAfter1,
+      'Calling the producer again must leave the queue length unchanged — it runs every ' +
+        'frame during a zone load and must never grow the queue without bound.',
+    );
+  });
+
+  test('zone-pinned prewarm chunks survive the memory-budget eviction pass', () => {
+    // Defect 3: without pinning, evictStalePrewarmedChunks was free to drop
+    // chunks backing an outstanding readiness requirement, so warming and
+    // eviction thrashed and the barrier never closed.
+    setPinnedPrewarmRooms(['pinnedRoom']);
+    try {
+      assert.ok(
+        getPinnedPrewarmRoomIds().has('pinnedRoom'),
+        'setPinnedPrewarmRooms must record the active zone rooms',
+      );
+      // An empty keep-set would evict everything not pinned; the pinned room
+      // must survive regardless of quality tier.
+      evictStalePrewarmedChunks(new Set<string>(), 'low');
+      assert.ok(
+        getPinnedPrewarmRoomIds().has('pinnedRoom'),
+        'Zone-pinned rooms must remain protected across an eviction pass.',
+      );
+    } finally {
+      setPinnedPrewarmRooms([]);
+    }
+  });
+
+  test('startZoneLoad pins the zone in both the runtime cache and the chunk store', () => {
+    // The two pin-sets must be kept in step: readiness requires a prepared
+    // runtime entry AND covered prewarm chunks for every zone room, so a room
+    // pinned in only one of them is still evictable from the other.
+    const registry = ringZone(4, 95);
+    const cache    = new RoomRuntimeCache(2); // capacity below zone size
+    const loader   = new ZoneResidentLoader(registry, cache);
+    const manager  = new ResidentRoomManager();
+
+    loader.startZoneLoad(95, manager);
+    const ids = loader.getZoneRoomIds(95);
+
+    for (const id of ids) {
+      cache.set(id, {
+        renderRevision: -1, wallTemplate: buildRoomWallTemplate(registry.get(id)!),
+        edgeExtension: null, blockerKeys: new Set(), darkBlockerKeys: new Set(), wallDecorations: [],
+      });
+    }
+    for (const id of ids) {
+      assert.ok(cache.has(id), `${id} must survive LRU eviction while the zone is pinned`);
+      assert.ok(getPinnedPrewarmRoomIds().has(id), `${id} must be pinned in the chunk store too`);
+    }
+    setPinnedPrewarmRooms([]);
+  });
+
+  test('readiness reports the exact failing subcondition, not a bare false', () => {
+    // Phase-3 diagnostic guarantee: an unsatisfied requirement must name why.
+    installCanvasStub();
+    const registry = ringZone(3, 96);
+    const cache    = new RoomRuntimeCache();
+    const ids      = [...registry.keys()];
+
+    // Nothing in the cache at all → every room fails at the source-entry stage.
+    const empty = collectZoneEntryReadinessReport(ids, registry, cache, 480, 270, 1);
+    assert.ok(empty.failures.length > 0, 'an unprepared zone must report failures');
+    assert.ok(
+      empty.failures.every(f => f.reason === 'sourceRuntimeEntryAbsent'),
+      'the reported reason must identify the absent runtime entry precisely, ' +
+        `got: ${JSON.stringify(empty.failures.map(f => f.reason))}`,
+    );
+
+    // Cached but not fully prepared → a different, equally specific reason.
+    for (const [id, r] of registry) {
+      cache.set(id, {
+        renderRevision: -1, wallTemplate: buildRoomWallTemplate(r), edgeExtension: null,
+        blockerKeys: null, darkBlockerKeys: null, wallDecorations: null,
+      });
+    }
+    const partial = collectZoneEntryReadinessReport(ids, registry, cache, 480, 270, 1);
+    assert.ok(
+      partial.failures.every(f => f.reason === 'sourceRuntimeNotFullyPrepared'),
+      'a cached-but-incomplete entry must be distinguished from an absent one, ' +
+        `got: ${JSON.stringify(partial.failures.map(f => f.reason))}`,
+    );
+  });
+
+  test('isZoneEntryReadinessComplete stays strict — true only with zero failures', () => {
+    // Guards against "fixing" a hang by weakening the barrier.
+    installCanvasStub();
+    const registry = ringZone(3, 97);
+    const cache    = new RoomRuntimeCache();
+    const ids      = [...registry.keys()];
+    assert.strictEqual(
+      isZoneEntryReadinessComplete(ids, registry, cache, 480, 270, 1), false,
+      'readiness must be false while requirements are unsatisfied',
+    );
+    const report = collectZoneEntryReadinessReport(ids, registry, cache, 480, 270, 1);
+    assert.strictEqual(
+      isZoneEntryReadinessComplete(ids, registry, cache, 480, 270, 1),
+      report.failures.length === 0,
+      'isZoneEntryReadinessComplete must agree exactly with the aggregate report',
     );
   });
 });

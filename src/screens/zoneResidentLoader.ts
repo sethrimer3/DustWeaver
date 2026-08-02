@@ -56,6 +56,7 @@ import {
   addZoneEntryViewportTasks,
   runChunkPrewarmSliceNow,
   getPrewarmStats,
+  setPinnedPrewarmRooms,
 } from './roomRenderChunkWarmScheduler';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -190,8 +191,12 @@ export class ZoneResidentLoader {
       if (room !== undefined) residentRoomManager.ensureResident(room);
     }
     
-    // Pin all zone rooms in the runtime cache so they aren't evicted during loading.
+    // Pin all zone rooms so nothing they contribute to zone readiness can be
+    // evicted mid-load.  Both caches must be pinned together: the runtime cache
+    // backs `isEntryFullyPrepared`, the render-chunk store backs entry-viewport
+    // coverage, and readiness requires both for every room in the zone.
     this._runtimeCache.setPinnedRooms(roomIds);
+    setPinnedPrewarmRooms(roomIds);
 
     this._activeZone = {
       worldNumber,
@@ -676,6 +681,11 @@ export class ZoneResidentLoader {
         pausedForFrameTime:     prewarm.pausedForFrameTime,
         totalWallChunks:        prewarm.totalWallChunks,
         totalBgChunks:          prewarm.totalBgChunks,
+        totalPrewarmMemoryKB:   prewarm.totalPrewarmMemoryKB,
+        memoryBudgetKB:         prewarm.memoryBudgetKB,
+        // Non-zero during a zone load means readiness-critical coverage is
+        // being destroyed as fast as it is built.
+        totalEvictions:         prewarm.totalEvictions,
       },
       // Invariant: no unsatisfied requirement may lack an executable task.
       // A non-empty list here is the signature of a load that cannot progress.
@@ -684,7 +694,20 @@ export class ZoneResidentLoader {
       elapsedMs: Math.round(performance.now() - state.t0),
     };
 
-    const diagStr = JSON.stringify(diag);
+    // Change-detection key deliberately excludes continuously-churning fields
+    // (elapsed time, per-slice counters) so "state changed" means the *load
+    // state* changed, not merely that another frame elapsed.
+    const diagStr = JSON.stringify({
+      phase:        diag.phase,
+      incomplete:   diag.progress.incompleteRooms,
+      buildsDone:   diag.progress.residentBuildsDone,
+      prepared:     diag.runtimeCache.fullyPreparedCount,
+      missingKeys:  diag.runtimeCache.missingExpectedKeys,
+      satisfied:    diag.directedEntryRequirements.satisfied,
+      failures:     diag.directedEntryRequirements.failuresByReason,
+      blocked:      diag.taskProduction.blocked,
+      noTaskFor:    diag.requirementsWithoutExecutableTask,
+    });
     if (!this._diagSnapshotTaken) {
       this._diagSnapshotTaken     = true;
       this._diagLastUnresolvedStr = diagStr;
