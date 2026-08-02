@@ -124,6 +124,27 @@ export interface GrappleWorldState {
    * state machine.  Cleared by releaseGrapple and by zip activation.
    */
   isGrappleZipTriggeredFlag: 0 | 1;
+  /**
+   * Set to 1 when the player requests an ordinary ("quiet") grapple release —
+   * Hold-mode mouse/gamepad-button-up, or a second click in Toggle mode.
+   *
+   * Command processing runs once per rendered frame, decoupled from the fixed
+   * simulation tick, so this flag is a queued one-shot request rather than an
+   * immediate releaseGrapple() call. It is consumed inside
+   * applyGrappleClusterConstraint() at the correct point in the deterministic
+   * fixed tick — after that tick's retraction and rope-length constraint have
+   * finished updating the player's genuine swing velocity — so the release
+   * always carries the player's true, fully up-to-date physical velocity
+   * instead of a stale value from the previous frame's last completed tick.
+   *
+   * Jump-off (playerJumpTriggeredFlag) takes priority: if both are set on the
+   * same tick, the jump-off release+impulse happens and this flag is simply
+   * cleared without a second, redundant release.
+   *
+   * Cleared by releaseGrapple() (so it can never leak into a later grapple
+   * session) and by fireGrapple() on a fresh attach.
+   */
+  isGrappleQuietReleaseRequestedFlag: 0 | 1;
   /** 1 when the player has arrived at the zip target and is sticking. */
   isGrappleStuckFlag: 0 | 1;
   /**
@@ -417,6 +438,7 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleInputMode:                      GrappleInputMode.Hold,
     isGrappleZipActiveFlag:                0,
     isGrappleZipTriggeredFlag:             0,
+    isGrappleQuietReleaseRequestedFlag:    0,
     isGrappleStuckFlag:                    0,
     grappleStuckStoppedTickCount:          0,
     grappleZipNormalXWorld:                0.0,

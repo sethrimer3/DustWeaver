@@ -241,6 +241,12 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   if (player === undefined || player.isAliveFlag === 0) return;
   const playerEntityId = player.entityId;
 
+  // A stale quiet-release request from a previous grapple session (e.g. a
+  // mouse-up that arrived on the same frame the old grapple already ended
+  // some other way) must never carry over and instantly release this new
+  // attach.
+  world.isGrappleQuietReleaseRequestedFlag = 0;
+
   // Verdant Dust mobility tradeoff: grapple input does nothing while Verdant
   // is equipped (traded for doubled ground speed/accel and boosted jump
   // launches). Intentionally silent — no empty-charge FX — since this isn't

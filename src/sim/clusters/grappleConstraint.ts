@@ -149,14 +149,37 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   const jumpJustPressed = world.playerJumpTriggeredFlag === 1;
   world.playerJumpTriggeredFlag = 0; // consume — grapple owns the flag while active
 
+  // ── Ordinary ("quiet") release request ────────────────────────────────────
+  // Set by gameCommandProcessor.ts on Hold-mode mouse/gamepad-button-up or a
+  // Toggle-mode second click. That command processing happens once per
+  // rendered frame, outside the deterministic fixed tick, so it only queues
+  // the request here rather than releasing immediately. Consuming (and
+  // clearing) it now means it is applied at most once and jump-off — handled
+  // immediately below — always takes priority when both land on the same
+  // tick, per the intended jump-off-over-quiet-release ordering.
+  const quietReleaseRequested = world.isGrappleQuietReleaseRequestedFlag === 1;
+  world.isGrappleQuietReleaseRequestedFlag = 0;
+
   // Consume the down triggered flag so it does not accumulate during grapple.
   // (Retraction uses playerCrouchHeldFlag; playerDownTriggeredFlag was only
   //  needed by the old double-tap zip detection which has been replaced by RMB.)
   world.playerDownTriggeredFlag = 0;
 
   if (tickGrappleZip(world, player, jumpJustPressed, dtSec)) {
+    // Zip owns jump handling internally (zip-jump window). If a quiet release
+    // was also requested this tick and zip did not already end the grapple
+    // (e.g. via the miss-window release), honor it now so mouse-up during a
+    // zip still reliably detaches, matching pre-existing behavior.
+    if (quietReleaseRequested && world.isGrappleActiveFlag === 1) {
+      releaseGrapple(world);
+    }
     return;
   }
+
+  // Jump-off already handles its own release below and must win over a
+  // same-tick quiet release; quietReleaseRequested is otherwise honored at
+  // the end of this function, after this tick's swing physics (retraction +
+  // rope-length constraint) has finished updating the player's true velocity.
 
   // ════════════════════════════════════════════════════════════════════════════
   // Normal grapple — pendulum swing
@@ -192,7 +215,12 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   const dy = player.positionYWorld - ay;
   const dist = Math.sqrt(dx * dx + dy * dy);
 
-  if (dist < 1.0) return; // degenerate — player at anchor point
+  if (dist < 1.0) {
+    // Degenerate — player at anchor point. No swing physics to run this tick,
+    // but a pending quiet release must still be honored with current velocity.
+    if (quietReleaseRequested) releaseGrapple(world);
+    return;
+  }
 
   const invDist = 1.0 / dist;
   // Unit vector pointing from anchor toward player (outward / radial direction)
@@ -313,6 +341,7 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
         GRAPPLE_CARRY_TENSION_PULL_SPEED_WORLD_PER_SEC * stretchFactor,
       );
       world.grappleLengthWorld = Math.max(world.grappleLengthWorld, dist - GRAPPLE_CARRY_TENSION_SLACK_WORLD);
+      if (quietReleaseRequested) releaseGrapple(world);
       return;
     }
   }
@@ -352,4 +381,15 @@ export function applyGrappleClusterConstraint(world: WorldState): void {
   // Movement V2 intentionally applies no passive swing damping. Tangential
   // velocity persists until another gameplay force, collision, or retraction
   // changes it.
+
+  // ── Honor a pending quiet release, now that this tick's retraction and
+  // rope-length constraint have both finished updating the player's genuine
+  // swing velocity. This is the sole authoritative point for an ordinary
+  // release: it preserves full physical velocity (horizontal + vertical) and
+  // explicitly excludes any position-only correction — the outward-velocity
+  // removal above stays because it is real rope tension, not a fabricated
+  // snap-derived velocity.
+  if (quietReleaseRequested && world.isGrappleActiveFlag === 1) {
+    releaseGrapple(world);
+  }
 }

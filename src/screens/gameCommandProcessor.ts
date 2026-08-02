@@ -15,7 +15,7 @@ import {
   getActiveExclusivePlayerAction,
 } from '../input/playerActionArbitration';
 import { WorldState } from '../sim/world';
-import { fireGrapple, releaseGrapple } from '../sim/clusters/grapple';
+import { fireGrapple } from '../sim/clusters/grapple';
 import { GrappleInputMode } from '../sim/worldGrappleState';
 import { getWallJumpCandidate } from '../sim/clusters/playerWallJump';
 import { screenToWorld } from './gameRoom';
@@ -361,8 +361,13 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
       const player = world.clusters[0];
       if (player !== undefined && player.isAliveFlag === 1) {
         if (world.grappleInputMode === GrappleInputMode.Toggle && world.isGrappleActiveFlag === 1) {
-          // Toggle mode: a second left-click releases the grapple instead of re-firing.
-          releaseGrapple(world);
+          // Toggle mode: a second left-click releases the grapple instead of
+          // re-firing. This runs at render-frame command-processing time, not
+          // inside the deterministic fixed tick, so queue the request rather
+          // than releasing immediately — applyGrappleClusterConstraint()
+          // consumes it at the correct point in the next fixed tick, once
+          // that tick's swing physics has finished updating true velocity.
+          world.isGrappleQuietReleaseRequestedFlag = 1;
         } else if (exclusiveAction.allowGrapple) {
           fireGrappleAtScreenPoint(ctx, cmd.aimXPx, cmd.aimYPx);
           grappleFireTriggered = true;
@@ -376,8 +381,11 @@ export function processPlayerCommands(ctx: GameCommandContext): GameCommandResul
     } else if (cmd.kind === CommandKind.GrappleRelease) {
       // In Hold mode the grapple releases on mouse-up.
       // In Toggle mode releasing the mouse does nothing; the player clicks again to release.
+      // Queued (not immediate) for the same reason as the Toggle-mode release
+      // above: this command is processed once per rendered frame, decoupled
+      // from the fixed simulation tick that owns the player's true velocity.
       if (world.grappleInputMode === GrappleInputMode.Hold) {
-        releaseGrapple(world);
+        world.isGrappleQuietReleaseRequestedFlag = 1;
       }
     } else if (cmd.kind === CommandKind.ToggleFullscreen) {
       if (!document.fullscreenElement) {

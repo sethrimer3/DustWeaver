@@ -393,6 +393,7 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
   world.isGrappleActiveFlag = 0;
   world.isGrappleZipActiveFlag = 0;
   world.isGrappleZipTriggeredFlag = 0; // cancel any pending zip request
+  world.isGrappleQuietReleaseRequestedFlag = 0; // consumed (or moot) — never leak into the next session
   world.isGrappleStuckFlag = 0;
   world.grappleStuckStoppedTickCount = 0;
   world.isZipJumpWindowOpenFlag = 0;
