@@ -229,10 +229,13 @@ export function applyGamepadInputSnapshot(
     state.gamepadMoveX = 0;
     state.isGamepadDownHeldFlag = false;
     state.isGamepadJumpHeldFlag = false;
+    // Only force a grapple release if a gamepad button was actually held when
+    // it disconnected — this branch also runs every frame when no gamepad was
+    // ever connected, so it must not stomp mouse-driven isMouseDownFlag /
+    // isRightMouseDownFlag / isGrappleHeldFlag state on every such frame
+    // (that broke mouse-hold release detection: onMouseUp bails out early
+    // once isMouseDownFlag reads 0, so GrappleRelease never fired).
     if (gamepadPreviousState.primary) state.isGrappleReleaseTriggeredFlag = 1;
-    state.isMouseDownFlag = 0;
-    state.isRightMouseDownFlag = 0;
-    state.isGrappleHeldFlag = 0;
     gamepadPreviousStates.delete(state);
     return;
   }
