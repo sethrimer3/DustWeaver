@@ -78,6 +78,7 @@ import {
   GRAPPLE_CHAIN_LIFETIME_TICKS,
   GRAPPLE_ANCHOR_SURFACE_EPSILON_WORLD,
   raycastWalls,
+  releaseGrapple,
   clearLegacyGrappleMissState,
   getEffectiveGrappleRangeWorld,
   resetGrappleDisplayRadius,
@@ -86,6 +87,7 @@ import { raycastRopeSegments } from './grappleRopeSupport';
 import { isGrappleWallHitSlimed } from './slimeSnailAi';
 import { findGrappleCarryBlockRayHit } from '../grappleCarryBlocks';
 import { isVerdantDustEquipped } from './verdantMobility';
+import { isVoidDustEquipped, startVoidDash } from './voidDash';
 
 export { updateGrappleRopeAnchor } from './grappleRopeSupport';
 export { raycastRopeSegments } from './grappleRopeSupport';
@@ -264,6 +266,17 @@ export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorl
   // fully enforced regardless of assist mode.
   if (world.hasGrappleChargeFlag === 0 && world.isAssistModeFlag === 0) {
     triggerGrappleEmptyFx(world);
+    return;
+  }
+
+  // Void Dust replaces the rope with a directional brake-and-dash while
+  // retaining the grapple charge/recharge economy.
+  if (isVoidDustEquipped(world)) {
+    if (world.isGrappleActiveFlag === 1) releaseGrapple(world, false);
+    if (startVoidDash(world, player, anchorXWorld, anchorYWorld)) {
+      clearGrappleFailureFx(world);
+      world.hasGrappleChargeFlag = 0;
+    }
     return;
   }
 

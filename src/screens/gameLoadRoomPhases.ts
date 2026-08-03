@@ -135,6 +135,7 @@ import { resetShieldWeaveState } from '../sim/stormweave/shieldWeave';
 import { resetShieldLiquidContactLatch } from '../sim/hazards';
 import { resetTimeStopFieldPlayerState } from '../sim/timeStopField/timeStopFieldPlayerState';
 import { resetPoisonExposureState } from '../sim/poisonField/poisonExposureState';
+import { resetVoidDashState } from '../sim/clusters/voidDash';
 import type { CombatMode } from '../sim/combatMode';
 
 /**
@@ -384,6 +385,7 @@ function resetRoomScopedSimState(world: WorldState): void {
   // respawn) must clear it so a stale exposure timer never survives into a
   // new room or a fresh spawn.
   resetPoisonExposureState(world.poisonExposure);
+  resetVoidDashState(world.voidDash);
 
   world.isGrappleActiveFlag       = 0;
   world.isGrappleMissActiveFlag   = 0;

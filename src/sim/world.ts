@@ -20,6 +20,7 @@ import {
   type PoisonExposureState,
 } from './poisonField/poisonExposureState';
 import { createSecondaryWeaveGestureState, type SecondaryWeaveGestureState } from '../input/secondaryWeaveGesture';
+import { createVoidDashState, type VoidDashState } from './clusters/voidDash';
 
 /** Fixed capacity for this tick's Verdant flower-bloom spawn events (see verdantFlowerEventCount). */
 export const VERDANT_FLOWER_EVENTS_CAPACITY = 16;
@@ -79,6 +80,8 @@ export const MAX_BOW_ARROW_MOTES = 5;
 export const MIN_BOW_ARROW_MOTES = 3;
 
 export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWorldState {
+  /** Deterministic, non-serialized Void Dust brake-and-launch state. */
+  voidDash: VoidDashState;
   /** Directional Shield Weave collision state, derived from canonical player life. */
   shieldWeave: ShieldWeaveState;
   /**
@@ -582,6 +585,7 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 
 export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
   return {
+    voidDash:                       createVoidDashState(),
     shieldWeave: createShieldWeaveState(),
     timeStopField: createTimeStopFieldPlayerState(),
     poisonExposure: createPoisonExposureState(),

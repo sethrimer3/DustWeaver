@@ -16,7 +16,7 @@
 import { WorldState } from '../world';
 import { ClusterState } from './state';
 import { DASH_RECHARGE_ANIM_TICKS } from './dashConstants';
-import { PLAYER_HALF_HEIGHT_WORLD } from '../../levels/roomDef';
+import { PLAYER_HALF_HEIGHT_WORLD, PLAYER_HALF_WIDTH_WORLD } from '../../levels/roomDef';
 import { nextUint32 } from '../rng';
 
 import {
@@ -28,6 +28,7 @@ import { updatePlayerSkidState } from './playerSkid';
 import { applyPlayerGravityAndJump } from './playerVerticalMovement';
 import { applyPlayerHorizontalMovement } from './playerHorizontalMovement';
 import { applyPlayerWaterHorizontalDrag } from './playerWaterPhysics';
+import { updateVoidDash } from './voidDash';
 
 /**
  * Tick all player-specific velocity and input logic for a single cluster.
@@ -174,6 +175,11 @@ export function tickPlayerMovement(
   // ── Skid activation/termination (authoritative; must run before the jump
   // trigger below so a same-tick reversal + jump press is handled correctly,
   // and before horizontal movement integrates this tick's velocity change) ──
+  if (updateVoidDash(cluster, world, dtSec)) {
+    cluster.halfWidthWorld = PLAYER_HALF_WIDTH_WORLD;
+    return;
+  }
+
   updatePlayerSkidState(cluster, world);
 
   // ── Apply gravity, variable-jump sustain, fall speed cap, and jump trigger ──

@@ -5,6 +5,7 @@ import type { PlayerProgress } from '../progression/playerProgress';
 import { MAX_WALLS, type WorldState } from '../sim/world';
 import { SURFACE_RIM_STYLE_INDEX_DEFAULT } from '../render/walls/surfaceRimStyle';
 import { createChallengeModeState, toggleChallengeTotem, updateChallengeFields } from '../sim/challengeMode';
+import { resetVoidDashState } from '../sim/clusters/voidDash';
 import {
   clearGateLatchForSave,
   clearGateLatchForRoomExit,
@@ -71,6 +72,7 @@ export function updateRoomChallengeElements(world: WorldState, progress?: Player
     world.grappleReleaseStartIndex = -1;
     world.grappleReleaseBurstCounter = 0;
     world.grappleCarryBlockIndex = -1;
+    resetVoidDashState(world.voidDash);
   }
 
   const conditionContext = {
