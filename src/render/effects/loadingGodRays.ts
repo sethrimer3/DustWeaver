@@ -31,14 +31,20 @@ const RAY_ANGLE_RAD = Math.PI * 0.285;
 const BASE_ALPHA = 0.22;
 const DRIFT_SPEED = 0.000018;
 const NOISE_STRENGTH = 0.07;
+// Resolution of the offscreen light buffer, relative to the visible canvas. A lower
+// resolution buffer naturally softens the beams before the blur filter even runs.
 const LOGICAL_SCALE = 0.42;
+const LIGHT_BUFFER_BLUR_PX = 5;
 const NOISE_TILE_SIZE = 64;
-const HARD_TO_SOFT_DELAY_MS = 420;
-const HARD_TO_SOFT_DURATION_MS = 2600;
+const FADE_IN_DELAY_MS = 420;
+const FADE_IN_DURATION_MS = 2600;
 const OVERLAY_RESET_GAP_MS = 900;
-const SOFT_LAYER_COUNT = 7;
-const SOFT_WIDTH_SCALE_MAX = 3.8;
-const SOFT_ALPHA_SCALE = 0.24;
+// A beam is built from many faint, progressively wider layers rather than one hard-edged
+// shape, so the combined result reads as a soft field of light instead of a flat polygon.
+const SOFT_LAYER_COUNT = 9;
+const SOFT_WIDTH_SCALE_MAX = 3.6;
+const SOFT_ALPHA_SCALE = 0.30;
+const SOFT_FALLOFF_POWER = 2.3;
 
 const RAYS: readonly LoadingRayDef[] = [
   { x: -0.18, y: -0.08, length: 1.48, widthStart: 0.17, widthEnd: 0.07, alpha: 0.60, phase: 0.1, core: true },
@@ -64,6 +70,11 @@ let _dustRayCount = RAY_COUNT;
 let _transitionStartMs = -1;
 let _lastRenderTimeMs = -1;
 
+let _lightCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+let _lightCtx: CanvasRenderingContext2D | null = null;
+let _lightBufferW = 0;
+let _lightBufferH = 0;
+
 export function setLoadingGodRaysEnabled(enabled: boolean): boolean {
   _isDevEnabled = Boolean(enabled);
   return _isDevEnabled;
@@ -85,6 +96,9 @@ export function renderLoadingGodRays(
   try {
     const width = Math.max(1, Math.floor(viewport.width * LOGICAL_SCALE));
     const height = Math.max(1, Math.floor(viewport.height * LOGICAL_SCALE));
+    const lightCtx = getLightBufferCtx(width, height);
+    if (lightCtx === null) return;
+
     const rayCount = Math.max(0, Math.min(RAYS.length, options.rayCount ?? RAY_COUNT));
     const angleRad = options.angleRad ?? RAY_ANGLE_RAD;
     const baseAlpha = options.baseAlpha ?? BASE_ALPHA;
@@ -94,39 +108,68 @@ export function renderLoadingGodRays(
       _transitionStartMs = timeMs;
     }
     _lastRenderTimeMs = timeMs;
-    const transitionT = smoothstep(
-      (timeMs - _transitionStartMs - HARD_TO_SOFT_DELAY_MS) / HARD_TO_SOFT_DURATION_MS,
-    );
-    const hardAlphaScale = 1 - transitionT * 0.82;
-    const softAlphaScale = transitionT;
+    const fadeInT = smoothstep((timeMs - _transitionStartMs - FADE_IN_DELAY_MS) / FADE_IN_DURATION_MS);
+    const alphaScale = 0.18 + fadeInT * 0.82;
 
+    // Draw every beam as a soft field of light into the low-res buffer, never onto the
+    // main canvas directly.
+    lightCtx.clearRect(0, 0, width, height);
+    lightCtx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < rayCount; i++) {
+      drawSoftRay(lightCtx, RAYS[i], width, height, angleRad, baseAlpha * alphaScale, driftSpeed, timeMs);
+    }
+    _loadingDustMotes.render(lightCtx, width, height, timeMs, loadingDustIntensityAt, 'loading');
+
+    // Blur the combined buffer once and screen-composite it back onto the scene — this is
+    // what turns the layered shapes into something that reads as light rather than geometry.
     ctx.save();
     ctx.clearRect(0, 0, viewport.width, viewport.height);
-    ctx.imageSmoothingEnabled = false;
-    ctx.scale(viewport.width / width, viewport.height / height);
+    ctx.imageSmoothingEnabled = true;
     ctx.globalCompositeOperation = 'screen';
+    ctx.filter = `blur(${LIGHT_BUFFER_BLUR_PX}px)`;
+    ctx.drawImage(_lightCanvas as CanvasImageSource, 0, 0, viewport.width, viewport.height);
+    ctx.filter = 'none';
+    ctx.restore();
 
-    for (let i = 0; i < rayCount; i++) {
-      drawSoftRay(ctx, RAYS[i], width, height, angleRad, baseAlpha * softAlphaScale, driftSpeed, timeMs);
-      drawRay(ctx, RAYS[i], width, height, angleRad, baseAlpha * hardAlphaScale, driftSpeed, timeMs);
-    }
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    drawNoise(ctx, viewport.width, viewport.height, timeMs, noiseStrength);
+    ctx.restore();
 
-    drawNoise(ctx, width, height, timeMs, noiseStrength);
     _dustViewportW = width;
     _dustViewportH = height;
     _dustAngleRad = angleRad;
     _dustBaseAlpha = baseAlpha;
     _dustDriftSpeed = driftSpeed;
     _dustRayCount = rayCount;
-    _loadingDustMotes.render(ctx, width, height, timeMs, loadingDustIntensityAt, 'loading');
-    ctx.restore();
   } catch {
     try {
+      ctx.filter = 'none';
       ctx.restore();
     } catch {
       // Loading should never fail because the optional effect did.
     }
   }
+}
+
+function getLightBufferCtx(width: number, height: number): CanvasRenderingContext2D | null {
+  if (_lightCanvas === null || _lightBufferW !== width || _lightBufferH !== height) {
+    _lightCanvas = typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(width, height)
+      : typeof document !== 'undefined'
+        ? document.createElement('canvas')
+        : null;
+    if (_lightCanvas === null) {
+      _lightCtx = null;
+      return null;
+    }
+    _lightCanvas.width = width;
+    _lightCanvas.height = height;
+    _lightCtx = _lightCanvas.getContext('2d') as CanvasRenderingContext2D | null;
+    _lightBufferW = width;
+    _lightBufferH = height;
+  }
+  return _lightCtx;
 }
 
 function smoothstep(value: number): number {
@@ -216,37 +259,6 @@ function estimateLoadingGodRayIntensityAt(
   return intensity <= 0 ? 0 : intensity >= 1 ? 1 : intensity;
 }
 
-function drawRay(
-  ctx: CanvasRenderingContext2D,
-  ray: LoadingRayDef,
-  viewportW: number,
-  viewportH: number,
-  angleRad: number,
-  baseAlpha: number,
-  driftSpeed: number,
-  timeMs: number,
-): void {
-  const diagonal = Math.hypot(viewportW, viewportH);
-  const directionX = Math.cos(angleRad);
-  const directionY = Math.sin(angleRad);
-  const perpX = -directionY;
-  const perpY = directionX;
-  const shimmer = 0.92 + 0.08 * Math.sin(timeMs * 0.00042 + ray.phase);
-  const { startX, startY } = computeRayOrigin(ray, viewportW, viewportH, perpY, driftSpeed, timeMs);
-  const length = Math.round(ray.length * diagonal);
-  const endX = Math.round(startX + directionX * length);
-  const endY = Math.round(startY + directionY * length);
-  const w0 = Math.round(ray.widthStart * viewportW);
-  const w1 = Math.round(ray.widthEnd * viewportW);
-  const alpha = baseAlpha * ray.alpha * shimmer;
-
-  fillBeamQuad(ctx, startX, startY, endX, endY, perpX, perpY, w0, w1, alpha);
-
-  if (ray.core) {
-    fillBeamQuad(ctx, startX, startY, endX, endY, perpX, perpY, Math.max(2, w0 * 0.22), Math.max(1, w1 * 0.18), alpha * 0.36);
-  }
-}
-
 function drawSoftRay(
   ctx: CanvasRenderingContext2D,
   ray: LoadingRayDef,
@@ -271,14 +283,13 @@ function drawSoftRay(
   const w0 = ray.widthStart * viewportW;
   const w1 = ray.widthEnd * viewportW;
   const alpha = baseAlpha * ray.alpha * shimmer;
+  const coreBoost = ray.core ? 1.25 : 1;
 
-  const prevComposite = ctx.globalCompositeOperation;
-  ctx.globalCompositeOperation = 'lighter';
   for (let layer = SOFT_LAYER_COUNT - 1; layer >= 0; layer--) {
     const t = layer / Math.max(1, SOFT_LAYER_COUNT - 1);
     const widthScale = 1 + t * (SOFT_WIDTH_SCALE_MAX - 1);
-    const falloff = Math.pow(1 - t * 0.78, 2.2);
-    const layerAlpha = alpha * SOFT_ALPHA_SCALE * falloff;
+    const falloff = Math.pow(1 - t, SOFT_FALLOFF_POWER);
+    const layerAlpha = alpha * SOFT_ALPHA_SCALE * falloff * coreBoost;
     if (layerAlpha <= 0.0008) continue;
     fillBeamQuad(
       ctx,
@@ -288,12 +299,11 @@ function drawSoftRay(
       endY,
       perpX,
       perpY,
-      Math.max(2, Math.round(w0 * widthScale)),
-      Math.max(1, Math.round(w1 * (0.7 + widthScale * 0.55))),
+      Math.max(2, w0 * widthScale),
+      Math.max(1, w1 * (0.7 + widthScale * 0.55)),
       layerAlpha,
     );
   }
-  ctx.globalCompositeOperation = prevComposite;
 }
 
 function fillBeamQuad(
@@ -308,14 +318,14 @@ function fillBeamQuad(
   widthEnd: number,
   alpha: number,
 ): void {
-  const sx0 = Math.round(startX + perpX * widthStart);
-  const sy0 = Math.round(startY + perpY * widthStart);
-  const sx1 = Math.round(startX - perpX * widthStart);
-  const sy1 = Math.round(startY - perpY * widthStart);
-  const ex0 = Math.round(endX + perpX * widthEnd);
-  const ey0 = Math.round(endY + perpY * widthEnd);
-  const ex1 = Math.round(endX - perpX * widthEnd);
-  const ey1 = Math.round(endY - perpY * widthEnd);
+  const sx0 = startX + perpX * widthStart;
+  const sy0 = startY + perpY * widthStart;
+  const sx1 = startX - perpX * widthStart;
+  const sy1 = startY - perpY * widthStart;
+  const ex0 = endX + perpX * widthEnd;
+  const ey0 = endY + perpY * widthEnd;
+  const ex1 = endX - perpX * widthEnd;
+  const ey1 = endY - perpY * widthEnd;
 
   const gradient = ctx.createLinearGradient(startX, startY, endX, endY);
   gradient.addColorStop(0, `rgba(242,212,142,${alpha.toFixed(3)})`);
