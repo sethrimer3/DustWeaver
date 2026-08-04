@@ -95,7 +95,7 @@ export function resetWallTemplateDiagnostics(): void {
  * used baked data vs. required a full merge pass.
  */
 export function logWallTemplateDiagnosticsSummary(label = 'startup'): void {
-  if (!import.meta.env.DEV) return;
+  if (!import.meta.env?.DEV) return;
   const d = _diag;
   const total = d.cacheHits + d.bakedHits + d.fallbackBuilds;
   const slowStr = d.slowestFallbacks
@@ -135,7 +135,7 @@ export function resolveRoomWallTemplate(
   if (cache !== undefined) {
     const cacheEntry = cache.get(room.id);
     if (cacheEntry !== undefined) {
-      if (import.meta.env.DEV) _diag.cacheHits++;
+      if (import.meta.env?.DEV) _diag.cacheHits++;
       return { template: cacheEntry.wallTemplate, source: 'cache', buildMs: 0 };
     }
   }
@@ -152,7 +152,7 @@ export function resolveRoomWallTemplate(
         wallDecorations: null,
       });
     }
-    if (import.meta.env.DEV) _diag.bakedHits++;
+    if (import.meta.env?.DEV) _diag.bakedHits++;
     return { template: room.bakedWallTemplate, source: 'baked', buildMs: 0 };
   }
 
@@ -170,7 +170,7 @@ export function resolveRoomWallTemplate(
       wallDecorations: null,
     });
   }
-  if (import.meta.env.DEV) _recordFallback(room.id, buildMs);
+  if (import.meta.env?.DEV) _recordFallback(room.id, buildMs);
   return { template, source: 'fallback', buildMs };
 }
 

@@ -104,7 +104,7 @@ export function buildResidentWorldState(
   campaignSeed: number,
   roomRuntimeCache: RoomRuntimeCache,
 ): WorldState {
-  const t0 = import.meta.env.DEV ? performance.now() : 0;
+  const t0 = import.meta.env?.DEV ? performance.now() : 0;
 
   // Derive a local per-room RNG — never shared with active gameplay levelRng.
   const levelRng: RngState = createResidentRoomRng(room, campaignSeed);
@@ -125,11 +125,11 @@ export function buildResidentWorldState(
   // defaults by createWorldState() (tick=0, particleCount=0, clusters=[],
   // wallCount=0, all grapple flags=0, hasGrappleChargeFlag=1, etc.).
 
-  FP.recordLoadPhaseStep('Resident:phaseA', import.meta.env.DEV ? performance.now() - t0 : 0);
+  FP.recordLoadPhaseStep('Resident:phaseA', import.meta.env?.DEV ? performance.now() - t0 : 0);
 
   // ── Phase C equivalent: bgWallGrid + spawn enemies ────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     rw.bgWallGridWidth  = room.widthBlocks;
     rw.bgWallGridHeight = room.heightBlocks;
     const bgWallCellCount = room.widthBlocks * room.heightBlocks;
@@ -154,7 +154,7 @@ export function buildResidentWorldState(
         }
       }
     }
-    if (import.meta.env.DEV && bgWallCellCount > 65536) {
+    if (import.meta.env?.DEV && bgWallCellCount > 65536) {
       const bgBlockCount = room.backgroundBlocks?.length ?? 0;
       const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
       console.log(
@@ -165,34 +165,34 @@ export function buildResidentWorldState(
     }
     // Enemy entityIds start at 2 (same as in the active world).
     spawnEnemyClusters(rw, room.enemies, 2, levelRng);
-    FP.recordLoadPhaseStep('Resident:phaseC', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:phaseC', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
 
   // ── Phase D equivalent: bg fluid + grapple hunter chains + walls ─────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     spawnBackgroundFluidParticles(rw, BACKGROUND_FLUID_COUNT, levelRng);
-    FP.recordLoadPhaseStep('Resident:bgFluid', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:bgFluid', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
 
   {
     // Grapple hunter chains (no player chain — player entityId=1 is absent).
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     for (let ci = 0; ci < rw.clusters.length; ci++) {
       const cl = rw.clusters[ci];
       if (cl.isGrappleHunterFlag === 1) {
         initGrappleHunterChainParticles(rw, cl);
       }
     }
-    FP.recordLoadPhaseStep('Resident:grappleChains', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:grappleChains', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
 
   {
     // Wall template — priority: cache → baked JSON template → runtime build.
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     const resolution = resolveRoomWallTemplate(room, roomRuntimeCache);
     applyRoomWallTemplate(rw, resolution.template);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       if (resolution.source === 'cache') {
         console.log(`[wallTemplate] roomId=${room.id} source=cache wallCount=${resolution.template.wallCount}`);
@@ -204,38 +204,38 @@ export function buildResidentWorldState(
           ` (build ${resolution.buildMs.toFixed(1)}ms)`);
       }
     }
-    FP.recordLoadPhaseStep('Resident:walls', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:walls', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
 
   // ── Phase E equivalent: hazards + ropes + falling blocks + grasshoppers ───
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     loadRoomHazards(rw, room);
     loadRoomChallengeElements(rw, room);
-    FP.recordLoadPhaseStep('Resident:hazards', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:hazards', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     loadRoomRopes(rw, room);
-    FP.recordLoadPhaseStep('Resident:ropes', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:ropes', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     loadRoomFallingBlocks(rw, room);
-    FP.recordLoadPhaseStep('Resident:fallingBlocks', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:fallingBlocks', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     loadRoomGrasshoppers(rw, room);
-    FP.recordLoadPhaseStep('Resident:grasshoppers', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:grasshoppers', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     spawnAllDustPiles(rw);
-    FP.recordLoadPhaseStep('Resident:dustPiles', import.meta.env.DEV ? performance.now() - _t : 0);
+    FP.recordLoadPhaseStep('Resident:dustPiles', import.meta.env?.DEV ? performance.now() - _t : 0);
   }
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(
       `[residentBuild] ${room.id} built in ${(performance.now() - t0).toFixed(1)}ms` +
       ` (${rw.clusters.length} enemies, wallCount=${rw.wallCount}, particles=${rw.particleCount})`,
@@ -330,7 +330,7 @@ export function* createResidentBuildGenerator(
   roomRuntimeCache: RoomRuntimeCache,
   diagContext?: ResidentBuildDiagContext,
 ): Generator<string, WorldState, void> {
-  const t0 = import.meta.env.DEV ? performance.now() : 0;
+  const t0 = import.meta.env?.DEV ? performance.now() : 0;
 
   // Derive a local per-room RNG — never shared with active gameplay levelRng.
   const levelRng: RngState = createResidentRoomRng(room, campaignSeed);
@@ -342,10 +342,10 @@ export function* createResidentBuildGenerator(
 
   // ── Phase A: world dimensions ─────────────────────────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     rw.worldWidthWorld  = room.widthBlocks  * BLOCK_SIZE_MEDIUM;
     rw.worldHeightWorld = room.heightBlocks * BLOCK_SIZE_MEDIUM;
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:phaseA', _ms);
       _warnLongPhase('phaseA', _ms, room.id, diagContext);
@@ -355,7 +355,7 @@ export function* createResidentBuildGenerator(
 
   // ── Phase C: bgWallGrid + spawn enemies ───────────────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     rw.bgWallGridWidth  = room.widthBlocks;
     rw.bgWallGridHeight = room.heightBlocks;
     const bgWallCellCount = room.widthBlocks * room.heightBlocks;
@@ -380,7 +380,7 @@ export function* createResidentBuildGenerator(
         }
       }
     }
-    if (import.meta.env.DEV && bgWallCellCount > 65536) {
+    if (import.meta.env?.DEV && bgWallCellCount > 65536) {
       const bgBlockCount = room.backgroundBlocks?.length ?? 0;
       const sparsePct = bgWallCellCount > 0 ? ((occupiedCells / bgWallCellCount) * 100).toFixed(2) : '0';
       console.log(
@@ -390,7 +390,7 @@ export function* createResidentBuildGenerator(
       );
     }
     spawnEnemyClusters(rw, room.enemies, 2, levelRng);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:phaseC', _ms);
       _warnLongPhase('phaseC', _ms, room.id, diagContext);
@@ -400,9 +400,9 @@ export function* createResidentBuildGenerator(
 
   // ── Phase D step 1: background fluid ─────────────────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     spawnBackgroundFluidParticles(rw, BACKGROUND_FLUID_COUNT, levelRng);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:bgFluid', _ms);
       _warnLongPhase('phaseD_fluid', _ms, room.id, diagContext);
@@ -412,14 +412,14 @@ export function* createResidentBuildGenerator(
 
   // ── Phase D step 2: grapple hunter chains ────────────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     for (let ci = 0; ci < rw.clusters.length; ci++) {
       const cl = rw.clusters[ci];
       if (cl.isGrappleHunterFlag === 1) {
         initGrappleHunterChainParticles(rw, cl);
       }
     }
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:grappleChains', _ms);
       _warnLongPhase('phaseD_chains', _ms, room.id, diagContext);
@@ -434,12 +434,12 @@ export function* createResidentBuildGenerator(
   // phaseD_walls_build is skipped and we proceed directly to phaseE_sim.
   let _wallsCacheHit = false;
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     const cacheEntry = roomRuntimeCache.get(room.id);
     if (cacheEntry !== undefined) {
       applyRoomWallTemplate(rw, cacheEntry.wallTemplate);
       _wallsCacheHit = true;
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         const _ms = performance.now() - _t;
         FP.recordLoadPhaseStep('Resident:walls_lookup_hit', _ms);
         _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
@@ -458,14 +458,14 @@ export function* createResidentBuildGenerator(
         wallDecorations: null,
       });
       _wallsCacheHit = true; // treat as hit so phaseD_walls_build is skipped
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         const _ms = performance.now() - _t;
         FP.recordLoadPhaseStep('Resident:walls_lookup_hit', _ms);
         _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
         console.log(`[residentBuild:gen] ${room.id} walls: baked HIT wallCount=${room.bakedWallTemplate.wallCount}`);
       } else { FP.recordLoadPhaseStep('Resident:walls_lookup_hit', 0); }
     } else {
-      if (import.meta.env.DEV) {
+      if (import.meta.env?.DEV) {
         const _ms = performance.now() - _t;
         FP.recordLoadPhaseStep('Resident:walls_lookup_miss', _ms);
         _warnLongPhase('phaseD_walls_lookup', _ms, room.id, diagContext);
@@ -481,12 +481,12 @@ export function* createResidentBuildGenerator(
   // the 8 ms LONG_PHASE_WARN_MS threshold.  Each mid-build yield emits the
   // 'phaseD_walls_merge' phase label so callers can observe progress.
   if (!_wallsCacheHit) {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     const mergeGen = buildRoomWallTemplateIncremental(room);
     let mergeStep = mergeGen.next();
     while (!mergeStep.done) {
       // Merge budget elapsed — hand back to the scheduler and resume next frame.
-      if (import.meta.env.DEV) FP.recordLoadPhaseStep('Resident:walls_merge_slice', performance.now() - _t);
+      if (import.meta.env?.DEV) FP.recordLoadPhaseStep('Resident:walls_merge_slice', performance.now() - _t);
       yield 'phaseD_walls_merge';
       mergeStep = mergeGen.next();
     }
@@ -501,7 +501,7 @@ export function* createResidentBuildGenerator(
       darkBlockerKeys: null,
       wallDecorations: null,
     });
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:walls_build', _ms);
       console.log(`[residentBuild:gen] ${room.id} walls: incremental build in ${_ms.toFixed(1)}ms` +
@@ -512,13 +512,13 @@ export function* createResidentBuildGenerator(
 
   // ── Phase E step 1: hazards + ropes + falling blocks + grasshoppers ───────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     loadRoomHazards(rw, room);
     loadRoomChallengeElements(rw, room);
     loadRoomRopes(rw, room);
     loadRoomFallingBlocks(rw, room);
     loadRoomGrasshoppers(rw, room);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:phaseE_sim', _ms);
       _warnLongPhase('phaseE_sim', _ms, room.id, diagContext);
@@ -528,9 +528,9 @@ export function* createResidentBuildGenerator(
 
   // ── Phase E step 2: dust piles ────────────────────────────────────────────
   {
-    const _t = import.meta.env.DEV ? performance.now() : 0;
+    const _t = import.meta.env?.DEV ? performance.now() : 0;
     spawnAllDustPiles(rw);
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const _ms = performance.now() - _t;
       FP.recordLoadPhaseStep('Resident:dustPiles', _ms);
       _warnLongPhase('phaseE_dust', _ms, room.id, diagContext);
@@ -538,7 +538,7 @@ export function* createResidentBuildGenerator(
   }
   yield 'phaseE_dust';
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env?.DEV) {
     console.log(
       `[residentBuild:gen] ${room.id} built in ${(performance.now() - t0).toFixed(1)}ms` +
       ` (${rw.clusters.length} enemies, wallCount=${rw.wallCount}, particles=${rw.particleCount})`,
