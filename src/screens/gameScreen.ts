@@ -919,6 +919,7 @@ export function startGameScreen(
       );
     },
     isZoneReady: (worldNumber) => _zoneLoader.isZoneReady(worldNumber, residentRoomManager),
+    isEntryCoverageRebuilding: () => _zoneLoader.isEntryCoverageRebuilding(),
     getSeamlessDiagnosticContext: (sourceRoomId, targetRoomId) => {
       const prewarm = getPrewarmStats();
       return {
@@ -1197,11 +1198,25 @@ export function startGameScreen(
     onEnterWorldEditor: () => {
       editorController.toggle(currentRoom);
     },
-    onResizeCanvas: resizeCanvas,
+    // Route the settings-driven resize (world-view preset, render size) through
+    // the same handler as a window resize so it also re-queues entry coverage —
+    // a preset change moves the viewport just as much as dragging the window.
+    onResizeCanvas: () => { onResize(); },
   });
 
   function onResize(): void {
     resizeCanvas();
+    // Entry-chunk coverage is computed for a specific viewport rectangle, so a
+    // resize invalidates every directed-entry requirement at once. Re-queue the
+    // warming or every subsequent crossing silently stops being seamless —
+    // residents stay valid, only coverage is viewport-dependent.
+    //
+    // Deliberately here rather than inside resizeCanvas(): that function also
+    // runs during construction, before `_zoneLoader`/`currentRoom`/`camera`
+    // exist, so touching them there is a temporal-dead-zone ReferenceError.
+    _zoneLoader.notifyViewportChanged(
+      currentRoom.worldNumber ?? 1, virtualWidthPx, virtualHeightPx, camera.zoom,
+    );
   }
   window.addEventListener('resize', onResize);
 
@@ -2121,6 +2136,15 @@ export function startGameScreen(
       virtualWidthPx,
       virtualHeightPx,
       camera.zoom,
+    );
+
+    // Rebuild entry coverage after a viewport change (no-op otherwise).
+    _zoneLoader.tickViewportCoverageRebuild(
+      currentRoom.worldNumber ?? 1,
+      virtualWidthPx,
+      virtualHeightPx,
+      camera.zoom,
+      renderProfiler.getLastFrameMs(),
     );
 
     // ── Frame-budget-driven background preload slice ────────────────────────

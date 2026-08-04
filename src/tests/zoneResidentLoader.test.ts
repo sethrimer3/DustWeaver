@@ -680,6 +680,123 @@ describe('ZoneResidentLoader', () => {
       `budget must afford a meaningful look-ahead, got ${roomsAffordable} rooms`);
   });
 
+  // ── Viewport-change coverage rebuild ───────────────────────────────────────
+
+  test('the first viewport observation records dimensions without queueing work', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 20, 21);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    // Startup calls resizeCanvas() once; that must not be treated as a change.
+    assert.strictEqual(loader.notifyViewportChanged(20, 480, 270, 1), false);
+    assert.strictEqual(loader.isEntryCoverageRebuilding(), false);
+  });
+
+  test('an identical viewport is not treated as a change', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 22, 23);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    loader.notifyViewportChanged(22, 480, 270, 1);
+    assert.strictEqual(loader.notifyViewportChanged(22, 480, 270, 1), false,
+      'same dimensions must not re-queue anything');
+    assert.strictEqual(loader.isEntryCoverageRebuilding(), false);
+  });
+
+  test('a real resize marks coverage stale and queues a rebuild', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 24, 25);
+    const cache  = new RoomRuntimeCache();
+    const loader = new ZoneResidentLoader(registry, cache);
+    for (const [id, r] of registry) {
+      cache.set(id, {
+        renderRevision: -1, wallTemplate: buildRoomWallTemplate(r), edgeExtension: null,
+        blockerKeys: new Set(), darkBlockerKeys: new Set(), wallDecorations: [],
+      });
+    }
+    loader.notifyViewportChanged(24, 480, 270, 1);
+    // Regression guard for the silent failure: before this existed, a resize
+    // left `isZoneReady` true with coverage computed for the OLD rectangle, so
+    // every crossing quietly stopped being seamless with no signal.
+    assert.strictEqual(loader.notifyViewportChanged(24, 960, 540, 1), true,
+      'a genuine resize must be reported as a change');
+    assert.strictEqual(loader.isEntryCoverageRebuilding(), true,
+      'coverage must be marked stale so the invariant is suppressed and a rebuild runs');
+  });
+
+  test('a resize does NOT invalidate residency — only coverage is viewport-dependent', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 26, 27);
+    const loader  = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    const manager = new ResidentRoomManager();
+    loader.startZoneLoad(26, manager);
+    for (const id of loader.getZoneRoomIds(26)) {
+      manager.ensureResident(registry.get(id)!);
+      manager.getResident(id)!.runtimeReady = true;
+    }
+    loader.notifyViewportChanged(26, 480, 270, 1);
+    loader.notifyViewportChanged(26, 800, 450, 1);
+    for (const id of loader.getZoneRoomIds(26)) {
+      assert.strictEqual(
+        manager.getResident(id)?.runtimeReady, true,
+        'a WorldState does not depend on the viewport; rebuilding it here would be pure waste',
+      );
+    }
+  });
+
+  test('the coverage rebuild yields when the previous frame was over budget', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 28, 29);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    loader.notifyViewportChanged(28, 480, 270, 1);
+    loader.notifyViewportChanged(28, 960, 540, 1);
+    assert.strictEqual(loader.isEntryCoverageRebuilding(), true);
+    loader.tickViewportCoverageRebuild(28, 960, 540, 1, NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS + 5);
+    assert.strictEqual(loader.isEntryCoverageRebuilding(), true,
+      'an over-budget frame must buy no rebuild work');
+  });
+
+  test('an over-cap zone is truncated LOUDLY, not silently', () => {
+    // Silent truncation used to let an over-cap zone report ready having never
+    // considered the excess rooms. That cost only a loading screen before;
+    // now isZoneReady() also gates the cross-zone deferral skip.
+    const registry = new Map<string, RoomDef>();
+    for (let i = 0; i < ZONE_ROOM_CAP + 5; i++) {
+      registry.set(`big_${i}`, fullRoom(`big_${i}`, 42, []));
+    }
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(String(args[0])); };
+    let ids: string[];
+    try {
+      ids = loader.getZoneRoomIds(42);
+    } finally {
+      console.warn = realWarn;
+    }
+
+    assert.strictEqual(ids.length, ZONE_ROOM_CAP, 'still capped — behaviour unchanged');
+    assert.strictEqual(loader.isZoneTruncated(42), true);
+    assert.ok(
+      warnings.some(w => w.includes('over ZONE_ROOM_CAP')),
+      `truncation must be reported, got: ${JSON.stringify(warnings)}`,
+    );
+  });
+
+  test('a zone within the cap is not truncated and warns nothing', () => {
+    const registry = linkedZones(3, 3, 30, 31);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    const warnings: string[] = [];
+    const realWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(String(args[0])); };
+    try {
+      assert.strictEqual(loader.getZoneRoomIds(30).length, 3);
+    } finally {
+      console.warn = realWarn;
+    }
+    assert.strictEqual(loader.isZoneTruncated(30), false);
+    assert.deepStrictEqual(warnings, [], 'a normal zone must not warn');
+  });
+
   test('resetNeighbourPreload clears in-flight and abandoned state', () => {
     installCanvasStub();
     const registry = linkedZones(3, 3, 18, 19);

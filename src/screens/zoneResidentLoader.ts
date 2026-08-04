@@ -187,6 +187,27 @@ export class ZoneResidentLoader {
   /** Zones that filled the budget or otherwise gave up; not retried this session. */
   private readonly _preloadAbandoned = new Set<number>();
 
+  /**
+   * Viewport the current entry-chunk coverage was built for, or null before the
+   * first report.  Entry coverage is the ONE part of zone readiness that is
+   * viewport-dependent — resident `WorldState`s are not — so this is tracked
+   * separately from `_readyZones` rather than invalidating residency.
+   */
+  private _coverageViewport: { wPx: number; hPx: number; scalePx: number } | null = null;
+
+  /**
+   * True while entry coverage is being rebuilt after a viewport change.
+   *
+   * Consumed by the transition coordinator to suppress the seamless-invariant
+   * report during the transient: a coverage miss right after a resize is
+   * expected and self-healing, and firing the defect diagnostic for it would
+   * train readers to ignore the one message that means something.
+   */
+  private _coverageRebuildPending = false;
+
+  /** Zones already warned about exceeding ZONE_ROOM_CAP (warn once each). */
+  private readonly _truncatedZonesWarned = new Set<number>();
+
   constructor(registry: ReadonlyMap<string, RoomDef>, runtimeCache: RoomRuntimeCache) {
     this._registry     = registry;
     this._runtimeCache = runtimeCache;
@@ -200,13 +221,37 @@ export class ZoneResidentLoader {
    */
   getZoneRoomIds(worldNumber: number): string[] {
     const ids: string[] = [];
+    let total = 0;
     for (const [id, room] of this._registry) {
-      if ((room.worldNumber ?? 1) === worldNumber) {
-        ids.push(id);
-        if (ids.length >= ZONE_ROOM_CAP) break;
-      }
+      if ((room.worldNumber ?? 1) !== worldNumber) continue;
+      total++;
+      if (ids.length < ZONE_ROOM_CAP) ids.push(id);
+    }
+    // Truncation used to be a silent `break`: an over-cap zone reported "ready"
+    // having never considered rooms past the cap.  That cost only a loading
+    // screen before; now that `isZoneReady()` also gates the cross-zone
+    // deferral skip, a silently-truncated zone can skip its load screen while
+    // genuinely unprepared.  Behaviour is unchanged (rooms past the cap fall
+    // back to the ordinary cold build path, which is correct) — but it must
+    // not be invisible.
+    if (total > ZONE_ROOM_CAP && !this._truncatedZonesWarned.has(worldNumber)) {
+      this._truncatedZonesWarned.add(worldNumber);
+      console.warn(
+        `[zoneLoader] zone ${worldNumber} has ${total} rooms, over ZONE_ROOM_CAP=${ZONE_ROOM_CAP}. ` +
+        `${total - ZONE_ROOM_CAP} room(s) are excluded from zone residency and will load ` +
+        'on demand — crossings into them will not be seamless.',
+      );
     }
     return ids;
+  }
+
+  /** True when `worldNumber` has more rooms than ZONE_ROOM_CAP admits. */
+  isZoneTruncated(worldNumber: number): boolean {
+    let total = 0;
+    for (const [, room] of this._registry) {
+      if ((room.worldNumber ?? 1) === worldNumber) total++;
+    }
+    return total > ZONE_ROOM_CAP;
   }
 
   /**
@@ -552,6 +597,105 @@ export class ZoneResidentLoader {
     }
   }
 
+  // ── Viewport-change coverage rebuild ────────────────────────────────────────
+
+  /**
+   * Notifies the loader that the render viewport changed (window resize, render
+   * size setting, world-view preset).
+   *
+   * Entry-chunk coverage is computed for a specific viewport rectangle, so a
+   * resize invalidates every directed-entry requirement at once — silently.
+   * Before this existed, `resizeCanvas()` mutated `virtualWidthPx/HeightPx`
+   * with nothing re-warming afterwards, while `isZoneReady()` kept reporting
+   * true (its cheap re-verify checks residents and decode only, not coverage).
+   * Every subsequent crossing therefore missed coverage and quietly degraded
+   * from genuinely seamless to an inline close-out, with no signal that the
+   * feature had regressed.
+   *
+   * Residency is deliberately NOT invalidated: a `WorldState` does not depend
+   * on the viewport, so rebuilding residents here would be pure waste. Only the
+   * chunk coverage is re-queued.
+   *
+   * @returns True when this was a real change that queued rebuild work.
+   */
+  notifyViewportChanged(
+    activeWorldNumber: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+  ): boolean {
+    const prev = this._coverageViewport;
+    if (prev !== null && prev.wPx === vpWPx && prev.hPx === vpHPx && prev.scalePx === scalePx) {
+      return false;
+    }
+    this._coverageViewport = { wPx: vpWPx, hPx: vpHPx, scalePx };
+    // First observation (startup): record the dimensions, nothing to rebuild.
+    if (prev === null) return false;
+
+    // Re-queue entry warming for the active zone and every speculatively
+    // preloaded zone, at the NEW dimensions.
+    const zones = new Set<number>([activeWorldNumber, ...this._preloadedZones]);
+    let queued = 0;
+    for (const z of zones) {
+      const roomIds = this.getZoneRoomIds(z);
+      if (roomIds.length === 0) continue;
+      queued += addZoneEntryViewportTasks(
+        roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
+      ).added;
+    }
+    this._coverageRebuildPending = true;
+    if (import.meta.env?.DEV) {
+      console.log(
+        `[zoneLoader] viewport ${prev.wPx}x${prev.hPx}@${prev.scalePx} → ` +
+        `${vpWPx}x${vpHPx}@${scalePx}; re-queued entry coverage for ` +
+        `${zones.size} zone(s), ${queued} task(s)`,
+      );
+    }
+    return true;
+  }
+
+  /**
+   * True while post-resize entry coverage is still being rebuilt.  A coverage
+   * miss during this window is an expected transient, not a defect.
+   */
+  isEntryCoverageRebuilding(): boolean {
+    return this._coverageRebuildPending;
+  }
+
+  /**
+   * Drives the post-resize coverage rebuild.  Call once per gameplay frame;
+   * a no-op unless a rebuild is pending.
+   *
+   * Frame-budget gated for the same reason neighbour preloading is: the player
+   * is mid-session, and a resize must not cost them frames on top of the
+   * relayout they already paid for.
+   */
+  tickViewportCoverageRebuild(
+    activeWorldNumber: number,
+    vpWPx: number,
+    vpHPx: number,
+    scalePx: number,
+    lastFrameMs: number,
+  ): void {
+    if (!this._coverageRebuildPending) return;
+    if (this._activeZone !== null) return;           // a blocking load owns the frame
+    if (lastFrameMs >= NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS) return;
+
+    runChunkPrewarmSliceNow(8);
+
+    const roomIds = this.getZoneRoomIds(activeWorldNumber);
+    if (roomIds.length === 0) { this._coverageRebuildPending = false; return; }
+    const report = collectZoneEntryReadinessReport(
+      roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
+    );
+    if (report.failures.length === 0) {
+      this._coverageRebuildPending = false;
+      if (import.meta.env?.DEV) {
+        console.log(`[zoneLoader] entry coverage rebuilt for ${vpWPx}x${vpHPx}@${scalePx}`);
+      }
+    }
+  }
+
   // ── Neighbour-zone preloading ───────────────────────────────────────────────
 
   /**
@@ -674,6 +818,17 @@ export class ZoneResidentLoader {
     if (this._activeZone !== null) return false;
     if (!this._readyZones.has(activeWorldNumber)) return false;
     if (lastFrameMs >= NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS) return false;
+
+    // A zone abandoned for want of memory becomes eligible again once the
+    // budget frees up (the player moved on and the old neighbour was evicted).
+    // Without this it stayed abandoned for the whole session and its boundary
+    // never got another chance to be seamless.
+    if (
+      this._preloadAbandoned.size > 0 &&
+      this.getSpeculativeMemoryKB(activeWorldNumber, manager) < NEIGHBOUR_PRELOAD_BUDGET_KB / 2
+    ) {
+      this._preloadAbandoned.clear();
+    }
 
     if (this._neighbourPreload === null) {
       if (this.getSpeculativeMemoryKB(activeWorldNumber, manager) >= NEIGHBOUR_PRELOAD_BUDGET_KB) return false;

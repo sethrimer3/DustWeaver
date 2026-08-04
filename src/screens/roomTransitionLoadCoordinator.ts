@@ -221,6 +221,13 @@ export interface RoomTransitionLoadCoordinatorDeps {
    * assert.
    */
   isZoneReady(worldNumber: number): boolean;
+  /**
+   * True while entry coverage is being rebuilt after a viewport change.  A
+   * coverage miss during that window is an expected, self-healing transient —
+   * reporting it as a seamless-invariant violation would bury the real signal
+   * under noise every time the player resizes the window.
+   */
+  isEntryCoverageRebuilding(): boolean;
   /** Structured readiness facts for the seamless-invariant defect report. */
   getSeamlessDiagnosticContext(sourceRoomId: string, targetRoomId: string): Record<string, unknown>;
   /** roomRenderChunkWarmScheduler.getRoomPrewarmReadiness. */
@@ -764,7 +771,10 @@ export class RoomTransitionLoadCoordinator {
     const isIntraZone = (room.worldNumber ?? 1) === (outgoingRoom.worldNumber ?? 1);
     const zoneWasReady = d.isZoneReady(room.worldNumber ?? 1);
     if (!viewportCovered) {
-      if (isIntraZone && zoneWasReady) {
+      // Suppress the defect report during a post-resize coverage rebuild: that
+      // miss is expected and self-healing, and crying wolf on every window
+      // resize would devalue the one message that means something.
+      if (isIntraZone && zoneWasReady && !d.isEntryCoverageRebuilding()) {
         this._reportSeamlessInvariantViolation(
           outgoingRoom, room, spawnXBlock, spawnYBlock,
           { wallPresent, bgPresent, bgRequired, wallStatus, bgStatus },

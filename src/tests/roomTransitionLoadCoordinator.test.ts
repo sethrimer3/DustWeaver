@@ -116,6 +116,8 @@ interface Harness {
     roomVersions: Map<string, number>;
     /** Zones that have passed the readiness barrier (drives the seamless path). */
     readyZones: Set<number>;
+    /** True while post-resize entry coverage is being rebuilt. */
+    coverageRebuilding: boolean;
   };
 }
 
@@ -141,6 +143,7 @@ function makeHarness(rooms: RoomDef[]): Harness {
     handoff: null,
     roomVersions: new Map<string, number>(),
     readyZones: new Set<number>(),
+    coverageRebuilding: false,
   };
 
   const manager = {
@@ -253,6 +256,7 @@ function makeHarness(rooms: RoomDef[]): Harness {
       events.push(`completeEntryCoverageNow:${room.id}:${sx}:${sy}`);
     },
     isZoneReady: (worldNumber) => state.readyZones.has(worldNumber),
+    isEntryCoverageRebuilding: () => state.coverageRebuilding,
     getSeamlessDiagnosticContext: () => ({}),
     getRoomPrewarmReadiness: () => { events.push('getRoomPrewarmReadiness'); return state.prewarmReadiness; },
     getLastAdoptionResult: () => state.adoptionResult,
@@ -795,6 +799,33 @@ test('cross-zone: an UNPREPARED target zone still defers behind the zone-load sc
   assert.equal(h.coord.isZoneTransitionActive(), true, 'unprepared zone must still load');
   assert.ok(h.events.some(e => e.startsWith('startZoneLoad:2')));
   assert.ok(h.events.some(e => e.startsWith('overlay.showZoneLoad')));
+});
+
+test('resize transient: coverage miss still closes out inline, but is NOT reported as a defect', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  h.state.viewportCovered = false;
+  h.state.coverageRebuilding = true;          // a resize is still settling
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+
+  const errors: string[] = [];
+  const realError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(String(args[0])); };
+  try {
+    h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  } finally {
+    console.error = realError;
+  }
+
+  assert.ok(
+    !errors.some(e => e.includes('INVARIANT VIOLATED')),
+    'a post-resize coverage miss is an expected transient, not a defect to report',
+  );
+  // The player must still be protected: gap closed inline, no cover.
+  assert.ok(h.events.includes('completeEntryCoverageNow:b:2:2'));
+  assert.ok(!h.events.some(e => e.startsWith('overlay.')));
+  assert.equal(h.coord.isBlockingGameplay(), false);
 });
 
 test('invariant: a ready zone falling back to a build is reported, not normalised', () => {
