@@ -112,6 +112,16 @@ export class RoomRuntimeCache {
     }
   }
 
+  /** Number of rooms currently protected from eviction (diagnostics). */
+  get pinnedRoomCount(): number {
+    return this._pinnedRooms.size;
+  }
+
+  /** True when `roomId` is protected from eviction (diagnostics/tests). */
+  isRoomPinned(roomId: string): boolean {
+    return this._pinnedRooms.has(roomId);
+  }
+
   /**
    * Returns the cached entry for `roomId`, promoting it to most-recently-used.
    * Returns `undefined` when the room is not cached.

@@ -110,6 +110,9 @@ export type TransitionBuildSchedulerPort = Pick<ResidentBuildScheduler,
   | 'getActiveBuild'
   | 'hasQueuedBuild'
   | 'refreshFromNeighborhood'
+  | 'takeActiveBuildForTransition'
+  | 'isBuildVersionCurrent'
+  | 'getRoomVersion'
 >;
 
 /**
@@ -202,6 +205,23 @@ export interface RoomTransitionLoadCoordinatorDeps {
   resetEntryWarm(): void;
   /** entryViewportWarm.startEntryWarm bound to the current viewport/zoom. */
   startEntryWarm(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void;
+  /**
+   * Synchronously build whatever entry-viewport chunks are still missing, up
+   * to a bounded wall-clock budget, WITHOUT starting a blocking warm phase or
+   * showing any cover.  Used only on the seamless intra-zone path as a
+   * belt-and-braces close-out when the zone barrier passed but activation
+   * still found a coverage gap (which is separately reported as a defect).
+   */
+  completeEntryCoverageNow(room: RoomDef, spawnXBlock: number, spawnYBlock: number): void;
+  /**
+   * True when `worldNumber`'s zone previously satisfied the full readiness
+   * barrier.  Distinguishes "this crossing was promised to be seamless" from
+   * an ordinary cold entry, which is what makes the strict invariant safe to
+   * assert.
+   */
+  isZoneReady(worldNumber: number): boolean;
+  /** Structured readiness facts for the seamless-invariant defect report. */
+  getSeamlessDiagnosticContext(sourceRoomId: string, targetRoomId: string): Record<string, unknown>;
   /** roomRenderChunkWarmScheduler.getRoomPrewarmReadiness. */
   getRoomPrewarmReadiness(roomId: string, room: RoomDef): {
     wallPresent: boolean; bgPresent: boolean; bgRequired: boolean;
@@ -250,10 +270,40 @@ interface BuildingResidentState {
   spawnXBlock: number;
   spawnYBlock: number;
   hotSwapMissReason: string;
+  /**
+   * Room version this generator was started at.  Compared against the
+   * scheduler's current version before publishing, so a room edited while the
+   * load was in flight is discarded rather than published stale — the same
+   * guarantee `ResidentBuildScheduler.advanceFrame` applies to its own builds.
+   */
+  capturedVersion: number;
+  /** True when `gen` was taken over from the scheduler rather than created here. */
+  adopted: boolean;
+  /** Whether the loading cover has painted at least one frame yet. */
+  coverPainted: boolean;
+  /** Generator phases stepped so far (diagnostics). */
+  phasesRun: number;
 }
 
 /** Coarse transition-execution phase, for diagnostics and tests. */
 export type TransitionExecutionPhase = 'idle' | 'asyncLoading' | 'zoneLoading';
+
+/**
+ * Wall-clock budget (ms) for draining generator phases per frame on the cold
+ * fallback path.
+ *
+ * Gameplay is already frozen behind a painted cover here, so there is no frame
+ * to protect — the one-phase-per-RAF pacing that used to apply cost ~7 frames
+ * (~117 ms) for a room whose real work is a fraction of that.  Slicing remains
+ * correct for *speculative background* builds (ResidentBuildScheduler), which
+ * is why this budget lives only on the covered path.
+ *
+ * 12 ms leaves room inside a 16.7 ms frame for the browser to keep the cover
+ * composited and the tab responsive; the incremental wall-merge generator keeps
+ * its own 4 ms internal yield safeguard, which this loop respects because it
+ * only ever checks the budget *between* `next()` calls.
+ */
+export const LOAD_DRAIN_BUDGET_MS = 12;
 
 // ── RoomTransitionLoadCoordinator ─────────────────────────────────────────────
 
@@ -271,6 +321,10 @@ export class RoomTransitionLoadCoordinator {
     spawnXBlock: 0,
     spawnYBlock: 0,
     hotSwapMissReason: '',
+    capturedVersion: 0,
+    adopted: false,
+    coverPainted: false,
+    phasesRun: 0,
   };
   /**
    * Cross-zone transition state.  While active, gameplay is paused and
@@ -465,19 +519,52 @@ export class RoomTransitionLoadCoordinator {
   advanceAsyncLoad(): void {
     const d = this.deps;
     if (!this.buildingResident.isActive || this.buildingResident.gen === null) return;
-    const phaseT0 = d.isDevMode ? performance.now() : 0;
-    const result = this.buildingResident.gen.next();
-    if (d.isDevMode && phaseT0 > 0) {
+
+    // First call after submitTransition: the cover was only *requested* last
+    // frame, so yield this one frame to let it composite before spending the
+    // drain budget.  Without this the browser can show the pre-transition frame
+    // frozen for the whole drain instead of the cover.
+    if (!this.buildingResident.coverPainted) {
+      this.buildingResident.coverPainted = true;
+      return;
+    }
+
+    // Drain as many phases as fit the budget.  Gameplay is already frozen and
+    // covered, so there is no frame to protect — see LOAD_DRAIN_BUDGET_MS.
+    const startedAt = performance.now();
+    let result: IteratorResult<string, WorldState>;
+    let longestPhaseMs = 0;
+    do {
+      const phaseT0 = performance.now();
+      result = this.buildingResident.gen.next();
+      this.buildingResident.phasesRun++;
       const phaseMs = performance.now() - phaseT0;
-      if (phaseMs > 16) {
-        console.warn(`[perf] async load phase took ${phaseMs.toFixed(1)}ms`);
-      }
+      if (phaseMs > longestPhaseMs) longestPhaseMs = phaseMs;
+    } while (!result.done && performance.now() - startedAt < LOAD_DRAIN_BUDGET_MS);
+
+    if (d.isDevMode && longestPhaseMs > 16) {
+      console.warn(`[perf] async load phase took ${longestPhaseMs.toFixed(1)}ms`);
     }
     if (!result.done) return;
 
     this.buildingResident.isActive = false;
     this.buildingResident.gen = null;
-    
+
+    // Stale guard: a room edited while this generator was in flight must not
+    // publish. Mirrors ResidentBuildScheduler.advanceFrame's version check —
+    // preserved across an adopted (taken-over) generator too.
+    if (!d.buildScheduler.isBuildVersionCurrent(
+      this.buildingResident.targetRoomId, this.buildingResident.capturedVersion,
+    )) {
+      if (d.isDevMode) {
+        console.warn(
+          `[transition] async load DISCARDED (stale): ${this.buildingResident.targetRoomId}` +
+          ` ver=${this.buildingResident.capturedVersion}`,
+        );
+      }
+      return;
+    }
+
     // The generator yielded the fully built, playerless resident world.
     const targetWorld = result.value;
     const targetRoomId = this.buildingResident.targetRoomId;
@@ -642,9 +729,33 @@ export class RoomTransitionLoadCoordinator {
       wallStatus === 'adopted' || bgStatus === 'adopted' ? true : null;
     d.resetEntryWarm();
     const viewportCovered = d.canSkipEntryWarm(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
+    // An intra-zone crossing out of a zone that already passed the readiness
+    // barrier is *supposed* to be covered — the barrier's whole contract is
+    // that every directed intra-zone entry is activatable without warming.
+    // A miss here is a defect in the producer/predicate/retention chain, not a
+    // normal fallback, so surface it loudly with everything needed to find the
+    // cause rather than silently showing a cover.
+    const isIntraZone = (room.worldNumber ?? 1) === (outgoingRoom.worldNumber ?? 1);
+    const zoneWasReady = d.isZoneReady(room.worldNumber ?? 1);
     if (!viewportCovered) {
-      d.startEntryWarm(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
-      d.overlay.showEntryWarm();
+      if (isIntraZone && zoneWasReady) {
+        this._reportSeamlessInvariantViolation(
+          outgoingRoom, room, spawnXBlock, spawnYBlock,
+          { wallPresent, bgPresent, bgRequired, wallStatus, bgStatus },
+        );
+      }
+      if (isIntraZone && zoneWasReady) {
+        // Close the gap in-place, this frame, before anything renders: no
+        // overlay, no blocked frames, no pop-in.  Bounded so a pathological
+        // miss degrades to one long frame rather than a stall; because the
+        // zone barrier already passed, the real shortfall is a chunk or two.
+        d.completeEntryCoverageNow(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
+      } else {
+        // Genuine cold entry (cross-zone arrival, or a zone that never
+        // completed its barrier) — the covered warm path is correct here.
+        d.startEntryWarm(d.getCurrentRoom(), spawnXBlock, spawnYBlock);
+        d.overlay.showEntryWarm();
+      }
     }
     // Record the outcome diagnostic and emit the compact transition summary.
     const diag: TransitionReadinessDiagnostic = !viewportCovered ? {
@@ -713,9 +824,33 @@ export class RoomTransitionLoadCoordinator {
     this.buildingResident.sourceRoomId  = outgoingRoom.id;
     this.buildingResident.targetRoomId  = room.id;
     this.buildingResident.hotSwapMissReason = hotSwapMissReason;
-    this.buildingResident.gen           = d.createResidentBuildGenerator(room);
+    this.buildingResident.coverPainted  = false;
+    this.buildingResident.phasesRun     = 0;
+
+    // Take over an in-flight background build rather than restarting it.  The
+    // RAF loop stops advancing the scheduler while this load blocks gameplay,
+    // so a session left behind would be frozen mid-build while we rebuilt the
+    // identical room from Phase A — double work, and the near-complete build
+    // discarded.  Ownership transfer also guarantees only one generator for
+    // this room exists at a time.
+    const handoff = d.buildScheduler.takeActiveBuildForTransition(room.id);
+    if (handoff !== null) {
+      this.buildingResident.gen             = handoff.gen;
+      this.buildingResident.capturedVersion = handoff.capturedVersion;
+      this.buildingResident.adopted         = true;
+      if (d.isDevMode) {
+        console.log(
+          `[transition] ${room.id}: adopted in-flight build at phase=${handoff.currentPhase}` +
+          ` (reason=${handoff.reason})`,
+        );
+      }
+    } else {
+      this.buildingResident.gen             = d.createResidentBuildGenerator(room);
+      this.buildingResident.capturedVersion = d.buildScheduler.getRoomVersion(room.id);
+      this.buildingResident.adopted         = false;
+    }
     this.buildingResident.isActive      = true;
-    
+
     const diag: TransitionReadinessDiagnostic = {
       roomId: room.id,
       runtimeReady: false,
@@ -732,9 +867,11 @@ export class RoomTransitionLoadCoordinator {
     d.recordTransitionOutcome('loading', diag);
     d.profiler.end(room, diag);
     d.overlay.showLoadingOverlay();
-    
-    // Advance Phase A immediately.
-    this.buildingResident.gen.next();
+
+    // No generator work runs here.  The first `advanceAsyncLoad()` yields one
+    // frame so the cover composites, then drains under LOAD_DRAIN_BUDGET_MS.
+    // (The old code stepped Phase A synchronously inside the transition
+    // callback, spending it on the frame the player was still being simulated.)
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────
@@ -753,6 +890,73 @@ export class RoomTransitionLoadCoordinator {
     player.velocityYWorld = dir === 'up'
       ? vy - PLAYER_JUMP_SPEED_WORLD * UPWARD_TRANSITION_VY_REDUCTION
       : vy;
+  }
+
+  /**
+   * Reports a violation of the seamless-intra-zone contract: the target zone
+   * passed its readiness barrier, yet activation found the entry viewport
+   * uncovered.  Emits every fact needed to locate the cause without a repro —
+   * source/target room and zone, resident state, scheduler state, active build
+   * room+phase, runtime-cache state, prewarm presence, directed-entry key,
+   * render-state-key comparison, decode readiness, and the exact miss reason.
+   *
+   * Intentionally `console.error`: this path is a defect to fix, never a
+   * fallback to normalise.  DEV-gated so production players never see it.
+   */
+  private _reportSeamlessInvariantViolation(
+    sourceRoom: RoomDef,
+    targetRoom: RoomDef,
+    spawnXBlock: number,
+    spawnYBlock: number,
+    prewarm: {
+      wallPresent: boolean; bgPresent: boolean; bgRequired: boolean;
+      wallStatus: string; bgStatus: string;
+    },
+  ): void {
+    const d = this.deps;
+    if (!d.isDevMode) return;
+    const resident   = d.manager.getResident(targetRoom.id);
+    const activeBuild = d.buildScheduler.getActiveBuild();
+    const transitionIndex = sourceRoom.transitions.findIndex(t => t.targetRoomId === targetRoom.id);
+    console.error(
+      '[seamless] INVARIANT VIOLATED — zone reported ready but the intra-zone entry viewport was not covered.\n' +
+      JSON.stringify({
+        sourceRoomId: sourceRoom.id,
+        targetRoomId: targetRoom.id,
+        sourceZone:   sourceRoom.worldNumber ?? 1,
+        targetZone:   targetRoom.worldNumber ?? 1,
+        directedEntryKey: transitionIndex >= 0 ? `${sourceRoom.id}:${transitionIndex}` : 'unresolved',
+        activationSpawnBlock: [spawnXBlock, spawnYBlock],
+        resident: {
+          exists:          resident !== undefined,
+          runtimeReady:    resident?.runtimeReady ?? false,
+          worldPresent:    (resident?.world ?? null) !== null,
+          builtForRoomId:  resident?.world?.builtForRoomId ?? null,
+        },
+        scheduler: {
+          activeBuildRoomId: activeBuild?.roomId ?? null,
+          activeBuildPhase:  activeBuild?.phase  ?? null,
+          hasQueuedBuild:    d.buildScheduler.hasQueuedBuild(targetRoom.id),
+        },
+        runtimeCachePrepared: d.getRoomPreparedState(targetRoom.id),
+        prewarm: {
+          wallPresent: prewarm.wallPresent,
+          bgPresent:   prewarm.bgPresent,
+          bgRequired:  prewarm.bgRequired,
+        },
+        adoption: { wallStatus: prewarm.wallStatus, bgStatus: prewarm.bgStatus },
+        renderStateKeyMatches:
+          prewarm.wallStatus === 'staleRenderState' || prewarm.bgStatus === 'staleRenderState'
+            ? false
+            : prewarm.wallStatus === 'adopted' || prewarm.bgStatus === 'adopted',
+        decode: {
+          spritesReady:    d.areRoomSpritesReady(targetRoom),
+          backgroundReady: d.isRoomBackgroundDecodeReady(targetRoom),
+        },
+        fallbackReason: 'entryViewportNotCovered',
+        extra: d.getSeamlessDiagnosticContext(sourceRoom.id, targetRoom.id),
+      }, null, 2),
+    );
   }
 
   /** Pre-register adjacent rooms (radius ≤ 2) as resident shells. */

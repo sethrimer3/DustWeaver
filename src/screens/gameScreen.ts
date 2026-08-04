@@ -96,6 +96,7 @@ import {
   recordTransitionOutcome,
   getRoomPrewarmReadiness,
   getLastAdoptionResult,
+  getPinnedPrewarmRoomIds,
   addZoneEntryViewportTasks,
   runChunkPrewarmSliceNow,
   type TransitionReadinessDiagnostic,
@@ -164,6 +165,7 @@ import {
   tickEntryWarm,
   isEntryWarmReadyOrTimedOut,
   canSkipEntryWarm,
+  completeEntryCoverageNow,
   type EntryWarmState,
 } from './entryViewportWarm';
 import { ResidentRoomManager } from './residentRoomManager';
@@ -733,8 +735,18 @@ export function startGameScreen(
   let isInitialCampaignLoad = true;
 
   function showLoadingOverlay(): void {
-    loadingOverlay.show(isInitialCampaignLoad);
-    isInitialCampaignLoad = false; // subsequent room loads use the standard fade
+    if (isInitialCampaignLoad) {
+      loadingOverlay.show(true);
+      isInitialCampaignLoad = false; // subsequent room loads use the adaptive cover
+      return;
+    }
+    // Mid-session room load (cold intra-zone fallback): adaptive cover — no
+    // 200 ms minimum and an 80 ms cut-like fade, escalating to the full
+    // presentation only if the load actually turns out to be long. With the
+    // budgeted drain in advanceAsyncLoad this usually completes in 1-2 frames,
+    // where the old fixed 200 ms + 300 ms cost half a second of interruption
+    // for nothing.
+    loadingOverlay.showAdaptiveRoomLoad();
   }
 
   // ── Post-load entry fade (todo #11) ───────────────────────────────────────
@@ -892,6 +904,27 @@ export function startGameScreen(
     resetEntryWarm: () => { entryWarmState = createEntryWarmState(); },
     startEntryWarm: (room, spawnXBlock, spawnYBlock) => {
       startEntryWarm(entryWarmState, room, spawnXBlock, spawnYBlock, virtualWidthPx, virtualHeightPx, camera.zoom);
+    },
+    completeEntryCoverageNow: (room, spawnXBlock, spawnYBlock) => {
+      completeEntryCoverageNow(
+        room, spawnXBlock, spawnYBlock,
+        virtualWidthPx, virtualHeightPx, camera.zoom, roomRuntimeCache,
+      );
+    },
+    isZoneReady: (worldNumber) => _zoneLoader.isZoneReady(worldNumber, residentRoomManager),
+    getSeamlessDiagnosticContext: (sourceRoomId, targetRoomId) => {
+      const prewarm = getPrewarmStats();
+      return {
+        zonePinnedRoomCount: getPinnedPrewarmRoomIds().size,
+        sourcePinned: getPinnedPrewarmRoomIds().has(sourceRoomId),
+        targetPinned: getPinnedPrewarmRoomIds().has(targetRoomId),
+        runtimeCachePinnedSize: roomRuntimeCache.pinnedRoomCount,
+        prewarmQueueLength: prewarm.queueLength,
+        prewarmTotalEvictions: prewarm.totalEvictions,
+        prewarmMemoryKB: prewarm.totalPrewarmMemoryKB,
+        prewarmMemoryBudgetKB: prewarm.memoryBudgetKB,
+        viewport: { wPx: virtualWidthPx, hPx: virtualHeightPx, zoom: camera.zoom },
+      };
     },
     getRoomPrewarmReadiness,
     getLastAdoptionResult,

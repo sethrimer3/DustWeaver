@@ -24,6 +24,7 @@
 import type { RoomDef, TransitionDirection } from '../levels/roomDef';
 import { BLOCK_SIZE_MEDIUM } from '../levels/roomDef';
 import { bfsNearbyRooms, computeEntranceOffset } from './roomPrewarmNeighborhood';
+import { computeDirectedEntryViewport } from './transitionEntryGeometry';
 import type { PrewarmAdoptResult, DirectedEntry } from '../render/walls/roomRenderCacheStore';
 import { isWallPrewarmViewportCovered, isBgPrewarmViewportCovered, getCacheBundle } from '../render/walls/roomRenderCacheStore';
 import {
@@ -996,6 +997,18 @@ export function addZoneEntryViewportTasks(
         continue;
       }
 
+      // Warm the SWEPT entry region — the union of the camera viewport over
+      // every spawn the runtime can actually produce for this crossing — not
+      // the single viewport implied by the authored `targetSpawnBlock` hint.
+      // The hint is not what activation uses (see transitionEntryGeometry.ts),
+      // so warming it left `canSkipEntryWarm()` false on essentially every
+      // crossing.  Costs ~1.14x a single viewport on the shipping campaign.
+      const swept = computeDirectedEntryViewport(sourceRoom, i, targetRoom, vpWPx, vpHPx, scalePx);
+      if (swept === null) {
+        result.blocked.push(entryKey);
+        continue;
+      }
+
       const entry: DirectedEntry = {
         sourceRoomId: sourceId,
         sourceTransitionKey: `${sourceId}:${i}`,
@@ -1003,12 +1016,12 @@ export function addZoneEntryViewportTasks(
         targetSpawnBlock: trans.targetSpawnBlock,
         targetRenderKey,
         targetRenderRevision: targetRuntime.renderRevision,
-        vpWPx,
-        vpHPx,
+        vpWPx: swept.vpWPx,
+        vpHPx: swept.vpHPx,
         scalePx
       };
 
-      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
+      const off = { offsetXPx: swept.offsetXPx, offsetYPx: swept.offsetYPx };
 
       // Check if already covered
       const wallReady = isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx);
@@ -1152,6 +1165,13 @@ export function collectZoneEntryReadinessReport(
       const targetRenderKey = computeRenderStateKeyForEntry(targetRoom, targetRuntime);
       if (!targetRenderKey)                 { push('targetRenderStateKeyNotComputable'); continue; }
 
+      // MUST use the same swept-region derivation as addZoneEntryViewportTasks
+      // above: producer and predicate enumerating different requirements is
+      // exactly what let a zone report ready while activation still needed an
+      // entry warm.  Both now route through transitionEntryGeometry.ts.
+      const swept = computeDirectedEntryViewport(sourceRoom, i, targetRoom, vpWPx, vpHPx, scalePx);
+      if (swept === null)                   { push('targetRenderStateKeyNotComputable'); continue; }
+
       const entry: DirectedEntry = {
         sourceRoomId: sourceId,
         sourceTransitionKey: entryKey,
@@ -1159,11 +1179,11 @@ export function collectZoneEntryReadinessReport(
         targetSpawnBlock: trans.targetSpawnBlock,
         targetRenderKey,
         targetRenderRevision: targetRuntime.renderRevision,
-        vpWPx,
-        vpHPx,
+        vpWPx: swept.vpWPx,
+        vpHPx: swept.vpHPx,
         scalePx,
       };
-      const off = computeEntranceOffset(trans, vpWPx, vpHPx, scalePx);
+      const off = { offsetXPx: swept.offsetXPx, offsetYPx: swept.offsetYPx };
 
       if (!isWallPrewarmViewportCovered(entry, off.offsetXPx, off.offsetYPx)) {
         push('wallViewportNotCovered');

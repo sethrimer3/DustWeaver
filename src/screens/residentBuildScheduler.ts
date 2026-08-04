@@ -100,6 +100,25 @@ interface ResidentBuildTask {
   reason: ResidentBuildReason;
 }
 
+/**
+ * An in-flight build session handed off from the scheduler to the transition
+ * coordinator by `takeActiveBuildForTransition`.  The scheduler has already
+ * forgotten the session by the time this is returned, so the receiver is the
+ * sole owner: it must drive `gen` to completion and publish the result.
+ */
+export interface ResidentBuildHandoff {
+  roomId: string;
+  gen: Generator<string, WorldState, void>;
+  /** Room version at the ORIGINAL dequeue — check with `isBuildVersionCurrent`. */
+  capturedVersion: number;
+  /** Phase label the generator had already reached at handoff (diagnostics). */
+  currentPhase: string;
+  /** `performance.now()` when the original session started (diagnostics). */
+  startedAtMs: number;
+  reason: ResidentBuildReason;
+  priority: ResidentBuildPriority;
+}
+
 interface ResidentBuildSession {
   task: ResidentBuildTask;
   gen: Generator<string, WorldState, void>;
@@ -250,6 +269,71 @@ export class ResidentBuildScheduler {
   getActiveBuild(): { roomId: string; phase: string } | null {
     if (this.activeSession === null) return null;
     return { roomId: this.activeSession.task.roomId, phase: this.activeSession.currentPhase };
+  }
+
+  /**
+   * Transfers ownership of the in-flight build for `roomId` to the caller.
+   *
+   * Called by `RoomTransitionLoadCoordinator` when the player crosses into a
+   * room the background scheduler is already partway through building.  Before
+   * this existed the coordinator threw that session away and started a *fresh*
+   * generator from Phase A — while the RAF loop's early-return kept the
+   * scheduler from ever finishing the original — so a build that was 8/9 done
+   * cost exactly as much as a cold one and the same room was built twice.
+   *
+   * After a successful take:
+   *  - `activeSession` is cleared, so `advanceFrame()` will never step or
+   *    publish this generator again (no redundant/stale publish);
+   *  - the caller owns the generator and MUST publish the result itself;
+   *  - `capturedVersion` travels with the handoff so the caller can preserve
+   *    stale-version rejection via `isBuildVersionCurrent()`.
+   *
+   * Returns `null` when no in-flight session matches `roomId` — the caller
+   * then creates its own generator as before.
+   */
+  takeActiveBuildForTransition(roomId: string): ResidentBuildHandoff | null {
+    const sess = this.activeSession;
+    if (sess === null || sess.task.roomId !== roomId) return null;
+
+    this.activeSession = null;
+    this.deps.manager.setCurrentBuildInfo(null, null, null);
+    // The room is no longer background work: drop any queued duplicate so a
+    // second build cannot start behind the transition's own generator.
+    this.queueIds.delete(roomId);
+    const qi = this.queue.findIndex(t => t.roomId === roomId);
+    if (qi >= 0) this.queue.splice(qi, 1);
+
+    if (this.deps.isDevMode) {
+      console.log(
+        `[resident] build ownership TAKEN by transition: ${roomId}` +
+        ` (phase=${sess.currentPhase} reason=${sess.task.reason} pri=${sess.task.priority})`,
+      );
+    }
+    return {
+      roomId,
+      gen: sess.gen,
+      capturedVersion: sess.capturedVersion,
+      currentPhase: sess.currentPhase,
+      startedAtMs: sess.t0,
+      reason: sess.task.reason,
+      priority: sess.task.priority,
+    };
+  }
+
+  /**
+   * True when `capturedVersion` still matches the room's current version — i.e.
+   * a build started at that version is safe to publish.  Lets a transferred
+   * generator keep the exact stale-build guarantee the scheduler applies to its
+   * own sessions (see the `capturedVersion === currentVer` check in
+   * `advanceFrame`).
+   */
+  isBuildVersionCurrent(roomId: string, capturedVersion: number): boolean {
+    return (this.roomVersions.get(roomId) ?? 0) === capturedVersion;
+  }
+
+  /** Current version counter for `roomId` — for callers starting a fresh build. */
+  getRoomVersion(roomId: string): number {
+    return this.roomVersions.get(roomId) ?? 0;
   }
 
   /** True when the room has a queued (not yet started) build entry. */

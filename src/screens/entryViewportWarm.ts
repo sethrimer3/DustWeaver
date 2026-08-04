@@ -52,6 +52,8 @@ import {
   type EntryWarmCoverageSnapshot,
   type EntryWarmDecision,
 } from './entryWarmDecision';
+import * as FP from '../debug/perfFreezeProfiler';
+import { computeEntryCameraCenterWorld } from './transitionEntryGeometry';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -205,15 +207,21 @@ export function startEntryWarm(
   vpHPx: number,
   scalePx: number,
 ): void {
-  const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
-  const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
+  // Use the CLAMPED camera centre: `applyResidentRoomActivation` snaps the
+  // camera to the spawn and then clamps it to the room, and every boundary
+  // spawn sits within half a viewport of an edge — so the unclamped centre
+  // this used to compute described a viewport up to half a screen away from
+  // what is actually drawn (half of it outside the room). Warming that region
+  // left real visible chunks unbuilt: pop-in on entry.
+  const { centerXWorld, centerYWorld } =
+    computeEntryCameraCenterWorld(room, spawnXBlock, spawnYBlock, vpWPx, vpHPx, scalePx);
   state.phase              = 'warming';
   state.framesWarmed       = 0;
   state.msSpent            = 0;
   state.chunksWarmed       = 0;
   state.usedFallbackRelease = false;
-  state.entryOffsetXPx     = vpWPx / 2 - spawnXWorld * scalePx;
-  state.entryOffsetYPx     = vpHPx / 2 - spawnYWorld * scalePx;
+  state.entryOffsetXPx     = vpWPx / 2 - centerXWorld * scalePx;
+  state.entryOffsetYPx     = vpHPx / 2 - centerYWorld * scalePx;
   state.vpWPx              = vpWPx;
   state.vpHPx              = vpHPx;
   state.scalePx            = scalePx;
@@ -326,6 +334,94 @@ export function tickEntryWarm(
 
   const postBuildDecision = decideEntryWarm(_buildDecisionInput(state, room, fullReady));
   _applyDecision(postBuildDecision, state, room, currentRenderStateKey);
+}
+
+/**
+ * Wall-clock ceiling for `completeEntryCoverageNow`.  This runs INSIDE an
+ * ordinary gameplay frame (no cover, no blocked frames), so it must degrade to
+ * one long frame in the worst case rather than a stall.
+ */
+const INLINE_COVERAGE_BUDGET_MS = 6;
+
+/**
+ * Synchronously builds whatever entry-viewport chunks are still missing, then
+ * adopts them — without starting a blocking warm phase and without any cover.
+ *
+ * Used only by the seamless intra-zone transition path, as a close-out for the
+ * case where the zone readiness barrier passed but activation still found a
+ * coverage gap.  That case is separately reported as an invariant violation
+ * (see `_reportSeamlessInvariantViolation`); this function exists so the
+ * *player* never pays for the defect with an overlay or a visible pop-in while
+ * the underlying cause is being fixed.
+ *
+ * Deliberately does NOT touch `EntryWarmState`: the RAF loop early-returns on
+ * `phase === 'warming'`, so starting a warm here would reintroduce exactly the
+ * blocked frames this path exists to eliminate.
+ *
+ * @returns Diagnostics describing what it had to do (all zeroes on the healthy
+ *          path, where coverage was already complete and this is never called).
+ */
+export function completeEntryCoverageNow(
+  room: RoomDef,
+  spawnXBlock: number,
+  spawnYBlock: number,
+  vpWPx: number,
+  vpHPx: number,
+  scalePx: number,
+  runtimeCache: RoomRuntimeCache,
+): { chunksBuilt: number; ms: number; covered: boolean } {
+  const entry = runtimeCache.get(room.id);
+  if (entry === undefined || entry.blockerKeys === null || !areRoomSpritesReady(room)) {
+    return { chunksBuilt: 0, ms: 0, covered: false };
+  }
+
+  const { centerXWorld, centerYWorld } =
+    computeEntryCameraCenterWorld(room, spawnXBlock, spawnYBlock, vpWPx, vpHPx, scalePx);
+  const offsetXPx = vpWPx / 2 - centerXWorld * scalePx;
+  const offsetYPx = vpHPx / 2 - centerYWorld * scalePx;
+
+  const renderStateKey = computeRoomRenderStateKey(room, entry.blockerKeys);
+  const wallSnap = wallTemplateToSnapshot(entry.wallTemplate);
+  const wallCtx  = makeWallPrewarmCtx(room, wallSnap, entry.blockerKeys, entry.renderRevision);
+
+  const t0 = performance.now();
+  let chunksBuilt = 0;
+  // Bake is permitted here: this is a transition frame, not steady-state
+  // gameplay rendering, and the caller has not yet rendered anything.
+  FP.setBakeForbiddenInGameplay(false);
+  try {
+    while (performance.now() - t0 < INLINE_COVERAGE_BUDGET_MS) {
+      const wallResult = prewarmWallChunksForRoom(
+        room.id, wallCtx, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx,
+        BLOCK_SIZE_MEDIUM, ENTRY_WARM_CHUNKS_PER_STEP,
+      );
+      const bgResult = prewarmBgChunksForRoom(
+        room, scalePx, offsetXPx, offsetYPx, vpWPx, vpHPx, ENTRY_WARM_CHUNKS_PER_STEP,
+      );
+      chunksBuilt += wallResult.rebuilt + bgResult.rebuilt;
+      const nothingLeft =
+        wallResult.rebuilt === 0 && wallResult.skipped === 0 &&
+        bgResult.rebuilt   === 0 && bgResult.skipped   === 0;
+      if (nothingLeft) break;
+    }
+    adoptPrewarmedWallChunks(room.id, scalePx, renderStateKey);
+    adoptPrewarmedBgChunks(room, scalePx, renderStateKey);
+  } finally {
+    FP.setBakeForbiddenInGameplay(true);
+  }
+
+  const covered =
+    isWallActiveViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM) &&
+    isBgActiveViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx);
+  const ms = performance.now() - t0;
+
+  if (import.meta.env.DEV) {
+    console.warn(
+      `[seamless] inline entry coverage close-out for ${room.id}: ` +
+      `chunks=${chunksBuilt} ms=${ms.toFixed(1)} covered=${covered}`,
+    );
+  }
+  return { chunksBuilt, ms, covered };
 }
 
 /**
@@ -459,10 +555,11 @@ export function canSkipEntryWarm(
   vpHPx: number,
   scalePx: number,
 ): boolean {
-  const spawnXWorld = spawnXBlock * BLOCK_SIZE_MEDIUM;
-  const spawnYWorld = spawnYBlock * BLOCK_SIZE_MEDIUM;
-  const offsetXPx = vpWPx / 2 - spawnXWorld * scalePx;
-  const offsetYPx = vpHPx / 2 - spawnYWorld * scalePx;
+  // Must match the renderer's clamped camera centre — see startEntryWarm.
+  const { centerXWorld, centerYWorld } =
+    computeEntryCameraCenterWorld(room, spawnXBlock, spawnYBlock, vpWPx, vpHPx, scalePx);
+  const offsetXPx = vpWPx / 2 - centerXWorld * scalePx;
+  const offsetYPx = vpHPx / 2 - centerYWorld * scalePx;
 
   const wallCovered = isWallActiveViewportCovered(offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx, BLOCK_SIZE_MEDIUM);
   const bgCovered   = isBgActiveViewportCovered(room, offsetXPx, offsetYPx, vpWPx, vpHPx, scalePx);

@@ -43,6 +43,13 @@ const FADE_DURATION_CAMPAIGN_START_MS = 700;
  */
 const FADE_DURATION_ENTRY_WARM_MS = 80;
 
+/**
+ * How long an adaptive room-load cover may stay up before it is treated as a
+ * real loading event and upgraded to the standard fade. Below this the cover
+ * reads as a cut; above it, an abrupt 80 ms dismissal would look like a glitch.
+ */
+const ADAPTIVE_ESCALATE_MS = 250;
+
 export class GameLoadingOverlay {
   private el: HTMLDivElement | null = null;
   private godRaysCanvas: HTMLCanvasElement | null = null;
@@ -52,6 +59,11 @@ export class GameLoadingOverlay {
   private fadeDurationMs = FADE_DURATION_STANDARD_MS;
   /** Per-show readiness poll interval (ms). 0 = check every tick. */
   private checkIntervalMs = CHECK_INTERVAL_MS;
+  /**
+   * `performance.now()` when an adaptive room-load cover was shown, or 0 when
+   * the current cover is not adaptive (or has already escalated).
+   */
+  private adaptiveShownAtMs = 0;
 
   constructor(private readonly uiRoot: HTMLElement) {}
 
@@ -67,6 +79,7 @@ export class GameLoadingOverlay {
       ? FADE_DURATION_CAMPAIGN_START_MS
       : FADE_DURATION_STANDARD_MS;
     this.checkIntervalMs = CHECK_INTERVAL_MS;
+    this.adaptiveShownAtMs = 0;
     const div = document.createElement('div');
     div.style.cssText = [
       'position:absolute',
@@ -115,6 +128,7 @@ export class GameLoadingOverlay {
     if (this.el !== null) return;
     this.fadeDurationMs = FADE_DURATION_ENTRY_WARM_MS;
     this.checkIntervalMs = 0;
+    this.adaptiveShownAtMs = 0;
     const div = document.createElement('div');
     div.style.cssText = [
       'position:absolute',
@@ -146,6 +160,7 @@ export class GameLoadingOverlay {
       ? FADE_DURATION_CAMPAIGN_START_MS
       : FADE_DURATION_STANDARD_MS;
     this.checkIntervalMs = CHECK_INTERVAL_MS;
+    this.adaptiveShownAtMs = 0;
     const div = document.createElement('div');
     div.style.cssText = [
       'position:absolute',
@@ -191,6 +206,41 @@ export class GameLoadingOverlay {
   }
 
   /**
+   * Adaptive room-load cover for the cold intra-zone fallback path.
+   *
+   * The fixed presentation (`show()`: 200 ms minimum + 300 ms fade) charged
+   * every fallback half a second of visual interruption regardless of how long
+   * the load actually took — which, once `advanceAsyncLoad` drains under a
+   * wall-clock budget instead of one phase per frame, is usually a frame or
+   * two.  This variant starts with no minimum and the short cut-like fade, and
+   * escalates to the full loading presentation only if the load proves to be
+   * genuinely long (`ADAPTIVE_ESCALATE_MS`).
+   *
+   * Cross-zone loads and campaign startup keep their deliberate presentation —
+   * they use `showZoneLoad()` / `show(true)` and are unaffected.
+   */
+  showAdaptiveRoomLoad(): void {
+    if (this.el !== null) return;
+    this.fadeDurationMs   = FADE_DURATION_ENTRY_WARM_MS;
+    this.checkIntervalMs  = 0;       // release the moment readiness flips
+    this.adaptiveShownAtMs = performance.now();
+    const div = document.createElement('div');
+    div.style.cssText = [
+      'position:absolute',
+      'inset:0',
+      'background:#060503',
+      'z-index:9999',
+      'pointer-events:none',
+      'overflow:hidden',
+      `transition:opacity ${(FADE_DURATION_ENTRY_WARM_MS / 1000).toFixed(2)}s`,
+    ].join(';');
+    this.uiRoot.appendChild(div);
+    this.el = div;
+    this.minShowUntilMs = performance.now();  // no artificial minimum
+    this.lastCheckMs = 0;
+  }
+
+  /**
    * Polls readiness; fades out and removes the overlay once the minimum
    * show time has elapsed and `isReady()` returns true.
    * Call once per frame.
@@ -198,6 +248,17 @@ export class GameLoadingOverlay {
   tick(isReady: () => boolean): void {
     if (this.el === null) return;
     const now = performance.now();
+    // Adaptive escalation: a cover that has been up long enough to read as a
+    // real load gets the full-length fade so its dismissal is graceful rather
+    // than an abrupt cut.
+    if (
+      this.adaptiveShownAtMs > 0 &&
+      now - this.adaptiveShownAtMs >= ADAPTIVE_ESCALATE_MS
+    ) {
+      this.adaptiveShownAtMs = 0;
+      this.fadeDurationMs = FADE_DURATION_STANDARD_MS;
+      this.el.style.transition = `opacity ${(FADE_DURATION_STANDARD_MS / 1000).toFixed(1)}s`;
+    }
     if (now < this.minShowUntilMs) return;
     if (this.checkIntervalMs > 0 && now - this.lastCheckMs < this.checkIntervalMs) return;
     this.lastCheckMs = now;
