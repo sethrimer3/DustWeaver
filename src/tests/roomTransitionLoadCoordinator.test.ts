@@ -96,6 +96,26 @@ interface Harness {
     loadPhases: number;
     /** Called during the load generator's Phase A (mirrors setCurrentRoom write-back). */
     transferSnapshot: { healthPoints: number; ownedParticles: unknown[] } | null;
+    /** What `buildScheduler.getActiveBuild()` reports. */
+    activeBuild: { roomId: string; phase: string } | null;
+    /**
+     * The handoff `takeActiveBuildForTransition` will surrender, or null when
+     * no in-flight build matches.  Cleared on take so a second call returns
+     * null — the "never build the same room twice" property.
+     */
+    handoff: {
+      roomId: string;
+      gen: Generator<string, WorldState, void>;
+      capturedVersion: number;
+      currentPhase: string;
+      startedAtMs: number;
+      reason: string;
+      priority: number;
+    } | null;
+    /** Room version counters backing the stale-build guard. */
+    roomVersions: Map<string, number>;
+    /** Zones that have passed the readiness barrier (drives the seamless path). */
+    readyZones: Set<number>;
   };
 }
 
@@ -117,6 +137,10 @@ function makeHarness(rooms: RoomDef[]): Harness {
     prewarmReadiness: { wallPresent: false, bgPresent: false, bgRequired: false },
     loadPhases: 6,
     transferSnapshot: { healthPoints: 7, ownedParticles: [1, 2, 3] },
+    activeBuild: null,
+    handoff: null,
+    roomVersions: new Map<string, number>(),
+    readyZones: new Set<number>(),
   };
 
   const manager = {
@@ -151,9 +175,20 @@ function makeHarness(rooms: RoomDef[]): Harness {
   } as unknown as TransitionResidentManagerPort;
 
   const buildScheduler = {
-    getActiveBuild: () => null,
+    getActiveBuild: () => state.activeBuild,
     hasQueuedBuild: () => false,
     refreshFromNeighborhood: () => { events.push('refreshFromNeighborhood'); },
+    takeActiveBuildForTransition: (roomId: string) => {
+      if (state.handoff === null || state.handoff.roomId !== roomId) return null;
+      const h = state.handoff;
+      state.handoff = null;              // ownership transfers exactly once
+      state.activeBuild = null;
+      events.push(`takeActiveBuildForTransition:${roomId}:${h.currentPhase}`);
+      return h;
+    },
+    isBuildVersionCurrent: (roomId: string, captured: number) =>
+      (state.roomVersions.get(roomId) ?? 0) === captured,
+    getRoomVersion: (roomId: string) => state.roomVersions.get(roomId) ?? 0,
   } as unknown as TransitionBuildSchedulerPort;
 
   const deps: RoomTransitionLoadCoordinatorDeps = {
@@ -214,6 +249,11 @@ function makeHarness(rooms: RoomDef[]): Harness {
     canSkipEntryWarm: (room) => { events.push(`canSkipEntryWarm:${room.id}`); return state.viewportCovered; },
     resetEntryWarm: () => { events.push('resetEntryWarm'); },
     startEntryWarm: (room, sx, sy) => { events.push(`startEntryWarm:${room.id}:${sx}:${sy}`); },
+    completeEntryCoverageNow: (room, sx, sy) => {
+      events.push(`completeEntryCoverageNow:${room.id}:${sx}:${sy}`);
+    },
+    isZoneReady: (worldNumber) => state.readyZones.has(worldNumber),
+    getSeamlessDiagnosticContext: () => ({}),
     getRoomPrewarmReadiness: () => { events.push('getRoomPrewarmReadiness'); return state.prewarmReadiness; },
     getLastAdoptionResult: () => state.adoptionResult,
     recordTransitionOutcome: (outcome, diag) => {
@@ -388,7 +428,7 @@ test('getPreTransitionVelocity reflects the most recent request (Phase-F prewarm
 
 // ── Async lifecycle ───────────────────────────────────────────────────────────
 
-test('async lifecycle: starts inactive, one generator, phase A advanced synchronously, one phase per frame', () => {
+test('async lifecycle: starts inactive, one generator, zero work at submit, drains under budget', () => {
   const a = makeRoom('a'), b = makeRoom('b');
   const h = makeHarness([a, b]);
   assert.equal(h.coord.isAsyncLoadActive(), false);
@@ -397,14 +437,24 @@ test('async lifecycle: starts inactive, one generator, phase A advanced synchron
   // The active room remains the outgoing room during async loading.
   assert.equal(h.state.currentRoom.id, 'a');
   assert.equal(h.events.filter(e => e.startsWith('createResidentBuildGenerator')).length, 1);
-  const phasesAfterSubmit = h.events.filter(e => e.startsWith('loadPhase:')).length;
-  assert.equal(phasesAfterSubmit, 1, 'exactly one phase executed at submit time');
+  // No generator work runs inside the transition callback any more: that frame
+  // is still simulating the player, and the cover has not painted yet.
+  assert.equal(
+    h.events.filter(e => e.startsWith('loadPhase:')).length, 0,
+    'no phase executed at submit time',
+  );
+  // First advance is the cover-paint yield — still no generator work.
   h.coord.advanceAsyncLoad();
-  assert.equal(h.events.filter(e => e.startsWith('loadPhase:')).length, 2, 'one phase per frame');
+  assert.equal(
+    h.events.filter(e => e.startsWith('loadPhase:')).length, 0,
+    'first advance yields one frame so the cover composites',
+  );
   assert.equal(h.coord.isAsyncLoadActive(), true);
-  h.coord.advanceAsyncLoad(); // phase 3
-  h.coord.advanceAsyncLoad(); // done
-  assert.equal(h.coord.isAsyncLoadActive(), false);
+  // Second advance drains every remaining phase within LOAD_DRAIN_BUDGET_MS —
+  // these fake phases are effectively free, so the whole load completes here
+  // rather than costing one RAF frame per phase.
+  h.coord.advanceAsyncLoad();
+  assert.equal(h.coord.isAsyncLoadActive(), false, 'drained to completion in one covered frame');
   // Completion side effects, each once.
   assert.equal(h.state.currentRoom.id, 'b', 'currentRoom updates on completion');
   assert.equal(h.events.filter(e => e === 'setResidentWorld:b:active=true').length, 1);
@@ -503,6 +553,230 @@ test('reset clears pending cross-zone work', () => {
   const n = h.events.length;
   h.coord.tickZoneTransition(); // no-op while inactive
   assert.equal(h.events.length, n);
+});
+
+// ── Seamless intra-zone activation ───────────────────────────────────────────
+//
+// The contract: once a zone has passed its readiness barrier, an intra-zone
+// crossing must present NO loading UI at all — no standard overlay, no entry
+// warm cover — and must not block gameplay frames.  These tests pin that so a
+// future change cannot quietly reintroduce a cover on the ordinary path.
+
+test('seamless: ready intra-zone hot-swap shows no overlay and starts no entry warm', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.ok(!h.events.some(e => e.startsWith('overlay.')), 'no overlay of any kind');
+  assert.ok(!h.events.some(e => e.startsWith('startEntryWarm')), 'no blocking entry warm');
+  assert.equal(h.coord.isBlockingGameplay(), false, 'no gameplay-blocked frames');
+  assert.ok(h.events.includes('recordTransitionOutcome:residentWorldHot:missReason=none'));
+});
+
+test('seamless: an uncovered viewport in a ready zone closes out inline, still no cover', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  h.state.viewportCovered = false;           // the defect case
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.ok(
+    h.events.includes('completeEntryCoverageNow:b:2:2'),
+    'gap is closed synchronously, before anything renders',
+  );
+  assert.ok(!h.events.includes('overlay.showEntryWarm'), 'never covers on the seamless path');
+  assert.ok(!h.events.some(e => e.startsWith('startEntryWarm')), 'never starts a blocking warm');
+  assert.equal(h.coord.isBlockingGameplay(), false);
+});
+
+test('seamless: a NOT-ready zone still uses the covered entry-warm path', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  // readyZones intentionally empty — this is a genuine cold entry.
+  h.state.viewportCovered = false;
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.ok(h.events.includes('overlay.showEntryWarm'), 'cold entry keeps its cover');
+  assert.ok(h.events.some(e => e.startsWith('startEntryWarm:b')));
+  assert.ok(!h.events.some(e => e.startsWith('completeEntryCoverageNow')));
+});
+
+test('seamless: momentum, facing and health survive a ready intra-zone crossing', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  const targetPlayer = makePlayer();
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', targetPlayer) });
+  h.coord.submitTransition(b, 2, 2, 6.25, -3.5, 'right');
+
+  assert.equal(targetPlayer.velocityXWorld, 6.25, 'horizontal momentum preserved exactly');
+  assert.equal(targetPlayer.velocityYWorld, -3.5, 'vertical momentum preserved exactly');
+  assert.equal(targetPlayer.velocityWrites, 1, 'applied exactly once');
+  // healthPoints from the transfer snapshot (7), not the default (10).
+  assert.ok(h.events.includes('applyResidentActivation:b:hp=7'), 'carried health, not a fresh spawn');
+});
+
+test('seamless: immediate A->B->A backtrack is hot both ways, no overlay', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.equal(h.state.currentRoom.id, 'b');
+
+  // The outgoing room must have been stored back as a ready resident — that is
+  // what makes the return crossing hot instead of a rebuild.
+  assert.ok(h.events.includes('setResidentWorld:a:active=false'), 'outgoing room retained');
+  h.state.residents.set('a', { runtimeReady: true, world: makeWorld('a', makePlayer()) });
+
+  const before = h.events.length;
+  h.coord.submitTransition(a, 3, 3, 0, 0, 'left');
+  const backEvents = h.events.slice(before);
+  assert.equal(h.state.currentRoom.id, 'a');
+  assert.ok(!backEvents.some(e => e.startsWith('overlay.')), 'backtrack shows no overlay');
+  assert.ok(
+    !backEvents.some(e => e.startsWith('createResidentBuildGenerator')),
+    'backtrack does not rebuild',
+  );
+});
+
+// ── In-flight build ownership transfer ───────────────────────────────────────
+
+/** A generator that records each phase it runs, for takeover assertions. */
+function makeTrackedGen(
+  events: string[], roomId: string, phases: number, world: WorldState,
+): Generator<string, WorldState, void> {
+  function* gen(): Generator<string, WorldState, void> {
+    for (let i = 0; i < phases; i++) {
+      events.push(`loadPhase:${roomId}:${i}`);
+      yield `phase${i}`;
+    }
+    return world;
+  }
+  return gen();
+}
+
+test('takeover: an in-flight build is adopted, not restarted, at an early phase', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  const gen = makeTrackedGen(h.events, 'b', 5, makeWorld('b', makePlayer()));
+  gen.next(); // scheduler already ran phase 0
+  h.state.activeBuild = { roomId: 'b', phase: 'phase0' };
+  h.state.handoff = {
+    roomId: 'b', gen, capturedVersion: 0, currentPhase: 'phase0',
+    startedAtMs: 0, reason: 'adjacent', priority: 3,
+  };
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.ok(h.events.includes('takeActiveBuildForTransition:b:phase0'), 'ownership taken');
+  assert.ok(
+    !h.events.some(e => e.startsWith('createResidentBuildGenerator')),
+    'no second generator for the same room',
+  );
+  // Phase 0 must not run twice — the adopted generator resumes where it was.
+  assert.equal(h.events.filter(e => e === 'loadPhase:b:0').length, 1, 'no phase re-run');
+});
+
+test('takeover: adopting a build at its FINAL phase completes almost immediately', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  const targetWorld = makeWorld('b', makePlayer());
+  const gen = makeTrackedGen(h.events, 'b', 5, targetWorld);
+  for (let i = 0; i < 4; i++) gen.next();   // 4 of 5 phases already done
+  h.state.activeBuild = { roomId: 'b', phase: 'phase3' };
+  h.state.handoff = {
+    roomId: 'b', gen, capturedVersion: 0, currentPhase: 'phase3',
+    startedAtMs: 0, reason: 'adjacent', priority: 3,
+  };
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  h.coord.advanceAsyncLoad();  // cover-paint yield
+  h.coord.advanceAsyncLoad();  // drains the single remaining phase
+  assert.equal(h.coord.isAsyncLoadActive(), false, 'near-complete build finishes at once');
+  assert.equal(h.state.currentRoom.id, 'b');
+  // Exactly 5 phases across the whole lifetime — none repeated by a restart.
+  assert.equal(h.events.filter(e => e.startsWith('loadPhase:b:')).length, 5);
+});
+
+test('takeover: mid-phase adoption resumes and never double-publishes', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  const gen = makeTrackedGen(h.events, 'b', 6, makeWorld('b', makePlayer()));
+  gen.next(); gen.next(); gen.next();
+  h.state.activeBuild = { roomId: 'b', phase: 'phase2' };
+  h.state.handoff = {
+    roomId: 'b', gen, capturedVersion: 0, currentPhase: 'phase2',
+    startedAtMs: 0, reason: 'velocityTarget', priority: 1,
+  };
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  h.coord.advanceAsyncLoad();
+  h.coord.advanceAsyncLoad();
+  assert.equal(h.coord.isAsyncLoadActive(), false);
+  assert.equal(
+    h.events.filter(e => e === 'setResidentWorld:b:active=true').length, 1,
+    'published exactly once',
+  );
+  assert.equal(h.events.filter(e => e.startsWith('loadPhase:b:')).length, 6);
+  // A second take must return null — ownership moved, so the scheduler can
+  // never publish a competing world for this room.
+  assert.equal(h.state.handoff, null);
+});
+
+test('takeover: no in-flight build for the target still creates a fresh generator', () => {
+  const a = makeRoom('a'), b = makeRoom('b'), c = makeRoom('c');
+  const h = makeHarness([a, b, c]);
+  // Scheduler is busy with a DIFFERENT room — must not be raided.
+  h.state.activeBuild = { roomId: 'c', phase: 'phase1' };
+  h.state.handoff = {
+    roomId: 'c', gen: makeTrackedGen(h.events, 'c', 3, makeWorld('c', null)),
+    capturedVersion: 0, currentPhase: 'phase1', startedAtMs: 0,
+    reason: 'adjacent', priority: 3,
+  };
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'));
+  assert.ok(!h.events.some(e => e.startsWith('takeActiveBuildForTransition')));
+  assert.notEqual(h.state.handoff, null, 'a build for another room is left alone');
+});
+
+test('takeover: stale-version rejection survives the handoff', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  const gen = makeTrackedGen(h.events, 'b', 3, makeWorld('b', makePlayer()));
+  gen.next();
+  h.state.activeBuild = { roomId: 'b', phase: 'phase0' };
+  h.state.handoff = {
+    roomId: 'b', gen, capturedVersion: 0, currentPhase: 'phase0',
+    startedAtMs: 0, reason: 'adjacent', priority: 3,
+  };
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  // Room edited mid-load (e.g. the editor rebuild path bumped its version).
+  h.state.roomVersions.set('b', 1);
+
+  h.coord.advanceAsyncLoad();
+  h.coord.advanceAsyncLoad();
+  assert.equal(h.coord.isAsyncLoadActive(), false);
+  assert.ok(
+    !h.events.includes('setResidentWorld:b:active=true'),
+    'a build started at a stale version must not publish',
+  );
+});
+
+test('fallback drain: a cold load completes without one frame per phase', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.loadPhases = 9;   // more phases than the old path had frames budgeted
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  h.coord.advanceAsyncLoad();   // cover-paint yield only
+  assert.equal(h.events.filter(e => e.startsWith('loadPhase:')).length, 0);
+  h.coord.advanceAsyncLoad();   // drains all 8 remaining phases
+  assert.equal(h.coord.isAsyncLoadActive(), false, '9-phase load took ONE covered frame');
+  assert.equal(h.state.currentRoom.id, 'b');
 });
 
 

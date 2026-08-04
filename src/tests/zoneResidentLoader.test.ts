@@ -17,6 +17,11 @@ import {
 } from '../screens/roomRenderChunkWarmScheduler';
 import type { RoomDef, RoomTransitionDef } from '../levels/roomDef';
 import { buildRoomWallTemplate, type RoomWallTemplate } from '../screens/gameRoomWalls';
+import {
+  computeDirectedEntryViewport,
+  enumerateEntrySpawnCandidates,
+  computeEntryCameraCenterWorld,
+} from '../screens/transitionEntryGeometry';
 
 function room(id: string, worldNumber = 1): RoomDef {
   return {
@@ -526,6 +531,57 @@ describe('ZoneResidentLoader', () => {
       'a cached-but-incomplete entry must be distinguished from an absent one, ' +
         `got: ${JSON.stringify(partial.failures.map(f => f.reason))}`,
     );
+  });
+
+  test('zone readiness verifies the region activation actually renders, for every reachable spawn', () => {
+    // THE headline contract. Readiness used to be checked at the entry viewport
+    // implied by the SOURCE room's authored `targetSpawnBlock` — a value the
+    // runtime never uses. Activation instead derives the spawn from the TARGET
+    // room's return transition plus the crossing fraction, then clamps the
+    // camera to the room. On the shipping campaign that mismatched on 62 of 62
+    // intra-zone transitions, so a "ready" zone still hit
+    // `entryViewportNotCovered` and covered the crossing with an entry warm.
+    //
+    // The requirement the readiness path checks must therefore CONTAIN the
+    // viewport activation renders, for every spawn the crossing can produce.
+    const registry = ringZone(6, 98);
+    const VP_W = 480, VP_H = 270, SCALE = 1;
+
+    let checked = 0;
+    for (const [sourceId, sourceRoom] of registry) {
+      for (let i = 0; i < sourceRoom.transitions.length; i++) {
+        const targetRoom = registry.get(sourceRoom.transitions[i].targetRoomId);
+        if (targetRoom === undefined) continue;
+
+        const swept = computeDirectedEntryViewport(
+          sourceRoom, i, targetRoom, VP_W, VP_H, SCALE,
+        );
+        assert.ok(swept !== null, `${sourceId}:${i} must yield an entry region`);
+
+        const candidates = enumerateEntrySpawnCandidates(sourceRoom, i, targetRoom);
+        assert.ok(candidates.length > 0, `${sourceId}:${i} must have reachable spawns`);
+
+        for (const c of candidates) {
+          const centre = computeEntryCameraCenterWorld(
+            targetRoom, c.xBlock, c.yBlock, VP_W, VP_H, SCALE,
+          );
+          const actMinX = centre.centerXWorld * SCALE - VP_W / 2;
+          const actMinY = centre.centerYWorld * SCALE - VP_H / 2;
+          const sweptMinX = -swept.offsetXPx;
+          const sweptMinY = -swept.offsetYPx;
+          const E = 1e-6;
+          assert.ok(
+            actMinX >= sweptMinX - E && actMinX + VP_W <= sweptMinX + swept.vpWPx + E &&
+            actMinY >= sweptMinY - E && actMinY + VP_H <= sweptMinY + swept.vpHPx + E,
+            `${sourceId}:${i} spawn (${c.xBlock},${c.yBlock}): the viewport activation ` +
+            'renders is outside the region zone readiness verifies — a ready zone would ' +
+            'still need an entry warm here.',
+          );
+          checked++;
+        }
+      }
+    }
+    assert.ok(checked > 0, 'the contract must actually have been exercised');
   });
 
   test('isZoneEntryReadinessComplete stays strict — true only with zero failures', () => {

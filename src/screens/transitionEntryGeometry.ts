@@ -232,10 +232,13 @@ export function computeSweptEntryViewport(
     if (yw > maxYWorld) maxYWorld = yw;
   }
 
-  // Offset for the *lowest* spawn on each axis is the largest offset (offset
-  // decreases as world position grows), so the union rect starts there.
-  const offsetXPx = vpWPx / 2 - maxXWorld * scalePx;
-  const offsetYPx = vpHPx / 2 - maxYWorld * scalePx;
+  // A viewport at offset O shows world-px span [-O, -O + vp].  A camera centre
+  // C gives O = vp/2 - C*scale, hence span [C*scale - vp/2, C*scale + vp/2].
+  // Unioning over C ∈ [minC, maxC] gives [minC*scale - vp/2, maxC*scale + vp/2]:
+  // the union's LEFT edge comes from the smallest centre, so the union offset
+  // is derived from `min`, and its width grows by the centre spread.
+  const offsetXPx = vpWPx / 2 - minXWorld * scalePx;
+  const offsetYPx = vpHPx / 2 - minYWorld * scalePx;
   const spreadXPx = (maxXWorld - minXWorld) * scalePx;
   const spreadYPx = (maxYWorld - minYWorld) * scalePx;
 

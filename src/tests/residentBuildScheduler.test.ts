@@ -416,3 +416,106 @@ test('initial zone load: begin/progress/finish transitions and lazy start timest
   p.finish();
   assert.equal(p.isActive, false);
 });
+
+// ── takeActiveBuildForTransition (build ownership transfer) ───────────────────
+//
+// The transition coordinator takes over an in-flight background build instead
+// of restarting it from Phase A. These pin the two properties that make that
+// safe: the scheduler must forget the session entirely (so it can never publish
+// a competing world), and the version captured at the original dequeue must
+// travel with the handoff so stale-build rejection still applies.
+
+test('takeActiveBuildForTransition transfers the live generator and clears the session', () => {
+  const h = makeHarness([makeRoom('a')]);
+  h.phasesByRoom.set('a', ['p0', 'p1', 'p2', 'p3']);
+  h.scheduler.enqueue({ roomId: 'a', priority: 3, reason: 'adjacent' });
+  h.scheduler.advanceFrame();   // start session
+  h.scheduler.advanceFrame();   // run a phase
+  assert.equal(h.scheduler.getActiveBuild()?.roomId, 'a', 'session is live');
+
+  const handoff = h.scheduler.takeActiveBuildForTransition('a');
+  assert.notEqual(handoff, null);
+  assert.equal(handoff?.roomId, 'a');
+  assert.equal(typeof handoff?.gen.next, 'function', 'the actual generator is transferred');
+  assert.equal(h.scheduler.getActiveBuild(), null, 'scheduler forgot the session');
+});
+
+test('after a take, advanceFrame never publishes that build', () => {
+  const h = makeHarness([makeRoom('a')]);
+  h.phasesByRoom.set('a', ['p0', 'p1', 'p2']);
+  h.scheduler.enqueue({ roomId: 'a', priority: 3, reason: 'adjacent' });
+  h.scheduler.advanceFrame();
+  const handoff = h.scheduler.takeActiveBuildForTransition('a');
+  assert.notEqual(handoff, null);
+
+  const publishedBefore = h.manager.published.length;
+  for (let i = 0; i < 10; i++) h.scheduler.advanceFrame();
+  assert.equal(
+    h.manager.published.length, publishedBefore,
+    'scheduler must not publish a world it no longer owns',
+  );
+  assert.ok(
+    !h.manager.published.some(p => p.roomId === 'a'),
+    'no redundant publish for the taken room',
+  );
+});
+
+test('a take also removes any queued duplicate so the room cannot rebuild behind it', () => {
+  const h = makeHarness([makeRoom('a'), makeRoom('b')]);
+  h.phasesByRoom.set('a', ['p0', 'p1']);
+  h.scheduler.enqueue({ roomId: 'a', priority: 3, reason: 'adjacent' });
+  h.scheduler.advanceFrame();               // 'a' becomes the active session
+  h.scheduler.enqueue({ roomId: 'b', priority: 3, reason: 'adjacent' });
+
+  h.scheduler.takeActiveBuildForTransition('a');
+  const builtBefore = h.built.filter(id => id === 'a').length;
+  for (let i = 0; i < 10; i++) h.scheduler.advanceFrame();
+  assert.equal(
+    h.built.filter(id => id === 'a').length, builtBefore,
+    'no second generator is ever created for the taken room',
+  );
+  assert.ok(h.built.includes('b'), 'unrelated queued work still proceeds');
+});
+
+test('takeActiveBuildForTransition returns null for a non-matching or idle room', () => {
+  const h = makeHarness([makeRoom('a'), makeRoom('b')]);
+  assert.equal(h.scheduler.takeActiveBuildForTransition('a'), null, 'idle scheduler');
+
+  h.phasesByRoom.set('a', ['p0', 'p1']);
+  h.scheduler.enqueue({ roomId: 'a', priority: 3, reason: 'adjacent' });
+  h.scheduler.advanceFrame();
+  assert.equal(
+    h.scheduler.takeActiveBuildForTransition('b'), null,
+    'a build for a different room is not surrendered',
+  );
+  assert.equal(h.scheduler.getActiveBuild()?.roomId, 'a', 'and is left running');
+});
+
+test('capturedVersion travels with the handoff and drives stale rejection', () => {
+  const h = makeHarness([makeRoom('a')]);
+  h.phasesByRoom.set('a', ['p0', 'p1']);
+  h.scheduler.enqueue({ roomId: 'a', priority: 3, reason: 'adjacent' });
+  h.scheduler.advanceFrame();
+
+  const handoff = h.scheduler.takeActiveBuildForTransition('a');
+  assert.notEqual(handoff, null);
+  assert.equal(
+    h.scheduler.isBuildVersionCurrent('a', handoff!.capturedVersion), true,
+    'unedited room: the handoff is still publishable',
+  );
+
+  h.scheduler.bumpRoomVersion('a');   // e.g. an editor rebuild landed mid-load
+  assert.equal(
+    h.scheduler.isBuildVersionCurrent('a', handoff!.capturedVersion), false,
+    'edited room: the in-flight result must be discarded, not published',
+  );
+});
+
+test('getRoomVersion reports the counter a freshly started build should capture', () => {
+  const h = makeHarness([makeRoom('a')]);
+  assert.equal(h.scheduler.getRoomVersion('a'), 0, 'unknown room starts at 0');
+  h.scheduler.bumpRoomVersion('a');
+  assert.equal(h.scheduler.getRoomVersion('a'), 1);
+  assert.equal(h.scheduler.isBuildVersionCurrent('a', 1), true);
+  assert.equal(h.scheduler.isBuildVersionCurrent('a', 0), false);
+});
