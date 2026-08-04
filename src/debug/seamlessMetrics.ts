@@ -227,7 +227,12 @@ declare global {
   }
 }
 
-if (import.meta.env.DEV && typeof window !== 'undefined') {
+// `import.meta.env` is undefined outside Vite (notably under `node --test`),
+// and roomTransitionLoadCoordinator.ts — which imports this module — is
+// explicitly node-safe, so this must use optional chaining rather than a bare
+// `.DEV`. A hard read here throws at module-evaluation time and takes the whole
+// coordinator test file down with it.
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
   window.__dwSeamlessStats   = (count = 20) => getRecords(count);
   window.__dwSeamlessSummary = (count = 50) => summarize(count);
   window.__dwSeamlessReset   = () => { resetRecords(); };
