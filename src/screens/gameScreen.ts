@@ -855,7 +855,9 @@ export function startGameScreen(
       getZoneRoomIds: (worldNumber) => _zoneLoader.getZoneRoomIds(worldNumber),
       tickZoneLoad: () => _zoneLoader.tickZoneLoad(residentRoomManager, RESIDENT_CAMPAIGN_SEED, virtualWidthPx, virtualHeightPx, camera.zoom),
       getZoneProgress: () => _zoneLoader.getZoneProgress(residentRoomManager),
-      buildZoneRoomIdSet: (worldNumber) => _zoneLoader.buildZoneRoomIdSet(worldNumber),
+      // Retain speculatively-preloaded neighbour zones too: evicting one would
+      // discard exactly the work that makes its boundary seamless.
+      buildZoneRoomIdSet: (worldNumber) => _zoneLoader.buildRetainedRoomIdSet(worldNumber),
       evictInactiveZoneResidents: (activeWorldNumber, previousWorldNumber) => {
         _zoneLoader.evictInactiveZoneResidents(activeWorldNumber, previousWorldNumber, residentRoomManager);
       },
@@ -2102,6 +2104,24 @@ export function startGameScreen(
     // the per-phase debug overlay (currentBuildPhase) gives sufficient
     // visibility into the cost of individual phases in the interim.
     residentBuildScheduler.advanceFrame();
+
+    // ── Speculative neighbour-zone preload ──────────────────────────────────
+    // Prepares the zone the player is walking TOWARDS so its boundary can take
+    // the ordinary hot-swap path instead of a zone-load screen.  Self-gating:
+    // it no-ops unless the active zone is already ready, the previous frame was
+    // inside NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS, and speculative residency is
+    // under NEIGHBOUR_PRELOAD_BUDGET_KB — so it can never cost the zone the
+    // player is actually in a frame or an eviction.
+    _zoneLoader.tickNeighbourPreload(
+      currentRoom.worldNumber ?? 1,
+      currentRoom.id,
+      residentRoomManager,
+      RESIDENT_CAMPAIGN_SEED,
+      renderProfiler.getLastFrameMs(),
+      virtualWidthPx,
+      virtualHeightPx,
+      camera.zoom,
+    );
 
     // ── Frame-budget-driven background preload slice ────────────────────────
     // Supplements the requestIdleCallback-based schedulers with deterministic

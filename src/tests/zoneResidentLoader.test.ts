@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { ZoneResidentLoader } from '../screens/zoneResidentLoader';
+import {
+  ZoneResidentLoader,
+  ZONE_ROOM_CAP,
+  RESIDENT_WORLD_COST_KB,
+  NEIGHBOUR_PRELOAD_BUDGET_KB,
+  NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS,
+} from '../screens/zoneResidentLoader';
 import { ResidentRoomManager } from '../screens/residentRoomManager';
 import { RoomRuntimeCache, isEntryFullyPrepared } from '../screens/roomRuntimeCache';
 import {
@@ -582,6 +588,113 @@ describe('ZoneResidentLoader', () => {
       }
     }
     assert.ok(checked > 0, 'the contract must actually have been exercised');
+  });
+
+  // ── Speculative neighbour-zone preloading ──────────────────────────────────
+
+  /** Two zones joined by one door: zone A room 0 <-> zone B room 0. */
+  function linkedZones(aCount: number, bCount: number, zoneA: number, zoneB: number): Map<string, RoomDef> {
+    const registry = new Map<string, RoomDef>();
+    const aIds = Array.from({ length: aCount }, (_, i) => `z${zoneA}_r${i}`);
+    const bIds = Array.from({ length: bCount }, (_, i) => `z${zoneB}_r${i}`);
+    const mk = (targetRoomId: string, direction: 'left' | 'right'): RoomTransitionDef => ({
+      direction, targetRoomId, xBlock: 0, yBlock: 0,
+      positionBlock: 0, openingSizeBlocks: 4, targetSpawnBlock: [0, 0],
+    });
+    for (let i = 0; i < aCount; i++) {
+      const trans = [mk(aIds[(i + 1) % aCount], 'right'), mk(aIds[(i - 1 + aCount) % aCount], 'left')];
+      if (i === 0) trans.push(mk(bIds[0], 'right'));   // the cross-zone door
+      registry.set(aIds[i], fullRoom(aIds[i], zoneA, trans));
+    }
+    for (let i = 0; i < bCount; i++) {
+      const trans = [mk(bIds[(i + 1) % bCount], 'right'), mk(bIds[(i - 1 + bCount) % bCount], 'left')];
+      if (i === 0) trans.push(mk(aIds[0], 'left'));
+      registry.set(bIds[i], fullRoom(bIds[i], zoneB, trans));
+    }
+    return registry;
+  }
+
+  test('neighbour zones are discovered through real transition links', () => {
+    const registry = linkedZones(3, 3, 10, 11);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    assert.deepStrictEqual(loader.getNeighbourZoneNumbers(10), [11]);
+    assert.deepStrictEqual(loader.getNeighbourZoneNumbers(11), [10]);
+    // A zone with no outward links has no neighbours — numeric adjacency must
+    // not be assumed (campaign zone numbers are not necessarily contiguous).
+    assert.deepStrictEqual(loader.getNeighbourZoneNumbers(99), []);
+  });
+
+  test('neighbour preload never runs before the ACTIVE zone is ready', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 12, 13);
+    const loader  = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    const manager = new ResidentRoomManager();
+    // Active zone has NOT been readied — speculative work must not start.
+    const started = loader.tickNeighbourPreload(12, 'z12_r0', manager, 1, 0);
+    assert.strictEqual(started, false);
+    assert.strictEqual(loader.getNeighbourPreloadStatus(12, manager).inFlightZone, null);
+  });
+
+  test('neighbour preload yields entirely when the previous frame was over budget', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 14, 15);
+    const cache   = new RoomRuntimeCache();
+    const loader  = new ZoneResidentLoader(registry, cache);
+    const manager = new ResidentRoomManager();
+    // Make the active zone ready.
+    loader.startZoneLoad(14, manager);
+    for (const id of loader.getZoneRoomIds(14)) {
+      manager.ensureResident(registry.get(id)!);
+      manager.getResident(id)!.runtimeReady = true;
+    }
+    // A slow frame must buy zero speculative work — this is purely
+    // look-ahead for a boundary the player has not reached.
+    for (let i = 0; i < 20; i++) {
+      loader.tickNeighbourPreload(14, 'z14_r0', manager, 1, NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS + 1);
+    }
+    assert.strictEqual(
+      loader.getNeighbourPreloadStatus(14, manager).inFlightZone, null,
+      'no session may start while frames are over budget',
+    );
+  });
+
+  test('preloaded zones are retained against eviction; unrelated zones are not', () => {
+    const registry = linkedZones(3, 3, 16, 17);
+    const loader = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    // Before any preload, only the active zone is retained.
+    const before = loader.buildRetainedRoomIdSet(16);
+    for (const id of loader.getZoneRoomIds(16)) assert.ok(before.has(id));
+    for (const id of loader.getZoneRoomIds(17)) {
+      assert.ok(!before.has(id), 'a zone that was never preloaded is evictable');
+    }
+  });
+
+  test('the speculative memory budget is expressed in measured per-world cost', () => {
+    // Guards against the budget silently becoming meaningless if the constant
+    // is edited without re-measuring (see scripts/measure-resident-memory.mts:
+    // an empty WorldState is ~695 KB, and room content barely moves it).
+    assert.ok(RESIDENT_WORLD_COST_KB >= 600 && RESIDENT_WORLD_COST_KB <= 900,
+      'per-world cost constant should track the measured ~695 KB');
+    const roomsAffordable = Math.floor(NEIGHBOUR_PRELOAD_BUDGET_KB / RESIDENT_WORLD_COST_KB);
+    assert.ok(roomsAffordable >= ZONE_ROOM_CAP / 2,
+      `budget must afford a meaningful look-ahead, got ${roomsAffordable} rooms`);
+  });
+
+  test('resetNeighbourPreload clears in-flight and abandoned state', () => {
+    installCanvasStub();
+    const registry = linkedZones(3, 3, 18, 19);
+    const loader  = new ZoneResidentLoader(registry, new RoomRuntimeCache());
+    const manager = new ResidentRoomManager();
+    loader.startZoneLoad(18, manager);
+    for (const id of loader.getZoneRoomIds(18)) {
+      manager.ensureResident(registry.get(id)!);
+      manager.getResident(id)!.runtimeReady = true;
+    }
+    loader.tickNeighbourPreload(18, 'z18_r0', manager, 1, 0); // starts a session
+    loader.resetNeighbourPreload();
+    const st = loader.getNeighbourPreloadStatus(18, manager);
+    assert.strictEqual(st.inFlightZone, null);
+    assert.deepStrictEqual(st.abandonedZones, []);
   });
 
   test('isZoneEntryReadinessComplete stays strict — true only with zero failures', () => {

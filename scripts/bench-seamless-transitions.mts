@@ -417,6 +417,19 @@ function main(): void {
     }
   }
 
+  // Cross-zone crossings, measured separately: before neighbour preloading
+  // these always deferred behind a zone-load screen; with the target zone
+  // preloaded they should take the ordinary hot-swap path.
+  const crossZone: Array<{ src: RoomDef; ti: number; dst: RoomDef }> = [];
+  for (const [, src] of registry) {
+    for (let ti = 0; ti < src.transitions.length; ti++) {
+      const dst = registry.get(src.transitions[ti].targetRoomId);
+      if (dst === undefined) continue;
+      if ((dst.worldNumber ?? 1) === (src.worldNumber ?? 1)) continue;
+      crossZone.push({ src, ti, dst });
+    }
+  }
+
   const scenarios: Array<{ name: string; opts: Parameters<typeof measureCrossing>[4] }> = [
     { name: '1. first crossing after zone startup',   opts: { residentReady: true,  inFlightBuild: false, zoneReady: true } },
     { name: '2. A->B->A backtracking (return leg)',   opts: { residentReady: true,  inFlightBuild: false, zoneReady: true } },
@@ -451,6 +464,27 @@ function main(): void {
       seamless: `${rows.filter(r =>
         r.blockedFrames === 0 && r.overlayShown.length === 0 &&
         !r.entryWarmStarted && r.velocityPreserved).length}/${n}`,
+    };
+  }
+
+  // Scenario 6: cross-zone, target zone NOT prepared (the old behaviour for
+  // every zone boundary) vs prepared by the neighbour preloader.
+  for (const [label, zoneReady] of [['6a. cross-zone, target NOT preloaded', false], ['6b. cross-zone, target preloaded', true]] as const) {
+    const rows = crossZone.map(d => measureCrossing(registry, d.src, d.ti, d.dst, {
+      residentReady: zoneReady, inFlightBuild: false, zoneReady,
+    }));
+    const n = Math.max(1, rows.length);
+    const sum = (f: (r: CrossingResult) => number): number => rows.reduce((a, r) => a + f(r), 0);
+    out[label] = {
+      crossings: rows.length,
+      blockedFrames: { total: sum(r => r.blockedFrames), mean: +(sum(r => r.blockedFrames) / n).toFixed(2) },
+      crossingsWithOverlay: rows.filter(r => r.overlayShown.length > 0).length,
+      overlayKinds: rows.flatMap(r => r.overlayShown).reduce<Record<string, number>>((a, k) => { a[k] = (a[k] ?? 0) + 1; return a; }, {}),
+      overlayVisibleMs: { mean: +(sum(r => r.overlayMs) / n).toFixed(1) },
+      velocityPreserved: `${rows.filter(r => r.velocityPreserved).length}/${rows.length}`,
+      seamless: `${rows.filter(r =>
+        r.blockedFrames === 0 && r.overlayShown.length === 0 &&
+        !r.entryWarmStarted && r.velocityPreserved).length}/${rows.length}`,
     };
   }
 

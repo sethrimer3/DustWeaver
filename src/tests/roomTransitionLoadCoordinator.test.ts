@@ -767,6 +767,36 @@ test('takeover: stale-version rejection survives the handoff', () => {
   );
 });
 
+test('cross-zone: a PRELOADED target zone crosses seamlessly, with no zone-load screen', () => {
+  const a = makeRoom('a', 1), b = makeRoom('b', 2);
+  const h = makeHarness([a, b]);
+  // The neighbour preloader already brought zone 2 to full readiness.
+  h.state.readyZones.add(1);
+  h.state.readyZones.add(2);
+  const targetPlayer = makePlayer();
+  h.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', targetPlayer) });
+
+  h.coord.submitTransition(b, 2, 2, 5.5, 0, 'right');
+
+  assert.equal(h.coord.isZoneTransitionActive(), false, 'no deferral for a ready zone');
+  assert.ok(!h.events.some(e => e.startsWith('overlay.')), 'no zone-load screen');
+  assert.ok(!h.events.some(e => e.startsWith('startZoneLoad')), 'no zone-load session started');
+  assert.equal(h.state.currentRoom.id, 'b', 'activated immediately');
+  assert.equal(targetPlayer.velocityXWorld, 5.5, 'momentum carried across the zone boundary');
+  assert.equal(h.coord.isBlockingGameplay(), false, 'no gameplay-blocked frames');
+});
+
+test('cross-zone: an UNPREPARED target zone still defers behind the zone-load screen', () => {
+  const a = makeRoom('a', 1), b = makeRoom('b', 2);
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);   // zone 2 deliberately NOT ready
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.equal(h.coord.isZoneTransitionActive(), true, 'unprepared zone must still load');
+  assert.ok(h.events.some(e => e.startsWith('startZoneLoad:2')));
+  assert.ok(h.events.some(e => e.startsWith('overlay.showZoneLoad')));
+});
+
 test('invariant: a ready zone falling back to a build is reported, not normalised', () => {
   const a = makeRoom('a'), b = makeRoom('b');
   const h = makeHarness([a, b]);

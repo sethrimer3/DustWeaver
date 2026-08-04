@@ -665,6 +665,9 @@ export class ZoneResidentLoader {
     manager: ResidentRoomManager,
     campaignSeed: number,
     lastFrameMs: number,
+    vpWPx = 480,
+    vpHPx = 270,
+    scalePx = 1,
   ): boolean {
     // Never compete with a blocking load, and never run before the zone the
     // player is actually in is finished.
@@ -755,6 +758,16 @@ export class ZoneResidentLoader {
     // Every room built — complete the static runtime preparation sweep.
     this._advanceRuntimePreparation(state);
     if (state.prepDone.size < state.roomIds.length) return false;
+
+    // Queue entry-viewport warming for the preloaded zone's own directed
+    // transitions, so movement THROUGH it is seamless too rather than only the
+    // first room being resident.  (The cross-zone door itself is not covered
+    // here: addZoneEntryViewportTasks enumerates same-zone links only, so that
+    // one entry still warms via the ordinary adjacency prewarm once the player
+    // is near it.)
+    addZoneEntryViewportTasks(
+      state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
+    );
 
     this._preloadedZones.add(state.worldNumber);
     this._readyZones.add(state.worldNumber);
