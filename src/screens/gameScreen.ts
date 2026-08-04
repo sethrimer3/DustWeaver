@@ -153,6 +153,7 @@ import { orchestrateRoomTransitions, type TransitionDebugState } from './gameRoo
 import type { TransitionDirection } from './gameTransitions';
 import { RoomTransitionLoadCoordinator } from './roomTransitionLoadCoordinator';
 import * as FP from '../debug/perfFreezeProfiler';
+import * as SM from '../debug/seamlessMetrics';
 import { resetLegacyShadingFrameStats } from '../render/walls/legacyBlockShading';
 import { type LoadRoomCtx, makeLoadRoomPhases, applyResidentRoomActivation } from './gameLoadRoomPhases';
 import {
@@ -765,6 +766,10 @@ export function startGameScreen(
    *  no async room load is in progress, the initial resident build phase is done,
    *  the zone transition load is done, and the entry viewport warm completed. */
   function tickLoadingOverlay(): void {
+    // Count every frame on which a cover is actually on screen. This is the
+    // measurement that decides "did the player see a loading event?" — the
+    // transition profiler's timings cannot answer it.
+    if (loadingOverlay.isVisible()) SM.noteOverlayFrame(performance.now());
     loadingOverlay.tick(() =>
       !transitionCoordinator.isBlockingGameplay()
       && !initialZoneLoad.isActive
@@ -1388,6 +1393,7 @@ export function startGameScreen(
       }
       tickLoadingOverlay();
       if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      SM.noteBlockedFrame();
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       rafHandle = requestAnimationFrame(frame);
@@ -1406,6 +1412,7 @@ export function startGameScreen(
       // Keep the overlay visible and skip gameplay sim/render this frame.
       tickLoadingOverlay();
       if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      SM.noteBlockedFrame();
       FP.setBakeForbiddenInGameplay(false);
       FP.endFrame();
       // Reset the frame-delta accumulator so the first gameplay frame after
@@ -1434,6 +1441,7 @@ export function startGameScreen(
         // Still loading — hold overlay, skip gameplay.
         tickLoadingOverlay();
         if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+        SM.noteBlockedFrame();
         FP.setBakeForbiddenInGameplay(false);
         FP.endFrame();
         lastTimestampMs = 0;
@@ -1448,6 +1456,8 @@ export function startGameScreen(
 
     if (entryWarmState.phase === 'warming') {
       if (import.meta.env.DEV) FP.setFrameGameContext('entryWarm');
+      SM.noteBlockedFrame();
+      SM.noteEntryWarmFrame();
       FP.setBakeForbiddenInGameplay(false);
       tickEntryWarm(entryWarmState, currentRoom, roomRuntimeCache);
       tickLoadingOverlay();
@@ -1467,6 +1477,7 @@ export function startGameScreen(
     if (loadingOverlay.isVisible() &&
         (!areRoomSpritesReady(currentRoom) || !isRoomBackgroundDecodeReady(currentRoom))) {
       if (import.meta.env.DEV) FP.setFrameGameContext('loading');
+      SM.noteBlockedFrame();
       FP.setBakeForbiddenInGameplay(false);
       tickLoadingOverlay();
       FP.endFrame();
@@ -1912,6 +1923,19 @@ export function startGameScreen(
       );
       // Mark this as an active-gameplay frame so freeze warnings highlight it.
       FP.setFrameGameContext('gameplay');
+    }
+
+    // Close any open seamless-metrics crossing: control has reached the first
+    // frame that actually simulates the player again, so this is the moment the
+    // interruption ends. Reading velocity here (rather than at activation) is
+    // what makes the momentum-preservation check meaningful.
+    if (SM.isCrossingOpen()) {
+      const _smPlayer = world.clusters.length > 0 ? world.clusters[0] : undefined;
+      SM.endCrossing(
+        _smPlayer?.velocityXWorld ?? 0,
+        _smPlayer?.velocityYWorld ?? 0,
+        performance.now(),
+      );
     }
 
     // Forbid expensive derived-sprite baking during active gameplay to prevent

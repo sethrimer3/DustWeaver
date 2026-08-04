@@ -270,6 +270,37 @@ test('invalid transition index and empty candidate sets are handled, not thrown'
   assert.equal(computeSweptEntryViewport([], VP_W, VP_H, 1), null);
 });
 
+// ── Spawn resolution locality ────────────────────────────────────────────────
+
+test('a blocked doorway spawn resolves to a NEARBY block, not across the room', () => {
+  // `findOpenSpawnBlock`'s room-wide top-left scan used to run whenever a
+  // doorway spawn landed in geometry, teleporting the player to the far side of
+  // the room on an ordinary crossing (measured: 8 of 62 campaign entries moved
+  // by up to 194 blocks). It also blew up the swept entry region, since the
+  // outlier had to be covered too.
+  const wallAt = (x: number, y: number): unknown => ({
+    xBlock: x, yBlock: y, wBlock: 1, hBlock: 1,
+    isPlatformFlag: 0, isInvisibleFlag: 0, isPillarHalfWidthFlag: 0,
+  });
+  // Solid 3x3 patch around the intended spawn; open ground just outside it.
+  const walls: unknown[] = [];
+  for (let x = 39; x <= 41; x++) for (let y = 39; y <= 41; y++) walls.push(wallAt(x, y));
+  const room = makeRoom('r', 100, 100, [], { walls: walls as RoomDef['walls'] });
+
+  const [rx, ry] = resolveSpawnBlock(room, 40, 40);
+  const distance = Math.max(Math.abs(rx - 40), Math.abs(ry - 40));
+  assert.ok(distance > 0, 'the blocked block itself is rejected');
+  assert.ok(
+    distance <= 4,
+    `resolved spawn (${rx},${ry}) is ${distance} blocks away — must stay local to the doorway`,
+  );
+});
+
+test('an already-open spawn is returned unchanged', () => {
+  const room = makeRoom('r', 100, 100, []);
+  assert.deepEqual([...resolveSpawnBlock(room, 40, 40)], [40, 40]);
+});
+
 test('single candidate yields exactly the single viewport (no gratuitous growth)', () => {
   const room = makeRoom('r', 200, 200, []);
   const swept = computeSweptEntryViewport([{ xBlock: 100, yBlock: 100 }], VP_W, VP_H, 1, room);

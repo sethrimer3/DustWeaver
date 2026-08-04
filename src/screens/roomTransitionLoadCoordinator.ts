@@ -75,6 +75,7 @@ import type { TransitionProfileMode } from '../debug/transitionProfiler';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { ZoneTransitionState } from './residentBuildScheduler';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
+import * as SM from '../debug/seamlessMetrics';
 
 /**
  * Fraction of `PLAYER_JUMP_SPEED_WORLD` subtracted from upward-transition
@@ -425,6 +426,17 @@ export class RoomTransitionLoadCoordinator {
     const isPrepared = preparedState === 'prepared';
     const currentRoom = d.getCurrentRoom();
 
+    // Open a seamless-metrics record unless this is the zone-load re-issue,
+    // which is a continuation of the crossing already being measured.
+    if (!this.isReissuingZoneActivation) {
+      SM.beginCrossing(
+        currentRoom.id, room.id,
+        isPrepared ? 'preparedInstant' : 'pending',
+        (room.worldNumber ?? 1) === (currentRoom.worldNumber ?? 1),
+        vx, vy, performance.now(),
+      );
+    }
+
     // ── Cross-zone transition guard (BUILD 430) ───────────────────────────
     // If the target room belongs to a different worldNumber than the current
     // room, start a zone-load session and defer activation until the zone is
@@ -497,6 +509,7 @@ export class RoomTransitionLoadCoordinator {
       isPrepared    ? 'preparedInstant'  :
                       'asyncCacheMiss';
     d.profiler.begin(room.id, tpMode, residentReady);
+    SM.noteMode(tpMode);
 
     if (residentReady && targetResident !== undefined && targetResident.world !== null) {
       this._runResidentHotSwap(room, spawnXBlock, spawnYBlock, vx, vy, dir, targetResident.world, t0);
@@ -542,6 +555,7 @@ export class RoomTransitionLoadCoordinator {
       if (phaseMs > longestPhaseMs) longestPhaseMs = phaseMs;
     } while (!result.done && performance.now() - startedAt < LOAD_DRAIN_BUDGET_MS);
 
+    SM.noteGeneratorProgress(this.buildingResident.phasesRun, longestPhaseMs);
     if (d.isDevMode && longestPhaseMs > 16) {
       console.warn(`[perf] async load phase took ${longestPhaseMs.toFixed(1)}ms`);
     }
@@ -784,6 +798,8 @@ export class RoomTransitionLoadCoordinator {
       missReason: 'none',
     };
     d.recordTransitionOutcome(diag.outcome, diag);
+    SM.noteMissReason(diag.missReason);
+    if (t0 > 0) SM.noteActivationMs(performance.now() - t0);
     if (d.isDevMode && d.profiler.isVerbose()) {
       console.log(`[transition] ${room.id}: residentWorldHot done in ${(performance.now() - t0).toFixed(1)}ms`);
     }
