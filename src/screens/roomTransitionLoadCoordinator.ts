@@ -826,8 +826,29 @@ export class RoomTransitionLoadCoordinator {
       console.warn(`[transition] ${room.id}: cache MISS (${preparedState}) — async load`);
     }
     const outgoingRoom = d.getCurrentRoom();
-    
-    // We do NOT invalidate the outgoing resident world. The async load builds 
+
+    // Falling back to a build for a room inside a zone that already passed its
+    // readiness barrier is a defect, not a normal path: the barrier's contract
+    // is that every intra-zone room is resident and activatable.  Report it with
+    // the same detail as a coverage miss (this is where `residentMissing`,
+    // `runtimeNotReady`, `buildQueued` and `buildInProgress:*` surface) so the
+    // producer/retention bug behind it gets fixed rather than normalised.
+    if (
+      (room.worldNumber ?? 1) === (outgoingRoom.worldNumber ?? 1) &&
+      d.isZoneReady(room.worldNumber ?? 1)
+    ) {
+      this._reportSeamlessInvariantViolation(
+        outgoingRoom, room, spawnXBlock, spawnYBlock,
+        {
+          wallPresent: false, bgPresent: false,
+          bgRequired: (room.backgroundBlocks?.length ?? 0) > 0,
+          wallStatus: 'missing', bgStatus: 'missing',
+        },
+        hotSwapMissReason,
+      );
+    }
+
+    // We do NOT invalidate the outgoing resident world. The async load builds
     // the target room in an isolated world and then hot-swaps to it, preserving
     // the source room for backtracking.
     d.manager.recordTransitionMode('legacyLoad', hotSwapMissReason);
@@ -928,6 +949,13 @@ export class RoomTransitionLoadCoordinator {
       wallPresent: boolean; bgPresent: boolean; bgRequired: boolean;
       wallStatus: string; bgStatus: string;
     },
+    /**
+     * Exact fallback reason.  Defaults to the coverage miss; the cold-fallback
+     * caller passes the hot-swap miss classification instead
+     * (`residentMissing` / `runtimeNotReady` / `buildQueued` /
+     * `buildInProgress:<phase>` / `worldNull` / `roomIdMismatch`).
+     */
+    fallbackReason = 'entryViewportNotCovered',
   ): void {
     const d = this.deps;
     if (!d.isDevMode) return;
@@ -969,7 +997,7 @@ export class RoomTransitionLoadCoordinator {
           spritesReady:    d.areRoomSpritesReady(targetRoom),
           backgroundReady: d.isRoomBackgroundDecodeReady(targetRoom),
         },
-        fallbackReason: 'entryViewportNotCovered',
+        fallbackReason,
         extra: d.getSeamlessDiagnosticContext(sourceRoom.id, targetRoom.id),
       }, null, 2),
     );

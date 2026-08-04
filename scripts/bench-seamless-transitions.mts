@@ -51,9 +51,20 @@ import { computeEntranceOffset } from '../src/screens/roomPrewarmNeighborhood';
 import { RoomTransitionLoadCoordinator } from '../src/screens/roomTransitionLoadCoordinator';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOMS_DIR = path.resolve(HERE, '../ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS');
+const ROOMS_DIR = process.env.DW_ROOMS_DIR ?? path.resolve(HERE, '../ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS');
 
 const VP_W = 480, VP_H = 270, SCALE = 1;
+
+// Constants mirrored from the shipped modules so the harness can price the
+// parts of a crossing that live outside the coordinator (the RAF loop's
+// entry-warm branch and the overlay's own show/fade timing).
+const PLAYER_JUMP_SPEED_WORLD = 255.0;         // sim/clusters/movementConstants
+const UPWARD_TRANSITION_VY_REDUCTION = 0.5;   // roomTransitionLoadCoordinator
+const ENTRY_WARM_SOFT_FRAME_CAP = 8;          // entryViewportWarm
+const OVERLAY_MIN_SHOW_MS = 200;              // gameLoadingOverlay (legacy path)
+const OVERLAY_STANDARD_FADE_MS = 300;         // gameLoadingOverlay (legacy path)
+const OVERLAY_ADAPTIVE_FADE_MS = 80;          // gameLoadingOverlay (adaptive path)
+const OVERLAY_ENTRY_WARM_FADE_MS = 80;        // gameLoadingOverlay
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
 
@@ -62,6 +73,8 @@ const argOf = (name: string, dflt: string): string => {
   const hit = argv.find(a => a.startsWith(`--${name}=`));
   return hit === undefined ? dflt : hit.slice(name.length + 3);
 };
+/** Whether the overlay uses the legacy fixed 200ms+300ms presentation. */
+const LEGACY_OVERLAY_MODE = argv.includes('--legacy-overlay');
 /** 'legacy' = pre-fix pre-warm rule, 'swept' = post-fix rule. */
 const WARM_RULE = argOf('warm', 'swept') as 'legacy' | 'swept';
 const LABEL = argOf('label', WARM_RULE);
@@ -198,6 +211,8 @@ interface CrossingResult {
   missReason: string;
   blockedFrames: number;
   overlayShown: string[];
+  entryWarmFrames: number;
+  overlayMs: number;
   entryWarmStarted: boolean;
   inlineCloseout: boolean;
   generatorPhases: number;
@@ -375,8 +390,10 @@ function measureCrossing(
     targetRoomId: targetRoom.id,
     mode: outcomeName,
     missReason,
-    blockedFrames,
+    blockedFrames: blockedFrames + entryWarmFrames,
+    entryWarmFrames,
     overlayShown,
+    overlayMs,
     entryWarmStarted,
     inlineCloseout,
     generatorPhases: phasesRun,
@@ -424,6 +441,8 @@ function main(): void {
         kinds: rows.flatMap(r => r.overlayShown).reduce<Record<string, number>>((a, k) => { a[k] = (a[k] ?? 0) + 1; return a; }, {}),
       },
       entryWarmCrossings: rows.filter(r => r.entryWarmStarted).length,
+      entryWarmFrames: { total: sum(r => r.entryWarmFrames), mean: +(sum(r => r.entryWarmFrames) / n).toFixed(2) },
+      overlayVisibleMs: { total: sum(r => r.overlayMs), mean: +(sum(r => r.overlayMs) / n).toFixed(1), max: max(r => r.overlayMs) },
       inlineCloseouts:    rows.filter(r => r.inlineCloseout).length,
       generatorPhases: { total: sum(r => r.generatorPhases), mean: +(sum(r => r.generatorPhases) / n).toFixed(2), max: max(r => r.generatorPhases) },
       activationMs: { mean: +(sum(r => r.activationMs) / n).toFixed(3), max: +max(r => r.activationMs).toFixed(3) },

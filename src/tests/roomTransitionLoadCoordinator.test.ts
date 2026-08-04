@@ -767,6 +767,29 @@ test('takeover: stale-version rejection survives the handoff', () => {
   );
 });
 
+test('invariant: a ready zone falling back to a build is reported, not normalised', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.state.readyZones.add(1);
+  // Zone says ready, yet the target has no resident — exactly the class of
+  // defect (`residentMissing`) the strict diagnostic exists to surface.
+  const errors: unknown[][] = [];
+  const realError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args); };
+  try {
+    // isDevMode is false in the harness, so the report is suppressed; assert the
+    // path still routes to a build rather than silently claiming to be seamless.
+    h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  } finally {
+    console.error = realError;
+  }
+  assert.ok(h.events.includes('createResidentBuildGenerator:b'), 'falls back to a build');
+  assert.ok(
+    h.events.some(e => e.startsWith('recordTransitionMode:legacyLoad:residentMissing')),
+    'the exact miss reason is recorded for diagnosis',
+  );
+});
+
 test('fallback drain: a cold load completes without one frame per phase', () => {
   const a = makeRoom('a'), b = makeRoom('b');
   const h = makeHarness([a, b]);
