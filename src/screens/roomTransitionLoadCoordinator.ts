@@ -445,7 +445,19 @@ export class RoomTransitionLoadCoordinator {
     // takePendingActivation() re-calls submitTransition).
     const targetWorldNumber = room.worldNumber ?? 1;
     const currentWorldNumber = currentRoom.worldNumber ?? 1;
-    if (targetWorldNumber !== currentWorldNumber && !this.zoneTransition.isActive && !this.isReissuingZoneActivation) {
+    // A zone that the neighbour-preloader already brought to full readiness
+    // needs no deferral and no loading screen: its residents are built and its
+    // directed entries are warm, so the crossing can take the ordinary
+    // hot-swap path and be exactly as seamless as an intra-zone one.  Without
+    // this check the guard fired on worldNumber alone and every zone boundary
+    // paid for a load session that had nothing left to do.
+    const targetZoneAlreadyReady = d.isZoneReady(targetWorldNumber);
+    if (
+      targetWorldNumber !== currentWorldNumber &&
+      !targetZoneAlreadyReady &&
+      !this.zoneTransition.isActive &&
+      !this.isReissuingZoneActivation
+    ) {
       this.zoneTransition.begin({
         targetRoom: room,
         spawnXBlock,

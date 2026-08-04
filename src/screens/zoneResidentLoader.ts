@@ -127,6 +127,37 @@ const ZONE_LOAD_YIELD_FRAMES = 2;
  */
 export const ZONE_ROOM_CAP = 64;
 
+/**
+ * Measured typed-array cost of one resident `WorldState`, in KB.
+ *
+ * Deliberately a flat constant rather than a per-room estimate: measurement
+ * (scripts/measure-resident-memory.mts) showed an EMPTY world is already
+ * ~695 KB of fixed-capacity buffers, and room content moves the total by only
+ * a few percent — chasm (area 60000) is 753 KB, the_squeeze (area 4000) is
+ * 698 KB.  Sizing the budget off room area would therefore be false precision.
+ */
+export const RESIDENT_WORLD_COST_KB = 700;
+
+/**
+ * Memory ceiling for speculative neighbour-zone residency, in KB.
+ *
+ * Only bounds the SPECULATIVE set — the active zone is never counted against
+ * it and never evicted for it.  32 MB buys roughly 45 rooms of look-ahead,
+ * comfortably more than one typical zone, while keeping the worst case well
+ * under what the shipping campaign needs for every zone at once (~22 MB).
+ */
+export const NEIGHBOUR_PRELOAD_BUDGET_KB = 32 * 1024;
+
+/**
+ * Frame-time ceiling (ms) above which neighbour preloading yields entirely.
+ *
+ * Stricter than the resident scheduler's background budget: this work is
+ * purely speculative and must never be the reason the ACTIVE zone drops a
+ * frame.  A boundary the player has not reached yet is worth zero dropped
+ * frames.
+ */
+export const NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS = 8;
+
 // ── ZoneResidentLoader ────────────────────────────────────────────────────────
 
 export class ZoneResidentLoader {
@@ -138,6 +169,23 @@ export class ZoneResidentLoader {
 
   /** World numbers of zones that have been fully readied at least once. */
   private readonly _readyZones = new Set<number>();
+
+  /**
+   * Speculative neighbour-zone preload session, or null when idle.
+   *
+   * Structurally the same work as `_activeZone`, but driven from the GAMEPLAY
+   * frame path instead of a blocking overlay, and abandoned the instant the
+   * frame budget or memory budget says so.  Kept separate from `_activeZone`
+   * precisely so the two can never be confused: `isLoading()` (which gates the
+   * overlay and blocks gameplay) must stay false while this runs.
+   */
+  private _neighbourPreload: ZoneLoadState | null = null;
+
+  /** Zones fully prepared speculatively; retained against eviction. */
+  private readonly _preloadedZones = new Set<number>();
+
+  /** Zones that filled the budget or otherwise gave up; not retried this session. */
+  private readonly _preloadAbandoned = new Set<number>();
 
   constructor(registry: ReadonlyMap<string, RoomDef>, runtimeCache: RoomRuntimeCache) {
     this._registry     = registry;
@@ -502,6 +550,264 @@ export class ZoneResidentLoader {
         (prevWorldNumber !== null ? `, prev world=${prevWorldNumber}` : ''),
       );
     }
+  }
+
+  // ── Neighbour-zone preloading ───────────────────────────────────────────────
+
+  /**
+   * World numbers reachable by one transition out of `activeWorldNumber`.
+   *
+   * Derived from real transition links rather than numeric adjacency, so a
+   * campaign whose zones are not numbered contiguously still preloads the zone
+   * the player can actually walk into.
+   */
+  getNeighbourZoneNumbers(activeWorldNumber: number): number[] {
+    const out = new Set<number>();
+    for (const [, room] of this._registry) {
+      if ((room.worldNumber ?? 1) !== activeWorldNumber) continue;
+      for (const t of room.transitions) {
+        const target = this._registry.get(t.targetRoomId);
+        if (target === undefined) continue;
+        const z = target.worldNumber ?? 1;
+        if (z !== activeWorldNumber) out.add(z);
+      }
+    }
+    return [...out];
+  }
+
+  /**
+   * Picks the neighbour zone worth preparing next, or null when there is
+   * nothing useful to do.
+   *
+   * Priority, highest first:
+   *   1. a zone the CURRENT room opens directly into (the player is standing at
+   *      the boundary — this is the one about to be needed);
+   *   2. a zone reachable within `lookaheadRadius` rooms of the current room;
+   *   3. any other neighbour of the active zone.
+   *
+   * Already-ready, already-preloaded, in-flight and abandoned zones are skipped,
+   * so this is safe to call every frame.
+   */
+  chooseNeighbourZoneToPreload(
+    activeWorldNumber: number,
+    currentRoomId: string,
+    lookaheadRadius = 3,
+  ): number | null {
+    const candidates = this.getNeighbourZoneNumbers(activeWorldNumber)
+      .filter(z =>
+        !this._readyZones.has(z) &&
+        !this._preloadedZones.has(z) &&
+        !this._preloadAbandoned.has(z) &&
+        this._neighbourPreload?.worldNumber !== z);
+    if (candidates.length === 0) return null;
+
+    // Rank by hop distance from the current room to a door into that zone.
+    const distance = new Map<number, number>();
+    const visited = new Set<string>([currentRoomId]);
+    let frontier = [currentRoomId];
+    for (let hop = 0; hop <= lookaheadRadius && frontier.length > 0; hop++) {
+      const next: string[] = [];
+      for (const id of frontier) {
+        const room = this._registry.get(id);
+        if (room === undefined) continue;
+        for (const t of room.transitions) {
+          const target = this._registry.get(t.targetRoomId);
+          if (target === undefined) continue;
+          const z = target.worldNumber ?? 1;
+          if (z !== activeWorldNumber && candidates.includes(z) && !distance.has(z)) {
+            distance.set(z, hop);
+          }
+          if (visited.has(t.targetRoomId)) continue;
+          visited.add(t.targetRoomId);
+          if ((target.worldNumber ?? 1) === activeWorldNumber) next.push(t.targetRoomId);
+        }
+      }
+      frontier = next;
+    }
+
+    let best: number | null = null;
+    let bestDist = Infinity;
+    for (const z of candidates) {
+      const dist = distance.get(z) ?? Infinity;
+      if (dist < bestDist) { bestDist = dist; best = z; }
+    }
+    // Nothing within the look-ahead radius: leave it for when the player is
+    // closer rather than spending frames on a zone they may never approach.
+    return bestDist === Infinity ? null : best;
+  }
+
+  /** KB currently attributed to speculative (non-active-zone) residency. */
+  getSpeculativeMemoryKB(activeWorldNumber: number, manager: ResidentRoomManager): number {
+    let rooms = 0;
+    for (const z of [...this._preloadedZones, ...(this._neighbourPreload !== null ? [this._neighbourPreload.worldNumber] : [])]) {
+      if (z === activeWorldNumber) continue;
+      for (const id of this.getZoneRoomIds(z)) {
+        if (manager.getResident(id)?.runtimeReady === true) rooms++;
+      }
+    }
+    return rooms * RESIDENT_WORLD_COST_KB;
+  }
+
+  /**
+   * Advances speculative neighbour-zone preparation by at most one generator
+   * phase.  Call once per GAMEPLAY frame (never while a blocking load is up).
+   *
+   * Yields immediately — doing nothing at all — when the previous frame was
+   * over budget, when the memory ceiling is reached, or when the active zone is
+   * not itself ready.  Those three guards are what keep this from ever being
+   * the cause of a dropped frame or an eviction in the zone being played.
+   *
+   * @returns True when a zone finished preparing on this call.
+   */
+  tickNeighbourPreload(
+    activeWorldNumber: number,
+    currentRoomId: string,
+    manager: ResidentRoomManager,
+    campaignSeed: number,
+    lastFrameMs: number,
+  ): boolean {
+    // Never compete with a blocking load, and never run before the zone the
+    // player is actually in is finished.
+    if (this._activeZone !== null) return false;
+    if (!this._readyZones.has(activeWorldNumber)) return false;
+    if (lastFrameMs >= NEIGHBOUR_PRELOAD_FRAME_BUDGET_MS) return false;
+
+    if (this._neighbourPreload === null) {
+      if (this.getSpeculativeMemoryKB(activeWorldNumber, manager) >= NEIGHBOUR_PRELOAD_BUDGET_KB) return false;
+      const target = this.chooseNeighbourZoneToPreload(activeWorldNumber, currentRoomId);
+      if (target === null) return false;
+      const roomIds = this.getZoneRoomIds(target);
+      if (roomIds.length === 0) { this._preloadAbandoned.add(target); return false; }
+      this._neighbourPreload = {
+        worldNumber: target, roomIds,
+        buildIdx: 0, activeGen: null, activeRoomId: null, activeGenT0: 0,
+        decodeStarted: new Set(), yieldFrames: 0, builtCount: 0, failedCount: 0,
+        t0: performance.now(), tasksQueued: false, prepIdx: 0, prepDone: new Set(),
+      };
+      if (import.meta.env?.DEV) {
+        console.log(`[zoneLoader] neighbour preload START world=${target} (${roomIds.length} rooms)`);
+      }
+      return false;
+    }
+
+    const state = this._neighbourPreload;
+
+    // Memory ceiling can be crossed mid-session as rooms complete.
+    if (this.getSpeculativeMemoryKB(activeWorldNumber, manager) >= NEIGHBOUR_PRELOAD_BUDGET_KB) {
+      if (import.meta.env?.DEV) {
+        console.log(`[zoneLoader] neighbour preload world=${state.worldNumber} stopped at memory budget`);
+      }
+      this._preloadAbandoned.add(state.worldNumber);
+      this._neighbourPreload = null;
+      return false;
+    }
+
+    // Decode assets for one not-yet-started room per tick (fire and forget).
+    for (const roomId of state.roomIds) {
+      if (state.decodeStarted.has(roomId)) continue;
+      const room = this._registry.get(roomId);
+      if (room !== undefined) {
+        void decodeRoomThemeSprites(room);
+        decodeRoomBackground(room);
+        state.decodeStarted.add(roomId);
+      }
+      break; // one per tick — decode is cheap to start but not free
+    }
+
+    // Advance the in-flight build by exactly one phase.
+    if (state.activeGen !== null) {
+      const roomId = state.activeRoomId!;
+      try {
+        const result = state.activeGen.next();
+        if (result.done) {
+          const room = this._registry.get(roomId);
+          if (room !== undefined) {
+            manager.ensureResident(room);
+            manager.setResidentWorld(roomId, result.value, false);
+          }
+          state.builtCount++;
+          state.activeGen = null;
+          state.activeRoomId = null;
+        }
+      } catch {
+        state.failedCount++;
+        state.activeGen = null;
+        state.activeRoomId = null;
+      }
+      return false;
+    }
+
+    // Start the next room that still needs building.
+    while (state.buildIdx < state.roomIds.length) {
+      const roomId = state.roomIds[state.buildIdx++];
+      if (manager.getResident(roomId)?.runtimeReady === true) continue;
+      const room = this._registry.get(roomId);
+      if (room === undefined) continue;
+      manager.ensureResident(room);
+      state.activeGen = createResidentBuildGenerator(room, campaignSeed, this._runtimeCache, {
+        reason: 'zoneLoad', priority: 4,
+      });
+      state.activeRoomId = roomId;
+      state.activeGenT0 = performance.now();
+      return false;
+    }
+
+    // Every room built — complete the static runtime preparation sweep.
+    this._advanceRuntimePreparation(state);
+    if (state.prepDone.size < state.roomIds.length) return false;
+
+    this._preloadedZones.add(state.worldNumber);
+    this._readyZones.add(state.worldNumber);
+    if (import.meta.env?.DEV) {
+      console.log(
+        `[zoneLoader] neighbour preload DONE world=${state.worldNumber} — ` +
+        `${state.builtCount} built, ${state.failedCount} failed, ` +
+        `${(performance.now() - state.t0).toFixed(0)}ms`,
+      );
+    }
+    this._neighbourPreload = null;
+    return true;
+  }
+
+  /**
+   * Room IDs that must survive eviction: the active zone plus any zone brought
+   * to readiness speculatively.  Discarding a preloaded zone would throw away
+   * exactly the work that makes its boundary seamless.
+   */
+  buildRetainedRoomIdSet(activeWorldNumber: number): Set<string> {
+    const out = this.buildZoneRoomIdSet(activeWorldNumber);
+    for (const z of this._preloadedZones) {
+      if (z === activeWorldNumber) continue;
+      for (const id of this.getZoneRoomIds(z)) out.add(id);
+    }
+    return out;
+  }
+
+  /** Diagnostics for the debug overlay and tests. */
+  getNeighbourPreloadStatus(activeWorldNumber: number, manager: ResidentRoomManager): {
+    inFlightZone: number | null;
+    inFlightBuilt: number;
+    inFlightTotal: number;
+    preloadedZones: number[];
+    abandonedZones: number[];
+    speculativeMemoryKB: number;
+    budgetKB: number;
+  } {
+    return {
+      inFlightZone:  this._neighbourPreload?.worldNumber ?? null,
+      inFlightBuilt: this._neighbourPreload?.builtCount ?? 0,
+      inFlightTotal: this._neighbourPreload?.roomIds.length ?? 0,
+      preloadedZones: [...this._preloadedZones],
+      abandonedZones: [...this._preloadAbandoned],
+      speculativeMemoryKB: this.getSpeculativeMemoryKB(activeWorldNumber, manager),
+      budgetKB: NEIGHBOUR_PRELOAD_BUDGET_KB,
+    };
+  }
+
+  /** Drops speculative preload state (zone change, editor edit, shutdown). */
+  resetNeighbourPreload(): void {
+    this._neighbourPreload = null;
+    this._preloadAbandoned.clear();
   }
 
   // ── Internal helpers ────────────────────────────────────────────────────────
