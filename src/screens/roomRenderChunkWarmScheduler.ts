@@ -882,6 +882,35 @@ export function getPinnedPrewarmRoomIds(): ReadonlySet<string> {
 }
 
 /**
+ * The region each queued task will actually warm (diagnostics and tests).
+ *
+ * Exists because the one property that matters for zone-load termination —
+ * that a task warms the SAME rectangle the readiness predicate tests — was
+ * otherwise unobservable from outside this module, and a producer/predicate
+ * mismatch there is an unbounded warm/re-queue loop rather than a visible
+ * failure.
+ */
+export function getQueuedWarmRegions(): readonly {
+  roomId: string;
+  entryKey: string | null;
+  offsetXPx: number;
+  offsetYPx: number;
+  vpWPx: number;
+  vpHPx: number;
+  scalePx: number;
+}[] {
+  return _queue.map(t => ({
+    roomId:    t.roomId,
+    entryKey:  t.entryKey ?? null,
+    offsetXPx: t.offsetXPx,
+    offsetYPx: t.offsetYPx,
+    vpWPx:     t.vpWPx,
+    vpHPx:     t.vpHPx,
+    scalePx:   t.scalePx,
+  }));
+}
+
+/**
  * Outcome of one `addZoneEntryViewportTasks` pass, so the caller can assert the
  * invariant that every unsatisfied zone-entry readiness requirement has an
  * executable or active task behind it.

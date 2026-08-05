@@ -15,7 +15,10 @@ import {
   ensureChunkPrewarmQueued,
   addZoneEntryViewportTasks,
   getPrewarmStats,
+  getQueuedWarmRegions,
 } from '../screens/roomRenderChunkWarmScheduler';
+import { computeDirectedEntryViewport } from '../screens/transitionEntryGeometry';
+import { buildRoomWallTemplate } from '../screens/gameRoomWalls';
 import {
   getOrCreatePrewarmWallCache,
   hasPrewarmedWallChunks,
@@ -767,6 +770,73 @@ test('addZoneEntryViewportTasks assigns a lower priority than radius-1 work', ()
     assert.equal(hasPrewarmedWallChunks('room3'), false, 'Genuine radius-3 room should be evicted');
     assert.equal(hasPrewarmedWallChunks('roomZ'), false, 'Zone-entry task should be evicted before radius-1 work, at or below radius-2 value');
     assert.equal(hasPrewarmedWallChunks('room1'), true, 'Genuine radius-1 room should survive relative to the zone-entry task');
+  } finally {
+    handle.cancel();
+    clearAllRenderBundles();
+  }
+});
+
+test('a zone-entry task warms the SWEPT region the readiness predicate tests, not the raw viewport', () => {
+  // The producer and `collectZoneEntryReadinessReport` must agree on the exact
+  // rectangle. Warming a strictly smaller one (the raw viewport, while the
+  // predicate tests the swept union over every reachable spawn) makes the task
+  // complete, the requirement stay unsatisfied, and the next frame re-queue an
+  // identical task — the zone overlay then sits at "N/N" forever.
+  clearAllRenderBundles();
+  const vpW = 240, vpH = 135, scale = 1;
+
+  // A tall room with a mid-wall doorway: the runtime slides the spawn along the
+  // opening, so the swept union is genuinely larger than one viewport.
+  const door = (direction: TransitionDirection, target: string): RoomTransitionDef => ({
+    ...tx(direction, target),
+    xBlock: direction === 'left' ? 0 : 59,
+    yBlock: 24,
+    positionBlock: 24,
+    openingSizeBlocks: 6,
+  });
+  const tall = (id: string, transitions: RoomTransitionDef[]): RoomDef =>
+    ({ ...room(id, transitions), widthBlocks: 60, heightBlocks: 60 }) as RoomDef;
+
+  const left  = tall('left',  [door('right' as TransitionDirection, 'right')]);
+  const right = tall('right', [door('left'  as TransitionDirection, 'left')]);
+  const registry = new Map<string, RoomDef>([['left', left], ['right', right]]);
+
+  const runtimeCache = new RoomRuntimeCache();
+  for (const [id, r] of registry) {
+    runtimeCache.set(id, {
+      renderRevision: -1,
+      wallTemplate:   buildRoomWallTemplate(r),
+      edgeExtension:  null,
+      blockerKeys:    new Set(),
+      darkBlockerKeys: new Set(),
+      wallDecorations: [],
+    } as never);
+  }
+
+  const handle = scheduleChunkPrewarms(left, registry, runtimeCache, () => 'high', () => 10, vpW, vpH, scale);
+  try {
+    const produced = addZoneEntryViewportTasks(['left', 'right'], registry, runtimeCache, vpW, vpH, scale);
+    assert.equal(produced.added > 0, true, 'the fixture must actually queue zone-entry tasks');
+
+    const zoneTasks = getQueuedWarmRegions().filter(t => t.entryKey !== null);
+    assert.equal(zoneTasks.length, produced.added);
+
+    let sawSpread = false;
+    for (const task of zoneTasks) {
+      const [sourceId, idxStr] = task.entryKey!.split(':');
+      const swept = computeDirectedEntryViewport(
+        registry.get(sourceId)!, Number(idxStr),
+        registry.get(task.roomId)!, vpW, vpH, scale,
+      );
+      assert.ok(swept !== null);
+      if (swept!.vpWPx > vpW || swept!.vpHPx > vpH) sawSpread = true;
+      assert.deepEqual(
+        { w: task.vpWPx, h: task.vpHPx, x: task.offsetXPx, y: task.offsetYPx },
+        { w: swept!.vpWPx, h: swept!.vpHPx, x: swept!.offsetXPx, y: swept!.offsetYPx },
+        `task for ${task.entryKey} must warm exactly the swept entry region`,
+      );
+    }
+    assert.equal(sawSpread, true, 'fixture must exercise a spawn spread, or it proves nothing');
   } finally {
     handle.cancel();
     clearAllRenderBundles();
