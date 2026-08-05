@@ -1045,8 +1045,16 @@ export function addZoneEntryViewportTasks(
         entryKey,
         offsetXPx: off.offsetXPx,
         offsetYPx: off.offsetYPx,
-        vpWPx,
-        vpHPx,
+        // MUST be the SWEPT dimensions, not the raw viewport.  The coverage
+        // predicate this task exists to satisfy (`isWallPrewarmViewportCovered`
+        // via `collectZoneEntryReadinessReport`) tests `swept.vpWPx/vpHPx`,
+        // which are the base viewport grown by the spawn spread.  Warming only
+        // the base viewport built a strictly smaller region than the predicate
+        // demands: the task completed, was popped, the requirement was still
+        // uncovered, the next frame re-queued an identical task — an unbounded
+        // loop with the zone overlay stuck at "N/N".
+        vpWPx: swept.vpWPx,
+        vpHPx: swept.vpHPx,
         scalePx,
         transitionDir: undefined,
         wallDone: false,
