@@ -12,6 +12,7 @@ import type { EditableCampaignSession } from '../editor/editableCampaignSession'
 import { createNewCampaignSession, sanitizeCampaignId, createSessionFromPackedCampaign } from '../editor/editableCampaignSession';
 import { applyLocalePresentation, getUiFontFamily, t } from '../i18n';
 import { showWorkshopBrowser } from './workshopBrowser';
+import type { PublishableCampaign } from './workshopPublishDialog';
 import { loadCampaignSourceForWorkshopItem } from '../workshop/workshopCampaignLoader';
 import type { WorkshopItem } from '../workshop/types';
 
@@ -68,6 +69,11 @@ export async function buildCustomCampaignsUI(
   });
   createNewBtn.addEventListener('click', () => showCreateNewCampaignDialog(container, callbacks));
   container.appendChild(createNewBtn);
+
+  // Populated once the campaign list resolves below. The Workshop browser
+  // reads it lazily on open, so it is always current by the time the player
+  // can click through to the publish dialog.
+  const publishableCampaigns: PublishableCampaign[] = [];
 
   // ── Browse Workshop button ────────────────────────────────────────────────
   const workshopBtn = document.createElement('button');
@@ -140,6 +146,21 @@ export async function buildCustomCampaignsUI(
     listError = e instanceof Error ? e.message : String(e);
   }
   container.removeChild(loadingEl);
+
+  // Only packed campaigns can be uploaded: the Workshop package format is a
+  // single `.dwcampaign.json`, and folder-backed bundled campaigns have no
+  // packed representation to serialize.
+  publishableCampaigns.length = 0;
+  for (const source of sources) {
+    const loadPackedCampaign = source.loadPackedCampaign;
+    if (!loadPackedCampaign) continue;
+    publishableCampaigns.push({
+      campaignId: source.id,
+      defaultTitle: source.title,
+      defaultDescription: source.description,
+      loadCampaign: () => loadPackedCampaign(),
+    });
+  }
 
   if (listError !== null) {
     const errorEl = document.createElement('div');

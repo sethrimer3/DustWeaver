@@ -56,7 +56,12 @@ against a running Steam client with the game launched through Steam:
   Steam, e.g. after a fresh Steam install) get pushed to Steam on next load
   via `reconcileSaveSlotAchievements` in `src/progression/saveSlots.ts`.
 - Publish a test Workshop item from the in-game "Browse Workshop → Publish"
-  flow and confirm it appears on the item's Steam Workshop page.
+  flow and confirm it appears on the item's Steam Workshop page **with the
+  campaign file actually attached** (check the item's file listing, not just
+  that the item exists), along with the title, description, tags, and preview
+  image entered in the dialog.
+- Publish the same campaign a second time and confirm it updates the existing
+  item instead of creating a duplicate.
 - Subscribe/unsubscribe to a Workshop item from both the Steam client and
   the in-game browser and confirm state stays consistent.
 - Verify `WORKSHOP_AUTHOR` and `WORKSHOP_SUBSCRIBER` achievements unlock on
@@ -69,9 +74,46 @@ against a running Steam client with the game launched through Steam:
   package (missing `workshop-meta.json` or `.dwcampaign.json`, or an
   unsupported `formatVersion`).
 
-## 5. Known gaps left for the Steam integration pass
+## 5. How upload and download are wired
 
-- The publish dialog (title/description/tags) referenced in the design is
-  simplified to reuse whatever `WorkshopPackageManifest` the caller
-  supplies; a dedicated input form for authoring metadata in
-  `workshopBrowser.ts` is not yet built.
+All live Steam UGC calls go through `electron/workshopUgc.cjs` (main process
+only). `electron/platformBridge.cjs` owns the ipcMain handlers and delegates
+there; the renderer reaches them via `src/workshop/rendererWorkshopAdapter.ts`.
+
+**Upload.** "Browse Workshop → pick a campaign → Publish" opens
+`src/ui/workshopPublishDialog.ts` (title, description, tags, visibility,
+preview image, change note, optional existing item ID). The campaign is sent as
+*data*, not a directory path — the main process stages it into a temp folder as
+`workshop-meta.json` + `<campaignId>.dwcampaign.json`, then calls
+`createItem`/`updateItem` with that folder as `contentPath`. New items are
+created **private** by default, because Steam hides an item until its author
+accepts the Workshop legal agreement on the item page; the dialog says so when
+Steam reports `needsToAcceptAgreement`.
+
+Re-publishing the same campaign updates the existing item rather than creating
+a duplicate. The campaign → item-ID mapping lives in
+`src/workshop/publishedItemRegistry.ts` (localStorage). If that mapping is lost,
+paste the item ID into the dialog's "Existing item ID" field to relink.
+
+**Download.** `dw:workshop-download` asks Steam to fetch an item and polls
+until it is installed (2 minute cap; the download continues in the background
+after a timeout). Subscribed items are listed with real titles via a UGC detail
+query, and each row shows installed / downloading / update-available state.
+Items can also be pulled in by pasting a published-file ID.
+
+**Version note.** `steamworks.js` has renamed workshop methods across releases,
+so `resolveWorkshopApi` in `workshopUgc.cjs` accepts either the modern
+(`download`, `installInfo`, `subscribe`) or legacy (`downloadItem`,
+`getItemInstallInfo`, `subscribeItem`) names. If a future version renames them
+again, add the new name there rather than at the call sites.
+
+## 6. Remaining gaps
+
+- `steamworks.js` is not a dependency in this repo, so nothing above has been
+  executed against a real Steam client. The staging layout, update details, and
+  create-vs-update logic are covered by `src/tests/workshopUgc.test.ts` with a
+  fake client; the native boundary itself is unverified.
+- There is no in-game Workshop search/browse of the public catalogue — players
+  subscribe from the Steam client or by pasting an item ID.
+- Upload progress is reported as a single "Uploading…" state rather than a
+  byte-level progress bar.

@@ -113,16 +113,18 @@ export function showWorkshopPublishDialog(
 
   const visibilitySelect = document.createElement('select');
   visibilitySelect.style.cssText = FIELD_CSS;
-  const visibilityOptions: Array<{ value: WorkshopVisibility; key: string }> = [
-    { value: 'private', key: 'workshop.visibilityPrivate' },
-    { value: 'friendsOnly', key: 'workshop.visibilityFriends' },
-    { value: 'unlisted', key: 'workshop.visibilityUnlisted' },
-    { value: 'public', key: 'workshop.visibilityPublic' },
+  // Private first: it is the safe default for a brand-new item, since Steam
+  // hides items anyway until the author accepts the Workshop agreement.
+  const visibilityOptions: Array<{ value: WorkshopVisibility; label: string }> = [
+    { value: 'private', label: t('workshop.visibilityPrivate') },
+    { value: 'friendsOnly', label: t('workshop.visibilityFriends') },
+    { value: 'unlisted', label: t('workshop.visibilityUnlisted') },
+    { value: 'public', label: t('workshop.visibilityPublic') },
   ];
   for (const option of visibilityOptions) {
     const el = document.createElement('option');
     el.value = option.value;
-    el.textContent = t(option.key);
+    el.textContent = option.label;
     visibilitySelect.appendChild(el);
   }
   panel.appendChild(field(t('workshop.fieldVisibility'), visibilitySelect));

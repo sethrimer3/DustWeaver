@@ -79,8 +79,17 @@ function resolveWorkshopApi(client) {
 
 // ── Staging ────────────────────────────────────────────────────────────────
 
+/**
+ * Reduces a campaign ID to a safe single path segment. Separators are replaced
+ * and dot-runs collapsed, so a hostile ID like `../../evil` can never escape the
+ * staging directory or produce a relative-looking filename inside the uploaded
+ * package.
+ */
 function sanitizeForFilename(value) {
-  const cleaned = String(value || "").replace(/[^a-zA-Z0-9._-]/g, "_");
+  const cleaned = String(value || "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/\.{2,}/g, "_")
+    .replace(/^[._-]+/, "");
   return cleaned.length > 0 ? cleaned.slice(0, 64) : "campaign";
 }
 
