@@ -18,7 +18,46 @@ export interface WorkshopItem {
   tags: string[];
   subscribed: boolean;
   installed: boolean;
+  /** True while Steam is actively fetching the item's content. */
+  downloading?: boolean;
+  /** True when Steam holds a newer revision than the one installed locally. */
+  needsUpdate?: boolean;
   localPath?: string;
+}
+
+/** Steam UGC visibility, mirrored as strings so the UI never hardcodes enum ints. */
+export type WorkshopVisibility = 'public' | 'friendsOnly' | 'private' | 'unlisted';
+
+/**
+ * Everything needed to upload a campaign. The campaign is passed as data
+ * rather than a directory path: the main process stages it into a temp folder
+ * in the installed-package layout before handing it to Steam, so campaigns
+ * that only exist in browser storage (never exported to disk) can publish too.
+ */
+export interface WorkshopPublishInput {
+  manifest: WorkshopPackageManifest;
+  /** A validated `SavedCampaignV1`. */
+  campaign: unknown;
+  /**
+   * When set, updates that existing Workshop item instead of creating a new
+   * one — this is what stops re-publishing from littering the author's
+   * Workshop page with duplicates.
+   */
+  existingPublishedFileId?: string;
+  visibility?: WorkshopVisibility;
+  changeNote?: string;
+  /** `data:image/png;base64,…` (or jpeg), max 1 MiB per Steam's preview limit. */
+  previewImageDataUrl?: string;
+}
+
+export interface WorkshopPublishResult {
+  item: WorkshopItem;
+  /**
+   * True when Steam reports the author has not yet accepted the Workshop legal
+   * agreement. Until they do, the item stays invisible on the Workshop even if
+   * visibility was set to public, so the UI must tell them to visit the page.
+   */
+  needsToAcceptAgreement: boolean;
 }
 
 /**
@@ -38,7 +77,7 @@ export interface WorkshopInstalledPackage {
  */
 export interface WorkshopAdapter {
   isAvailable(): boolean;
-  publish(manifest: WorkshopPackageManifest, campaignDir: string): Promise<WorkshopItem>;
+  publish(input: WorkshopPublishInput): Promise<WorkshopPublishResult>;
   subscribe(steamPublishedFileId: string): Promise<void>;
   unsubscribe(steamPublishedFileId: string): Promise<void>;
   getSubscribedItems(): Promise<WorkshopItem[]>;

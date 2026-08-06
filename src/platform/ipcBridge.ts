@@ -5,7 +5,12 @@
  * to these channels via `rendererPlatform.ts`.
  */
 import type { AchievementId, AchievementStatus } from './types';
-import type { WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from '../workshop/types';
+import type {
+  WorkshopInstalledPackage,
+  WorkshopItem,
+  WorkshopPublishInput,
+  WorkshopPublishResult,
+} from '../workshop/types';
 
 export const PLATFORM_UNLOCK_ACHIEVEMENT = 'dw:platform-unlock-achievement' as const;
 export const PLATFORM_GET_ACHIEVEMENT = 'dw:platform-get-achievement' as const;
@@ -19,6 +24,7 @@ export const WORKSHOP_SUBSCRIBE = 'dw:workshop-subscribe' as const;
 export const WORKSHOP_UNSUBSCRIBE = 'dw:workshop-unsubscribe' as const;
 export const WORKSHOP_INSTALL_PATH = 'dw:workshop-install-path' as const;
 export const WORKSHOP_READ_PACKAGE = 'dw:workshop-read-package' as const;
+export const WORKSHOP_DOWNLOAD = 'dw:workshop-download' as const;
 
 export interface PlatformUnlockAchievementRequest {
   id: AchievementId;
@@ -42,12 +48,16 @@ export type PlatformGetPersonaNameResponse =
   | { ok: true; personaName: string | null }
   | { ok: false; error: string };
 
-export interface WorkshopPublishRequest {
-  manifest: WorkshopPackageManifest;
-  campaignDir: string;
-}
+export type WorkshopPublishRequest = WorkshopPublishInput;
 export type WorkshopPublishResponse =
-  | { ok: true; item: WorkshopItem }
+  | ({ ok: true } & WorkshopPublishResult)
+  | { ok: false; error: string };
+
+export interface WorkshopDownloadRequest {
+  steamPublishedFileId: string;
+}
+export type WorkshopDownloadResponse =
+  | { ok: true; installPath: string }
   | { ok: false; error: string };
 
 export type WorkshopGetItemsResponse =

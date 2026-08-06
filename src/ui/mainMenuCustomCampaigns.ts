@@ -84,6 +84,7 @@ export async function buildCustomCampaignsUI(
       onPlayItem: (item: WorkshopItem) => {
         void handlePlayWorkshopItem(item, callbacks, () => closeWorkshopBrowser?.());
       },
+      getPublishableCampaigns: () => publishableCampaigns,
     }, () => {}).then((close) => {
       closeWorkshopBrowser = close;
     });

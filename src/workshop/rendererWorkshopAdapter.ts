@@ -5,12 +5,14 @@
  * Steam Workshop adapter over IPC.
  */
 import {
+  WORKSHOP_DOWNLOAD,
   WORKSHOP_GET_ITEMS,
   WORKSHOP_INSTALL_PATH,
   WORKSHOP_PUBLISH,
   WORKSHOP_READ_PACKAGE,
   WORKSHOP_SUBSCRIBE,
   WORKSHOP_UNSUBSCRIBE,
+  type WorkshopDownloadResponse,
   type WorkshopGetItemsResponse,
   type WorkshopInstallPathResponse,
   type WorkshopPublishResponse,
@@ -19,7 +21,13 @@ import {
   type WorkshopUnsubscribeResponse,
 } from '../platform/ipcBridge';
 import type { ElectronPlatformBridge } from '../platform/rendererPlatform';
-import type { WorkshopAdapter, WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from './types';
+import type {
+  WorkshopAdapter,
+  WorkshopInstalledPackage,
+  WorkshopItem,
+  WorkshopPublishInput,
+  WorkshopPublishResult,
+} from './types';
 
 export function createRendererWorkshopAdapter(): WorkshopAdapter {
   const bridge = (typeof window !== 'undefined' ? window.electronPlatform : undefined) as
@@ -35,10 +43,10 @@ export function createRendererWorkshopAdapter(): WorkshopAdapter {
       return true;
     },
 
-    async publish(manifest: WorkshopPackageManifest, campaignDir: string): Promise<WorkshopItem> {
-      const response = (await bridge.invoke(WORKSHOP_PUBLISH, { manifest, campaignDir })) as WorkshopPublishResponse;
+    async publish(input: WorkshopPublishInput): Promise<WorkshopPublishResult> {
+      const response = (await bridge.invoke(WORKSHOP_PUBLISH, input)) as WorkshopPublishResponse;
       if (!response.ok) throw new Error(response.error);
-      return response.item;
+      return { item: response.item, needsToAcceptAgreement: response.needsToAcceptAgreement };
     },
 
     async subscribe(steamPublishedFileId: string): Promise<void> {
@@ -64,9 +72,13 @@ export function createRendererWorkshopAdapter(): WorkshopAdapter {
     },
 
     async download(steamPublishedFileId: string): Promise<string> {
-      const response = (await bridge.invoke(WORKSHOP_INSTALL_PATH, { steamPublishedFileId })) as WorkshopInstallPathResponse;
+      // Fast path: already on disk, no need to ask Steam to fetch anything.
+      const installed = (await bridge.invoke(WORKSHOP_INSTALL_PATH, { steamPublishedFileId })) as WorkshopInstallPathResponse;
+      if (installed.ok && installed.installPath) {
+        return installed.installPath;
+      }
+      const response = (await bridge.invoke(WORKSHOP_DOWNLOAD, { steamPublishedFileId })) as WorkshopDownloadResponse;
       if (!response.ok) throw new Error(response.error);
-      if (!response.installPath) throw new Error(`Workshop item ${steamPublishedFileId} is not installed`);
       return response.installPath;
     },
 

@@ -1,4 +1,10 @@
-import type { WorkshopAdapter, WorkshopInstalledPackage, WorkshopItem, WorkshopPackageManifest } from './types';
+import type {
+  WorkshopAdapter,
+  WorkshopInstalledPackage,
+  WorkshopItem,
+  WorkshopPublishInput,
+  WorkshopPublishResult,
+} from './types';
 
 /**
  * Test/dev-only registry of installed package contents keyed by `localPath`,
@@ -33,8 +39,12 @@ export function createFakeWorkshopAdapter(): WorkshopAdapter {
       return true;
     },
 
-    async publish(manifest: WorkshopPackageManifest, campaignDir: string): Promise<WorkshopItem> {
-      const steamPublishedFileId = `fake-${nextId++}`;
+    async publish(input: WorkshopPublishInput): Promise<WorkshopPublishResult> {
+      const { manifest, campaign, existingPublishedFileId } = input;
+      // Re-publishing an existing item updates it in place, mirroring the real
+      // adapter — so a test that publishes twice sees one item, not two.
+      const steamPublishedFileId = existingPublishedFileId ?? `fake-${nextId++}`;
+      const localPath = `/fake-workshop/${steamPublishedFileId}`;
       const item: WorkshopItem = {
         steamPublishedFileId,
         title: manifest.title,
@@ -43,10 +53,18 @@ export function createFakeWorkshopAdapter(): WorkshopAdapter {
         tags: manifest.tags,
         subscribed: true,
         installed: true,
-        localPath: campaignDir,
+        localPath,
       };
       items.set(steamPublishedFileId, item);
-      return item;
+      registerFakeInstalledPackage(localPath, {
+        manifest,
+        campaignData: campaign,
+        files: [
+          { path: 'workshop-meta.json', sizeBytes: JSON.stringify(manifest).length },
+          { path: `${manifest.campaignId}.dwcampaign.json`, sizeBytes: JSON.stringify(campaign).length },
+        ],
+      });
+      return { item, needsToAcceptAgreement: false };
     },
 
     async subscribe(steamPublishedFileId: string): Promise<void> {

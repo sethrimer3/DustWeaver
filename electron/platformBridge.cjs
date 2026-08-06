@@ -12,6 +12,18 @@
 const { ipcMain } = require("electron");
 const fs = require("fs");
 const path = require("path");
+const workshopUgc = require("./workshopUgc.cjs");
+
+/**
+ * Steam App ID used for UGC calls. `steamworks.js` infers it from the running
+ * Steam context, but `createItem`/`updateItem` still take it explicitly — the
+ * previous hardcoded `0` would have created items under no app at all.
+ */
+function getSteamAppId() {
+  const raw = process.env.DUSTWEAVER_STEAM_APP_ID;
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
 
 const ACHIEVEMENT_IDS = [
   "FIRST_WEAVE",
@@ -38,13 +50,56 @@ function loadSteamworks() {
   }
 }
 
+/**
+ * Where locally "published" packages land when no Steam client is present, so
+ * authors can still exercise the full publish → list → play path in a plain
+ * dev build. Never used when Steam is available.
+ */
+function fallbackWorkshopRoot() {
+  const { app } = require("electron");
+  return path.join(app.getPath("userData"), "WORKSHOP_LOCAL");
+}
+
+/** Re-reads locally staged packages so they survive an app restart. */
+function loadFallbackWorkshopItems() {
+  const items = new Map();
+  let root;
+  try {
+    root = fallbackWorkshopRoot();
+    if (!fs.existsSync(root)) return items;
+  } catch {
+    return items;
+  }
+  for (const entry of fs.readdirSync(root)) {
+    const dir = path.join(root, entry);
+    const metaPath = path.join(dir, "workshop-meta.json");
+    try {
+      if (!fs.statSync(dir).isDirectory() || !fs.existsSync(metaPath)) continue;
+      const meta = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      items.set(entry, {
+        steamPublishedFileId: entry,
+        title: meta.title || entry,
+        description: meta.description || "",
+        authorName: meta.authorSteamId || "",
+        tags: Array.isArray(meta.tags) ? meta.tags : [],
+        subscribed: true,
+        installed: true,
+        localPath: dir,
+      });
+    } catch {
+      // Skip unreadable/partial directories rather than failing startup.
+    }
+  }
+  return items;
+}
+
 function registerPlatformIpcHandlers() {
   const client = loadSteamworks();
 
   // In-memory fallback state used whenever Steam is unavailable, so unlocks
   // are at least idempotent/visible for the current process lifetime.
   const fallbackUnlocked = new Map();
-  const fallbackWorkshopItems = new Map();
+  const fallbackWorkshopItems = client ? new Map() : loadFallbackWorkshopItems();
 
   ipcMain.handle("dw:platform-unlock-achievement", async (_event, { id }) => {
     try {
@@ -93,25 +148,27 @@ function registerPlatformIpcHandlers() {
   });
 
   // ── Workshop ──────────────────────────────────────────────────────────
-  ipcMain.handle("dw:workshop-publish", async (_event, { manifest, campaignDir }) => {
+  ipcMain.handle("dw:workshop-publish", async (_event, input) => {
     try {
       if (client && client.workshop) {
-        const { itemId } = await client.workshop.createItem(0);
-        const update = client.workshop.startItemUpdate(0, itemId);
-        await client.workshop.submitItemUpdate(update, `Publish ${manifest.title}`);
-        const item = {
-          steamPublishedFileId: itemId.toString(),
-          title: manifest.title,
-          description: manifest.description,
-          authorName: manifest.authorSteamId,
-          tags: manifest.tags,
-          subscribed: true,
-          installed: true,
-          localPath: campaignDir,
-        };
-        return { ok: true, item };
+        const result = await workshopUgc.publishItem(client, getSteamAppId(), input);
+        return { ok: true, item: result.item, needsToAcceptAgreement: result.needsToAcceptAgreement };
       }
-      const steamPublishedFileId = `fake-${fallbackWorkshopItems.size + 1}`;
+
+      // No Steam client: stage the package into userData anyway so the
+      // publish → list → play round trip is exercisable in plain dev builds.
+      const { manifest, campaign, existingPublishedFileId, previewImageDataUrl } = input;
+      const steamPublishedFileId =
+        existingPublishedFileId || `local-${manifest.campaignId}`;
+      const localRoot = path.join(fallbackWorkshopRoot(), steamPublishedFileId);
+      fs.rmSync(localRoot, { recursive: true, force: true });
+      fs.mkdirSync(localRoot, { recursive: true });
+      const staged = workshopUgc.stageCampaignPackage(manifest, campaign, previewImageDataUrl);
+      for (const entry of fs.readdirSync(staged.contentPath)) {
+        fs.copyFileSync(path.join(staged.contentPath, entry), path.join(localRoot, entry));
+      }
+      workshopUgc.cleanupStagedPackage(staged.contentPath);
+
       const item = {
         steamPublishedFileId,
         title: manifest.title,
@@ -120,10 +177,10 @@ function registerPlatformIpcHandlers() {
         tags: manifest.tags,
         subscribed: true,
         installed: true,
-        localPath: campaignDir,
+        localPath: localRoot,
       };
       fallbackWorkshopItems.set(steamPublishedFileId, item);
-      return { ok: true, item };
+      return { ok: true, item, needsToAcceptAgreement: false };
     } catch (err) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
@@ -132,23 +189,29 @@ function registerPlatformIpcHandlers() {
   ipcMain.handle("dw:workshop-get-items", async () => {
     try {
       if (client && client.workshop) {
-        const ids = client.workshop.getSubscribedItems();
-        const items = ids.map((itemId) => {
-          const info = client.workshop.getItemInstallInfo(itemId);
-          return {
-            steamPublishedFileId: itemId.toString(),
-            title: "",
-            description: "",
-            authorName: "",
-            tags: [],
-            subscribed: true,
-            installed: info !== null,
-            localPath: info ? info.folder : undefined,
-          };
-        });
-        return { ok: true, items };
+        return { ok: true, items: await workshopUgc.listSubscribedItems(client) };
       }
       return { ok: true, items: Array.from(fallbackWorkshopItems.values()) };
+    } catch (err) {
+      return { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+  });
+
+  // Asks Steam to fetch the item and waits until it is installed on disk,
+  // returning the install path. `dw:workshop-install-path` only reports what is
+  // already there; this is the channel that actually triggers a download.
+  ipcMain.handle("dw:workshop-download", async (_event, { steamPublishedFileId }) => {
+    try {
+      if (client && client.workshop) {
+        const installPath = await workshopUgc.downloadAndWait(client, steamPublishedFileId);
+        return { ok: true, installPath };
+      }
+      const item = fallbackWorkshopItems.get(steamPublishedFileId);
+      if (!item || !item.localPath) {
+        return { ok: false, error: `Workshop item ${steamPublishedFileId} is not available offline` };
+      }
+      item.installed = true;
+      return { ok: true, installPath: item.localPath };
     } catch (err) {
       return { ok: false, error: String(err && err.message ? err.message : err) };
     }
@@ -157,7 +220,7 @@ function registerPlatformIpcHandlers() {
   ipcMain.handle("dw:workshop-subscribe", async (_event, { steamPublishedFileId }) => {
     try {
       if (client && client.workshop) {
-        await client.workshop.subscribeItem(BigInt(steamPublishedFileId));
+        await workshopUgc.resolveWorkshopApi(client).subscribe(BigInt(steamPublishedFileId));
       } else {
         const item = fallbackWorkshopItems.get(steamPublishedFileId);
         if (item) item.subscribed = true;
@@ -171,7 +234,7 @@ function registerPlatformIpcHandlers() {
   ipcMain.handle("dw:workshop-unsubscribe", async (_event, { steamPublishedFileId }) => {
     try {
       if (client && client.workshop) {
-        await client.workshop.unsubscribeItem(BigInt(steamPublishedFileId));
+        await workshopUgc.resolveWorkshopApi(client).unsubscribe(BigInt(steamPublishedFileId));
       } else {
         const item = fallbackWorkshopItems.get(steamPublishedFileId);
         if (item) item.subscribed = false;
@@ -185,8 +248,8 @@ function registerPlatformIpcHandlers() {
   ipcMain.handle("dw:workshop-install-path", async (_event, { steamPublishedFileId }) => {
     try {
       if (client && client.workshop) {
-        const itemId = BigInt(steamPublishedFileId);
-        const info = client.workshop.getItemInstallInfo(itemId);
+        const api = workshopUgc.resolveWorkshopApi(client);
+        const info = api.installInfo ? api.installInfo(BigInt(steamPublishedFileId)) : null;
         return { ok: true, installPath: info ? info.folder : null };
       }
       const item = fallbackWorkshopItems.get(steamPublishedFileId);
