@@ -1,7 +1,7 @@
 /**
  * Editor workspace preferences — per-campaign, per-browser editor UI state
  * (which layers are shown/locked, the active palette category, brush mode,
- * layer-panel collapse state, sidebar scroll position).
+ * menu collapse state, sidebar visibility/scroll position, and panel layout).
  *
  * This is deliberately NOT room/campaign data: it never appears in exported
  * campaign JSON, never marks a room dirty, and never creates undo/history
@@ -28,12 +28,26 @@ import {
  *
  * v1 → v2 added the dockable-panel `panelLayout` and split the single
  * `sidebarScrollTop` into independent `leftSidebarScrollTop` /
- * `rightSidebarScrollTop`. Migration is handled inside `sanitize()` rather
+ * `rightSidebarScrollTop`. v2 → v3 added every menu's expanded state and both
+ * sidebar visibility flags. Migration is handled inside `sanitize()` rather
  * than by changing the storage key, so an existing v1 record keeps every
  * preference it already had (layers, category, brush, layer-panel collapse,
  * and its scroll position, which is reinterpreted as the LEFT sidebar's).
  */
-export const EDITOR_WORKSPACE_PREFS_VERSION = 2;
+export const EDITOR_WORKSPACE_PREFS_VERSION = 3;
+
+export const DEFAULT_EDITOR_SECTION_EXPANDED: Readonly<Record<string, boolean>> = Object.freeze({
+  tools: true,
+  brush: true,
+  categories: true,
+  palette: true,
+  roomDimensions: false,
+  background: false,
+  roomSong: false,
+  inspector: true,
+  layers: false,
+  export: false,
+});
 
 /** Stable storage key for the built-in (non-custom) campaign. */
 export const BUILTIN_CAMPAIGN_WORKSPACE_KEY = 'DUSTWEAVER_CAMPAIGN';
@@ -72,6 +86,9 @@ export interface EditorWorkspacePreferences {
    */
   panelLayout: EditorPanelLayout;
   sidebarsSwapped: boolean;
+  sectionExpanded: Record<string, boolean>;
+  leftSidebarVisible: boolean;
+  rightSidebarVisible: boolean;
 }
 
 export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences {
@@ -85,6 +102,9 @@ export function defaultEditorWorkspacePreferences(): EditorWorkspacePreferences 
     rightSidebarScrollTop: 0,
     panelLayout: defaultPanelLayout(),
     sidebarsSwapped: false,
+    sectionExpanded: { ...DEFAULT_EDITOR_SECTION_EXPANDED },
+    leftSidebarVisible: true,
+    rightSidebarVisible: true,
   };
 }
 
@@ -120,6 +140,21 @@ function sanitizeLayerPrefs(v: unknown): EditorWorkspaceLayerPrefs | null {
     locked: typeof o.locked === 'boolean' ? o.locked : false,
     selectOnly: typeof o.selectOnly === 'boolean' ? o.selectOnly : false,
   };
+}
+
+function sanitizeSectionExpanded(v: unknown, legacyLayerPanelCollapsed: unknown): Record<string, boolean> {
+  const result = { ...DEFAULT_EDITOR_SECTION_EXPANDED };
+  if (typeof v !== 'object' || v === null) {
+    if (typeof legacyLayerPanelCollapsed === 'boolean') {
+      result.layers = !legacyLayerPanelCollapsed;
+    }
+    return result;
+  }
+  for (const key of Object.keys(result)) {
+    const value = (v as Record<string, unknown>)[key];
+    if (typeof value === 'boolean') result[key] = value;
+  }
+  return result;
 }
 
 /**
@@ -161,6 +196,9 @@ function sanitize(raw: unknown): EditorWorkspacePreferences {
     // layout with every registered panel in exactly one location.
     panelLayout: normalizePanelLayout(o.panelLayout),
     sidebarsSwapped: typeof o.sidebarsSwapped === 'boolean' ? o.sidebarsSwapped : fallback.sidebarsSwapped,
+    sectionExpanded: sanitizeSectionExpanded(o.sectionExpanded, o.layerPanelCollapsed),
+    leftSidebarVisible: typeof o.leftSidebarVisible === 'boolean' ? o.leftSidebarVisible : fallback.leftSidebarVisible,
+    rightSidebarVisible: typeof o.rightSidebarVisible === 'boolean' ? o.rightSidebarVisible : fallback.rightSidebarVisible,
   };
 }
 

@@ -98,7 +98,7 @@ function ensureCollapsibleFocusStyleInjected(): void {
 
 export function createCollapsibleSection(
   titleText: string,
-  opts?: { defaultExpanded?: boolean; wrapperCss?: string; key?: string },
+  opts?: { defaultExpanded?: boolean; wrapperCss?: string; key?: string; onExpandedChange?: (expanded: boolean) => void },
 ): CollapsibleSection {
   ensureCollapsibleFocusStyleInjected();
 
@@ -140,10 +140,12 @@ export function createCollapsibleSection(
   let expanded = opts?.defaultExpanded ?? false;
 
   function setExpanded(value: boolean): void {
+    const changed = expanded !== value;
     expanded = value;
     header.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     chevron.textContent = expanded ? '▾' : '▸';
     body.style.display = expanded ? 'block' : 'none';
+    if (changed) opts?.onExpandedChange?.(expanded);
   }
 
   function isExpanded(): boolean {

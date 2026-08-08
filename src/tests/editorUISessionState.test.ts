@@ -17,18 +17,18 @@ function readSource(relPath: string): string {
   return readFileSync(path.join(__dirname, relPath), 'utf8');
 }
 
-test('every top-level collapsible section is keyed for session-state snapshot/restore', () => {
+test('every top-level collapsible section is keyed and has an explicit default state', () => {
   const source = readSource('../editor/editorUI.ts');
   const expectedKeyedSections = [
-    "createCollapsibleSection('Tools', { key: 'tools' })",
-    "createCollapsibleSection('Brush', { key: 'brush' })",
-    "createCollapsibleSection('Room Dimensions', { key: 'roomDimensions' })",
-    "createCollapsibleSection('Background', { key: 'background' })",
-    "createCollapsibleSection('Room Song', { key: 'roomSong' })",
-    "createCollapsibleSection('Categories', { key: 'categories' })",
-    "createCollapsibleSection('Palette', { key: 'palette' })",
-    "createCollapsibleSection('Inspector', { key: 'inspector' })",
-    "createCollapsibleSection('Export', { key: 'export' })",
+    "createCollapsibleSection('Tools', sectionOptions('tools', true))",
+    "createCollapsibleSection('Brush', sectionOptions('brush', true))",
+    "createCollapsibleSection('Room Dimensions', sectionOptions('roomDimensions'))",
+    "createCollapsibleSection('Background', sectionOptions('background'))",
+    "createCollapsibleSection('Room Song', sectionOptions('roomSong'))",
+    "createCollapsibleSection('Categories', sectionOptions('categories', true))",
+    "createCollapsibleSection('Palette', sectionOptions('palette', true))",
+    "createCollapsibleSection('Inspector', sectionOptions('inspector', true))",
+    "createCollapsibleSection('Export', sectionOptions('export'))",
   ];
   for (const s of expectedKeyedSections) {
     assert.ok(source.includes(s), `expected editorUI.ts to build a keyed section via: ${s}`);
@@ -45,13 +45,16 @@ test('EditorUI exposes session-state snapshot/restore + sidebar-visibility acces
   assert.ok(/applySessionUIState:\s*\(snapshot: EditorSessionUIState\)/.test(source));
 });
 
-test('EditorSessionUIState is in-memory only: never routed through workspace-preferences persistence (localStorage/disk)', () => {
+test('session snapshot remains distinct while durable menu state lives in workspace preferences', () => {
   const source = readSource('../editor/editorUI.ts');
   const prefsIdx = source.indexOf('interface EditorWorkspaceUIPrefs');
   const sessionIdx = source.indexOf('interface EditorSessionUIState');
   assert.ok(prefsIdx >= 0 && sessionIdx >= 0, 'expected both distinct interfaces to exist');
   // The two concepts must remain distinct types, not merged into one.
   assert.notEqual(prefsIdx, sessionIdx);
+  assert.ok(source.includes('sectionExpanded: Record<string, boolean>;'));
+  assert.ok(source.includes('leftSidebarVisible: boolean;'));
+  assert.ok(source.includes('rightSidebarVisible: boolean;'));
 });
 
 test('controller snapshots session UI state before ui.destroy() and restores it after createEditorUI on reopen', () => {
@@ -73,7 +76,7 @@ test('controller snapshots session UI state before ui.destroy() and restores it 
   assert.ok(restoreIdx > createIdx, 'restore must happen after the new EditorUI is constructed');
 });
 
-test('Swap Menu Sides control exists with atomic content-group swap and session-only sidebarsSwapped state', () => {
+test('Swap Menu Sides control exists with atomic content-group swap and snapshot state', () => {
   const source = readSource('../editor/editorUI.ts');
   assert.ok(source.includes('sidebarsSwapped: boolean;'), 'expected EditorSessionUIState to carry a sidebarsSwapped flag');
   assert.ok(source.includes('function swapMenuSides(): void'), 'expected a swapMenuSides implementation');

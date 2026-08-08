@@ -50,6 +50,7 @@ test('v1 record migrates without losing layers, category, brush, collapse, or sc
   // Every v1 preference survives the upgrade.
   assert.deepEqual(loaded.layers.terrain, { visible: false, locked: true, selectOnly: false });
   assert.equal(loaded.layerPanelCollapsed, true);
+  assert.equal(loaded.sectionExpanded.layers, false, 'legacy collapsed Layers state survives v3 migration');
   assert.equal(loaded.activeCategory, 'enemies');
   assert.equal(loaded.brushMode, '3x3');
   // v1's single scroll value is reinterpreted as the LEFT sidebar's; the

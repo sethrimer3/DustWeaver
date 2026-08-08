@@ -169,6 +169,8 @@ export function createEditorLayersPanel(
   // presets + layer rows go into the section's body.
   const section = createCollapsibleSection('Layers', {
     defaultExpanded: false,
+    key: 'layers',
+    onExpandedChange: () => getCallbacks()?.onWorkspaceUIChange?.(),
     wrapperCss: `
       border: 1px solid ${PANEL_BORDER}; border-radius: 3px;
       padding: 6px 8px; margin-bottom: 8px; background: rgba(0,0,0,0.2);

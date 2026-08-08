@@ -21,11 +21,11 @@ import {
 
 // ── Registry / default layout ───────────────────────────────────────────────
 
-test('default layout reproduces the pre-docking hardcoded sidebar arrangement', () => {
+test('default layout places Layers immediately below Inspector', () => {
   const layout = defaultPanelLayout();
   assert.deepEqual(layout.right, ['tools', 'brush', 'categories', 'palette']);
   assert.deepEqual(layout.left, [
-    'roomDimensions', 'background', 'roomSong', 'layers', 'inspector', 'export',
+    'roomDimensions', 'background', 'roomSong', 'inspector', 'layers', 'export',
   ]);
   assert.deepEqual(layout.floating, {});
   assert.equal(isPanelLayoutComplete(layout), true);
@@ -76,7 +76,7 @@ test('reordering within one sidebar moves only the dragged panel', () => {
   // Move 'export' (last on the left) to the top of the left sidebar.
   const next = dockPanel(layout, 'export', 'left', 0);
   assert.deepEqual(next.left, [
-    'export', 'roomDimensions', 'background', 'roomSong', 'layers', 'inspector',
+    'export', 'roomDimensions', 'background', 'roomSong', 'inspector', 'layers',
   ]);
   assert.deepEqual(next.right, layout.right, 'the other sidebar is untouched');
   assert.equal(isPanelLayoutComplete(next), true);
@@ -88,7 +88,7 @@ test('reorder index is interpreted against the list after removal', () => {
   // after the two panels that remain ahead of it once it is lifted out.
   const next = dockPanel(layout, 'roomDimensions', 'left', 2);
   assert.deepEqual(next.left, [
-    'background', 'roomSong', 'roomDimensions', 'layers', 'inspector', 'export',
+    'background', 'roomSong', 'roomDimensions', 'inspector', 'layers', 'export',
   ]);
 });
 
@@ -110,7 +110,7 @@ test('moving a panel to the other sidebar at a specific index', () => {
   const next = dockPanel(layout, 'palette', 'left', 1);
   assert.equal(next.right.includes('palette'), false, 'removed from its old sidebar');
   assert.deepEqual(next.left, [
-    'roomDimensions', 'palette', 'background', 'roomSong', 'layers', 'inspector', 'export',
+    'roomDimensions', 'palette', 'background', 'roomSong', 'inspector', 'layers', 'export',
   ]);
   assert.deepEqual(next.right, ['tools', 'brush', 'categories']);
   assert.equal(isPanelLayoutComplete(next), true);
@@ -238,9 +238,9 @@ test('normalize restores panels missing from a stored layout to their default lo
   assert.equal(layout.left.includes('layers'), true);
   assert.equal(layout.left.includes('export'), true);
   // They land in default-order position relative to their default-side peers,
-  // not blindly appended: layers (order 3) before inspector (order 4).
-  assert.ok(layout.left.indexOf('layers') < layout.left.indexOf('inspector'));
-  assert.ok(layout.left.indexOf('inspector') < layout.left.indexOf('export'));
+  // not blindly appended: inspector (order 3) before layers (order 4).
+  assert.ok(layout.left.indexOf('inspector') < layout.left.indexOf('layers'));
+  assert.ok(layout.left.indexOf('layers') < layout.left.indexOf('export'));
 });
 
 test('normalize handles wholly corrupt / missing input without throwing', () => {

@@ -65,17 +65,20 @@ export interface EditorWorkspaceUIPrefs {
   panelLayout: EditorPanelLayout;
   /** Whether the two content groups are swapped between left/right physical shells. */
   sidebarsSwapped: boolean;
+  sectionExpanded: Record<string, boolean>;
+  leftSidebarVisible: boolean;
+  rightSidebarVisible: boolean;
 }
 
 /**
- * In-memory, controller-owned snapshot of purely session-lived UI state:
+ * In-memory, controller-owned snapshot of UI state used for an immediate
+ * close/reopen within the same app session:
  * every collapsible section's expanded/collapsed state (keyed by the stable
  * `key` passed to createCollapsibleSection) plus each sidebar's
  * visible/hidden state. Survives editor close/reopen within the same
- * running app session, but is never written to disk/localStorage/room JSON
- * — that's the separate, per-campaign-persisted `EditorWorkspaceUIPrefs`
- * above (layers panel only). Kept as a distinct type/concept deliberately;
- * do not merge the two.
+ * running app session. The same durable subset is also written to the separate,
+ * per-campaign `EditorWorkspaceUIPrefs` above so it survives a full app restart;
+ * neither representation enters room JSON or undo history.
  */
 export interface EditorSessionUIState {
   sectionExpanded: Record<string, boolean>;
@@ -258,14 +261,18 @@ export function createEditorUI(
   rightSidebar.appendChild(rightContentGroup);
 
   function setLeftSidebarVisible(visible: boolean): void {
+    if (leftSidebarVisible === visible) return;
     leftSidebarVisible = visible;
     container.style.display = visible ? '' : 'none';
     leftRevealTab.style.display = visible ? 'none' : 'block';
+    callbacks?.onWorkspaceUIChange?.();
   }
   function setRightSidebarVisible(visible: boolean): void {
+    if (rightSidebarVisible === visible) return;
     rightSidebarVisible = visible;
     rightSidebar.style.display = visible ? '' : 'none';
     rightRevealTab.style.display = visible ? 'none' : 'block';
+    callbacks?.onWorkspaceUIChange?.();
   }
 
   // ── Title ────────────────────────────────────────────────────────────────
@@ -469,7 +476,12 @@ export function createEditorUI(
     toolBtns.push(btn);
     toolBar.appendChild(btn);
   }
-  const toolsSection = createCollapsibleSection('Tools', { key: 'tools' });
+  const sectionOptions = (key: string, defaultExpanded = false) => ({
+    key,
+    defaultExpanded,
+    onExpandedChange: () => callbacks?.onWorkspaceUIChange?.(),
+  });
+  const toolsSection = createCollapsibleSection('Tools', sectionOptions('tools', true));
   toolsSection.body.appendChild(toolBar);
 
   // ── Brush mode selector ──────────────────────────────────────────────────
@@ -497,7 +509,7 @@ export function createEditorUI(
     brushBtns.push(btn);
     brushRow.appendChild(btn);
   }
-  const brushSection = createCollapsibleSection('Brush', { key: 'brush' });
+  const brushSection = createCollapsibleSection('Brush', sectionOptions('brush', true));
   brushSection.body.appendChild(brushRow);
   const roomDimDiv = document.createElement('div');
 
@@ -537,7 +549,7 @@ export function createEditorUI(
   }
   roomDimDiv.appendChild(edgeResizeDiv);
 
-  const roomDimSection = createCollapsibleSection('Room Dimensions', { key: 'roomDimensions' });
+  const roomDimSection = createCollapsibleSection('Room Dimensions', sectionOptions('roomDimensions'));
   roomDimSection.body.appendChild(roomDimDiv);
 
   // ── Background picker ────────────────────────────────────────────────────
@@ -703,7 +715,7 @@ export function createEditorUI(
   bgBlurLabel.appendChild(document.createTextNode('Use blurred version'));
   bgDiv.appendChild(bgBlurLabel);
 
-  const bgSection = createCollapsibleSection('Background', { key: 'background' });
+  const bgSection = createCollapsibleSection('Background', sectionOptions('background'));
   bgSection.body.appendChild(bgDiv);
 
   // ── Room Song dropdown ───────────────────────────────────────────────────
@@ -725,7 +737,7 @@ export function createEditorUI(
   });
   songSelect.addEventListener('click', (e) => e.stopPropagation());
   songDiv.appendChild(songSelect);
-  const songSection = createCollapsibleSection('Room Song', { key: 'roomSong' });
+  const songSection = createCollapsibleSection('Room Song', sectionOptions('roomSong'));
   songSection.body.appendChild(songDiv);
 
   // ── Layers panel (always visible — editor-only visibility/lock/solo/target) ──
@@ -750,13 +762,13 @@ export function createEditorUI(
     catBtns.push(btn);
     catBar.appendChild(btn);
   }
-  const categoriesSection = createCollapsibleSection('Categories', { key: 'categories' });
+  const categoriesSection = createCollapsibleSection('Categories', sectionOptions('categories', true));
   categoriesSection.body.appendChild(catBar);
 
   // ── Palette items ────────────────────────────────────────────────────────
   const paletteDiv = document.createElement('div');
   paletteDiv.style.cssText = 'margin-bottom: 12px;';
-  const paletteSection = createCollapsibleSection('Palette', { key: 'palette' });
+  const paletteSection = createCollapsibleSection('Palette', sectionOptions('palette', true));
   paletteSection.body.appendChild(paletteDiv);
 
   // Track rendered palette state to avoid recreating buttons every frame.
@@ -926,7 +938,7 @@ export function createEditorUI(
   paletteSection.body.appendChild(specialItemPickers.crumblePickerDiv);
   paletteSection.body.appendChild(specialItemPickers.dustJarPickerDiv);
 
-  const inspectorSection = createCollapsibleSection('Inspector', { key: 'inspector' });
+  const inspectorSection = createCollapsibleSection('Inspector', sectionOptions('inspector', true));
   inspectorSection.body.appendChild(inspectorDiv);
 
   // ── Export button ────────────────────────────────────────────────────────
@@ -935,7 +947,7 @@ export function createEditorUI(
     width: 100%; padding: 10px; font-size: 13px;
     background: rgba(212,168,75,0.4); border-color: ${ACCENT_GOLD};
   `;
-  const exportSection = createCollapsibleSection('Export', { key: 'export' });
+  const exportSection = createCollapsibleSection('Export', sectionOptions('export'));
   exportSection.body.appendChild(exportBtn);
 
   root.appendChild(container);
@@ -1482,14 +1494,34 @@ export function createEditorUI(
       );
       container.scrollTop = prefs.leftSidebarScrollTop;
       rightSidebar.scrollTop = prefs.rightSidebarScrollTop;
+      for (const section of collapsibleSections) {
+        if (section.key !== null && section.key in prefs.sectionExpanded) {
+          section.setExpanded(prefs.sectionExpanded[section.key]);
+        }
+      }
+      if (LAYERS_SESSION_KEY in prefs.sectionExpanded) {
+        layersPanel.setCollapsed(!prefs.sectionExpanded[LAYERS_SESSION_KEY]);
+      }
+      setLeftSidebarVisible(prefs.leftSidebarVisible);
+      setRightSidebarVisible(prefs.rightSidebarVisible);
     },
-    getWorkspaceUIPrefsSnapshot: () => ({
-      layerPanelCollapsed: layersPanel.isCollapsed(),
-      leftSidebarScrollTop: container.scrollTop,
-      rightSidebarScrollTop: rightSidebar.scrollTop,
-      panelLayout: docking.getLayout(),
-      sidebarsSwapped,
-    }),
+    getWorkspaceUIPrefsSnapshot: () => {
+      const sectionExpanded: Record<string, boolean> = {};
+      for (const section of collapsibleSections) {
+        if (section.key !== null) sectionExpanded[section.key] = section.isExpanded();
+      }
+      sectionExpanded[LAYERS_SESSION_KEY] = !layersPanel.isCollapsed();
+      return {
+        layerPanelCollapsed: layersPanel.isCollapsed(),
+        leftSidebarScrollTop: container.scrollTop,
+        rightSidebarScrollTop: rightSidebar.scrollTop,
+        panelLayout: docking.getLayout(),
+        sidebarsSwapped,
+        sectionExpanded,
+        leftSidebarVisible,
+        rightSidebarVisible,
+      };
+    },
     getSidebarVisibility: () => ({ left: leftSidebarVisible, right: rightSidebarVisible }),
     getFloatingPanelRects: () => docking.getFloatingPanelRects(),
     isPanelDragActive: () => docking.isDragging(),

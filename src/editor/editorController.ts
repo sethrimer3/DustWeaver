@@ -482,8 +482,9 @@ export function createEditorController(
 
   // ── Editor workspace preferences (Phase 6) ────────────────────────────────
   // Per-campaign, per-browser editor UI preferences (layer visibility/lock/
-  // select-only, layer-panel collapse, active category, brush mode, sidebar
-  // scroll) — never room/campaign data, never dirty/history, never exported.
+  // select-only, menu collapse, active category, brush mode, sidebar
+  // visibility/scroll, and panel layout) — never room/campaign data, never
+  // dirty/history, never exported.
   // activeCampaignSession.campaign.campaign.id is stable for the lifetime of
   // this controller (one controller per campaign-editing session), including
   // the built-in campaign (id 'DUSTWEAVER_CAMPAIGN').
@@ -505,6 +506,9 @@ export function createEditorController(
       // room-dirty, never an undo/history entry.
       panelLayout: uiSnapshot?.panelLayout ?? defaultPanelLayout(),
       sidebarsSwapped: uiSnapshot?.sidebarsSwapped ?? false,
+      sectionExpanded: uiSnapshot?.sectionExpanded ?? defaultEditorWorkspacePreferences().sectionExpanded,
+      leftSidebarVisible: uiSnapshot?.leftSidebarVisible ?? true,
+      rightSidebarVisible: uiSnapshot?.rightSidebarVisible ?? true,
     };
     workspaceSaver.schedule(prefs);
   }
@@ -990,6 +994,9 @@ export function createEditorController(
         rightSidebarScrollTop: workspacePrefs.rightSidebarScrollTop,
         panelLayout: workspacePrefs.panelLayout,
         sidebarsSwapped: workspacePrefs.sidebarsSwapped,
+        sectionExpanded: workspacePrefs.sectionExpanded,
+        leftSidebarVisible: workspacePrefs.leftSidebarVisible,
+        rightSidebarVisible: workspacePrefs.rightSidebarVisible,
       });
       // Persist (debounced) after any completed reorder, cross-sidebar move,
       // float, redock, or floating-window move. The docking system only fires
@@ -1446,6 +1453,9 @@ export function createEditorController(
             rightSidebarScrollTop: 0,
             panelLayout: resetWorkspacePanelLayout(),
             sidebarsSwapped: false,
+            sectionExpanded: defaultEditorWorkspacePreferences().sectionExpanded,
+            leftSidebarVisible: true,
+            rightSidebarVisible: true,
           });
           ui?.update(state);
           scheduleWorkspaceSave();

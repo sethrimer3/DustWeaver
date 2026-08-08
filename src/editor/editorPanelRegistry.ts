@@ -54,9 +54,8 @@ export interface EditorPanelDef {
 }
 
 /**
- * Registered panels, in their default arrangement. This reproduces the
- * pre-docking hardcoded layout exactly:
- *   left  — Room Dimensions, Background, Room Song, Layers, Inspector, Export
+ * Registered panels, in their default arrangement:
+ *   left  — Room Dimensions, Background, Room Song, Inspector, Layers, Export
  *   right — Tools, Brush, Categories, Palette
  */
 export const EDITOR_PANEL_DEFS: readonly EditorPanelDef[] = Object.freeze([
@@ -69,8 +68,8 @@ export const EDITOR_PANEL_DEFS: readonly EditorPanelDef[] = Object.freeze([
   { id: 'roomDimensions', title: 'Room Dimensions', defaultSide: 'left', defaultOrder: 0 },
   { id: 'background', title: 'Background', defaultSide: 'left', defaultOrder: 1 },
   { id: 'roomSong', title: 'Room Song', defaultSide: 'left', defaultOrder: 2 },
-  { id: 'layers', title: 'Layers', defaultSide: 'left', defaultOrder: 3 },
-  { id: 'inspector', title: 'Inspector', defaultSide: 'left', defaultOrder: 4 },
+  { id: 'inspector', title: 'Inspector', defaultSide: 'left', defaultOrder: 3 },
+  { id: 'layers', title: 'Layers', defaultSide: 'left', defaultOrder: 4 },
   { id: 'export', title: 'Export', defaultSide: 'left', defaultOrder: 5 },
 ] as const);
 

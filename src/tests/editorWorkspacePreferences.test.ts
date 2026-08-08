@@ -31,11 +31,40 @@ test('round-trip: save then reload produces an equal preferences object', () => 
   prefs.layerPanelCollapsed = true;
   prefs.leftSidebarScrollTop = 240;
   prefs.layers.terrain = { visible: false, locked: true, selectOnly: false };
+  prefs.sectionExpanded.palette = false;
+  prefs.sectionExpanded.layers = true;
+  prefs.leftSidebarVisible = false;
 
   saveEditorWorkspacePreferencesNow('campaign_a', prefs);
   const reloaded = loadEditorWorkspacePreferences('campaign_a');
 
   assert.deepEqual(reloaded, prefs);
+});
+
+test('fresh workspace opens the primary authoring menus and Inspector, with Layers closed', () => {
+  const prefs = defaultEditorWorkspacePreferences();
+  for (const key of ['tools', 'brush', 'categories', 'palette', 'inspector']) {
+    assert.equal(prefs.sectionExpanded[key], true, `${key} should start open`);
+  }
+  assert.equal(prefs.sectionExpanded.layers, false);
+  assert.equal(prefs.leftSidebarVisible, true);
+  assert.equal(prefs.rightSidebarVisible, true);
+});
+
+test('corrupt or partial persisted menu state is sanitized against safe defaults', () => {
+  resetStorage();
+  localStorage.setItem('dw_editor_workspace_prefs_v1__campaign_panels', JSON.stringify({
+    sectionExpanded: { tools: false, layers: true, inspector: 'yes', unknown: true },
+    leftSidebarVisible: false,
+    rightSidebarVisible: 'no',
+  }));
+  const loaded = loadEditorWorkspacePreferences('campaign_panels');
+  assert.equal(loaded.sectionExpanded.tools, false);
+  assert.equal(loaded.sectionExpanded.layers, true);
+  assert.equal(loaded.sectionExpanded.inspector, true);
+  assert.equal(loaded.sectionExpanded.unknown, undefined);
+  assert.equal(loaded.leftSidebarVisible, false);
+  assert.equal(loaded.rightSidebarVisible, true);
 });
 
 // ── Campaign isolation ───────────────────────────────────────────────────────
