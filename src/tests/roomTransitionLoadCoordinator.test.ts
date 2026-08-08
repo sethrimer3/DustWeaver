@@ -25,6 +25,10 @@ import {
   type TransitionResidentManagerPort,
   type TransitionBuildSchedulerPort,
 } from '../screens/roomTransitionLoadCoordinator';
+import {
+  RoomPreparationCostModel,
+  RESIDENT_BUILD_PHASE_ORDER,
+} from '../screens/roomPreparationCostModel';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -121,7 +125,15 @@ interface Harness {
   };
 }
 
-function makeHarness(rooms: RoomDef[]): Harness {
+function makeHarness(
+  rooms: RoomDef[],
+  /**
+   * Optional cost model.  Omitted by every pre-existing test on purpose: with no
+   * model the coordinator must behave exactly as it did before the graded
+   * fallback existed, so those tests double as the backward-compatibility proof.
+   */
+  opts?: { costModel?: RoomPreparationCostModel },
+): Harness {
   const events: string[] = [];
   const registry = new Map(rooms.map(r => [r.id, r]));
   const state: Harness['state'] = {
@@ -272,6 +284,7 @@ function makeHarness(rooms: RoomDef[]): Harness {
     areRoomSpritesReady: () => true,
     isRoomBackgroundDecodeReady: () => true,
     updateRadiusReadyCounts: () => { events.push('updateRadiusReadyCounts'); },
+    costModel: opts?.costModel,
     isDevMode: false,
   };
 
@@ -866,6 +879,178 @@ test('fallback drain: a cold load completes without one frame per phase', () => 
   h.coord.advanceAsyncLoad();   // drains all 8 remaining phases
   assert.equal(h.coord.isAsyncLoadActive(), false, '9-phase load took ONE covered frame');
   assert.equal(h.state.currentRoom.id, 'b');
+});
+
+// ── Graded fallback (deadline-driven, not boolean) ────────────────────────────
+//
+// Before this, a destination that was not fully resident ALWAYS got a blocking
+// loading cover, regardless of how close to ready it actually was.  These pin
+// the replacement rule: presentation now follows the measured estimate.
+
+/** A cost model trained to believe every generator phase is cheap and the frame idle. */
+function cheapTrainedModel(): RoomPreparationCostModel {
+  const model = new RoomPreparationCostModel();
+  for (let i = 0; i < 60; i++) {
+    for (const label of RESIDENT_BUILD_PHASE_ORDER) model.noteMeasuredPhase(label, 0.05);
+    model.noteMeasuredPhase('phaseD_walls_build', 0.05);  // ends the merge run
+    model.noteFrameMs(2);
+  }
+  return model;
+}
+
+/** A generator resuming after `fromPhase`, yielding the real remaining labels. */
+function realPhaseGen(
+  fromPhase: string,
+  world: WorldState,
+  onPhase?: (label: string) => void,
+): Generator<string, WorldState, void> {
+  const start = RESIDENT_BUILD_PHASE_ORDER.indexOf(fromPhase) + 1;
+  function* gen(): Generator<string, WorldState, void> {
+    for (let i = start; i < RESIDENT_BUILD_PHASE_ORDER.length; i++) {
+      const label = RESIDENT_BUILD_PHASE_ORDER[i];
+      onPhase?.(label);
+      yield label;
+    }
+    return world;
+  }
+  return gen();
+}
+
+/** Handoff of an in-flight background build sitting at `phase`. */
+function handoffAt(
+  phase: string,
+  gen: Generator<string, WorldState, void>,
+): Harness['state']['handoff'] {
+  return {
+    roomId: 'b', gen, capturedVersion: 0, currentPhase: phase,
+    startedAtMs: 0, reason: 'adjacent', priority: 3,
+  };
+}
+
+test('graded fallback: a nearly-ready destination completes inline with NO cover', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b], { costModel: cheapTrainedModel() });
+  h.state.readyZones.add(1);
+  h.state.handoff = handoffAt('phaseE_sim', realPhaseGen('phaseE_sim', makeWorld('b', makePlayer())));
+
+  h.coord.submitTransition(b, 2, 2, 4.25, -1.75, 'right');
+
+  assert.equal(h.coord.isBlockingGameplay(), false, 'gameplay must not be blocked');
+  assert.equal(h.coord.isAsyncLoadActive(), false, 'no async load session should remain');
+  assert.ok(
+    !h.events.some(e => e.startsWith('overlay.')),
+    `no cover may be shown, got: ${h.events.filter(e => e.startsWith('overlay.')).join(', ')}`,
+  );
+  assert.equal(h.state.currentRoom.id, 'b', 'the destination is entered on the crossing frame');
+  const p = player0(h);
+  assert.equal(p.velocityXWorld, 4.25, 'momentum survives the inline path');
+  assert.equal(p.velocityYWorld, -1.75);
+  assert.equal(p.velocityWrites, 1, 'velocity applied exactly once');
+});
+
+test('graded fallback: an unmeasured (cold) model still takes the covered path', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  // A fresh model has no evidence — the pessimistic seed must forbid inlining.
+  const h = makeHarness([a, b], { costModel: new RoomPreparationCostModel() });
+  h.state.handoff = handoffAt('phaseE_sim', realPhaseGen('phaseE_sim', makeWorld('b', makePlayer())));
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.equal(h.coord.isAsyncLoadActive(), true, 'must fall back to the covered path');
+  assert.ok(h.events.includes('overlay.showLoadingOverlay'));
+});
+
+test('graded fallback: no frame headroom forces the covered path even when work is cheap', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const model = cheapTrainedModel();
+  // Sustained heavy frames collapse the inline budget to zero, so a cover is the
+  // correct answer — spending unbudgeted milliseconds here would be the very
+  // hitch the cover exists to prevent.
+  for (let i = 0; i < 80; i++) model.noteFrameMs(40);
+  const h = makeHarness([a, b], { costModel: model });
+  h.state.handoff = handoffAt('phaseE_sim', realPhaseGen('phaseE_sim', makeWorld('b', makePlayer())));
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.equal(h.coord.isAsyncLoadActive(), true);
+  assert.ok(h.events.includes('overlay.showLoadingOverlay'));
+  assert.equal(h.coord.getLastFallback().detail, 'noFrameHeadroom');
+});
+
+test('graded fallback: undecoded assets force the covered path regardless of CPU estimate', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b], { costModel: cheapTrainedModel() });
+  // An I/O wait cannot be resolved by spending frame budget on it.
+  h.deps.areRoomSpritesReady = () => false;
+  h.state.handoff = handoffAt('phaseE_sim', realPhaseGen('phaseE_sim', makeWorld('b', makePlayer())));
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.equal(h.coord.isAsyncLoadActive(), true);
+  assert.equal(h.coord.getLastFallback().detail, 'assetsNotReady');
+});
+
+test('graded fallback: an inline attempt that overruns loses no work', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b], { costModel: cheapTrainedModel() });
+  // The model believes the remaining phases are cheap; they are not.  This is
+  // the mis-estimation case, and the property that matters is that giving up is
+  // free: the covered path resumes the SAME generator rather than restarting it.
+  const ran: string[] = [];
+  h.state.handoff = handoffAt('phaseA', realPhaseGen('phaseA', makeWorld('b', makePlayer()), () => {
+    const until = performance.now() + 4;      // deliberately over budget
+    while (performance.now() < until) { /* busy */ }
+  }));
+  // Record which phases the coordinator actually consumed, across both paths.
+  const trackedGen = h.state.handoff.gen;
+  h.state.handoff.gen = (function* (): Generator<string, WorldState, void> {
+    let r = trackedGen.next();
+    while (!r.done) { ran.push(r.value); yield r.value; r = trackedGen.next(); }
+    return r.value;
+  })();
+
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+
+  assert.equal(h.coord.isAsyncLoadActive(), true, 'overrun must fall back to the cover');
+  assert.ok(ran.length > 0, 'inline drain made real progress before giving up');
+  assert.ok(
+    h.coord.getLastFallback().detail.startsWith('inlineOverran'),
+    `expected an overrun detail, got "${h.coord.getLastFallback().detail}"`,
+  );
+  assert.ok(
+    !h.events.some(e => e.startsWith('createResidentBuildGenerator')),
+    'the partially drained generator must be reused, never restarted',
+  );
+
+  // Finish under the cover: every phase runs exactly once across both paths.
+  for (let f = 0; f < 20 && h.coord.isAsyncLoadActive(); f++) h.coord.advanceAsyncLoad();
+  assert.equal(h.coord.isAsyncLoadActive(), false);
+  assert.equal(h.state.currentRoom.id, 'b');
+  assert.equal(new Set(ran).size, ran.length, 'no phase ran twice');
+});
+
+test('graded fallback: causes are recorded structurally, not as free text', () => {
+  const a = makeRoom('a'), b = makeRoom('b');
+  const h = makeHarness([a, b]);
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.equal(
+    h.coord.getLastFallback().cause, 'UNPREDICTED_DESTINATION',
+    'no resident and no queued build means prediction missed this destination',
+  );
+
+  // A seamless crossing must clear the cause rather than leave the last one stale.
+  const h2 = makeHarness([a, b]);
+  h2.state.readyZones.add(1);
+  h2.state.residents.set('b', { runtimeReady: true, world: makeWorld('b', makePlayer()) });
+  h2.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.equal(h2.coord.getLastFallback().cause, 'NONE');
+});
+
+test('graded fallback: a cross-zone deferral is attributed to CROSS_ZONE', () => {
+  const a = makeRoom('a', 1), b = makeRoom('b', 2);
+  const h = makeHarness([a, b]);
+  h.coord.submitTransition(b, 2, 2, 0, 0, 'right');
+  assert.equal(h.coord.getLastFallback().cause, 'CROSS_ZONE');
 });
 
 

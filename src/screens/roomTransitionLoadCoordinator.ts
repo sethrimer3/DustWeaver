@@ -75,6 +75,12 @@ import type { TransitionProfileMode } from '../debug/transitionProfiler';
 import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { ZoneTransitionState } from './residentBuildScheduler';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
+import {
+  classifyFallbackCause,
+  decideTransitionFallback,
+  type RoomPreparationCostModel,
+  type TransitionFallbackCause,
+} from './roomPreparationCostModel';
 import * as SM from '../debug/seamlessMetrics';
 import type { ZoneLoadProgress } from './zoneResidentLoader';
 
@@ -248,6 +254,15 @@ export interface RoomTransitionLoadCoordinatorDeps {
   isRoomBackgroundDecodeReady(room: RoomDef): boolean;
   /** Recompute radius-1/2 readiness diagnostics after resident changes. */
   updateRadiusReadyCounts(): void;
+  /**
+   * Measured preparation costs and the adaptive streaming budget.
+   *
+   * Optional so the many existing call sites and tests that never exercise the
+   * graded fallback keep compiling unchanged; when absent the coordinator
+   * behaves exactly as it did before the model existed — every non-resident
+   * destination takes the covered path.
+   */
+  costModel?: RoomPreparationCostModel;
   /** Enables the DEV console diagnostics the closure version emitted. */
   isDevMode: boolean;
 }
@@ -292,6 +307,13 @@ interface BuildingResidentState {
   coverPainted: boolean;
   /** Generator phases stepped so far (diagnostics). */
   phasesRun: number;
+  /**
+   * Label of the last generator phase known to have completed, or null before
+   * the first yield.  Feeds `RoomPreparationCostModel.estimateRemainingMs` so
+   * the graded fallback knows how much work is actually left — an adopted
+   * in-flight build inherits the phase it had already reached.
+   */
+  lastPhase: string | null;
 }
 
 /** Coarse transition-execution phase, for diagnostics and tests. */
@@ -334,7 +356,12 @@ export class RoomTransitionLoadCoordinator {
     adopted: false,
     coverPainted: false,
     phasesRun: 0,
+    lastPhase: null,
   };
+  /** Structured cause of the most recent non-seamless crossing. */
+  private lastFallbackCause: TransitionFallbackCause = 'NONE';
+  /** Human-readable detail for why inline completion was not taken. */
+  private lastFallbackDetail = '';
   /**
    * Cross-zone transition state.  While active, gameplay is paused and
    * `tickZoneTransition()` drives the zone loader each frame.
@@ -409,6 +436,22 @@ export class RoomTransitionLoadCoordinator {
     return { vx: this.preTransVX, vy: this.preTransVY };
   }
 
+  /**
+   * Structured cause of the most recent crossing's fallback, plus the detail
+   * explaining why inline completion was not taken.  `NONE` means the crossing
+   * was seamless.  Read by the developer overlay and the seamless bench so a
+   * missed deadline can be attributed to a subsystem rather than guessed at.
+   */
+  getLastFallback(): { cause: TransitionFallbackCause; detail: string } {
+    return { cause: this.lastFallbackCause, detail: this.lastFallbackDetail };
+  }
+
+  /** Classify and store the fallback cause for the crossing just decided. */
+  private _recordFallbackCause(missReason: string): void {
+    this.lastFallbackCause = classifyFallbackCause(missReason);
+    if (this.lastFallbackCause === 'NONE') this.lastFallbackDetail = '';
+  }
+
   // ── Transition submission (path selection) ────────────────────────────────
 
   /**
@@ -477,6 +520,7 @@ export class RoomTransitionLoadCoordinator {
       });
       d.zoneLoader.startZoneLoad(targetWorldNumber);
       d.overlay.showZoneLoad(targetWorldNumber, d.zoneLoader.getZoneRoomIds(targetWorldNumber).length, false);
+      this._recordFallbackCause('crossZone');
       d.profiler.begin(room.id, 'crossZoneDeferred', false);
       d.profiler.end(room, null);
       if (d.isDevMode && d.profiler.isVerbose()) {
@@ -573,6 +617,12 @@ export class RoomTransitionLoadCoordinator {
       this.buildingResident.phasesRun++;
       const phaseMs = performance.now() - phaseT0;
       if (phaseMs > longestPhaseMs) longestPhaseMs = phaseMs;
+      // Feed the cost model from the covered path too: today's cover is what
+      // teaches the model whether tomorrow's identical crossing can be inline.
+      if (!result.done) {
+        this.buildingResident.lastPhase = result.value;
+        d.costModel?.noteMeasuredPhase(result.value, phaseMs);
+      }
     } while (!result.done && performance.now() - startedAt < LOAD_DRAIN_BUDGET_MS);
 
     SM.noteGeneratorProgress(this.buildingResident.phasesRun, longestPhaseMs);
@@ -681,6 +731,7 @@ export class RoomTransitionLoadCoordinator {
   reset(): void {
     this.buildingResident.isActive = false;
     this.buildingResident.gen = null;
+    this.buildingResident.lastPhase = null;
     this.buildingResident.transitionDir = null;
     this.buildingResident.preTransVX = 0;
     this.buildingResident.preTransVY = 0;
@@ -821,6 +872,7 @@ export class RoomTransitionLoadCoordinator {
       missReason: 'none',
     };
     d.recordTransitionOutcome(diag.outcome, diag);
+    this._recordFallbackCause(diag.missReason);
     SM.noteMissReason(diag.missReason);
     if (t0 > 0) SM.noteActivationMs(performance.now() - t0);
     if (d.isDevMode && d.profiler.isVerbose()) {
@@ -898,6 +950,7 @@ export class RoomTransitionLoadCoordinator {
       this.buildingResident.gen             = handoff.gen;
       this.buildingResident.capturedVersion = handoff.capturedVersion;
       this.buildingResident.adopted         = true;
+      this.buildingResident.lastPhase       = handoff.currentPhase;
       if (d.isDevMode) {
         console.log(
           `[transition] ${room.id}: adopted in-flight build at phase=${handoff.currentPhase}` +
@@ -908,7 +961,18 @@ export class RoomTransitionLoadCoordinator {
       this.buildingResident.gen             = d.createResidentBuildGenerator(room);
       this.buildingResident.capturedVersion = d.buildScheduler.getRoomVersion(room.id);
       this.buildingResident.adopted         = false;
+      this.buildingResident.lastPhase       = null;
     }
+
+    // ── Graded fallback (deadline arithmetic, not a boolean) ──────────────
+    // A destination that is only a few cheap generator phases from ready does
+    // not deserve the same visible cover as a cold build.  Ask the cost model
+    // whether the remainder fits this frame's headroom; if it does, finish the
+    // build inline and hot-swap without ever showing a cover.  If it does not —
+    // or the model has no evidence yet — fall through to the covered path with
+    // the generator retained, so nothing drained here is wasted.
+    if (this._tryInlineCompletion(room, spawnXBlock, spawnYBlock, vx, vy, dir)) return;
+
     this.buildingResident.isActive      = true;
 
     const diag: TransitionReadinessDiagnostic = {
@@ -925,6 +989,10 @@ export class RoomTransitionLoadCoordinator {
       missReason: 'runtimeNotReady',
     };
     d.recordTransitionOutcome('loading', diag);
+    // Attribute this cover to the reason the destination was late, not to the
+    // generic 'runtimeNotReady' the diagnostic carries — `hotSwapMissReason`
+    // distinguishes "never queued" from "queued but unfinished".
+    this._recordFallbackCause(hotSwapMissReason);
     d.profiler.end(room, diag);
     d.overlay.showLoadingOverlay();
 
@@ -932,6 +1000,102 @@ export class RoomTransitionLoadCoordinator {
     // frame so the cover composites, then drains under LOAD_DRAIN_BUDGET_MS.
     // (The old code stepped Phase A synchronously inside the transition
     // callback, spending it on the frame the player was still being simulated.)
+  }
+
+  /**
+   * Try to finish the destination on the crossing frame instead of behind a
+   * cover.  Returns true when the destination was completed and hot-swapped,
+   * meaning the caller must not show any overlay or block a frame.
+   *
+   * ## The contract this keeps
+   *
+   * Gameplay is NOT covered while this runs, so this must never become "build
+   * the room synchronously and freeze".  Three things enforce that:
+   *
+   *  1. it only starts when the cost model's measured estimate already fits the
+   *     frame's remaining headroom — a build with no measurements never
+   *     qualifies, because the seed cost is deliberately above the budget;
+   *  2. the wall clock is re-checked between every `gen.next()`, so a
+   *     mis-estimated phase costs one overrun rather than an unbounded stall;
+   *  3. giving up is free — the partially drained generator stays in
+   *     `buildingResident`, and the covered path picks it up exactly where this
+   *     left off.  No work is repeated and no state is rolled back.
+   *
+   * Assets are checked separately from CPU cost: a sprite decode that has not
+   * landed will not land inside a few milliseconds of busy-waiting, so an
+   * undecoded destination always takes the covered path.
+   */
+  private _tryInlineCompletion(
+    room: RoomDef,
+    spawnXBlock: number,
+    spawnYBlock: number,
+    vx: number,
+    vy: number,
+    dir: TransitionDirection,
+  ): boolean {
+    const d = this.deps;
+    const model = d.costModel;
+    const gen = this.buildingResident.gen;
+    if (model === undefined || gen === null) return false;
+
+    const assetsReady = d.areRoomSpritesReady(room) && d.isRoomBackgroundDecodeReady(room);
+    const budgetMs = model.inlineCompletionBudgetMs();
+    const estimateMs = model.estimateRemainingMs(this.buildingResident.lastPhase);
+    const decision = decideTransitionFallback({
+      estimatedRemainingMs: estimateMs,
+      inlineBudgetMs:       budgetMs,
+      hasGenerator:         true,
+      assetsReady,
+    });
+    if (decision.grade !== 'inlineCompletion') {
+      this.lastFallbackDetail = decision.rejectedBecause;
+      return false;
+    }
+
+    // Drain to completion under the budget, measuring each phase so the model
+    // keeps learning from the very path that depends on it.
+    const startedAt = performance.now();
+    let result: IteratorResult<string, WorldState>;
+    do {
+      const phaseT0 = performance.now();
+      result = gen.next();
+      this.buildingResident.phasesRun++;
+      const phaseMs = performance.now() - phaseT0;
+      if (!result.done) {
+        this.buildingResident.lastPhase = result.value;
+        model.noteMeasuredPhase(result.value, phaseMs);
+      }
+      if (result.done) break;
+    } while (performance.now() - startedAt < budgetMs);
+
+    if (!result.done) {
+      // Budget spent without finishing — hand what we have to the covered path.
+      this.lastFallbackDetail = `inlineOverran after ${(performance.now() - startedAt).toFixed(1)}ms`;
+      return false;
+    }
+
+    // Stale guard: mirrors advanceAsyncLoad.  A room edited while this build was
+    // in flight must not publish, and the covered path must not inherit it.
+    if (!d.buildScheduler.isBuildVersionCurrent(room.id, this.buildingResident.capturedVersion)) {
+      this.buildingResident.gen = null;
+      this.lastFallbackDetail = 'staleVersion';
+      return false;
+    }
+
+    const targetWorld = result.value;
+    this.buildingResident.gen = null;
+    this.buildingResident.isActive = false;
+    d.manager.ensureResident(room);
+    d.manager.setResidentWorld(room.id, targetWorld, false);
+    SM.noteMode('inlineCompletion');
+    if (d.isDevMode && d.profiler.isVerbose()) {
+      console.log(
+        `[transition] ${room.id}: inline completion — ${this.buildingResident.phasesRun} phase(s) in ` +
+        `${(performance.now() - startedAt).toFixed(1)}ms (est ${estimateMs.toFixed(1)}ms, budget ${budgetMs.toFixed(1)}ms)`,
+      );
+    }
+    this._runResidentHotSwap(room, spawnXBlock, spawnYBlock, vx, vy, dir, targetWorld, performance.now());
+    return true;
   }
 
   // ── Internal helpers ──────────────────────────────────────────────────────

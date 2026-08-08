@@ -162,6 +162,23 @@ export interface ResidentBuildSchedulerDeps {
   getCurrentRoomId(): string;
   /** Previous frame's wall-clock cost, for background budget gating. */
   getLastFrameMs(): number;
+  /**
+   * Measured preparation costs and the adaptive streaming budget.
+   *
+   * When present, background gating uses the model's *smoothed* frame signal
+   * with hysteresis instead of the raw previous frame.  A single anomalous
+   * frame — a GC pause, a one-off shader compile — should not swing streaming
+   * aggressiveness, and a frame time oscillating around one threshold should
+   * not toggle background work on and off every frame.
+   *
+   * Optional: without it the scheduler falls back to the raw single-frame
+   * comparison it has always used, so existing tests and call sites are
+   * unaffected.
+   */
+  costModel?: {
+    isBackgroundWorkAllowed(): boolean;
+    noteMeasuredPhase(label: string, ms: number): void;
+  };
   /** Fired after a build result is published to the manager (not on stale discard). */
   onBuildPublished(): void;
   /** Enables the DEV console diagnostics that the closure version emitted. */
@@ -357,7 +374,6 @@ export class ResidentBuildScheduler {
     // Step 1: advance the active session one phase.
     if (this.activeSession !== null) {
       const sess = this.activeSession;
-      const lastFrameMs = this.deps.getLastFrameMs();
       const isNonUrgent = sess.task.priority > URGENT_RESIDENT_BUILD_PRIORITY_THRESHOLD;
       // The current phase is 'phaseD_walls_lookup', meaning the NEXT gen.next()
       // call will execute the expensive phaseD_walls_build step.  Gate that
@@ -366,14 +382,21 @@ export class ResidentBuildScheduler {
       const isAboutToRunHeavyWallsBuild = sess.currentPhase === 'phaseD_walls_lookup';
       const shouldDeferHeavyWallsStep = isNonUrgent
         && isAboutToRunHeavyWallsBuild
-        && lastFrameMs >= RESIDENT_BUILD_BACKGROUND_FRAME_BUDGET_MS
+        && this._isOverFrameBudget()
         && sess.deferredFrames < NON_URGENT_WALLS_BUILD_DEFERRAL_FRAMES_CAP;
       if (shouldDeferHeavyWallsStep) {
         sess.deferredFrames++;
       } else {
         sess.deferredFrames = 0;
         try {
+          const phaseT0 = performance.now();
           const phaseResult = sess.gen.next();
+          if (!phaseResult.done) {
+            // Every background phase is a free measurement of what this machine
+            // actually costs — this is the sample stream the graded transition
+            // fallback depends on.
+            this.deps.costModel?.noteMeasuredPhase(phaseResult.value, performance.now() - phaseT0);
+          }
           if (phaseResult.done) {
             // Generator returned the completed WorldState.
             const buildMs = performance.now() - sess.t0;
@@ -418,9 +441,9 @@ export class ResidentBuildScheduler {
     // (3–5) respect the budget gate, with a forced start after enough
     // consecutive blocked frames.
     const nextPriority = this.queue.length > 0 ? this.queue[0].priority : null;
-    const lastFrameMs = this.deps.getLastFrameMs();
+    const overBudget = this._isOverFrameBudget();
     const isUrgentHead = nextPriority !== null && nextPriority <= URGENT_RESIDENT_BUILD_PRIORITY_THRESHOLD;
-    if (nextPriority !== null && !isUrgentHead && lastFrameMs >= RESIDENT_BUILD_BACKGROUND_FRAME_BUDGET_MS) {
+    if (nextPriority !== null && !isUrgentHead && overBudget) {
       this.nonUrgentBlockedFrames++;
     } else {
       this.nonUrgentBlockedFrames = 0;
@@ -429,7 +452,7 @@ export class ResidentBuildScheduler {
       && nextPriority > URGENT_RESIDENT_BUILD_PRIORITY_THRESHOLD
       && this.nonUrgentBlockedFrames >= NON_URGENT_RESIDENT_BUILD_FORCED_START_FRAMES;
     const canStartSession = nextPriority !== null
-      && (isUrgentHead || lastFrameMs < RESIDENT_BUILD_BACKGROUND_FRAME_BUDGET_MS || forceStartNonUrgent);
+      && (isUrgentHead || !overBudget || forceStartNonUrgent);
     if (this.activeSession === null && this.queue.length > 0 && canStartSession) {
       // Purge already-built or active-room entries from the front of the queue.
       let dequeued: ResidentBuildTask | null = null;
@@ -485,6 +508,20 @@ export class ResidentBuildScheduler {
     this.activeSession = null;
     this.roomVersions.clear();
     this.nonUrgentBlockedFrames = 0;
+  }
+
+  /**
+   * Whether background streaming work should hold off this frame.
+   *
+   * Prefers the cost model's smoothed, hysteretic signal; falls back to the
+   * original raw single-frame comparison when no model is wired.  Urgent
+   * (priority ≤ 2) work deliberately ignores this — a destination the player is
+   * about to enter must not starve behind a busy frame.
+   */
+  private _isOverFrameBudget(): boolean {
+    const model = this.deps.costModel;
+    if (model !== undefined) return !model.isBackgroundWorkAllowed();
+    return this.deps.getLastFrameMs() >= RESIDENT_BUILD_BACKGROUND_FRAME_BUDGET_MS;
   }
 
   private sortIfDirty(): void {

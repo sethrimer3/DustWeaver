@@ -178,6 +178,7 @@ import {
   InitialZoneLoadProgress,
   RESIDENT_BUILD_BACKGROUND_FRAME_BUDGET_MS,
 } from './residentBuildScheduler';
+import { RoomPreparationCostModel } from './roomPreparationCostModel';
 import { PLAYER_INITIAL_HEALTH } from './gameSpawn';
 import { logWallTemplateDiagnosticsSummary } from './preparedRoomRuntime';
 import { ZoneResidentLoader } from './zoneResidentLoader';
@@ -553,6 +554,15 @@ export function startGameScreen(
   // Zone loader initialized here after roomRuntimeCache is available.
   const _zoneLoader = new ZoneResidentLoader(ROOM_REGISTRY, roomRuntimeCache);
 
+  // ── Room preparation cost model ──────────────────────────────────────────
+  // Measures what preparing a room actually costs on THIS machine (per
+  // generator phase) and smooths gameplay frame time with hysteresis.  Two
+  // consumers: the build scheduler's background gating, and the transition
+  // coordinator's graded fallback, which uses the measured estimate to decide
+  // whether a not-yet-resident destination can be finished inline instead of
+  // behind a loading cover.  See roomPreparationCostModel.ts.
+  const roomPreparationCostModel = new RoomPreparationCostModel();
+
   // ── Resident build scheduler (BUILD 418; extracted BUILD 441) ─────────────
   // Owns the background resident-build priority queue, the single active
   // incremental build session, per-room version counters (stale-build guard),
@@ -569,6 +579,7 @@ export function startGameScreen(
       }),
     getCurrentRoomId: () => currentRoom.id,
     getLastFrameMs:   () => renderProfiler.getLastFrameMs(),
+    costModel:        roomPreparationCostModel,
     onBuildPublished: () => { _updateRadiusReadyCounts(); },
     isDevMode: import.meta.env.DEV,
   });
@@ -946,6 +957,7 @@ export function startGameScreen(
     areRoomSpritesReady,
     isRoomBackgroundDecodeReady,
     updateRadiusReadyCounts: () => { _updateRadiusReadyCounts(); },
+    costModel: roomPreparationCostModel,
     isDevMode: import.meta.env.DEV,
   });
 
@@ -2117,6 +2129,11 @@ export function startGameScreen(
     // callback that races with the RAF loop.  Deferred to a future pass;
     // the per-phase debug overlay (currentBuildPhase) gives sufficient
     // visibility into the cost of individual phases in the interim.
+    // Sample this frame's cost before any streaming work is scheduled, so the
+    // smoothed signal every gate below reads describes gameplay load rather
+    // than the streaming work it is meant to regulate.
+    roomPreparationCostModel.noteFrameMs(renderProfiler.getLastFrameMs());
+
     residentBuildScheduler.advanceFrame();
 
     // ── Speculative neighbour-zone preload ──────────────────────────────────
@@ -2215,8 +2232,19 @@ export function startGameScreen(
       __dwBenchTransition?: (roomId: string, opts?: BenchOpts) => boolean;
       __dwBenchPingPong?: (roomIdA: string, roomIdB: string, iterations: number) => void;
       __dwBenchSpriteAtlasRoom?: (roomId: string, opts?: BenchOpts) => Promise<SpriteAtlasBenchResult>;
+      __dwStreamingStats?: () => Record<string, unknown>;
     };
     const w = window as DwWin;
+    // Streaming diagnostics: what preparation actually costs on this machine,
+    // how much frame headroom the adaptive budget currently sees, and why the
+    // last crossing fell back (if it did).  Pairs with __dwSeamlessSummary(),
+    // which reports the crossing outcomes this budget produced.
+    w.__dwStreamingStats = (): Record<string, unknown> => ({
+      costModel:    roomPreparationCostModel.snapshot(),
+      lastFallback: transitionCoordinator.getLastFallback(),
+      currentRoom:  currentRoom.id,
+      zone:         currentRoom.worldNumber ?? 1,
+    });
     w.__dwBenchTransition = (roomId: string, opts?: BenchOpts): boolean => {
       const targetRoom = ROOM_REGISTRY.get(roomId);
       if (targetRoom === undefined) {

@@ -49,6 +49,10 @@ import { computeSpawnBlockForTransition, getOppositeTransitionDirection } from '
 import { resolveSpawnBlock } from '../src/screens/gameRoom';
 import { computeEntranceOffset } from '../src/screens/roomPrewarmNeighborhood';
 import { RoomTransitionLoadCoordinator } from '../src/screens/roomTransitionLoadCoordinator';
+import {
+  RoomPreparationCostModel,
+  RESIDENT_BUILD_PHASE_ORDER,
+} from '../src/screens/roomPreparationCostModel';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOMS_DIR = process.env.DW_ROOMS_DIR ?? path.resolve(HERE, '../ASSETS/CAMPAIGNS/DUSTWEAVER_CAMPAIGN/ROOMS');
@@ -193,12 +197,19 @@ const makeWorld = (builtForRoomId: string, player: FakePlayer | null): WorldStat
  * Mirrors residentWorldBuilder's yield structure: 7 phases on a wall-template
  * hit, plus incremental merge slices when it misses.
  */
-function phasesForRoom(room: RoomDef): number {
-  const base = 7;
+function phaseLabelsForRoom(room: RoomDef): string[] {
   const mergeSlices = room.bakedWallTemplate !== undefined
     ? 0
     : Math.min(8, Math.floor(room.walls.length / 400));
-  return base + mergeSlices;
+  const labels: string[] = [];
+  for (const label of RESIDENT_BUILD_PHASE_ORDER) {
+    if (label === 'phaseD_walls_merge') {
+      for (let i = 0; i < mergeSlices; i++) labels.push(label);
+    } else {
+      labels.push(label);
+    }
+  }
+  return labels;
 }
 
 // ── One measured crossing ────────────────────────────────────────────────────
@@ -226,7 +237,21 @@ function measureCrossing(
   sourceRoom: RoomDef,
   ti: number,
   targetRoom: RoomDef,
-  opts: { residentReady: boolean; inFlightBuild: boolean; zoneReady: boolean },
+  opts: {
+    residentReady: boolean;
+    inFlightBuild: boolean;
+    zoneReady: boolean;
+    /**
+     * Cost model wired into the coordinator, enabling the graded fallback.
+     *
+     * Omitted for the pre-graded-fallback baseline, so a single checkout can
+     * measure both behaviours: without a model, every non-resident destination
+     * takes the covered path, exactly as it did before.
+     */
+    costModel?: RoomPreparationCostModel;
+    /** Per-phase wall-clock the modelled generator burns (default 0). */
+    phaseCostMs?: number;
+  },
 ): CrossingResult {
   const events: string[] = [];
   const t = sourceRoom.transitions[ti];
@@ -248,18 +273,33 @@ function measureCrossing(
     residents.set(targetRoom.id, { runtimeReady: true, world: makeWorld(targetRoom.id, targetPlayer) });
   }
 
-  const totalPhases = phasesForRoom(targetRoom);
+  // Real generator phase labels, in the real order, with the wall-merge run
+  // sized from this room's actual wall count — so the cost model's estimate is
+  // computed from the same shape the shipping generator produces.
+  const phaseLabels = phaseLabelsForRoom(targetRoom);
+  const totalPhases = phaseLabels.length;
+  const phaseCostMs = opts.phaseCostMs ?? 0;
   let phasesRun = 0;
   let handoffTaken = false;
   const makeGen = (startAt: number): Generator<string, WorldState, void> => {
     function* gen(): Generator<string, WorldState, void> {
-      for (let i = startAt; i < totalPhases; i++) { phasesRun++; yield `phase${i}`; }
+      for (let i = startAt; i < totalPhases; i++) {
+        phasesRun++;
+        if (phaseCostMs > 0) {
+          const until = performance.now() + phaseCostMs;
+          while (performance.now() < until) { /* model real phase cost */ }
+        }
+        yield phaseLabels[i];
+      }
       return makeWorld(targetRoom.id, targetPlayer);
     }
     return gen();
   };
   // An in-flight background build is ~70% done when the player arrives.
-  const inFlightGen = opts.inFlightBuild ? makeGen(Math.floor(totalPhases * 0.7)) : null;
+  const inFlightStart = Math.floor(totalPhases * 0.7);
+  const inFlightGen = opts.inFlightBuild ? makeGen(inFlightStart) : null;
+  /** Label the in-flight build has already completed, for the handoff record. */
+  const inFlightPhase = phaseLabels[Math.max(0, inFlightStart - 1)];
 
   let entryWarmStarted = false;
   let inlineCloseout = false;
@@ -280,7 +320,7 @@ function measureCrossing(
     },
     buildScheduler: {
       getActiveBuild: () => (inFlightGen !== null && !handoffTaken
-        ? { roomId: targetRoom.id, phase: 'phaseD_walls_lookup' } : null),
+        ? { roomId: targetRoom.id, phase: inFlightPhase } : null),
       hasQueuedBuild: () => false,
       refreshFromNeighborhood: () => {},
       takeActiveBuildForTransition: (id: string) => {
@@ -289,7 +329,7 @@ function measureCrossing(
         events.push('takeover');
         return {
           roomId: id, gen: inFlightGen, capturedVersion: 0,
-          currentPhase: 'phaseD_walls_lookup', startedAtMs: 0,
+          currentPhase: inFlightPhase, startedAtMs: 0,
           reason: 'adjacent', priority: 3,
         };
       },
@@ -337,6 +377,7 @@ function measureCrossing(
     areRoomSpritesReady: () => true,
     isRoomBackgroundDecodeReady: () => true,
     updateRadiusReadyCounts: () => {},
+    costModel: opts.costModel,
     isDevMode: false,
   };
 
@@ -405,6 +446,21 @@ function measureCrossing(
 
 // ── Scenarios ────────────────────────────────────────────────────────────────
 
+/**
+ * A cost model that has already observed builds whose phases cost `phaseMs`,
+ * on a machine with idle frames.  Stands in for the measurements the real
+ * scheduler accumulates during a zone load.
+ */
+function trainedCostModel(phaseMs: number): RoomPreparationCostModel {
+  const model = new RoomPreparationCostModel();
+  for (let i = 0; i < 60; i++) {
+    for (const label of RESIDENT_BUILD_PHASE_ORDER) model.noteMeasuredPhase(label, phaseMs);
+    model.noteMeasuredPhase('phaseD_walls_build', phaseMs);   // closes the merge run
+    model.noteFrameMs(3);
+  }
+  return model;
+}
+
 function main(): void {
   const registry = loadRegistry();
   const directed: Array<{ src: RoomDef; ti: number; dst: RoomDef }> = [];
@@ -436,6 +492,26 @@ function main(): void {
     { name: '3. rapid same-zone traversal',           opts: { residentReady: true,  inFlightBuild: false, zoneReady: true } },
     { name: '4. target has an in-progress build',     opts: { residentReady: false, inFlightBuild: true,  zoneReady: true } },
     { name: '5. cold miss (zone barrier not passed)', opts: { residentReady: false, inFlightBuild: false, zoneReady: false } },
+    // 4a/4b isolate the graded fallback: identical situation to scenario 4, but
+    // with a cost model wired in.  4a's model has measured cheap phases, so the
+    // remainder fits the frame and the crossing completes inline with no cover;
+    // 4b's phases genuinely cost 3 ms each, so the estimate exceeds the budget
+    // and the covered path is correctly chosen.  Together they show the decision
+    // follows measured cost rather than a boolean.
+    {
+      name: '4a. in-progress build, cheap remainder (graded)',
+      opts: {
+        residentReady: false, inFlightBuild: true, zoneReady: true,
+        costModel: trainedCostModel(0.05), phaseCostMs: 0,
+      },
+    },
+    {
+      name: '4b. in-progress build, expensive remainder (graded)',
+      opts: {
+        residentReady: false, inFlightBuild: true, zoneReady: true,
+        costModel: trainedCostModel(3), phaseCostMs: 3,
+      },
+    },
   ];
 
   const out: Record<string, unknown> = { label: LABEL, warmRule: WARM_RULE, directedTransitions: directed.length };
