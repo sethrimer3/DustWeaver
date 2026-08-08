@@ -10,6 +10,14 @@ The top-level `README.md` is broad and older in some gameplay details, but still
 
 ## Recent implementation status
 
+### BUILD 615 graded transition fallback
+
+Room crossings no longer choose their presentation from a boolean. `src/screens/roomPreparationCostModel.ts` measures what each resident-build generator phase actually costs on the current machine (EWMA per phase label, fed by both `ResidentBuildScheduler.advanceFrame` and the transition drain loop) and smooths gameplay frame time with an outlier-clamped EWMA plus hysteresis.
+
+`RoomTransitionLoadCoordinator` uses that estimate before committing to a loading cover: a destination whose remaining work fits the frame's measured headroom is drained inline and hot-swapped on the crossing frame with no overlay and no blocked frames. Overrun, no headroom, undecoded assets, or an unmeasured model all fall back to the pre-existing covered path, retaining the partially drained generator so no work is repeated. Every fallback records a structured `TransitionFallbackCause`; `window.__dwStreamingStats()` exposes the model snapshot and the last fallback.
+
+Measured with `scripts/bench-seamless-transitions.mts` over 62 directed intra-zone crossings: the "target has an in-progress build" class went from 0/62 seamless (62 covers, 2 blocked frames each) to 62/62 seamless with a cheap measured remainder, while a genuinely expensive remainder still correctly takes the cover.
+
 ### BUILD 555 snapshot integration
 
 BUILD 555 completes the missing Bow/Sword scalar integration across both allocating and reusable simulation-to-render snapshots. BUILD 554's restored Bow and Sword runtime/render systems did not compile in the final tree because their renderer-required fields were absent from `WorldSnapshot`.
