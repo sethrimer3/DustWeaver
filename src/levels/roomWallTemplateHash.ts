@@ -97,6 +97,7 @@ export function computeWallTemplateSourceHash(json: RoomJsonDef): string {
     // Must stay in lockstep with scripts/bake-room-wall-templates.mjs — a
     // mismatch would let a stale baked template survive a stairs edit.
     hashStr(String(w.stairsOrientation ?? ''));
+    hashStr(String(w.roughStairOrientation ?? ''));
     hashBool(w.isPillarHalfWidth);
     hashStr(String(w.r ?? ''));
   }

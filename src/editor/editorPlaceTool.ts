@@ -55,14 +55,15 @@ function getPlacementWidth(item: PaletteItem, rotSteps: number): number {
   const h = item.defaultHeightBlocks ?? 1;
   // Stairs keep their authored bounding box: their four orientations are axis
   // mirrors of one mask, not rotations, so the box never transposes.
-  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1) return w;
+  // Rough stairs are always a fixed 1×1 footprint for the same reason.
+  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1 || item.isRoughStairItem === 1) return w;
   return (rotSteps % 2 === 0) ? w : h;
 }
 
 function getPlacementHeight(item: PaletteItem, rotSteps: number): number {
   const w = item.defaultWidthBlocks ?? 1;
   const h = item.defaultHeightBlocks ?? 1;
-  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1) return h;
+  if (item.isStairsItem === 1 || item.isSmoothRampItem === 1 || item.isRoughStairItem === 1) return h;
   return (rotSteps % 2 === 0) ? h : w;
 }
 
@@ -448,7 +449,7 @@ export function wouldPlacementSucceedAt(
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
       item.isPlatformItem !== 1 &&
-      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
+      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 && item.isRoughStairItem !== 1 &&
       item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 && item.isLaserItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
@@ -471,6 +472,7 @@ export function wouldPlacementSucceedAt(
       item.isRampItem !== 1 &&
       item.isStairsItem !== 1 &&
       item.isSmoothRampItem !== 1 &&
+      item.isRoughStairItem !== 1 &&
       state.pendingBlockPlacementModifier === 'background'
     ) {
       const bgW = getPlacementWidth(item, state.placementRotationSteps);
@@ -745,6 +747,9 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     let smoothRampOrientation: 0 | 1 | 2 | 3 | undefined;
     if (item.isSmoothRampItem === 1) smoothRampOrientation = shapeOrientation;
 
+    let roughStairOrientation: 0 | 1 | 2 | 3 | undefined;
+    if (item.isRoughStairItem === 1) roughStairOrientation = shapeOrientation;
+
     const platformEdgeMap: readonly (0 | 1 | 2 | 3)[] = [0, 3, 1, 2];
     const platformEdge: 0 | 1 | 2 | 3 = isPlatformFlag === 1
       ? platformEdgeMap[state.placementRotationSteps % 4]
@@ -859,6 +864,12 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         crumbleSmoothRamp = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
       }
 
+      let crumbleRoughStair: 0 | 1 | 2 | 3 | undefined;
+      if (item.isRoughStairItem === 1) {
+        const base = state.placementRotationSteps % 4;
+        crumbleRoughStair = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+      }
+
       const crumblePillar: 0 | 1 | undefined = item.isPillarHalfWidthItem === 1 ? 1 : undefined;
 
       // Direction follows the same 90°-CW rotation steps used for ramps/
@@ -901,6 +912,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
         rampOrientation: crumbleRamp,
         stairsOrientation: crumbleStairs,
         smoothRampOrientation: crumbleSmoothRamp,
+        roughStairOrientation: crumbleRoughStair,
         isPillarHalfWidthFlag: crumblePillar,
         variant: state.pendingCrumbleVariant,
         isSecretFlag: state.pendingBlockPlacementModifier === 'secret' ? 1 : undefined,
@@ -974,7 +986,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
     if (item.isFallingBlockItem === 1 || (
       item.category === 'blocks' &&
       item.isPlatformItem !== 1 &&
-      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 &&
+      item.isStairsItem !== 1 && item.isSmoothRampItem !== 1 && item.isRoughStairItem !== 1 &&
       item.isPillarHalfWidthItem !== 1 && item.isSpikeItem !== 1 && item.isLaserItem !== 1 &&
       (state.pendingBlockPlacementModifier === 'tough' || state.pendingBlockPlacementModifier === 'sensitive' || state.pendingBlockPlacementModifier === 'crumbling')
     )) {
@@ -1023,6 +1035,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       item.isRampItem !== 1 &&
       item.isStairsItem !== 1 &&
       item.isSmoothRampItem !== 1 &&
+      item.isRoughStairItem !== 1 &&
       state.pendingBlockPlacementModifier === 'background'
     ) {
       const bgW = getPlacementWidth(item, state.placementRotationSteps);
@@ -1079,6 +1092,7 @@ function placeAt(state: EditorState, bx: number, by: number): void {
       rampOrientation,
       stairsOrientation,
       smoothRampOrientation,
+      roughStairOrientation,
       isPillarHalfWidthFlag,
     });
   } else if (placeEnemyAtCursor(state, room, item, bx, by)) {

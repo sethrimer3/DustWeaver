@@ -38,7 +38,7 @@ import {
   DUST_BOOST_JAR_COLOR, DUST_BOOST_JAR_SELECTED,
   DUST_SWARM_COLOR, DUST_SWARM_SELECTED,
   CAMPAIGN_SPAWN_COLOR, CAMPAIGN_SPAWN_SELECTED,
-  drawMergedWallOutline, drawWallTileGrid, drawRampTriangle, drawStairsShape,
+  drawMergedWallOutline, drawWallTileGrid, drawRampTriangle, drawStairsShape, drawRoughStairShape,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   getEnemyFootprintBlocks, drawTransitionZone,
   isElementInViewport, getEditorWallTopology, type EditorViewport,
@@ -95,12 +95,16 @@ export function drawEditorWalls(
     const sel = isSelected('wall', w.uid);
     const isPlatform = w.isPlatformFlag === 1;
     const isStairs = w.stairsOrientation !== undefined;
+    const isRoughStair = w.roughStairOrientation !== undefined;
     const isRamp = w.rampOrientation !== undefined || w.smoothRampOrientation !== undefined;
     const isHalfPillar = w.isPillarHalfWidthFlag === 1;
 
     if (isStairs) {
       const color = sel ? STAIRS_SELECTED : STAIRS_HIGHLIGHT;
       drawStairsShape(ctx, w, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
+    } else if (isRoughStair) {
+      const color = sel ? STAIRS_SELECTED : STAIRS_HIGHLIGHT;
+      drawRoughStairShape(ctx, w, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);
     } else if (isRamp) {
       const color = sel ? RAMP_SELECTED : RAMP_HIGHLIGHT;
       drawRampTriangle(ctx, w, offsetXPx, offsetYPx, zoom, color, sel ? 2 : 1);

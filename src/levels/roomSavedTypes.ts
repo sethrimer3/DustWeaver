@@ -120,6 +120,8 @@ export interface SavedSpecialWall {
   stairs?: 0 | 1 | 2 | 3;
   /** Smooth-ramp orientation 0-3 — stairs collision, smooth diagonal render (omit if not a smooth ramp). */
   smoothRamp?: 0 | 1 | 2 | 3;
+  /** Rough stair orientation 0-3 — quadrant-cut single block (omit if not a rough stair). */
+  roughStair?: 0 | 1 | 2 | 3;
   /** 1 if half-width pillar. */
   half?: 1;
   /** Index into the room-level `rimStyles` table. */
@@ -245,6 +247,8 @@ export interface SavedCrumble {
   stairs?: 0 | 1 | 2 | 3;
   /** Smooth-ramp orientation 0-3 (omit if not a smooth ramp). */
   smoothRamp?: 0 | 1 | 2 | 3;
+  /** Rough stair orientation 0-3 (omit if not a rough stair). */
+  roughStair?: 0 | 1 | 2 | 3;
   /** 1 if this crumble block is a half-width pillar (omit if not). */
   pillar?: 1;
   /** Block theme ID override (omit if using room default). */

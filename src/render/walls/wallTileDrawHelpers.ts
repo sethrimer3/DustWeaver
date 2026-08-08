@@ -16,6 +16,7 @@ import type { TileVariant } from './blockSpriteSets';
 import { isSpriteReady } from './blockSpriteSets';
 import { isWallOccupied } from './blockWallLayoutCache';
 import { getStairsSolidRects, type StairsOrientation } from '../../levels/stairsGeometry';
+import { getRoughStairSolidRects, type RoughStairOrientation } from '../../levels/stairsGeometry';
 
 // ── Tile-spec lookup table ───────────────────────────────────────────────────
 
@@ -244,6 +245,63 @@ export function applyStairsClipPath(
 ): void {
   ctx.beginPath();
   for (const r of _stairsScreenRects(wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx)) {
+    ctx.rect(r.x, r.y, r.w, r.h);
+  }
+}
+
+function _roughStairScreenRects(
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+): { x: number; y: number; w: number; h: number }[] {
+  const rects = getRoughStairSolidRects(
+    (ori & 3) as RoughStairOrientation, widthWorldPx, heightWorldPx,
+  );
+  const sx = wwPx / widthWorldPx;
+  const sy = whPx / heightWorldPx;
+  return rects.map(r => {
+    const x0 = Math.round(wxPx + r.xPx * sx);
+    const y0 = Math.round(wyPx + r.yPx * sy);
+    const x1 = Math.round(wxPx + (r.xPx + r.wPx) * sx);
+    const y1 = Math.round(wyPx + (r.yPx + r.hPx) * sy);
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  });
+}
+
+/**
+ * Draws a rough stair as solid-color filled quadrant rectangles.
+ * Used as fallback for themes without a procedural material and while
+ * procedural sprites are still loading.
+ */
+export function drawRoughStairShape(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+  fillColor: string,
+): void {
+  ctx.fillStyle = fillColor;
+  for (const r of _roughStairScreenRects(wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx)) {
+    ctx.fillRect(r.x, r.y, r.w, r.h);
+  }
+}
+
+/**
+ * Applies a clip path matching the rough stair's solid quadrants.  Call
+ * `ctx.clip()` after this to restrict drawing to the rough-stair shape.  The
+ * caller is responsible for `ctx.save()` / `ctx.restore()`.
+ */
+export function applyRoughStairClipPath(
+  ctx: CanvasRenderingContext2D,
+  wxPx: number, wyPx: number,
+  wwPx: number, whPx: number,
+  ori: number,
+  widthWorldPx: number, heightWorldPx: number,
+): void {
+  ctx.beginPath();
+  for (const r of _roughStairScreenRects(wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx)) {
     ctx.rect(r.x, r.y, r.w, r.h);
   }
 }

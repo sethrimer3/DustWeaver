@@ -300,6 +300,9 @@ export function rotateSelectedElement(state: EditorState): boolean {
     } else if (wall.smoothRampOrientation !== undefined) {
       wall.smoothRampOrientation = ((wall.smoothRampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
       changed = true;
+    } else if (wall.roughStairOrientation !== undefined) {
+      wall.roughStairOrientation = ((wall.roughStairOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
     }
     // A square wall's dimensions are unchanged by a width/height swap — this
     // is a genuine no-op, not just "rotation isn't visually distinguishable".
@@ -332,6 +335,9 @@ export function rotateSelectedElement(state: EditorState): boolean {
       changed = true;
     } else if (block.smoothRampOrientation !== undefined) {
       block.smoothRampOrientation = ((block.smoothRampOrientation + 1) % 4) as 0 | 1 | 2 | 3;
+      changed = true;
+    } else if (block.roughStairOrientation !== undefined) {
+      block.roughStairOrientation = ((block.roughStairOrientation + 1) % 4) as 0 | 1 | 2 | 3;
       changed = true;
     }
     if (block.spikeDirection === undefined && block.wBlock !== block.hBlock) {

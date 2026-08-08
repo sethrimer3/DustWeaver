@@ -85,7 +85,7 @@ function buildBgBlockMap(blocks: RoomJsonBackgroundBlock[] | undefined): Map<str
 function buildCoverageMap(walls: RoomJsonWall[]): Map<string, string | undefined> {
   const map = new Map<string, string | undefined>();
   for (const w of walls) {
-    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth) continue;
+    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.roughStairOrientation !== undefined || w.isPillarHalfWidth) continue;
     const themeVal = w.blockTheme ?? undefined;
     for (const key of wallCells(w)) map.set(key, themeVal);
   }
@@ -100,7 +100,7 @@ function buildV1GrainSet(walls: RoomJsonWall[]): Set<string> {
   const v1 = new Set<string>();
   const v2plus = new Set<string>();
   for (const w of walls) {
-    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.isPillarHalfWidth) continue;
+    if (w.isPlatform || w.rampOrientation !== undefined || w.stairsOrientation !== undefined || w.roughStairOrientation !== undefined || w.isPillarHalfWidth) continue;
     const cells = wallCells(w);
     if (w.hBlock === 1) {
       for (const k of cells) if (!v2plus.has(k)) v1.add(k);

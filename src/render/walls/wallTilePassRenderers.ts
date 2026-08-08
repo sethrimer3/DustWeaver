@@ -23,6 +23,7 @@ import {
   getPlatformSpriteFromBaseUrl,
   getRampSprite,
   getStairsSprite,
+  getRoughStairSprite,
   OPEN_AIR_SIDE_N,
   OPEN_AIR_SIDE_E,
   OPEN_AIR_SIDE_S,
@@ -54,8 +55,10 @@ import { getSurfaceMaskAtTile, type SurfaceMask } from '../../sim/world/surfaceE
 import {
   decodeSmoothRampOrientationIndex,
   decodeStairsOrientationIndex,
+  decodeRoughStairOrientationIndex,
   isSmoothRampOrientationIndex,
   isStairsOrientationIndex,
+  isRoughStairOrientationIndex,
 } from '../../levels/stairsGeometry';
 import { renderSurfaceEdgeOverlayPass as _renderSurfaceEdgeOverlayPass } from './surfaceEdgeOverlay';
 import {
@@ -69,8 +72,10 @@ import {
   drawPlatformLine,
   drawRampTriangle,
   drawStairsShape,
+  drawRoughStairShape,
   applyStairsClipPath,
   applyRampClipPath,
+  applyRoughStairClipPath,
 } from './wallTileDrawHelpers';
 import { surfaceRimSuppressesBakedEdge } from './surfaceRimStyle';
 
@@ -688,9 +693,12 @@ export function renderShapedWallPass(
     const oriIndex = walls.rampOrientationIndex[wi];
     const isStairs = isStairsOrientationIndex(oriIndex);
     const isSmoothRamp = isSmoothRampOrientationIndex(oriIndex);
-    // Stairs and ramps share the flip convention, so both reduce to 0-3 here.
+    const isRoughStair = isRoughStairOrientationIndex(oriIndex);
+    // Stairs, ramps, and rough stairs all share the flip convention, so each
+    // reduces to a plain 0-3 orientation here.
     const ori = isStairs ? decodeStairsOrientationIndex(oriIndex)
       : isSmoothRamp ? decodeSmoothRampOrientationIndex(oriIndex)
+      : isRoughStair ? decodeRoughStairOrientationIndex(oriIndex)
       : oriIndex;
 
     const wxPx = walls.xWorld[wi] * scalePx + offsetXPx;
@@ -718,6 +726,8 @@ export function renderShapedWallPass(
     const drawFallbackShape = (fillColor: string, edgeColor: string): void => {
       if (isStairs) {
         drawStairsShape(ctx, wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx, fillColor);
+      } else if (isRoughStair) {
+        drawRoughStairShape(ctx, wxPx, wyPx, wwPx, whPx, ori, widthWorldPx, heightWorldPx, fillColor);
       } else {
         drawRampTriangle(ctx, wxPx, wyPx, wwPx, whPx, ori, fillColor, edgeColor, scalePx);
       }
@@ -730,6 +740,8 @@ export function renderShapedWallPass(
       const heightBlocks = Math.max(1, Math.round(walls.hWorld[wi] / blockSizePx));
       const procSprite = isStairs
         ? getStairsSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber, suppressBakedEdgeShading)
+        : isRoughStair
+        ? getRoughStairSprite(col, row, ori, material, blockSizePx, activeWorldNumber, suppressBakedEdgeShading)
         : getRampSprite(col, row, widthBlocks, heightBlocks, ori, material, blockSizePx, activeWorldNumber, suppressBakedEdgeShading);
       if (procSprite !== null) {
         ctx.drawImage(procSprite, Math.round(wxPx), Math.round(wyPx), Math.round(wwPx), Math.round(whPx));
@@ -751,6 +763,8 @@ export function renderShapedWallPass(
         ctx.save();
         if (isStairs) {
           applyStairsClipPath(ctx, rX, rY, rW, rH, ori, widthWorldPx, heightWorldPx);
+        } else if (isRoughStair) {
+          applyRoughStairClipPath(ctx, rX, rY, rW, rH, ori, widthWorldPx, heightWorldPx);
         } else {
           applyRampClipPath(ctx, rX, rY, rW, rH, ori);
         }

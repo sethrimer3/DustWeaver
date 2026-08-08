@@ -105,6 +105,11 @@ export interface EditorWall {
    * is identical to stairs; only rendering differs (smooth diagonal).
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Rough stair orientation (0-3). Undefined = not a rough stair. Names the
+   * absent quadrant: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
   /** 1 if this pillar wall should be rendered and collide at half-block width. */
   isPillarHalfWidthFlag: 0 | 1;
   /**
@@ -308,6 +313,11 @@ export interface EditorCrumbleBlock {
    * `stairsOrientation`, rendered as a smooth diagonal instead of steps.
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Rough stair orientation (0-3). Undefined = not a rough stair. Mirrors
+   * `EditorWall.roughStairOrientation`.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
   /**
    * 1 if this crumble block is a half-width pillar. Mirrors
    * `EditorWall.isPillarHalfWidthFlag`.

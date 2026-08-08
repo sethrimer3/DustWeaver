@@ -30,7 +30,7 @@ import {
   SAVE_TOMB_FOOTPRINT_W_BLOCKS, SAVE_TOMB_FOOTPRINT_H_BLOCKS,
   SKILL_TOMB_FOOTPRINT_W_BLOCKS, SKILL_TOMB_FOOTPRINT_H_BLOCKS,
   getDirectionVector, buildElementTooltipId, buildElementTypeName,
-  drawHoverTooltip, drawBlockRect, drawRampTriangle, drawStairsShape,
+  drawHoverTooltip, drawBlockRect, drawRampTriangle, drawStairsShape, drawRoughStairShape,
   drawPlatformLine, drawHalfPillarRect, drawMarker, drawObjectFootprint,
   drawTransitionZone,
 } from './editorRendererHelpers';
@@ -450,6 +450,25 @@ export function drawPlacementPreview(
       isPillarHalfWidthFlag: 0,
     };
     drawStairsShape(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_STAIRS_COLOR, 2);
+    return;
+  }
+
+  if (item.isRoughStairItem === 1) {
+    // Rough stair preview — quadrant-cut shape with the current orientation
+    const base = state.placementRotationSteps % 4;
+    const roughStairOri = (state.placementFlipH ? (base ^ 1) : base) as 0 | 1 | 2 | 3;
+    const previewWall: EditorWall = {
+      uid: -1,
+      xBlock: state.cursorBlockX,
+      yBlock: state.cursorBlockY,
+      wBlock: preview.wBlock,
+      hBlock: preview.hBlock,
+      isPlatformFlag: 0,
+      platformEdge: 0,
+      roughStairOrientation: roughStairOri,
+      isPillarHalfWidthFlag: 0,
+    };
+    drawRoughStairShape(ctx, previewWall, offsetXPx, offsetYPx, zoom, PREVIEW_STAIRS_COLOR, 2);
     return;
   }
 

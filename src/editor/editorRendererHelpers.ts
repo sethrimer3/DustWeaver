@@ -11,7 +11,7 @@
  */
 
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import { getStairsSolidRects } from '../levels/stairsGeometry';
+import { getStairsSolidRects, getRoughStairSolidRects } from '../levels/stairsGeometry';
 import type { CrumbleVariant, EditorRoomData, EditorTransition, EditorWall, AmbientLightDirection, EditorEnemy } from './editorState';
 import { getTransitionEditorHitbox } from './editorHitTest';
 import { editorPerfCounters } from './editorPerfCounters';
@@ -378,6 +378,39 @@ export function drawStairsShape(
   ctx.lineWidth = lineWidth;
   ctx.beginPath();
   for (const r of getStairsSolidRects(ori, widthWorldPx, heightWorldPx)) {
+    ctx.rect(x + r.xPx * zoom, y + r.yPx * zoom, r.wPx * zoom, r.hPx * zoom);
+  }
+  ctx.fill();
+  ctx.stroke();
+}
+
+/**
+ * Draws a rough-stair wall as its filled quadrant rectangles, using the
+ * wall's `roughStairOrientation`. Mirrors `drawStairsShape` above — shares
+ * `levels/stairsGeometry.ts` with collision and the in-game renderer, so the
+ * editor silhouette always matches play.
+ *
+ * `overrideOrientation` lets the placement preview draw a rough stair whose
+ * orientation is still being chosen by the rotate/flip keys.
+ */
+export function drawRoughStairShape(
+  ctx: CanvasRenderingContext2D,
+  w: Pick<EditorWall, 'xBlock' | 'yBlock' | 'wBlock' | 'hBlock'> & { roughStairOrientation?: 0 | 1 | 2 | 3 },
+  ox: number, oy: number, zoom: number,
+  color: string, lineWidth: number,
+  overrideOrientation?: 0 | 1 | 2 | 3,
+): void {
+  const x  = w.xBlock * BLOCK_SIZE_SMALL * zoom + ox;
+  const y  = w.yBlock * BLOCK_SIZE_SMALL * zoom + oy;
+  const widthWorldPx  = w.wBlock * BLOCK_SIZE_SMALL;
+  const heightWorldPx = w.hBlock * BLOCK_SIZE_SMALL;
+  const ori = overrideOrientation ?? w.roughStairOrientation ?? 0;
+
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color.replace(/[\d.]+\)$/, '1)');
+  ctx.lineWidth = lineWidth;
+  ctx.beginPath();
+  for (const r of getRoughStairSolidRects(ori, widthWorldPx, heightWorldPx)) {
     ctx.rect(x + r.xPx * zoom, y + r.yPx * zoom, r.wPx * zoom, r.hPx * zoom);
   }
   ctx.fill();

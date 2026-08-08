@@ -118,6 +118,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
       w.rampOrientation == null &&
       w.stairsOrientation == null &&
       w.smoothRampOrientation == null &&
+      w.roughStairOrientation == null &&
       (w.isPillarHalfWidthFlag ?? 0) === 0 &&
       (w.isPlatformFlag ?? 0) === 0 &&
       (w.wBlock > 1 || w.hBlock > 1);
@@ -138,6 +139,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
             rampOrientation: undefined,
             stairsOrientation: undefined,
             smoothRampOrientation: undefined,
+            roughStairOrientation: undefined,
             isPillarHalfWidthFlag: 0,
             surfaceRim: w.surfaceRim,
           });
@@ -156,6 +158,7 @@ export function roomDefToEditorRoomData(room: RoomDef, startUid: number): { data
         rampOrientation: w.rampOrientation,
         stairsOrientation: w.stairsOrientation,
         smoothRampOrientation: w.smoothRampOrientation,
+        roughStairOrientation: w.roughStairOrientation,
         isPillarHalfWidthFlag: (w.isPillarHalfWidthFlag ?? 0) as 0 | 1,
         surfaceRim: w.surfaceRim,
       });

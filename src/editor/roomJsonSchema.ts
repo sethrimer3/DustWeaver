@@ -143,6 +143,12 @@ export interface RoomJsonWall {
    * smooth diagonal triangle. Same 0-3 convention as `rampOrientation`.
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Rough stair orientation. When present, this wall is a single 1×1 block
+   * with one quadrant removed. Names the absent quadrant:
+   * 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
   /** true if this pillar wall is half-block wide (4 px). */
   isPillarHalfWidth?: boolean;
   /**
@@ -260,6 +266,11 @@ export interface RoomJsonCrumbleBlock {
    * wall-shape `smoothRampOrientation` field.
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Rough stair orientation (0-3). Absent = not a rough stair. Mirrors the
+   * wall-shape `roughStairOrientation` field.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
   /** 1 if this crumble block is a half-width pillar. Absent/0 = not a pillar. */
   isPillarHalfWidthFlag?: 0 | 1;
   /** Elemental weakness variant. Defaults to `'normal'` when absent. */

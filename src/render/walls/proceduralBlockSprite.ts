@@ -557,6 +557,38 @@ export function getStairsSprite(
 }
 
 /**
+ * Returns the procedural sprite for a rough-stair wall: a single 1×1 block
+ * with one quadrant cut away, using the same `destination-in` template
+ * compositing and flip convention as ramps/stairs.
+ *
+ * @param col         Tile column of the rough stair block.
+ * @param row         Tile row of the rough stair block.
+ * @param orientation Rough stair orientation index (0-3) — which quadrant is absent.
+ * @param material    Block material name.
+ * @param blockSizePx Block size in virtual pixels.
+ * @param seed        Hash seed.
+ */
+export function getRoughStairSprite(
+  col: number,
+  row: number,
+  orientation: number,
+  material: string,
+  blockSizePx: number,
+  seed: number,
+  suppressEdgeShading = false,
+): HTMLCanvasElement | null {
+  const pool = getBaseSpriteProbePool(material, false);
+  if (pool.length === 0) return null;
+
+  const hash    = hashTilePosition(col, row, seed);
+  const baseUrl = _pickFromPool(pool, hash);
+  if (baseUrl === null) return null;
+
+  const [flipX, flipY] = _rampOriToFlips(orientation);
+  return getProceduralSprite(baseUrl, TEMPLATE_URLS['1x1 rough stair'], blockSizePx, blockSizePx, flipX, flipY, 0, OPEN_AIR_ALL_SIDES, col * blockSizePx, row * blockSizePx, seed, col, row, suppressEdgeShading);
+}
+
+/**
  * Returns the procedural sprite for a ramp wall.  LEGACY — ramps are retired
  * from editor placement; this keeps pre-existing rooms rendering.
  *

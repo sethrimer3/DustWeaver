@@ -287,6 +287,12 @@ export interface RoomCrumbleBlockDef {
    * diagonal instead of jagged steps.
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
+  /**
+   * Rough stair orientation (0-3). Undefined or absent = not a rough stair.
+   * Mirrors `rampOrientation`'s "absent quadrant" convention — see
+   * `levels/stairsGeometry.ts`.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
   /** 1 if this crumble block is a half-width pillar (4px wide). */
   isPillarHalfWidthFlag?: 0 | 1;
   /** Which elemental type this crumble block is weak to. Defaults to `'normal'`. */

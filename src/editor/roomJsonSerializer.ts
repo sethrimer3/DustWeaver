@@ -89,6 +89,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (w.rampOrientation !== undefined) wall.rampOrientation = w.rampOrientation;
       if (w.stairsOrientation !== undefined) wall.stairsOrientation = w.stairsOrientation;
       if (w.smoothRampOrientation !== undefined) wall.smoothRampOrientation = w.smoothRampOrientation;
+      if (w.roughStairOrientation !== undefined) wall.roughStairOrientation = w.roughStairOrientation;
       if (w.isPillarHalfWidthFlag === 1) wall.isPillarHalfWidth = true;
       const rimIndex = rimIndexForWall(w);
       if (rimIndex !== undefined) wall.r = rimIndex;
@@ -391,6 +392,7 @@ export function editorRoomDataToJson(data: EditorRoomData): RoomJsonDef {
       if (b.rampOrientation !== undefined) entry.rampOrientation = b.rampOrientation;
       if (b.stairsOrientation !== undefined) entry.stairsOrientation = b.stairsOrientation;
       if (b.smoothRampOrientation !== undefined) entry.smoothRampOrientation = b.smoothRampOrientation;
+      if (b.roughStairOrientation !== undefined) entry.roughStairOrientation = b.roughStairOrientation;
       if (b.isPillarHalfWidthFlag === 1) entry.isPillarHalfWidthFlag = 1;
       if (b.variant !== 'normal') entry.variant = b.variant;
       if (b.isSecretFlag === 1) entry.isSecretFlag = 1;

@@ -9,7 +9,7 @@
 
 import type { EditorRoomData, EditorWall, EditorTransition } from './editorState';
 import { BLOCK_SIZE_SMALL } from '../levels/roomDef';
-import { isStairsSolidAtLocalPx } from '../levels/stairsGeometry';
+import { isStairsSolidAtLocalPx, isRoughStairSolidAtLocalPx } from '../levels/stairsGeometry';
 import { getMaterialFootprintSize, MATERIAL_SAND } from '../sim/pixelMaterials/pixelMaterialTypes';
 
 // ── Basic hit-test primitives ────────────────────────────────────────────────
@@ -199,6 +199,7 @@ export function cellOverlapsSolidWall(room: EditorRoomData, bx: number, by: numb
     w.rampOrientation === undefined &&
     w.stairsOrientation === undefined &&
     w.smoothRampOrientation === undefined &&
+    w.roughStairOrientation === undefined &&
     wallsOverlap(w, bx, by, 1, 1),
   );
 }
@@ -293,6 +294,11 @@ export function isPixelMaterialSolidAtPixel(room: EditorRoomData, xPixel: number
     // Smooth ramps collide identically to stairs — same jagged mask, smooth render only.
     if (w.smoothRampOrientation !== undefined
         && !isStairsSolidAtLocalPx(w.smoothRampOrientation, wPx, hPx, xPixel - x0, yPixel - y0)) {
+      continue;
+    }
+    // Rough stairs are only solid where the quadrant-cut mask is.
+    if (w.roughStairOrientation !== undefined
+        && !isRoughStairSolidAtLocalPx(w.roughStairOrientation, wPx, hPx, xPixel - x0, yPixel - y0)) {
       continue;
     }
     return true;
@@ -466,6 +472,7 @@ function isSolidWallAt(room: EditorRoomData, col: number, row: number): boolean 
     if (w.rampOrientation !== undefined) continue;
     if (w.stairsOrientation !== undefined) continue;
     if (w.smoothRampOrientation !== undefined) continue;
+    if (w.roughStairOrientation !== undefined) continue;
     if (col >= w.xBlock && col < w.xBlock + w.wBlock &&
         row >= w.yBlock && row < w.yBlock + w.hBlock) {
       return true;

@@ -16,22 +16,27 @@
 
 import type { WorldState } from './world';
 import {
+  decodeRoughStairOrientationIndex,
   decodeStairsPhysicsOrientationIndex,
+  getRoughStairSolidRects,
   getStairsSolidRects,
+  isRoughStairOrientationIndex,
   isStairsPhysicsOrientationIndex,
   isStairsSolidAtLocalPx,
+  isRoughStairSolidAtLocalPx,
 } from '../levels/stairsGeometry';
 
-/** True when wall slot `wi` is a stair wall. */
+/** True when wall slot `wi` is a stair wall (stairs, smooth ramp, or rough stair). */
 export function isStairsWall(world: WorldState, wi: number): boolean {
-  return isStairsPhysicsOrientationIndex(world.wallRampOrientationIndex[wi]);
+  const oriIndex = world.wallRampOrientationIndex[wi];
+  return isStairsPhysicsOrientationIndex(oriIndex) || isRoughStairOrientationIndex(oriIndex);
 }
 
 /**
  * Invokes `cb` once per solid world-space rectangle of wall `wi`.
  *
- * For a stair wall that is one rectangle per step; for every other wall it is
- * the wall's own AABB, called exactly once.
+ * For a stair or rough-stair wall that is one rectangle per step/quadrant;
+ * for every other wall it is the wall's own AABB, called exactly once.
  */
 export function forEachWallSolidRect(
   world: WorldState,
@@ -44,12 +49,16 @@ export function forEachWallSolidRect(
   const h = world.wallHWorld[wi];
 
   const oriIndex = world.wallRampOrientationIndex[wi];
-  if (!isStairsPhysicsOrientationIndex(oriIndex)) {
+  let rects;
+  if (isStairsPhysicsOrientationIndex(oriIndex)) {
+    rects = getStairsSolidRects(decodeStairsPhysicsOrientationIndex(oriIndex), w, h);
+  } else if (isRoughStairOrientationIndex(oriIndex)) {
+    rects = getRoughStairSolidRects(decodeRoughStairOrientationIndex(oriIndex), w, h);
+  } else {
     cb(x0, y0, x0 + w, y0 + h);
     return;
   }
 
-  const rects = getStairsSolidRects(decodeStairsPhysicsOrientationIndex(oriIndex), w, h);
   for (let i = 0; i < rects.length; i++) {
     const r = rects[i];
     cb(x0 + r.xPx, y0 + r.yPx, x0 + r.xPx + r.wPx, y0 + r.yPx + r.hPx);
@@ -95,12 +104,23 @@ export function stairsWallContainsPoint(
   yWorld: number,
 ): boolean {
   const oriIndex = world.wallRampOrientationIndex[wi];
-  if (!isStairsPhysicsOrientationIndex(oriIndex)) return false;
-  return isStairsSolidAtLocalPx(
-    decodeStairsPhysicsOrientationIndex(oriIndex),
-    world.wallWWorld[wi],
-    world.wallHWorld[wi],
-    xWorld - world.wallXWorld[wi],
-    yWorld - world.wallYWorld[wi],
-  );
+  if (isStairsPhysicsOrientationIndex(oriIndex)) {
+    return isStairsSolidAtLocalPx(
+      decodeStairsPhysicsOrientationIndex(oriIndex),
+      world.wallWWorld[wi],
+      world.wallHWorld[wi],
+      xWorld - world.wallXWorld[wi],
+      yWorld - world.wallYWorld[wi],
+    );
+  }
+  if (isRoughStairOrientationIndex(oriIndex)) {
+    return isRoughStairSolidAtLocalPx(
+      decodeRoughStairOrientationIndex(oriIndex),
+      world.wallWWorld[wi],
+      world.wallHWorld[wi],
+      xWorld - world.wallXWorld[wi],
+      yWorld - world.wallYWorld[wi],
+    );
+  }
+  return false;
 }

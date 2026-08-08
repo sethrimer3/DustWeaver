@@ -447,6 +447,19 @@ export interface RoomWallDef {
    */
   smoothRampOrientation?: 0 | 1 | 2 | 3;
   /**
+   * Rough stair orientation. When set, this wall is a single 1×1 block with
+   * one quadrant removed (75% solid) — a half-block-tall step rather than a
+   * multi-riser staircase. Orientation names the ABSENT quadrant:
+   *   0 = top-left absent, 1 = top-right absent (both "floor" shapes — the
+   *       player auto-climbs into the tall side, same as a stairs riser)
+   *   2 = bottom-left absent, 3 = bottom-right absent (both "ceiling" shapes —
+   *       flat on top, no auto-climb; the underside is stepped instead)
+   * Omit (or set to undefined) for a normal rectangular wall.
+   *
+   * See `levels/stairsGeometry.ts` for the authoritative solidity definition.
+   */
+  roughStairOrientation?: 0 | 1 | 2 | 3;
+  /**
    * 1 if this pillar wall is rendered and collides at half-block width (4 px).
    * Only meaningful for walls that are 1×2 blocks and serve as pillars.
    */

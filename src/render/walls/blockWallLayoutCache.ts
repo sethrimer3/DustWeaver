@@ -17,11 +17,14 @@ import { buildSurfaceExposureMap, type SurfaceExposureMap, type TileSolidityGrid
 import {
   decodeStairsOrientationIndex,
   decodeSmoothRampOrientationIndex,
+  decodeRoughStairOrientationIndex,
   isPlainRectOrientationIndex,
   isRampOrientationIndex,
   isSmoothRampOrientationIndex,
   isStairsOrientationIndex,
+  isRoughStairOrientationIndex,
   isStairsSolidAtLocalPx,
+  isRoughStairSolidAtLocalPx,
 } from '../../levels/stairsGeometry';
 import {
   hashSurfaceRimStyle,
@@ -300,6 +303,11 @@ function _wallContainsVisiblePixel(walls: WallSnapshot, wi: number, x: number, y
   if (isStairsOrientationIndex(orientation)) {
     return isStairsSolidAtLocalPx(
       decodeStairsOrientationIndex(orientation), width, height, lx, ly,
+    );
+  }
+  if (isRoughStairOrientationIndex(orientation)) {
+    return isRoughStairSolidAtLocalPx(
+      decodeRoughStairOrientationIndex(orientation), width, height, lx, ly,
     );
   }
   if (isRampOrientationIndex(orientation) || isSmoothRampOrientationIndex(orientation)) {

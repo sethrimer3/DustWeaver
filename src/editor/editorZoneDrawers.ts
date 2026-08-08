@@ -27,6 +27,7 @@ import {
   GUIDE_DUST_PATH_COLOR, GUIDE_DUST_PATH_SELECTED, GUIDE_DUST_POINT_COLOR,
   drawMarker,
   drawStairsShape,
+  drawRoughStairShape,
   isElementInViewport,
   type EditorViewport,
 } from './editorRendererHelpers';
@@ -291,6 +292,10 @@ export function drawEditorCrumbleBlocks(
       // orientation reads identically to a normal (non-crumble) stairs block.
       const stairsColor = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
       drawStairsShape(ctx, b, offsetXPx, offsetYPx, zoom, stairsColor, sel ? 2 : 1);
+    } else if (b.roughStairOrientation !== undefined) {
+      // Rough-stair quadrant-cut shape — mirrors the wall rendering.
+      const stairsColor = sel ? 'rgba(210,180,100,0.40)' : 'rgba(210,180,100,0.22)';
+      drawRoughStairShape(ctx, b, offsetXPx, offsetYPx, zoom, stairsColor, sel ? 2 : 1);
     } else if (b.rampOrientation !== undefined || b.smoothRampOrientation !== undefined) {
       // Ramp/smooth-ramp triangle shape — smooth ramps share the exact same
       // triangle silhouette as legacy ramps (identical stepped physics,

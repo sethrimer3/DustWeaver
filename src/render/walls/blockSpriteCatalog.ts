@@ -22,6 +22,7 @@ export const TEMPLATE_URLS = {
   '2x2 block':    `${_TEMPLATE_BASE_PATH}/2x2 block/2x2 block_template.png`,
   '2x2 platform': `${_TEMPLATE_BASE_PATH}/2x2 platform/2x2 platform_template.png`,
   '2x2 stairs':   `${_TEMPLATE_BASE_PATH}/2x2 stairs/2x2 stairs_template.png`,
+  '1x1 rough stair': `${_TEMPLATE_BASE_PATH}/1x1 rough stair/1x1 rough stair_template.png`,
   // Legacy ramp masks — retired from editor placement, retained so that rooms
   // and campaigns authored before stairs replaced ramps still render.
   '1x1 ramp':     `${_TEMPLATE_BASE_PATH}/1x1 ramp/1x1 ramp_template.png`,

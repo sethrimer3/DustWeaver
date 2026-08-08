@@ -222,6 +222,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     rampOrientation: w.rampOrientation,
     stairsOrientation: w.stairsOrientation,
     smoothRampOrientation: w.smoothRampOrientation,
+    roughStairOrientation: w.roughStairOrientation,
     isPillarHalfWidthFlag: w.isPillarHalfWidth ? 1 : 0,
     surfaceRim: w.r !== undefined && rimStylesTable !== undefined
       ? decodeSurfaceRimStyle(rimStylesTable[w.r])
@@ -532,6 +533,7 @@ export function jsonToEditorRoomData(json: RoomJsonDef, startUid: number): { dat
     rampOrientation: b.rampOrientation,
     stairsOrientation: b.stairsOrientation,
     smoothRampOrientation: b.smoothRampOrientation,
+    roughStairOrientation: b.roughStairOrientation,
     isPillarHalfWidthFlag: b.isPillarHalfWidthFlag,
     variant: b.variant ?? 'normal',
     isSecretFlag: b.isSecretFlag,

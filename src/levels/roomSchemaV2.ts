@@ -181,6 +181,7 @@ export function isUniformSolidWall(w: RoomJsonWall): boolean {
   if (w.rampOrientation !== undefined)   return false;
   if (w.stairsOrientation !== undefined) return false;
   if (w.smoothRampOrientation !== undefined) return false;
+  if (w.roughStairOrientation !== undefined) return false;
   if (w.isPillarHalfWidth === true)      return false;
   return true;
 }
@@ -426,6 +427,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
     if (w.rampOrientation !== undefined) sw.ramp = w.rampOrientation;
     if (w.stairsOrientation !== undefined) sw.stairs = w.stairsOrientation;
     if (w.smoothRampOrientation !== undefined) sw.smoothRamp = w.smoothRampOrientation;
+    if (w.roughStairOrientation !== undefined) sw.roughStair = w.roughStairOrientation;
     if (w.isPillarHalfWidth) sw.half = 1;
     if (w.r !== undefined) sw.rim = w.r;
     return sw;
@@ -628,6 +630,7 @@ export function dehydrateRoom(json: RoomJsonDef): SavedRoomV2 {
       if (c.rampOrientation !== undefined) entry.ramp = c.rampOrientation as 0 | 1 | 2 | 3;
       if (c.stairsOrientation !== undefined) entry.stairs = c.stairsOrientation;
       if (c.smoothRampOrientation !== undefined) entry.smoothRamp = c.smoothRampOrientation;
+      if (c.roughStairOrientation !== undefined) entry.roughStair = c.roughStairOrientation;
       if (c.isPillarHalfWidthFlag === 1) entry.pillar = 1;
       if (c.blockThemeId) entry.theme = c.blockThemeId;
       if (c.spikeDirection !== undefined) {
