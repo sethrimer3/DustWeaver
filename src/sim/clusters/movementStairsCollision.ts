@@ -20,6 +20,18 @@
  * Stairs are never bounce pads or kinetic blocks (the editor does not offer
  * those combinations), so this resolver has no bounce/kinetic branches. Ice
  * physics flags are honoured, inherited from the parent stair wall.
+ *
+ * `wasGrounded` must be the cluster's grounded state from BEFORE this tick's
+ * `resetClusterGroundedFlag()` call (movement.ts captures it for exactly this
+ * reason before calling `resolveClusterSolidWallCollision`). Recomputing it
+ * from `cluster.isGroundedFlag` inside this function would read the
+ * already-reset value for this tick, silently rejecting every step-up that
+ * doesn't ALSO land on the current tread this same tick (i.e. continuous
+ * walking across a multi-riser staircase or a rough stair's single riser,
+ * where the cluster settled on its current tread on an earlier tick, so
+ * neither `wasGrounded` (this tick, pre-reset) nor `isFalling`
+ * (`velocityYWorld` is already zeroed by this call's own Y-pass by the time
+ * the X-pass checks it) would otherwise be true).
  */
 
 import type { WorldState } from '../world';
@@ -43,10 +55,10 @@ export function resolveStairsSurfaces(
   world: WorldState,
   prevXWorld: number,
   prevYWorld: number,
+  wasGrounded: boolean = cluster.isGroundedFlag === 1,
 ): boolean {
   const hw = cluster.halfWidthWorld;
   const hh = cluster.halfHeightWorld;
-  const wasGrounded = cluster.isGroundedFlag === 1;
   let landed = false;
 
   for (let wi = 0; wi < world.wallCount; wi++) {
