@@ -32,6 +32,7 @@ import { makeBtn } from './editorUIHelpers';
 import { ACCENT_GOLD, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
 import {
   CAMPAIGN_STARTING_WEAVE_LIST,
+  WEAVE_GRAPPLE,
   WEAVE_LIST,
   WEAVE_REGISTRY,
 } from '../sim/weaves/weaveDefinition';
@@ -383,7 +384,10 @@ export function updateInspector(
       weavesLabel.style.cssText = `font-size: 11px; color: rgba(241,231,203,0.7); margin-top: 6px; margin-bottom: 3px;`;
       div.appendChild(weavesLabel);
 
-      const currentWeaves = new Set<string>(opts?.startingWeaves ?? []);
+      // Undefined is the legacy/unconfigured state, where Grapple remains on.
+      // Once the author changes any checkbox the explicit list is serialized,
+      // so unchecking Grapple disables it for that campaign.
+      const currentWeaves = new Set<string>(opts?.startingWeaves ?? [WEAVE_GRAPPLE]);
       const weavesGrid = document.createElement('div');
       weavesGrid.style.cssText = `display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;`;
       for (const weaveId of CAMPAIGN_STARTING_WEAVE_LIST) {

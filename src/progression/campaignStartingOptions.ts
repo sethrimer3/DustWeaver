@@ -14,7 +14,7 @@ import { PlayerProgress } from './playerProgress';
 import { CampaignSpawnData } from '../levels/campaignSchema';
 import { unlockDustType, unlockActiveWeave } from './unlocks';
 import { stringToParticleKind } from '../editor/roomJsonSchema';
-import { WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
+import { WEAVE_GRAPPLE, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
 import { expandLegacyWeaveId } from './weaveMigration';
 import { normalizeMoteCount } from '../sim/playerMoteLife';
 import { isEquippableParticleKind } from '../sim/particles/kinds';
@@ -73,6 +73,11 @@ export function applyCampaignStartingOptions(
         unlockActiveWeave(progress, expandedId);
       }
     }
+  } else {
+    // Campaigns authored before Grapple became a selectable starting weave
+    // omitted this field entirely and always allowed grappling. Preserve that
+    // behavior; an explicit array now controls Grapple by inclusion/omission.
+    unlockActiveWeave(progress, WEAVE_GRAPPLE);
   }
 
   // `startingPassives` may still be present in older campaign files. It is

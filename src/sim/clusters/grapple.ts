@@ -241,6 +241,7 @@ function triggerGrappleEmptyFx(world: WorldState): void {
 export function fireGrapple(world: WorldState, anchorXWorld: number, anchorYWorld: number): void {
   const player = world.clusters[0];
   if (player === undefined || player.isAliveFlag === 0) return;
+  if (world.canUsePlayerGrappleFlag === 0) return;
   const playerEntityId = player.entityId;
 
   // A stale quiet-release request from a previous grapple session (e.g. a

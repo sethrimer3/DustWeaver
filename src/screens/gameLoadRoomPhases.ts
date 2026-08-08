@@ -64,7 +64,7 @@ import {
   type PlayerWeaveLoadout,
   sanitizePlayerWeaveLoadoutForProgress,
 } from '../sim/weaves/playerLoadout';
-import { WEAVE_NONE, WEAVE_STORM } from '../sim/weaves/weaveDefinition';
+import { WEAVE_NONE } from '../sim/weaves/weaveDefinition';
 import { resetGrappleDisplayRadius } from '../sim/clusters/grappleShared';
 import { resetRadiantTetherState } from '../sim/clusters/radiantTetherAi';
 import { resetRadiantWebState } from '../sim/clusters/radiantWebAi';
@@ -146,6 +146,7 @@ import type { CombatMode } from '../sim/combatMode';
 export interface PersistentPlayerWorldConfig {
   assistMode: boolean;
   combatMode: CombatMode;
+  grappleEnabled?: boolean;
 }
 
 export function applyPersistentPlayerWorldConfig(
@@ -154,6 +155,11 @@ export function applyPersistentPlayerWorldConfig(
 ): void {
   world.isAssistModeFlag = config.assistMode ? 1 : 0;
   world.combatMode = config.combatMode;
+  world.canUsePlayerGrappleFlag = config.grappleEnabled === false ? 0 : 1;
+  if (world.canUsePlayerGrappleFlag === 0) {
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+  }
 }
 
 /**
@@ -422,7 +428,8 @@ function applyPlayerWeaveWorldFields(
   world.playerPrimaryWeaveId           = effectiveWeaveLoadout.primary.weaveId;
   world.playerSecondaryWeaveId         = effectiveWeaveLoadout.secondary.weaveId;
   world.canUsePlayerSecondaryWeaveFlag = effectiveWeaveLoadout.secondary.weaveId === WEAVE_NONE ? 0 : 1;
-  world.isMoteSourceOrbitFlag          = world.playerPrimaryWeaveId === WEAVE_STORM ? 1 : 0;
+  // Storm Weave is now inert; retain its ID only for save/campaign compatibility.
+  world.isMoteSourceOrbitFlag          = 0;
   world.characterId                    = ctx.progress?.characterId ?? 'knight';
   resetGrappleDisplayRadius(world);
 }

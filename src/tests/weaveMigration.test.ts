@@ -10,6 +10,8 @@ import {
 import { createDefaultProgress } from '../progression/playerProgress';
 import {
   CAMPAIGN_STARTING_WEAVE_LIST,
+  WEAVE_LIST,
+  WEAVE_GRAPPLE,
   WEAVE_STORM,
   WEAVE_SHIELD,
   WEAVE_ARROW,
@@ -136,8 +138,26 @@ test('expandLegacyWeaveId safely ignores unknown ids', () => {
 
 // ---- Campaign starting-weave config: independent subset support ------------
 
-test('campaign spawn offers Shield, Bow, and Sword as independent starting choices', () => {
-  assert.deepEqual(CAMPAIGN_STARTING_WEAVE_LIST, [WEAVE_SHIELD, WEAVE_ARROW, WEAVE_SWORD]);
+test('weave lists offer Shield, Bow, Sword, Grapple, and inert Storm', () => {
+  const expected = [WEAVE_SHIELD, WEAVE_ARROW, WEAVE_SWORD, WEAVE_GRAPPLE, WEAVE_STORM];
+  assert.deepEqual(WEAVE_LIST, expected);
+  assert.deepEqual(CAMPAIGN_STARTING_WEAVE_LIST, expected);
+});
+
+test('legacy campaigns without startingWeaves keep Grapple enabled', () => {
+  const p = createDefaultProgress();
+  applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0 }, 'fresh');
+  assert.ok(p.unlockedActiveWeaves.includes(WEAVE_GRAPPLE));
+});
+
+test('an explicit campaign starting-weave list can disable Grapple by omitting it', () => {
+  const p = createDefaultProgress();
+  applyCampaignStartingOptions(
+    p,
+    { roomId: 'r', xBlock: 0, yBlock: 0, startingWeaves: [WEAVE_SHIELD] },
+    'fresh',
+  );
+  assert.equal(p.unlockedActiveWeaves.includes(WEAVE_GRAPPLE), false);
 });
 
 test('campaign startingWeaves grants sword, shield, and bow independently', () => {

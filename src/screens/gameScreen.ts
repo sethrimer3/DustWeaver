@@ -33,6 +33,7 @@ import { handleGateRoomExit, handleGateSaveCompleted, interactWithNearbyChalleng
 import { PlayerProgress } from '../progression/playerProgress';
 import { createEditorController, EditorController } from '../editor/editorController';
 import { PlayerWeaveLoadout, createDefaultWeaveLoadout } from '../sim/weaves/playerLoadout';
+import { WEAVE_GRAPPLE } from '../sim/weaves/weaveDefinition';
 import { getMusicVolume, getSelectedRenderSize, getActiveWorldViewPreset, getGraphicsQuality, getCombatModeFromStorage, getEffectiveRenderAdjacentRooms } from '../ui/renderSettings';
 import { AdjacentRoomRenderCoordinator } from './adjacentRoomRenderCoordinator';
 import { productionAdjacentRoomDrawImpl } from './gameRenderAdjacentRoomsImpl';
@@ -689,6 +690,8 @@ export function startGameScreen(
     getPersistentPlayerWorldConfig: () => ({
       assistMode: runOptions?.assistMode === true,
       combatMode: getCombatMode(),
+      grappleEnabled: progress === undefined
+        || progress.unlockedActiveWeaves.includes(WEAVE_GRAPPLE),
     }),
     setCurrentRoom:             (r) => { currentRoom     = r; },
     setBgColor:                 (c) => { bgColor          = c; },

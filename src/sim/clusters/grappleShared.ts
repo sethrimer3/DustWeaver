@@ -422,6 +422,11 @@ export function releaseGrapple(world: WorldState, grantCoyoteTime = true, isJump
  * effect only on a depleted→charged transition.
  */
 export function rechargeGrappleCharge(world: WorldState): void {
+  if (world.canUsePlayerGrappleFlag === 0) {
+    world.hasGrappleChargeFlag = 0;
+    world.prevHasGrappleChargeFlag = 0;
+    return;
+  }
   const wasChargeDepleted =
     world.prevHasGrappleChargeFlag === 0 && world.hasGrappleChargeFlag === 0;
   world.hasGrappleChargeFlag = 1;

@@ -100,6 +100,8 @@ export interface GrappleWorldState {
    * Prevents firing a second grapple until recharged.
    */
   hasGrappleChargeFlag: 0 | 1;
+  /** 1 when the current campaign permits the player to use Grapple Weave. */
+  canUsePlayerGrappleFlag: 0 | 1;
 
   // ---- Grapple input mode --------------------------------------------------
   /**
@@ -435,6 +437,7 @@ export function createGrappleWorldState(): GrappleWorldState {
     grappleReleaseBurstCounter:            0,
     grappleJumpHeldTickCount:              0,
     hasGrappleChargeFlag:                  1,
+    canUsePlayerGrappleFlag:               1,
     grappleInputMode:                      GrappleInputMode.Hold,
     isGrappleZipActiveFlag:                0,
     isGrappleZipTriggeredFlag:             0,

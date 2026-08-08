@@ -27,6 +27,7 @@ export const WEAVE_SHIELD       = 'shield';
 export const WEAVE_ARROW        = 'arrow';
 export const WEAVE_SHIELD_SWORD = 'shield_sword';
 export const WEAVE_NONE         = 'none';
+export const WEAVE_GRAPPLE      = 'grapple';
 /**
  * Independent Sword unlock (Stage 1 of the Sword/Shield/Bow Weave rework).
  * Not yet an equippable/rendered weave in its own right — presently it only
@@ -91,13 +92,25 @@ export interface WeaveDefinition {
 const STORM_DEF: WeaveDefinition = {
   id: WEAVE_STORM,
   displayName: 'Storm Weave',
-  description: 'Passively attracts nearby dust to the Weaver. Always active.',
+  description: 'An inert legacy weave retained for campaign and save compatibility.',
   role: WeaveRole.PrimaryOnly,
   dustSlotCapacity: 0,   // Storm does not bind dust — it is always active passively
   durationTicks: 0,
   cooldownTicks: 0,
   deploySpeedWorld: 0,
   spreadRad: Math.PI * 2,
+};
+
+const GRAPPLE_DEF: WeaveDefinition = {
+  id: WEAVE_GRAPPLE,
+  displayName: 'Grapple Weave',
+  description: 'Allows the player to grapple onto solid surfaces.',
+  role: WeaveRole.PrimaryOnly,
+  dustSlotCapacity: 0,
+  durationTicks: 0,
+  cooldownTicks: 0,
+  deploySpeedWorld: 0,
+  spreadRad: 0,
 };
 
 const SHIELD_DEF: WeaveDefinition = {
@@ -182,20 +195,21 @@ export const WEAVE_REGISTRY: ReadonlyMap<WeaveId, WeaveDefinition> = new Map([
   [WEAVE_ARROW,        ARROW_DEF],
   [WEAVE_SHIELD_SWORD, SHIELD_SWORD_DEF],
   [WEAVE_SWORD,        SWORD_DEF],
+  [WEAVE_GRAPPLE,      GRAPPLE_DEF],
   [WEAVE_NONE,         NONE_DEF],
 ]);
 
 /** Ordered list of weave IDs for UI display (only actively supported techniques). */
 export const WEAVE_LIST: readonly WeaveId[] = [
   WEAVE_SHIELD,
+  WEAVE_ARROW,
+  WEAVE_SWORD,
+  WEAVE_GRAPPLE,
+  WEAVE_STORM,
 ];
 
 /** Weaves that a campaign author may grant from the campaign spawn inspector. */
-export const CAMPAIGN_STARTING_WEAVE_LIST: readonly WeaveId[] = [
-  WEAVE_SHIELD,
-  WEAVE_ARROW,
-  WEAVE_SWORD,
-];
+export const CAMPAIGN_STARTING_WEAVE_LIST: readonly WeaveId[] = WEAVE_LIST;
 
 /**
  * Returns the WeaveDefinition for a given weave ID.
