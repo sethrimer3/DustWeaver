@@ -8,7 +8,10 @@ import {
   ExclusivePlayerAction,
 } from '../input/playerActionArbitration';
 import { applyPlayerDamageWithKnockback, type PlayerDamageTarget } from '../sim/playerDamage';
-import { StormweaveLifeMotes } from '../sim/stormweave/lifeMotes';
+import {
+  SHIELD_MOTE_LOCK_DISTANCE_WORLD,
+  StormweaveLifeMotes,
+} from '../sim/stormweave/lifeMotes';
 import {
   createShieldWeaveState,
   deactivateShieldWeave,
@@ -172,6 +175,22 @@ describe('grapple and Shield Weave input arbitration', () => {
 });
 
 describe('shared Stormweave mote behavior', () => {
+  test('a mote within the widened shield seating radius snaps into its slot', () => {
+    const cloud = new StormweaveLifeMotes();
+    const shield = activate(1);
+    const shieldAngle = getShieldMoteAngleRad(shield, 0);
+    const slotX = shield.centerXWorld + Math.cos(shieldAngle) * shield.radiusWorld;
+    const slotY = shield.centerYWorld + Math.sin(shieldAngle) * shield.radiusWorld;
+    cloud.reset(0, 0, 1);
+    cloud.setMoteState(0, slotX + SHIELD_MOTE_LOCK_DISTANCE_WORLD - 0.01, slotY);
+
+    cloud.update(DT_SEC, 0, 0, 0, 0, false, shield);
+
+    assert.equal(cloud.isMoteLocked(0), true);
+    const mote = cloud.getMote(0)!;
+    assert.ok(Math.hypot(mote.xWorld - slotX, mote.yWorld - slotY) < 0.001);
+  });
+
   test('Shield Weave target replaces normal Stormweave attraction while active', () => {
     const shieldCloud = new StormweaveLifeMotes();
     const stormCloud = new StormweaveLifeMotes();

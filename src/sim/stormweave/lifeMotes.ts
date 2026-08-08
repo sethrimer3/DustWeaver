@@ -32,7 +32,7 @@ const SEPARATION_ACCEL_PER_SEC2 = 72;
 // slot on the arc, it "locks in": from then on it snaps rigidly to the slot
 // every frame instead of continuing to spring-chase it, so it never lags
 // behind a fast shield turn once seated.
-const SHIELD_MOTE_LOCK_DISTANCE_WORLD = 0.6;
+export const SHIELD_MOTE_LOCK_DISTANCE_WORLD = 2;
 // World-space distance the recent player-path vector must span before the
 // perpendicular wobble direction is treated as reliable. Below this the
 // direction is numerically unstable (near-zero-length vector), so its
