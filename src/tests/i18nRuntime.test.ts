@@ -142,8 +142,8 @@ test('interpolation substitutes named placeholders', () => {
   assert.equal(t('mainMenu.build', { number: 566 }), 'Build 566');
   assert.equal(t('saveSlots.slotLabel', { number: 2 }), 'Save Slot 2');
   assert.equal(
-    t('loading.zoneProgress', { zone: 1, built: 3, total: 12 }),
-    'Loading zone 1: 3 / 12',
+    t('loading.zoneRooms', { zone: 1, completed: 3, total: 12 }),
+    'Loading zone 1 rooms: 3 / 12',
   );
 });
 

@@ -236,7 +236,9 @@ export const ES_CATALOG: Partial<Record<TranslationKey, CatalogEntry>> = {
 
   // Loading / errors
   'loading.default': 'Cargando...',
-  'loading.zoneProgress': 'Cargando zona {zone}: {built} / {total}',
+  'loading.zoneRooms': 'Cargando salas de la zona {zone}: {completed} / {total}',
+  'loading.zoneAssets': 'Cargando recursos de la zona {zone}: {completed} / {total}',
+  'loading.zoneEntrances': 'Preparando entradas de la zona {zone}: {completed} / {total}',
 
   // HUD
   'hud.controlHintKeyboard':

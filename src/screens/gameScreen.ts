@@ -871,8 +871,8 @@ export function startGameScreen(
       showZoneLoad: (worldNumber, totalRooms, isInitialLoad) => {
         loadingOverlay.showZoneLoad(worldNumber, totalRooms, isInitialLoad);
       },
-      updateZoneProgress: (worldNumber, residentsReady, totalRooms) => {
-        loadingOverlay.updateZoneProgress(worldNumber, residentsReady, totalRooms);
+      updateZoneProgress: (progress) => {
+        loadingOverlay.updateZoneProgress(progress);
       },
     },
     profiler: {
@@ -1377,11 +1377,7 @@ export function startGameScreen(
       // Update overlay progress text.
       const _zoneProgress = _zoneLoader.getZoneProgress(residentRoomManager);
       if (_zoneProgress !== null) {
-        loadingOverlay.updateZoneProgress(
-          _zoneProgress.worldNumber,
-          _zoneProgress.residentsReady,
-          _zoneProgress.totalRooms,
-        );
+        loadingOverlay.updateZoneProgress(_zoneProgress);
         initialZoneLoad.recordProgress(_zoneProgress.residentsReady, _zoneProgress.totalRooms);
       }
 

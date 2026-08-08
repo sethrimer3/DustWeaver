@@ -243,7 +243,9 @@ export const EN_CATALOG = {
 
   // ── Loading / errors ──────────────────────────────────────────────────────
   'loading.default': 'Loading...',
-  'loading.zoneProgress': 'Loading zone {zone}: {built} / {total}',
+  'loading.zoneRooms': 'Loading zone {zone} rooms: {completed} / {total}',
+  'loading.zoneAssets': 'Loading zone {zone} assets: {completed} / {total}',
+  'loading.zoneEntrances': 'Warming zone {zone} entrances: {completed} / {total}',
 
   // ── HUD / gameplay prompts (canvas-rendered) ──────────────────────────────
   'hud.controlHintKeyboard':

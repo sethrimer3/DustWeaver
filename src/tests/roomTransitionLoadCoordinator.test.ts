@@ -202,7 +202,10 @@ function makeHarness(rooms: RoomDef[]): Harness {
       startZoneLoad: (w) => { events.push(`startZoneLoad:${w}`); },
       getZoneRoomIds: (w) => rooms.filter(r => (r.worldNumber ?? 1) === w).map(r => r.id),
       tickZoneLoad: () => { events.push('tickZoneLoad'); return state.zoneReady; },
-      getZoneProgress: () => ({ worldNumber: 2, residentsReady: 1, totalRooms: 3 }),
+      getZoneProgress: () => ({
+        worldNumber: 2, residentsReady: 1, totalRooms: 3, decodeReady: 0,
+        entrancesReady: 0, totalEntrances: 0, isReady: false,
+      }),
       buildZoneRoomIdSet: (w) => new Set(rooms.filter(r => (r.worldNumber ?? 1) === w).map(r => r.id)),
       evictInactiveZoneResidents: (active, prev) => { events.push(`evictInactiveZone:${active}:${prev}`); },
     },
@@ -210,7 +213,9 @@ function makeHarness(rooms: RoomDef[]): Harness {
       showLoadingOverlay: () => { events.push('overlay.showLoadingOverlay'); },
       showEntryWarm: () => { events.push('overlay.showEntryWarm'); },
       showZoneLoad: (w, total, initial) => { events.push(`overlay.showZoneLoad:${w}:${total}:${initial}`); },
-      updateZoneProgress: (w, ready, total) => { events.push(`overlay.zoneProgress:${w}:${ready}:${total}`); },
+      updateZoneProgress: (progress) => {
+        events.push(`overlay.zoneProgress:${progress.worldNumber}:${progress.residentsReady}:${progress.totalRooms}`);
+      },
     },
     profiler: {
       begin: (roomId, mode, residentReady) => { events.push(`profiler.begin:${roomId}:${mode}:${residentReady}`); },

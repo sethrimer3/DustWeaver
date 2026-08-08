@@ -76,6 +76,7 @@ import { PLAYER_JUMP_SPEED_WORLD } from '../sim/clusters/movementConstants';
 import { ZoneTransitionState } from './residentBuildScheduler';
 import { bfsNearbyRooms } from './roomPrewarmNeighborhood';
 import * as SM from '../debug/seamlessMetrics';
+import type { ZoneLoadProgress } from './zoneResidentLoader';
 
 /**
  * Fraction of `PLAYER_JUMP_SPEED_WORLD` subtracted from upward-transition
@@ -126,7 +127,7 @@ export interface TransitionZoneLoaderPort {
   getZoneRoomIds(worldNumber: number): string[];
   /** One zone-load tick; returns true when the zone is fully ready. */
   tickZoneLoad(): boolean;
-  getZoneProgress(): { worldNumber: number; residentsReady: number; totalRooms: number } | null;
+  getZoneProgress(): ZoneLoadProgress | null;
   buildZoneRoomIdSet(worldNumber: number): ReadonlySet<string>;
   evictInactiveZoneResidents(activeWorldNumber: number, previousWorldNumber: number): void;
 }
@@ -138,7 +139,7 @@ export interface TransitionOverlayPort {
   /** Lightweight textless cover while the entry viewport warms. */
   showEntryWarm(): void;
   showZoneLoad(worldNumber: number, totalRooms: number, isInitialLoad: boolean): void;
-  updateZoneProgress(worldNumber: number, residentsReady: number, totalRooms: number): void;
+  updateZoneProgress(progress: ZoneLoadProgress): void;
 }
 
 /**
@@ -650,7 +651,7 @@ export class RoomTransitionLoadCoordinator {
     const zoneReady = d.zoneLoader.tickZoneLoad();
     const progress = d.zoneLoader.getZoneProgress();
     if (progress !== null) {
-      d.overlay.updateZoneProgress(progress.worldNumber, progress.residentsReady, progress.totalRooms);
+      d.overlay.updateZoneProgress(progress);
     }
     if (!zoneReady) return;
 

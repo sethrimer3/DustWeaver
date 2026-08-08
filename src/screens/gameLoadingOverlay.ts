@@ -14,6 +14,7 @@
  */
 
 import { renderLoadingGodRays } from '../render/effects/loadingGodRays';
+import type { ZoneLoadProgress } from './zoneResidentLoader';
 import { getUiFontFamily, t } from '../i18n';
 import { LOADING_BACKGROUND_ASSETS } from '../ui/animatedAssetPaths';
 
@@ -180,7 +181,7 @@ export class GameLoadingOverlay {
     this.populateLoadingOverlay(
       div,
       false,
-      t('loading.zoneProgress', { zone: worldNumber, built: 0, total: totalRooms }),
+      t('loading.zoneRooms', { zone: worldNumber, completed: 0, total: totalRooms }),
     );
 
     this.uiRoot.appendChild(div);
@@ -193,15 +194,33 @@ export class GameLoadingOverlay {
    * Updates the zone-load progress text inside an overlay opened by `showZoneLoad()`.
    * No-op if the overlay is not visible.
    *
-   * @param worldNumber  Zone number (for label).
-   * @param built        Rooms whose residents are built so far.
-   * @param total        Total rooms in the zone.
+   * The displayed label and progress-bar denominator switch with the active
+   * readiness stage: resident rooms, decoded assets, then warmed entrances.
    */
-  updateZoneProgress(worldNumber: number, built: number, total: number): void {
+  updateZoneProgress(progress: ZoneLoadProgress): void {
     if (this.el === null) return;
     const label = this.el.querySelector<HTMLElement>('[data-zone-progress]');
-    if (label !== null) {
-      label.textContent = t('loading.zoneProgress', { zone: worldNumber, built, total });
+    const fill = this.el.querySelector<HTMLElement>('[data-zone-progress-fill]');
+    if (label === null) return;
+
+    let completed: number;
+    let total: number;
+    if (progress.residentsReady < progress.totalRooms) {
+      completed = progress.residentsReady;
+      total = progress.totalRooms;
+      label.textContent = t('loading.zoneRooms', { zone: progress.worldNumber, completed, total });
+    } else if (progress.decodeReady < progress.totalRooms) {
+      completed = progress.decodeReady;
+      total = progress.totalRooms;
+      label.textContent = t('loading.zoneAssets', { zone: progress.worldNumber, completed, total });
+    } else {
+      completed = progress.entrancesReady;
+      total = progress.totalEntrances;
+      label.textContent = t('loading.zoneEntrances', { zone: progress.worldNumber, completed, total });
+    }
+    if (fill !== null) {
+      const ratio = total <= 0 ? 1 : Math.max(0, Math.min(1, completed / total));
+      fill.style.width = `${(ratio * 100).toFixed(1)}%`;
     }
   }
 
@@ -349,22 +368,48 @@ export class GameLoadingOverlay {
 
     if (isTextless) return;
 
+    const progressGroup = document.createElement('div');
+    progressGroup.style.cssText = [
+      'position:absolute',
+      'right:24px',
+      'bottom:24px',
+      'z-index:4',
+      'min-width:260px',
+    ].join(';');
+
     const label = document.createElement('div');
     label.textContent = zoneText ?? t('loading.default');
     if (zoneText !== undefined) {
       label.setAttribute('data-zone-progress', '1');
     }
     label.style.cssText = [
-      'position:absolute',
-      'right:24px',
-      'bottom:24px',
-      'z-index:4',
       'font-size:0.82rem',
       'letter-spacing:0.14em',
       'text-transform:uppercase',
       'text-shadow:0 0 14px rgba(212,168,75,0.45)',
     ].join(';');
-    div.appendChild(label);
+    progressGroup.appendChild(label);
+
+    if (zoneText !== undefined) {
+      const track = document.createElement('div');
+      track.style.cssText = [
+        'height:3px',
+        'margin-top:8px',
+        'background:rgba(212,168,75,0.18)',
+        'overflow:hidden',
+      ].join(';');
+      const fill = document.createElement('div');
+      fill.setAttribute('data-zone-progress-fill', '1');
+      fill.style.cssText = [
+        'height:100%',
+        'width:0%',
+        'background:rgba(212,168,75,0.85)',
+        'transition:width 120ms linear',
+      ].join(';');
+      track.appendChild(fill);
+      progressGroup.appendChild(track);
+    }
+    div.appendChild(progressGroup);
   }
 
   private startGodRaysAnimation(canvas: HTMLCanvasElement): void {

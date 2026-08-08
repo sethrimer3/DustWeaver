@@ -71,6 +71,10 @@ export interface ZoneLoadProgress {
   residentsReady: number;
   /** Rooms whose sprites and backgrounds are fully decoded. */
   decodeReady: number;
+  /** Directed room-entry viewports whose render chunks are prewarmed. */
+  entrancesReady: number;
+  /** Total directed room-entry viewports that must be prewarmed. */
+  totalEntrances: number;
   /** True when all readiness criteria are satisfied. */
   isReady: boolean;
 }
@@ -108,6 +112,9 @@ interface ZoneLoadState {
   prepIdx:      number;
   /** Rooms whose runtime entry preparation has been completed by this session. */
   prepDone:     Set<string>;
+  /** Latest directed-entry readiness counts, populated after base readiness. */
+  entrancesReady: number;
+  totalEntrances: number;
 }
 
 // ── Module-level constants ────────────────────────────────────────────────────
@@ -306,6 +313,8 @@ export class ZoneResidentLoader {
       tasksQueued:   false,
       prepIdx:       0,
       prepDone:      new Set(),
+      entrancesReady: 0,
+      totalEntrances: 0,
     };
 
     // Fresh session → fresh diagnostic snapshot.
@@ -510,6 +519,8 @@ export class ZoneResidentLoader {
       totalRooms:    state.roomIds.length,
       residentsReady,
       decodeReady,
+      entrancesReady: state.entrancesReady,
+      totalEntrances: state.totalEntrances,
       isReady:       false, // still active session → not ready yet
     };
   }
@@ -841,6 +852,7 @@ export class ZoneResidentLoader {
         buildIdx: 0, activeGen: null, activeRoomId: null, activeGenT0: 0,
         decodeStarted: new Set(), yieldFrames: 0, builtCount: 0, failedCount: 0,
         t0: performance.now(), tasksQueued: false, prepIdx: 0, prepDone: new Set(),
+        entrancesReady: 0, totalEntrances: 0,
       };
       if (import.meta.env?.DEV) {
         console.log(`[zoneLoader] neighbour preload START world=${target} (${roomIds.length} rooms)`);
@@ -1090,6 +1102,8 @@ export class ZoneResidentLoader {
       state.roomIds, this._registry, this._runtimeCache, vpWPx, vpHPx, scalePx,
     );
     const allReady = entryReport.failures.length === 0;
+    state.entrancesReady = entryReport.satisfied;
+    state.totalEntrances = entryReport.required;
 
     this._emitZoneLoadDiagnostic(state, incompleteRooms, queueResult, entryReport, allReady);
 
