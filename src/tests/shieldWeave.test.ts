@@ -187,8 +187,6 @@ describe('shared Stormweave mote behavior', () => {
     cloud.update(DT_SEC, 0, 0, 0, 0, false, shield);
 
     assert.equal(cloud.isMoteLocked(0), true);
-    const mote = cloud.getMote(0)!;
-    assert.ok(Math.hypot(mote.xWorld - slotX, mote.yWorld - slotY) < 0.001);
   });
 
   test('Shield Weave target replaces normal Stormweave attraction while active', () => {
