@@ -190,6 +190,13 @@ export const WEAVE_LIST: readonly WeaveId[] = [
   WEAVE_SHIELD,
 ];
 
+/** Weaves that a campaign author may grant from the campaign spawn inspector. */
+export const CAMPAIGN_STARTING_WEAVE_LIST: readonly WeaveId[] = [
+  WEAVE_SHIELD,
+  WEAVE_ARROW,
+  WEAVE_SWORD,
+];
+
 /**
  * Returns the WeaveDefinition for a given weave ID.
  * Falls back to None if the ID is not found or invalid.

@@ -30,7 +30,11 @@ import {
 } from './editorFormWidgets';
 import { makeBtn } from './editorUIHelpers';
 import { ACCENT_GOLD, PANEL_BORDER, TEXT_COLOR } from './editorStyles';
-import { WEAVE_LIST, WEAVE_REGISTRY } from '../sim/weaves/weaveDefinition';
+import {
+  CAMPAIGN_STARTING_WEAVE_LIST,
+  WEAVE_LIST,
+  WEAVE_REGISTRY,
+} from '../sim/weaves/weaveDefinition';
 import { ALL_PASSIVE_TECHNIQUE_IDS, PASSIVE_TECHNIQUE_DEFINITIONS } from '../progression/passiveTechniques';
 import { buildDialogueTriggerInspector } from './editorDialogueTriggerInspector';
 import type { EditorWall } from './editorElementTypes';
@@ -382,7 +386,7 @@ export function updateInspector(
       const currentWeaves = new Set<string>(opts?.startingWeaves ?? []);
       const weavesGrid = document.createElement('div');
       weavesGrid.style.cssText = `display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 4px;`;
-      for (const weaveId of WEAVE_LIST) {
+      for (const weaveId of CAMPAIGN_STARTING_WEAVE_LIST) {
         const weaveDef = WEAVE_REGISTRY.get(weaveId);
         const weaveName = weaveDef?.displayName ?? weaveId;
         const isWeaveChecked = currentWeaves.has(weaveId);

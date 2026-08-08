@@ -9,6 +9,7 @@ import {
 } from '../progression/weaveMigration';
 import { createDefaultProgress } from '../progression/playerProgress';
 import {
+  CAMPAIGN_STARTING_WEAVE_LIST,
   WEAVE_STORM,
   WEAVE_SHIELD,
   WEAVE_ARROW,
@@ -134,6 +135,10 @@ test('expandLegacyWeaveId safely ignores unknown ids', () => {
 });
 
 // ---- Campaign starting-weave config: independent subset support ------------
+
+test('campaign spawn offers Shield, Bow, and Sword as independent starting choices', () => {
+  assert.deepEqual(CAMPAIGN_STARTING_WEAVE_LIST, [WEAVE_SHIELD, WEAVE_ARROW, WEAVE_SWORD]);
+});
 
 test('campaign startingWeaves grants sword, shield, and bow independently', () => {
   const p = createDefaultProgress();
