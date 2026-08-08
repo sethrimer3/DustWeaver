@@ -57,6 +57,14 @@ test('normal mode still rejects an airborne grapple after its charge is spent', 
   assert.ok(world.grappleEmptyFxTicksLeft > 0);
 });
 
+test('campaign configuration can disable grapple entirely', () => {
+  const world = activateRoom({ assistMode: true, combatMode: 'momentum', grappleEnabled: false });
+  world.clusters.push(createClusterState(1, 0, 0, 1));
+  fireGrapple(world, 100, 0);
+  assert.equal(world.isGrappleActiveFlag, 0);
+  assert.equal(world.hasGrappleChargeFlag, 0);
+});
+
 test('persistent configuration survives multiple transitions and returning to the original room', () => {
   const visits = [activateRoom(), activateRoom(), activateRoom(), activateRoom()];
   for (const world of visits) {

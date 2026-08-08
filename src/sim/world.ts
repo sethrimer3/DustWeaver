@@ -497,14 +497,8 @@ export interface WorldState extends ParticleBuffers, GrappleWorldState, HazardWo
 
   // ── Phase 8: Storm / Inventory source flag ─────────────────────────────────
   /**
-   * 1 when the player's primary weave is Storm (motes orbit passively).
-   * 0 when Storm is not equipped (motes materialize from inventory space).
-   *
-   * Set once at loadout apply time (gameScreen.ts) and again whenever the
-   * loadout changes.  Not recomputed every tick.
-   *
-   * Propagated to WorldSnapshot so renderers can choose the appropriate
-   * mote-source visual style without importing sim helpers.
+   * Retained for snapshot compatibility. Storm Weave is inert, so gameplay
+   * activation keeps this at 0.
    */
   isMoteSourceOrbitFlag: 0 | 1;
 
@@ -739,8 +733,7 @@ export function createWorldState(dtMs: number, rngSeed = 42): WorldState {
     bowArrowLatchedAimYWorld:      0,
     selectedDustKind:              0,
     grappleDisplayRadiusWorld:     96.0,
-    // Default: Storm Weave is the starting primary, so motes orbit from the start.
-    isMoteSourceOrbitFlag:         1,
+    isMoteSourceOrbitFlag:         0,
     // ── Falling blocks ────────────────────────────────────────────────────
     fallingBlockGroups:            [],
     zipMoveBlocks:                  [],

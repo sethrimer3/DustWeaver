@@ -193,10 +193,14 @@ describe('applyCampaignStartingOptions — weaves', () => {
     assert.ok(p.unlockedActiveWeaves.includes('storm'));
   });
 
-  it('absent/empty startingWeaves does nothing', () => {
-    const p = createDefaultProgress();
-    applyCampaignStartingOptions(p, { roomId: 'r', xBlock: 0, yBlock: 0, startingWeaves: [] }, 'fresh');
-    assert.strictEqual(p.unlockedActiveWeaves.length, 0);
+  it('absent startingWeaves preserves legacy Grapple while an explicit empty list disables it', () => {
+    const legacy = createDefaultProgress();
+    applyCampaignStartingOptions(legacy, { roomId: 'r', xBlock: 0, yBlock: 0 }, 'fresh');
+    assert.deepStrictEqual(legacy.unlockedActiveWeaves, ['grapple']);
+
+    const explicitEmpty = createDefaultProgress();
+    applyCampaignStartingOptions(explicitEmpty, { roomId: 'r', xBlock: 0, yBlock: 0, startingWeaves: [] }, 'fresh');
+    assert.strictEqual(explicitEmpty.unlockedActiveWeaves.length, 0);
   });
 });
 
